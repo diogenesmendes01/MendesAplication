@@ -35,6 +35,9 @@
 - Company context: `useCompany()` hook from `@/contexts/company-context` gives `selectedCompanyId`, `selectedCompany`, `companies`
 - Company-scoped server actions should accept `companyId` param and validate access (not rely on client-side context alone)
 - Shadcn DropdownMenu available in `src/components/ui/dropdown-menu.tsx`
+- RBAC helpers in `src/lib/rbac.ts`: `canAccessCompany()`, `canAccessModule()`, `requireCompanyAccess()`, `requireModuleAccess()` — use in company-scoped server actions
+- Admin role bypasses all RBAC checks; Manager role requires UserCompany assignment and module permissions
+- For company-scoped server actions, use `requireCompanyAccess(companyId)` instead of `requireSession()` — it validates both auth and company access
 
 ## Completed Stories
 
@@ -195,4 +198,21 @@
   - DropdownMenu from Shadcn uses `@radix-ui/react-dropdown-menu` — already installed
   - When creating new pages that need company scope, access `selectedCompanyId` from `useCompany()` hook
   - Browser testing not available — manual verification needed
+---
+
+## 2026-02-28 - US-009
+- What was implemented: Role-based access control helpers and middleware
+  - `src/lib/rbac.ts`: Four functions — `canAccessCompany(userId, role, companyId)`, `canAccessModule(userId, role, companyId, module)`, `requireCompanyAccess(companyId)`, `requireModuleAccess(companyId, module)`
+  - Admin role bypasses all company-level and module-level checks
+  - Manager role restricted to assigned companies (via UserCompany junction) and assigned modules (via UserCompany.modules array)
+  - `requireCompanyAccess` and `requireModuleAccess` are server action middleware — call at the top of any company-scoped action
+  - Existing server actions verified: company CRUD uses `requireAdmin()` (correct for admin-only ops), `getUserCompanies` already filters by role
+- Files changed:
+  - erp/src/lib/rbac.ts (new)
+- **Learnings for future iterations:**
+  - Prisma composite key `userId_companyId` is used for UserCompany lookups — use `findUnique` with `{ userId_companyId: { userId, companyId } }`
+  - If UserCompany.modules is empty array, it means the user has access to all modules for that company (no restrictions)
+  - Use `requireCompanyAccess(companyId)` in future company-scoped server actions (e.g., financeiro, SAC) instead of plain `requireSession()`
+  - Company CRUD is admin-only — no need for company-scoped RBAC on those actions
+  - No UI changes in this story — purely backend utilities
 ---
