@@ -38,6 +38,9 @@
 - RBAC helpers in `src/lib/rbac.ts`: `canAccessCompany()`, `canAccessModule()`, `requireCompanyAccess()`, `requireModuleAccess()` — use in company-scoped server actions
 - Admin role bypasses all RBAC checks; Manager role requires UserCompany assignment and module permissions
 - For company-scoped server actions, use `requireCompanyAccess(companyId)` instead of `requireSession()` — it validates both auth and company access
+- User server actions in `src/app/(app)/configuracoes/usuarios/actions.ts` — exports `createUser`, `updateUser`, `listUsers`, `getUserById`, `assignUserToCompanies`, `toggleUserStatus`
+- Always use explicit `select` on User queries to exclude `passwordHash` from responses
+- `assignUserToCompanies` replaces all assignments atomically — pass empty array to remove all
 
 ## Completed Stories
 
@@ -215,4 +218,24 @@
   - Use `requireCompanyAccess(companyId)` in future company-scoped server actions (e.g., financeiro, SAC) instead of plain `requireSession()`
   - Company CRUD is admin-only — no need for company-scoped RBAC on those actions
   - No UI changes in this story — purely backend utilities
+---
+
+## 2026-02-28 - US-010
+- What was implemented: User management server actions (CRUD + company assignments)
+  - `src/app/(app)/configuracoes/usuarios/actions.ts`: Six server actions:
+    - `createUser`: Creates user with name, email, password, role; hashes password with bcrypt; validates email uniqueness
+    - `updateUser`: Updates user fields; optionally updates password if provided
+    - `listUsers`: Paginated user listing with search by name or email
+    - `getUserById`: Get single user with company assignments included
+    - `assignUserToCompanies`: Replaces all UserCompany assignments in a transaction; validates company existence
+    - `toggleUserStatus`: Toggles between ACTIVE/INACTIVE
+- Files changed:
+  - erp/src/app/(app)/configuracoes/usuarios/actions.ts (new)
+- **Learnings for future iterations:**
+  - User actions follow the same pattern as company actions — `requireAdmin()` at top, input validation helper, paginated listing
+  - `assignUserToCompanies` uses `prisma.$transaction` to delete-then-create for atomic replacement of assignments
+  - Email is normalized to lowercase before storage and uniqueness checks
+  - Password is optional on update (only hashed/updated if provided) — use `undefined` check, not truthiness
+  - User select omits `passwordHash` from all responses — always use explicit `select` to avoid leaking sensitive data
+  - `CompanyAssignment` type exported for UI consumption: `{ companyId: string; modules: string[] }`
 ---
