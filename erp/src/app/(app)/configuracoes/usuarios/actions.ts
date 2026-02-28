@@ -305,6 +305,20 @@ export async function toggleUserStatus(id: string) {
 }
 
 /**
+ * List all active companies (for company assignment UI).
+ * Only ADMIN users can call this.
+ */
+export async function listAllCompanies() {
+  await requireAdmin();
+
+  return prisma.company.findMany({
+    where: { status: "ACTIVE" },
+    select: { id: true, nomeFantasia: true },
+    orderBy: { nomeFantasia: "asc" },
+  });
+}
+
+/**
  * Get a user by ID with their company assignments.
  * Only ADMIN users can call this.
  */
