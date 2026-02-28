@@ -3,6 +3,8 @@
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
 import { isValidCnpj, stripCnpj, formatCnpj } from "@/lib/cnpj";
+import { logAuditEvent } from "@/lib/audit";
+import { Prisma } from "@prisma/client";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -61,7 +63,7 @@ function validateCompanyInput(input: CompanyInput) {
  * Create a new company. Only ADMIN users can call this.
  */
 export async function createCompany(input: CompanyInput) {
-  await requireAdmin();
+  const session = await requireAdmin();
   validateCompanyInput(input);
 
   const cnpjDigits = stripCnpj(input.cnpj);
@@ -89,6 +91,14 @@ export async function createCompany(input: CompanyInput) {
     },
   });
 
+  await logAuditEvent({
+    userId: session.userId,
+    action: "CREATE",
+    entity: "Company",
+    entityId: company.id,
+    dataAfter: company as unknown as Prisma.InputJsonValue,
+  });
+
   return company;
 }
 
@@ -96,7 +106,7 @@ export async function createCompany(input: CompanyInput) {
  * Update an existing company. Only ADMIN users can call this.
  */
 export async function updateCompany(id: string, input: CompanyInput) {
-  await requireAdmin();
+  const session = await requireAdmin();
   validateCompanyInput(input);
 
   const cnpjDigits = stripCnpj(input.cnpj);
@@ -109,6 +119,8 @@ export async function updateCompany(id: string, input: CompanyInput) {
   if (existing) {
     throw new Error("Já existe outra empresa cadastrada com este CNPJ");
   }
+
+  const before = await prisma.company.findUnique({ where: { id } });
 
   const company = await prisma.company.update({
     where: { id },
@@ -123,6 +135,15 @@ export async function updateCompany(id: string, input: CompanyInput) {
       segmento: input.segmento?.trim() || null,
       logoUrl: input.logoUrl?.trim() || null,
     },
+  });
+
+  await logAuditEvent({
+    userId: session.userId,
+    action: "UPDATE",
+    entity: "Company",
+    entityId: id,
+    dataBefore: before as unknown as Prisma.InputJsonValue,
+    dataAfter: company as unknown as Prisma.InputJsonValue,
   });
 
   return company;
@@ -189,7 +210,7 @@ export async function getCompanyById(id: string) {
  * Only ADMIN users can call this.
  */
 export async function toggleCompanyStatus(id: string) {
-  await requireAdmin();
+  const session = await requireAdmin();
 
   const company = await prisma.company.findUnique({ where: { id } });
   if (!company) {
@@ -201,6 +222,15 @@ export async function toggleCompanyStatus(id: string) {
   const updated = await prisma.company.update({
     where: { id },
     data: { status: newStatus },
+  });
+
+  await logAuditEvent({
+    userId: session.userId,
+    action: "STATUS_CHANGE",
+    entity: "Company",
+    entityId: id,
+    dataBefore: { status: company.status },
+    dataAfter: { status: newStatus },
   });
 
   return updated;

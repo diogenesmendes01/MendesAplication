@@ -3,6 +3,8 @@
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
 import { hashPassword } from "@/lib/auth";
+import { logAuditEvent } from "@/lib/audit";
+import { Prisma } from "@prisma/client";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -91,7 +93,7 @@ function validateUpdateUserInput(input: UpdateUserInput) {
  * Create a new user. Only ADMIN users can call this.
  */
 export async function createUser(input: CreateUserInput) {
-  await requireAdmin();
+  const session = await requireAdmin();
   validateCreateUserInput(input);
 
   // Check email uniqueness
@@ -122,6 +124,14 @@ export async function createUser(input: CreateUserInput) {
     },
   });
 
+  await logAuditEvent({
+    userId: session.userId,
+    action: "CREATE",
+    entity: "User",
+    entityId: user.id,
+    dataAfter: { name: user.name, email: user.email, role: user.role },
+  });
+
   return user;
 }
 
@@ -129,7 +139,7 @@ export async function createUser(input: CreateUserInput) {
  * Update an existing user. Only ADMIN users can call this.
  */
 export async function updateUser(id: string, input: UpdateUserInput) {
-  await requireAdmin();
+  const session = await requireAdmin();
   validateUpdateUserInput(input);
 
   // Check email uniqueness (exclude current user)
@@ -139,6 +149,11 @@ export async function updateUser(id: string, input: UpdateUserInput) {
   if (existing) {
     throw new Error("Já existe outro usuário cadastrado com este email");
   }
+
+  const before = await prisma.user.findUnique({
+    where: { id },
+    select: { name: true, email: true, role: true },
+  });
 
   const data: Record<string, unknown> = {
     name: input.name.trim(),
@@ -163,6 +178,15 @@ export async function updateUser(id: string, input: UpdateUserInput) {
       createdAt: true,
       updatedAt: true,
     },
+  });
+
+  await logAuditEvent({
+    userId: session.userId,
+    action: "UPDATE",
+    entity: "User",
+    entityId: id,
+    dataBefore: before as unknown as Prisma.InputJsonValue,
+    dataAfter: { name: user.name, email: user.email, role: user.role },
   });
 
   return user;
@@ -225,7 +249,7 @@ export async function assignUserToCompanies(
   userId: string,
   assignments: CompanyAssignment[]
 ) {
-  await requireAdmin();
+  const session = await requireAdmin();
 
   // Verify user exists
   const user = await prisma.user.findUnique({ where: { id: userId } });
@@ -270,6 +294,14 @@ export async function assignUserToCompanies(
     include: { company: { select: { id: true, nomeFantasia: true } } },
   });
 
+  await logAuditEvent({
+    userId: session.userId,
+    action: "UPDATE",
+    entity: "UserCompany",
+    entityId: userId,
+    dataAfter: { assignments: assignments as unknown as Prisma.InputJsonValue },
+  });
+
   return updated;
 }
 
@@ -278,7 +310,7 @@ export async function assignUserToCompanies(
  * Only ADMIN users can call this.
  */
 export async function toggleUserStatus(id: string) {
-  await requireAdmin();
+  const session = await requireAdmin();
 
   const user = await prisma.user.findUnique({ where: { id } });
   if (!user) {
@@ -299,6 +331,15 @@ export async function toggleUserStatus(id: string) {
       createdAt: true,
       updatedAt: true,
     },
+  });
+
+  await logAuditEvent({
+    userId: session.userId,
+    action: "STATUS_CHANGE",
+    entity: "User",
+    entityId: id,
+    dataBefore: { status: user.status },
+    dataAfter: { status: newStatus },
   });
 
   return updated;

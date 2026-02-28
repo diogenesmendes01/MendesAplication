@@ -5,6 +5,7 @@ import {
   generateAccessToken,
   generateRefreshToken,
 } from "@/lib/auth";
+import { logAuditEvent } from "@/lib/audit";
 
 export async function POST(req: NextRequest) {
   try {
@@ -60,6 +61,19 @@ export async function POST(req: NextRequest) {
 
     const accessToken = generateAccessToken(tokenPayload);
     const refreshToken = generateRefreshToken(tokenPayload);
+
+    const ipAddress =
+      req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+      req.headers.get("x-real-ip") ??
+      null;
+
+    await logAuditEvent({
+      userId: user.id,
+      action: "LOGIN",
+      entity: "User",
+      entityId: user.id,
+      ipAddress,
+    });
 
     const response = NextResponse.json({
       user: {
