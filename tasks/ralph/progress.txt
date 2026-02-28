@@ -44,6 +44,8 @@
 - Shadcn Checkbox in `src/components/ui/checkbox.tsx`, Select in `src/components/ui/select.tsx` — available for forms
 - AVAILABLE_MODULES for RBAC UI: "comercial", "sac", "financeiro", "fiscal", "configuracoes"
 - Two-dialog pattern: separate create/edit dialog from assignment/config dialog for complex entities
+- Audit logging: `logAuditEvent()` from `@/lib/audit` — fire-and-forget, never throws. Use `Prisma.InputJsonValue` for dataBefore/dataAfter types
+- Logout API at POST `/api/auth/logout` — clears both cookies, logs LOGOUT audit event
 
 ## Completed Stories
 
@@ -269,4 +271,25 @@
   - Shadcn Select component requires `@radix-ui/react-select` — use for dropdowns with fixed options (like role)
   - Shadcn Checkbox component requires `@radix-ui/react-checkbox` — use for boolean toggles in forms
   - Browser testing not available — manual verification needed
+---
+
+## 2026-02-28 - US-012
+- What was implemented: Audit logging service with utility function and integration across all existing server actions
+  - `src/lib/audit.ts`: `logAuditEvent()` utility — fire-and-forget (catches errors to avoid disrupting main operations), insert-only, supports action types: CREATE, UPDATE, DELETE, LOGIN, LOGOUT, STATUS_CHANGE
+  - Company CRUD actions updated: createCompany (CREATE), updateCompany (UPDATE with dataBefore/dataAfter), toggleCompanyStatus (STATUS_CHANGE)
+  - User CRUD actions updated: createUser (CREATE), updateUser (UPDATE with dataBefore/dataAfter), assignUserToCompanies (UPDATE), toggleUserStatus (STATUS_CHANGE)
+  - Login route updated: logs LOGIN event with IP address extraction from x-forwarded-for/x-real-ip headers
+  - `src/app/api/auth/logout/route.ts` (new): POST endpoint that clears both cookies, logs LOGOUT event, extracts IP address
+- Files changed:
+  - erp/src/lib/audit.ts (new)
+  - erp/src/app/api/auth/logout/route.ts (new)
+  - erp/src/app/(app)/configuracoes/empresas/actions.ts (updated — added audit logging)
+  - erp/src/app/(app)/configuracoes/usuarios/actions.ts (updated — added audit logging)
+  - erp/src/app/api/auth/login/route.ts (updated — added audit logging)
+- **Learnings for future iterations:**
+  - Prisma `Json` fields require `Prisma.InputJsonValue` type — `Record<string, unknown>` is NOT compatible. Use `as unknown as Prisma.InputJsonValue` for type casts
+  - `requireAdmin()` returns the session JwtPayload — capture the return value (`const session = await requireAdmin()`) to use `session.userId` for audit logging
+  - IP extraction pattern: `req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? req.headers.get("x-real-ip")` — works behind proxies
+  - Audit logging is fire-and-forget: wrapped in try/catch with console.error fallback, so failures never block the main operation
+  - No UI changes in this story — purely backend service
 ---
