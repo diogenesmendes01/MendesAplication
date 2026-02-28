@@ -1,0 +1,10 @@
+{
+  "enabledPlugins": {
+    "ralph-skills@ralph-marketplace": true
+  },
+  "permissions": {
+    "allow": [
+      "Bash(ls:*)"
+    ]
+  }
+}
