@@ -6,3 +6,80 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
+enum UserRole {
+  ADMIN
+  MANAGER
+}
+
+enum Status {
+  ACTIVE
+  INACTIVE
+}
+
+model Company {
+  id                String   @id @default(cuid())
+  razaoSocial       String
+  nomeFantasia      String
+  cnpj              String   @unique
+  inscricaoEstadual String?
+  endereco          String?
+  telefone          String?
+  email             String?
+  segmento          String?
+  logoUrl           String?
+  status            Status   @default(ACTIVE)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  userCompanies UserCompany[]
+  auditLogs     AuditLog[]
+
+  @@map("companies")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         UserRole @default(MANAGER)
+  status       Status   @default(ACTIVE)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  userCompanies UserCompany[]
+  auditLogs     AuditLog[]
+
+  @@map("users")
+}
+
+model UserCompany {
+  userId    String
+  companyId String
+  modules   String[]
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@id([userId, companyId])
+  @@map("user_companies")
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String
+  action     String
+  entity     String
+  entityId   String
+  dataBefore Json?
+  dataAfter  Json?
+  ipAddress  String?
+  companyId  String?
+  createdAt  DateTime @default(now())
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+
+  @@map("audit_logs")
+}
