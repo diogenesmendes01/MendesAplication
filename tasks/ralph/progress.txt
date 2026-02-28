@@ -17,6 +17,10 @@
 - Auth utilities in `src/lib/auth.ts` — import `hashPassword`, `comparePassword`, `generateAccessToken`, `generateRefreshToken`, `verifyAccessToken`, `getCurrentUser`
 - Auth middleware `withAuth` in `src/lib/auth-middleware.ts` — wraps API handlers with JWT validation
 - Refresh token stored in httpOnly cookie "refreshToken", refresh endpoint at POST `/api/auth/refresh`
+- Access token stored in non-httpOnly cookie "accessToken" so middleware can check auth state
+- Next.js middleware at `src/middleware.ts` handles auth redirects: unauthenticated → /login
+- Login API at POST `/api/auth/login` — validates credentials, sets both cookies
+- Label component in `src/components/ui/label.tsx` for form labels
 
 ## Completed Stories
 
@@ -72,4 +76,28 @@
   - Refresh token is stored in httpOnly cookie named "refreshToken" — set via `response.cookies.set()`
   - Next.js 14 App Router route handlers that don't use `req` should omit the parameter entirely (not `_req`) to satisfy ESLint
   - JWT secrets fallback to dev defaults — always override in production via env vars
+---
+
+## 2026-02-28 - US-004
+- What was implemented: Login page UI with full auth flow
+  - `src/app/login/page.tsx`: Client component with email/password form, client-side validation (required fields, email format), error display, loading state
+  - `src/app/api/auth/login/route.ts`: POST endpoint that validates credentials against DB, returns user info, sets accessToken and refreshToken cookies
+  - `src/middleware.ts`: Next.js middleware that redirects unauthenticated users to /login, allows public paths (/login, /api/auth/*)
+  - `src/app/dashboard/page.tsx`: Placeholder dashboard page (redirect target after login)
+  - `src/components/ui/label.tsx`: Shadcn-style Label component for form labels
+  - `src/app/api/auth/refresh/route.ts`: Updated to also set accessToken cookie on refresh
+- Files changed:
+  - erp/src/app/login/page.tsx (new)
+  - erp/src/app/api/auth/login/route.ts (new)
+  - erp/src/middleware.ts (new)
+  - erp/src/app/dashboard/page.tsx (new)
+  - erp/src/components/ui/label.tsx (new)
+  - erp/src/app/api/auth/refresh/route.ts (updated)
+- **Learnings for future iterations:**
+  - Access token is stored in a non-httpOnly cookie so middleware can check auth state for redirects
+  - `jsonwebtoken` doesn't work in Edge runtime — middleware just checks cookie existence, actual verification happens in API routes
+  - Next.js middleware matcher pattern `/((?!_next/static|_next/image|favicon.ico).*)` excludes static files
+  - Login form uses Portuguese labels and error messages (pt-BR locale)
+  - The `PUBLIC_PATHS` array in middleware should be updated when adding new public routes
+  - Browser testing not available — manual verification needed
 ---
