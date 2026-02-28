@@ -21,6 +21,10 @@
 - Next.js middleware at `src/middleware.ts` handles auth redirects: unauthenticated → /login
 - Login API at POST `/api/auth/login` — validates credentials, sets both cookies
 - Label component in `src/components/ui/label.tsx` for form labels
+- Authenticated pages use `(app)` route group — layout at `src/app/(app)/layout.tsx`
+- Sidebar component at `src/components/sidebar.tsx`, Header at `src/components/header.tsx`
+- Navigation items defined in `navItems` array in sidebar.tsx — add new nav links there
+- Root page `/` redirects to `/dashboard`
 
 ## Completed Stories
 
@@ -99,5 +103,29 @@
   - Next.js middleware matcher pattern `/((?!_next/static|_next/image|favicon.ico).*)` excludes static files
   - Login form uses Portuguese labels and error messages (pt-BR locale)
   - The `PUBLIC_PATHS` array in middleware should be updated when adding new public routes
+  - Browser testing not available — manual verification needed
+---
+
+## 2026-02-28 - US-005
+- What was implemented: Base app layout with collapsible sidebar and header
+  - `src/app/(app)/layout.tsx`: Client component with sidebar + header + mobile overlay, manages collapsed/mobileOpen state
+  - `src/components/sidebar.tsx`: Fixed sidebar with nav links (Dashboard, Comercial, SAC, Financeiro, Fiscal, Configurações), collapsible with chevron toggle, active state highlighting
+  - `src/components/header.tsx`: Fixed header with mobile hamburger menu, company selector placeholder, user avatar/name display
+  - `src/app/(app)/dashboard/page.tsx`: Dashboard moved under (app) route group
+  - `src/app/page.tsx`: Root redirects to /dashboard
+  - Deleted old `src/app/dashboard/page.tsx`
+- Files changed:
+  - erp/src/app/(app)/layout.tsx (new)
+  - erp/src/app/(app)/dashboard/page.tsx (new — moved from app/dashboard/)
+  - erp/src/components/sidebar.tsx (new)
+  - erp/src/components/header.tsx (new)
+  - erp/src/app/page.tsx (updated — redirect to /dashboard)
+  - erp/src/app/dashboard/page.tsx (deleted)
+- **Learnings for future iterations:**
+  - `(app)` route group wraps all authenticated pages — new pages go under `src/app/(app)/`
+  - Sidebar navigation items are in `navItems` array in `sidebar.tsx` — add new routes there
+  - Header uses responsive classes: hamburger visible on mobile (`md:hidden`), sidebar left offset on desktop
+  - Mobile sidebar uses `translate-x` transform for slide animation with overlay backdrop
+  - `lucide-react` is already installed for icons — use it for all icon needs
   - Browser testing not available — manual verification needed
 ---
