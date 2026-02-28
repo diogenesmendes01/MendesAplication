@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Sidebar } from "@/components/sidebar";
 import { Header } from "@/components/header";
+import { CompanyProvider } from "@/contexts/company-context";
 import { cn } from "@/lib/utils";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -21,7 +22,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <>
+    <CompanyProvider>
       {/* Mobile overlay */}
       {mobileOpen && (
         <div
@@ -60,6 +61,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       >
         <div className="p-6">{children}</div>
       </main>
-    </>
+    </CompanyProvider>
   );
 }
