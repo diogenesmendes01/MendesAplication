@@ -1,0 +1,9 @@
+# Ralph Progress — MendesERP (erp-multi-empresa)
+
+## Current Status
+Not started
+
+## Completed Stories
+(none yet)
+
+## Notes
