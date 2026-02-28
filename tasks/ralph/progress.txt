@@ -25,6 +25,11 @@
 - Sidebar component at `src/components/sidebar.tsx`, Header at `src/components/header.tsx`
 - Navigation items defined in `navItems` array in sidebar.tsx — add new nav links there
 - Root page `/` redirects to `/dashboard`
+- Server actions use `"use server"` directive and live alongside their pages (e.g. `configuracoes/empresas/actions.ts`)
+- Session helpers in `src/lib/session.ts`: `getSession()`, `requireSession()`, `requireAdmin()` — read accessToken cookie for auth in server actions
+- CNPJ validation in `src/lib/cnpj.ts`: `isValidCnpj()`, `stripCnpj()`, `formatCnpj()` — validates check digits
+- Server actions use `PaginatedResult<T>` type for paginated listings (page, pageSize, total, totalPages, data)
+- CNPJs are stored formatted (XX.XXX.XXX/XXXX-XX) in the database
 
 ## Completed Stories
 
@@ -128,4 +133,22 @@
   - Mobile sidebar uses `translate-x` transform for slide animation with overlay backdrop
   - `lucide-react` is already installed for icons — use it for all icon needs
   - Browser testing not available — manual verification needed
+---
+
+## 2026-02-28 - US-006
+- What was implemented: Company CRUD server actions with CNPJ validation and admin role enforcement
+  - `src/lib/cnpj.ts`: CNPJ validation utility with check digit validation, strip, and format functions
+  - `src/lib/session.ts`: Server-action auth helpers (`getSession`, `requireSession`, `requireAdmin`) using cookie-based auth
+  - `src/app/(app)/configuracoes/empresas/actions.ts`: Five server actions — createCompany, updateCompany, listCompanies (paginated + search), getCompanyById, toggleCompanyStatus
+- Files changed:
+  - erp/src/lib/cnpj.ts (new)
+  - erp/src/lib/session.ts (new)
+  - erp/src/app/(app)/configuracoes/empresas/actions.ts (new)
+- **Learnings for future iterations:**
+  - Server actions need cookie-based auth (not Bearer token) — `cookies()` from `next/headers` is the way
+  - `requireAdmin()` pattern: call at the top of every admin-only server action for consistent authorization
+  - CNPJ validation includes check digit math — don't just check format length
+  - `PaginatedResult<T>` generic type provides consistent pagination shape for all listing actions
+  - CNPJs stored formatted in DB for consistent comparison and display
+  - `mode: "insensitive"` on Prisma `contains` enables case-insensitive search
 ---
