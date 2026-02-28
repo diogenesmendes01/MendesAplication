@@ -10,6 +10,10 @@
 - Quality checks: `npx tsc --noEmit` for typecheck, `npm run lint` for ESLint
 - `.env` is gitignored; `.env.example` has the template
 - Working directory for git commands: `/workspaces/app/` (root repo)
+- Prisma seed config goes in `package.json` under `"prisma": { "seed": "npx tsx prisma/seed.ts" }` (prisma.config.ts `seed` not supported in Prisma 6.19)
+- PostgreSQL needs manual setup: `sudo apt-get install postgresql`, `sudo su -c "..." postgres` to configure
+- Use `upsert` in seed scripts for idempotent re-runs
+- Shared enums (Status, UserRole) are defined at schema level and reused across models
 
 ## Completed Stories
 
@@ -29,4 +33,20 @@
   - Prisma 6.x generates `prisma.config.ts` automatically — keep it for config
   - Node 18 has engine warnings but everything works fine
   - The `scripts/ralph/` directory is an embedded git repo — don't try to stage it
+---
+
+## 2026-02-28 - US-002
+- What was implemented: Full Prisma schema for auth and multi-tenancy with Company, User, UserCompany, AuditLog models
+- Files changed:
+  - erp/prisma/schema.prisma — Added Company, User, UserCompany, AuditLog models with enums (UserRole, Status)
+  - erp/prisma/migrations/20260228221218_init_auth_multitenancy/migration.sql — PostgreSQL migration
+  - erp/prisma/seed.ts — Seed script creating 2 companies (Mendes Tech, Mendes Consultoria) and 1 admin user
+  - erp/package.json — Added prisma seed config and tsx dev dependency
+- **Learnings for future iterations:**
+  - Prisma 6.19 does NOT support `seed` in prisma.config.ts — use package.json `"prisma"` field instead
+  - PostgreSQL not pre-installed in devcontainer — install with `sudo apt-get install postgresql` and configure via `sudo su -c "..." postgres`
+  - Use `@@map("table_name")` in Prisma for snake_case table names while keeping camelCase in code
+  - UserCompany uses composite `@@id([userId, companyId])` for the junction table
+  - `modules` field is `String[]` (PostgreSQL array) for flexible module permission storage
+  - Seed admin password hash is for "admin123" — future auth stories should use bcrypt to hash
 ---
