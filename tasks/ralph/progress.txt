@@ -1,9 +1,32 @@
 # Ralph Progress — MendesERP (erp-multi-empresa)
 
-## Current Status
-Not started
+## Codebase Patterns
+- Project lives in `/workspaces/app/erp/` — all npm/npx commands must run from there
+- Next.js 14.2.35 with App Router, TypeScript strict mode
+- TailwindCSS 3.x with Shadcn/UI (New York style, default config)
+- Prisma 6.x with `prisma-client-js` generator (classic, not new `prisma-client`)
+- Prisma singleton in `src/lib/prisma.ts` — import from `@/lib/prisma`
+- Shadcn/UI components in `src/components/ui/` — use Sonner for toasts (not the old Toaster)
+- Quality checks: `npx tsc --noEmit` for typecheck, `npm run lint` for ESLint
+- `.env` is gitignored; `.env.example` has the template
+- Working directory for git commands: `/workspaces/app/` (root repo)
 
 ## Completed Stories
-(none yet)
 
-## Notes
+## 2026-02-28 - US-001
+- What was implemented: Full project scaffold with Next.js 14, TypeScript, TailwindCSS, Shadcn/UI, and Prisma
+- Files changed:
+  - erp/ — entire project directory created
+  - erp/package.json — Next.js 14 with all dependencies
+  - erp/src/components/ui/ — Button, Input, Card, Table, Dialog, Sonner
+  - erp/src/lib/prisma.ts — Prisma client singleton
+  - erp/src/lib/utils.ts — Shadcn/UI utility (cn)
+  - erp/prisma/schema.prisma — Base Prisma schema with PostgreSQL
+  - erp/.env.example — Database URL template
+- **Learnings for future iterations:**
+  - `create-next-app@14` is the correct command for Next.js 14 scaffold
+  - Shadcn/UI uses `sonner` for toasts now (not `toaster` — that component was removed from registry)
+  - Prisma 6.x generates `prisma.config.ts` automatically — keep it for config
+  - Node 18 has engine warnings but everything works fine
+  - The `scripts/ralph/` directory is an embedded git repo — don't try to stage it
+---
