@@ -51,6 +51,15 @@ export async function POST() {
 
   const response = NextResponse.json({ accessToken: newAccessToken });
 
+  // Access token cookie — not httpOnly so middleware can read it
+  response.cookies.set("accessToken", newAccessToken, {
+    httpOnly: false,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: 15 * 60, // 15 minutes
+  });
+
   // Set new refresh token as httpOnly cookie
   response.cookies.set("refreshToken", newRefreshToken, {
     httpOnly: true,
