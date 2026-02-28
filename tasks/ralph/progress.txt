@@ -30,6 +30,8 @@
 - CNPJ validation in `src/lib/cnpj.ts`: `isValidCnpj()`, `stripCnpj()`, `formatCnpj()` — validates check digits
 - Server actions use `PaginatedResult<T>` type for paginated listings (page, pageSize, total, totalPages, data)
 - CNPJs are stored formatted (XX.XXX.XXX/XXXX-XX) in the database
+- Listing pages pattern: client component with useCallback for loadData, useEffect to trigger, search resets to page 1
+- Form dialogs: reuse same Dialog for create/edit, distinguish via `editingId` state (null = create, string = edit)
 
 ## Completed Stories
 
@@ -151,4 +153,20 @@
   - `PaginatedResult<T>` generic type provides consistent pagination shape for all listing actions
   - CNPJs stored formatted in DB for consistent comparison and display
   - `mode: "insensitive"` on Prisma `contains` enables case-insensitive search
+---
+
+## 2026-02-28 - US-007
+- What was implemented: Company registration and listing page with full CRUD UI
+  - `src/app/(app)/configuracoes/empresas/page.tsx`: Client component with company listing table, search, pagination, create/edit dialog, CNPJ input mask, and active/inactive toggle
+- Files changed:
+  - erp/src/app/(app)/configuracoes/empresas/page.tsx (new)
+- **Learnings for future iterations:**
+  - CNPJ mask is implemented as a pure function `applyCnpjMask()` — can be extracted to a shared utility if needed elsewhere
+  - Inline CNPJ validation triggers when all 14 digits are typed, using the existing `isValidCnpj()` from `@/lib/cnpj`
+  - Status toggle is a clickable badge (green for ACTIVE, gray for INACTIVE) — no separate button needed
+  - `PaginatedResult<T>` type is imported from the actions file for consistent typing
+  - Dialog uses `max-h-[90vh] overflow-y-auto` to handle many form fields on small screens
+  - Search resets pagination to page 1 via `handleSearchChange`
+  - Server actions from `actions.ts` are called directly from client components — Next.js handles the RPC
+  - Browser testing not available — manual verification needed
 ---
