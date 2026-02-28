@@ -41,6 +41,9 @@
 - User server actions in `src/app/(app)/configuracoes/usuarios/actions.ts` — exports `createUser`, `updateUser`, `listUsers`, `getUserById`, `assignUserToCompanies`, `toggleUserStatus`
 - Always use explicit `select` on User queries to exclude `passwordHash` from responses
 - `assignUserToCompanies` replaces all assignments atomically — pass empty array to remove all
+- Shadcn Checkbox in `src/components/ui/checkbox.tsx`, Select in `src/components/ui/select.tsx` — available for forms
+- AVAILABLE_MODULES for RBAC UI: "comercial", "sac", "financeiro", "fiscal", "configuracoes"
+- Two-dialog pattern: separate create/edit dialog from assignment/config dialog for complex entities
 
 ## Completed Stories
 
@@ -238,4 +241,32 @@
   - Password is optional on update (only hashed/updated if provided) — use `undefined` check, not truthiness
   - User select omits `passwordHash` from all responses — always use explicit `select` to avoid leaking sensitive data
   - `CompanyAssignment` type exported for UI consumption: `{ companyId: string; modules: string[] }`
+---
+
+## 2026-02-28 - US-011
+- What was implemented: User management page with full CRUD UI and company assignment dialog
+  - `src/app/(app)/configuracoes/usuarios/page.tsx`: Client component with:
+    - User listing table with columns: name, email, role (with badge), status (toggle)
+    - Search by name or email with pagination
+    - Create user dialog: name, email, password, role (Admin/Manager via Select component)
+    - Edit user dialog with pre-populated data (password optional on edit)
+    - Company assignment dialog: multi-select of companies with module checkboxes per company
+    - Status toggle (active/inactive) per user
+  - `src/app/(app)/configuracoes/usuarios/actions.ts`: Added `listAllCompanies()` server action for company assignment UI
+  - `src/components/ui/checkbox.tsx`: Shadcn Checkbox component installed
+  - `src/components/ui/select.tsx`: Shadcn Select component installed
+- Files changed:
+  - erp/src/app/(app)/configuracoes/usuarios/page.tsx (new)
+  - erp/src/app/(app)/configuracoes/usuarios/actions.ts (updated — added listAllCompanies)
+  - erp/src/components/ui/checkbox.tsx (new — Shadcn)
+  - erp/src/components/ui/select.tsx (new — Shadcn)
+  - erp/package.json, erp/package-lock.json (added @radix-ui/react-checkbox, @radix-ui/react-select)
+- **Learnings for future iterations:**
+  - User page uses two separate dialogs: one for create/edit user, one for company assignment — keeps UI simpler than one giant form
+  - Company assignment dialog loads all companies and current assignments in parallel via `Promise.all`
+  - `listAllCompanies()` server action returns only active companies for the assignment UI
+  - AVAILABLE_MODULES constant defines the 5 business modules: comercial, sac, financeiro, fiscal, configuracoes
+  - Shadcn Select component requires `@radix-ui/react-select` — use for dropdowns with fixed options (like role)
+  - Shadcn Checkbox component requires `@radix-ui/react-checkbox` — use for boolean toggles in forms
+  - Browser testing not available — manual verification needed
 ---
