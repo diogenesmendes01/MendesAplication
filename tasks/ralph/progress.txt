@@ -14,6 +14,9 @@
 - PostgreSQL needs manual setup: `sudo apt-get install postgresql`, `sudo su -c "..." postgres` to configure
 - Use `upsert` in seed scripts for idempotent re-runs
 - Shared enums (Status, UserRole) are defined at schema level and reused across models
+- Auth utilities in `src/lib/auth.ts` — import `hashPassword`, `comparePassword`, `generateAccessToken`, `generateRefreshToken`, `verifyAccessToken`, `getCurrentUser`
+- Auth middleware `withAuth` in `src/lib/auth-middleware.ts` — wraps API handlers with JWT validation
+- Refresh token stored in httpOnly cookie "refreshToken", refresh endpoint at POST `/api/auth/refresh`
 
 ## Completed Stories
 
@@ -49,4 +52,24 @@
   - UserCompany uses composite `@@id([userId, companyId])` for the junction table
   - `modules` field is `String[]` (PostgreSQL array) for flexible module permission storage
   - Seed admin password hash is for "admin123" — future auth stories should use bcrypt to hash
+---
+
+## 2026-02-28 - US-003
+- What was implemented: JWT authentication utilities and middleware
+  - `src/lib/auth.ts`: token generation (access 15min, refresh 7d), verification, password hashing/comparison (bcrypt), getCurrentUser helper
+  - `src/lib/auth-middleware.ts`: `withAuth` higher-order function that wraps API route handlers, validates Bearer token, passes decoded JwtPayload
+  - `src/app/api/auth/refresh/route.ts`: POST endpoint that reads refresh token from httpOnly cookie, validates, re-issues new access + refresh tokens
+  - `.env.example`: added JWT_SECRET and REFRESH_SECRET template vars
+- Files changed:
+  - erp/src/lib/auth.ts (new)
+  - erp/src/lib/auth-middleware.ts (new)
+  - erp/src/app/api/auth/refresh/route.ts (new)
+  - erp/.env.example (updated)
+  - erp/package.json, erp/package-lock.json (added jsonwebtoken, bcryptjs + types)
+- **Learnings for future iterations:**
+  - Auth module exports: `hashPassword`, `comparePassword`, `generateAccessToken`, `generateRefreshToken`, `verifyAccessToken`, `verifyRefreshToken`, `getCurrentUser`
+  - `withAuth` middleware pattern: wrap handler `(req, context, user) => ...` — user is the decoded JwtPayload
+  - Refresh token is stored in httpOnly cookie named "refreshToken" — set via `response.cookies.set()`
+  - Next.js 14 App Router route handlers that don't use `req` should omit the parameter entirely (not `_req`) to satisfy ESLint
+  - JWT secrets fallback to dev defaults — always override in production via env vars
 ---
