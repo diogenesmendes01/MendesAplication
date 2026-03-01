@@ -112,7 +112,8 @@
 - Invoice model links to Proposal, Boleto (both optional), Client, and Company; issRate is Decimal(5,2)
 - ChartOfAccounts has self-relation (`parentId`→`ChartOfAccountsHierarchy`) for tree hierarchy; `@@unique([code, companyId])`
 - TaxEntry.period is String for flexible period (e.g., "2026-01", "2026-Q1")
-- Fiscal pages under `src/app/(app)/fiscal/` — `/fiscal` redirects to `/fiscal/plano-de-contas`
+- Fiscal pages under `src/app/(app)/fiscal/` — `/fiscal` redirects to `/fiscal/notas-fiscais`
+- Invoice listing server actions in `src/app/(app)/fiscal/notas-fiscais/actions.ts` — `listInvoices`, `listClientsForSelect`, `cancelInvoice`
 - ChartOfAccounts CRUD in `src/app/(app)/fiscal/plano-de-contas/actions.ts` — tree view page at `/fiscal/plano-de-contas`
 - Default chart of accounts auto-seeded on company creation; `seedDefaultChartOfAccounts(companyId)` can also be called manually from UI
 - NFS-e service in `src/lib/nfse.ts`: abstract `NfseProvider` interface with `MockNfseProvider`; follows same provider pattern as boleto and email services
@@ -970,4 +971,19 @@
   - Default ISS rate is 5% — can be made configurable per company in future
   - Email sending on invoice emission is fire-and-forget (caught silently) so invoice creation succeeds even if email fails
   - Invoice model already existed in schema (created in US-042); this story adds the service layer and server actions
+---
+
+## 2026-03-01 - US-045
+- What was implemented: NFS-e emission and listing UI with invoice listing page at /fiscal/notas-fiscais, filters, pagination, cancel action, and Emit NFS-e button on paid boletos in proposal detail page
+- Files changed:
+  - erp/src/app/(app)/fiscal/notas-fiscais/actions.ts — Server actions: `listInvoices` (with filters by status/client/date range, pagination), `listClientsForSelect`, `cancelInvoice` (status change with audit logging)
+  - erp/src/app/(app)/fiscal/notas-fiscais/page.tsx — Invoice listing page with table (NF number, client, description, value, status, date), status badges (pending=gray, issued=green, cancelled=red), filter panel, pagination, cancel confirmation dialog
+  - erp/src/app/(app)/comercial/propostas/[id]/page.tsx — Added "Emitir NFS-e" button on paid boletos in the boletos table, with confirmation dialog showing client, value, installment info, ISS rate preview, and auto-email notice
+  - erp/src/app/(app)/fiscal/page.tsx — Changed default fiscal redirect from /fiscal/plano-de-contas to /fiscal/notas-fiscais
+- **Learnings for future iterations:**
+  - Invoice listing follows same pattern as receivables (financeiro/receber): paginated table, filter panel with toggle, status badges, client dropdown
+  - NFS-e emission from proposal detail uses `emitInvoiceForBoleto` from `@/lib/nfse-actions` — already creates invoice and sends email
+  - Cancel invoice only works on ISSUED status (not PENDING); status change audited
+  - Fiscal default page now redirects to notas-fiscais for easier access
+  - Emit NFS-e button only shows for boletos with status "PAID" in the proposal detail page
 ---
