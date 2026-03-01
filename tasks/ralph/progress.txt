@@ -825,3 +825,14 @@
   - Reuses existing `createProposal` and `updateProposal` server actions from `../actions`
   - `calculateTotal` is computed client-side for real-time display; server action recalculates independently
 ---
+
+## 2026-03-01 - US-036
+- What was implemented: Proposal listing page at `/comercial/propostas` with full table display (client, total value, status, date, actions), status badges with colors (gray=draft, blue=sent, green=accepted, red=rejected, orange=expired), filters (status, client, date range, value range), row click navigation to edit/view proposals, and pagination
+- Files changed:
+  - `erp/src/app/(app)/comercial/propostas/page.tsx` — new listing page component
+- **Learnings for future iterations:**
+  - Proposal listing reuses the same pattern as financial listing pages (receber/pagar) — filter panel with collapsible toggle, paginated table, status badges
+  - Row click navigates to `/comercial/propostas/nova?edit=<id>` for both draft (edit) and non-draft (view) proposals — the edit page handles read-only display for non-DRAFT statuses
+  - Value range filters use `filterValueMin`/`filterValueMax` parsed to float before passing to server actions
+  - All types needed (`PaginatedResult`, `ProposalRow`, `ClientOption`) are already exported from the existing `actions.ts`
+---
