@@ -23,11 +23,26 @@ export interface CompanyKPI {
   profit: number;
 }
 
+export interface BoletoSummary {
+  emitted: number;
+  paid: number;
+  overdue: number;
+}
+
+export interface RevenueChartEntry {
+  companyName: string;
+  revenue: number;
+  expenses: number;
+  profit: number;
+}
+
 export interface DashboardData {
   totalRevenue: number;
   totalExpenses: number;
   totalProfit: number;
   companies: CompanyKPI[];
+  revenueChart: RevenueChartEntry[];
+  boletoSummary: BoletoSummary;
   periodLabel: string;
 }
 
@@ -97,6 +112,26 @@ function generatePlaceholderKPI(companyId: string, companyName: string, period: 
   };
 }
 
+/**
+ * Generate placeholder boleto summary data.
+ * Uses period-based scaling for consistent placeholder numbers.
+ */
+function generatePlaceholderBoletoSummary(period: PeriodType): BoletoSummary {
+  const scale: Record<PeriodType, number> = {
+    day: 1,
+    week: 5,
+    month: 20,
+    year: 240,
+    custom: 20,
+  };
+  const factor = scale[period];
+  return {
+    emitted: Math.round(3 * factor),
+    paid: Math.round(2 * factor),
+    overdue: Math.round(0.5 * factor),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Server Action
 // ---------------------------------------------------------------------------
@@ -138,11 +173,24 @@ export async function getDashboardData(filters: DashboardFilters): Promise<Dashb
   const totalExpenses = companyKPIs.reduce((sum, c) => sum + c.expenses, 0);
   const totalProfit = totalRevenue - totalExpenses;
 
+  // Chart data: revenue comparison across companies
+  const revenueChart: RevenueChartEntry[] = companyKPIs.map((c) => ({
+    companyName: c.companyName,
+    revenue: c.revenue,
+    expenses: c.expenses,
+    profit: c.profit,
+  }));
+
+  // Boleto summary: placeholder data until CRM module
+  const boletoSummary = generatePlaceholderBoletoSummary(filters.period);
+
   return {
     totalRevenue,
     totalExpenses,
     totalProfit,
     companies: companyKPIs,
+    revenueChart,
+    boletoSummary,
     periodLabel: getPeriodLabel(filters.period, filters.customStart, filters.customEnd),
   };
 }

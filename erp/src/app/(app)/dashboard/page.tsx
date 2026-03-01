@@ -7,7 +7,20 @@ import {
   TrendingDown,
   TrendingUp,
   Calendar,
+  FileText,
+  CheckCircle,
+  AlertTriangle,
 } from "lucide-react";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from "recharts";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -48,6 +61,12 @@ function formatCurrency(value: number): string {
   }).format(value);
 }
 
+function formatChartCurrency(value: number): string {
+  if (value >= 1_000_000) return `R$ ${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `R$ ${(value / 1_000).toFixed(0)}k`;
+  return `R$ ${value}`;
+}
+
 const PERIOD_OPTIONS: { value: PeriodType; label: string }[] = [
   { value: "day", label: "Hoje" },
   { value: "week", label: "Esta Semana" },
@@ -55,6 +74,32 @@ const PERIOD_OPTIONS: { value: PeriodType; label: string }[] = [
   { value: "year", label: "Este Ano" },
   { value: "custom", label: "Personalizado" },
 ];
+
+// ---------------------------------------------------------------------------
+// Chart tooltip
+// ---------------------------------------------------------------------------
+
+function ChartTooltipContent({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean;
+  payload?: Array<{ value: number; name: string; color: string }>;
+  label?: string;
+}) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="rounded-lg border bg-white p-3 shadow-md">
+      <p className="mb-1 text-sm font-medium">{label}</p>
+      {payload.map((entry, i) => (
+        <p key={i} className="text-sm" style={{ color: entry.color }}>
+          {entry.name}: {formatCurrency(entry.value)}
+        </p>
+      ))}
+    </div>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Component
@@ -218,6 +263,98 @@ export default function DashboardPage() {
           </Card>
         </div>
       ) : null}
+
+      {/* Boleto Summary Cards */}
+      {!loading && data && (
+        <div className="grid gap-4 sm:grid-cols-3">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Boletos Emitidos
+              </CardTitle>
+              <FileText className="h-5 w-5 text-gray-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{data.boletoSummary.emitted}</div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Dados placeholder
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Boletos Pagos
+              </CardTitle>
+              <CheckCircle className="h-5 w-5 text-green-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-green-600">
+                {data.boletoSummary.paid}
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Dados placeholder
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Boletos Vencidos
+              </CardTitle>
+              <AlertTriangle className="h-5 w-5 text-red-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-red-600">
+                {data.boletoSummary.overdue}
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Dados placeholder
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Revenue Comparison Chart */}
+      {!loading && data && data.revenueChart.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Comparativo de Receita por Empresa</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[350px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={data.revenueChart}
+                  margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                  <XAxis
+                    dataKey="companyName"
+                    tick={{ fontSize: 12 }}
+                    interval={0}
+                    angle={data.revenueChart.length > 4 ? -20 : 0}
+                    textAnchor={data.revenueChart.length > 4 ? "end" : "middle"}
+                    height={data.revenueChart.length > 4 ? 60 : 30}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 12 }}
+                    tickFormatter={formatChartCurrency}
+                  />
+                  <Tooltip content={<ChartTooltipContent />} />
+                  <Legend />
+                  <Bar dataKey="revenue" name="Receita" fill="#22c55e" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="expenses" name="Despesas" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="profit" name="Lucro" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Per-company breakdown table */}
       {!loading && data && data.companies.length > 0 && (
