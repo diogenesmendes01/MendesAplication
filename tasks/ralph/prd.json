@@ -741,7 +741,7 @@
         "Typecheck passes"
       ],
       "priority": 44,
-      "passes": false,
+      "passes": true,
       "notes": "NFS-e provider TBD (eNotas, Focus NFe). System uses abstract interface."
     },
     {

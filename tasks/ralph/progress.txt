@@ -115,6 +115,9 @@
 - Fiscal pages under `src/app/(app)/fiscal/` — `/fiscal` redirects to `/fiscal/plano-de-contas`
 - ChartOfAccounts CRUD in `src/app/(app)/fiscal/plano-de-contas/actions.ts` — tree view page at `/fiscal/plano-de-contas`
 - Default chart of accounts auto-seeded on company creation; `seedDefaultChartOfAccounts(companyId)` can also be called manually from UI
+- NFS-e service in `src/lib/nfse.ts`: abstract `NfseProvider` interface with `MockNfseProvider`; follows same provider pattern as boleto and email services
+- NFS-e server actions in `src/lib/nfse-actions.ts`: `emitInvoiceForBoleto(boletoId, companyId)` — creates Invoice with ISSUED status, calls NFS-e provider, auto-sends email to client
+- NFS-e email template: `buildNfseEmailHtml()` in `src/lib/email-templates.ts` — shows NF number, service description, value, ISS rate/value
 
 ## Completed Stories
 
@@ -952,4 +955,19 @@
   - Company creation auto-seeds default chart of accounts; if seeding fails, it's silently caught (admin can seed manually)
   - Delete account re-parents children to the deleted account's parent to preserve hierarchy
   - Parent selector excludes the account itself and all descendants to prevent circular references
+---
+
+## 2026-03-01 - US-044
+- What was implemented: NFS-e emission service with abstract provider interface, mock adapter, server action for emitting invoices linked to paid boletos, and auto-email to client
+- Files changed:
+  - erp/src/lib/nfse.ts — Abstract NfseProvider interface + MockNfseProvider (generates fake NF number, logs to console)
+  - erp/src/lib/nfse-actions.ts — Server action `emitInvoiceForBoleto(boletoId, companyId)` that validates paid boleto, calls NFS-e provider, creates Invoice record with ISSUED status, and auto-sends email
+  - erp/src/lib/email-templates.ts — Added `NfseEmailData` interface and `buildNfseEmailHtml()` template showing NF number, service, value, ISS breakdown
+- **Learnings for future iterations:**
+  - NFS-e provider pattern follows same structure as boleto.ts and email.ts: abstract interface + mock + setter + exported function
+  - `emitInvoiceForBoleto` checks boleto status is PAID before proceeding; also checks for duplicate invoices on same boleto
+  - Service description for NFS-e is built by joining all proposal item descriptions with semicolons
+  - Default ISS rate is 5% — can be made configurable per company in future
+  - Email sending on invoice emission is fire-and-forget (caught silently) so invoice creation succeeds even if email fails
+  - Invoice model already existed in schema (created in US-042); this story adds the service layer and server actions
 ---
