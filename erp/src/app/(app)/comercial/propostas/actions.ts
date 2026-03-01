@@ -3,7 +3,8 @@
 import { prisma } from "@/lib/prisma";
 import { requireCompanyAccess } from "@/lib/rbac";
 import { logAuditEvent } from "@/lib/audit";
-import { Prisma, type ProposalStatus } from "@prisma/client";
+import { Prisma, type ProposalStatus, type BoletoStatus } from "@prisma/client";
+import { generateBoleto } from "@/lib/boleto";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -436,4 +437,236 @@ export async function listClientsForProposal(
   });
 
   return clients;
+}
+
+// ---------------------------------------------------------------------------
+// Boleto Types
+// ---------------------------------------------------------------------------
+
+export interface GenerateBoletosInput {
+  proposalId: string;
+  companyId: string;
+  installments: number;
+  firstDueDate: string;
+}
+
+export interface BoletoRow {
+  id: string;
+  bankReference: string | null;
+  value: string;
+  dueDate: string;
+  installmentNumber: number;
+  status: BoletoStatus;
+  createdAt: string;
+}
+
+// ---------------------------------------------------------------------------
+// Boleto Server Actions
+// ---------------------------------------------------------------------------
+
+export async function generateBoletosForProposal(
+  input: GenerateBoletosInput
+): Promise<{ boletos: BoletoRow[] }> {
+  const session = await requireCompanyAccess(input.companyId);
+
+  if (!input.installments || input.installments < 1) {
+    throw new Error("Número de parcelas deve ser pelo menos 1");
+  }
+  if (input.installments > 48) {
+    throw new Error("Número máximo de parcelas é 48");
+  }
+  if (!input.firstDueDate) {
+    throw new Error("Data do primeiro vencimento é obrigatória");
+  }
+
+  const proposal = await prisma.proposal.findFirst({
+    where: { id: input.proposalId, companyId: input.companyId },
+    include: {
+      client: {
+        select: {
+          id: true,
+          name: true,
+          cpfCnpj: true,
+          email: true,
+          endereco: true,
+        },
+      },
+      company: {
+        select: {
+          razaoSocial: true,
+          cnpj: true,
+        },
+      },
+      boletos: true,
+    },
+  });
+
+  if (!proposal) {
+    throw new Error("Proposta não encontrada");
+  }
+  if (proposal.status !== "ACCEPTED") {
+    throw new Error("Somente propostas aceitas podem gerar boletos");
+  }
+  if (proposal.boletos.length > 0) {
+    throw new Error("Esta proposta já possui boletos gerados");
+  }
+
+  const totalValue = Number(proposal.totalValue);
+  const installmentValue = Math.round((totalValue / input.installments) * 100) / 100;
+  const firstDue = new Date(input.firstDueDate);
+
+  const createdBoletos: BoletoRow[] = [];
+
+  await prisma.$transaction(async (tx) => {
+    for (let i = 1; i <= input.installments; i++) {
+      // Calculate due date for this installment
+      const dueDate = new Date(firstDue);
+      dueDate.setMonth(dueDate.getMonth() + (i - 1));
+
+      // Adjust last installment to handle rounding
+      const value =
+        i === input.installments
+          ? Math.round((totalValue - installmentValue * (input.installments - 1)) * 100) / 100
+          : installmentValue;
+
+      // Generate boleto via provider
+      const result = await generateBoleto({
+        clientData: {
+          name: proposal.client.name,
+          cpfCnpj: proposal.client.cpfCnpj,
+          email: proposal.client.email ?? "",
+          endereco: proposal.client.endereco,
+        },
+        companyData: {
+          razaoSocial: proposal.company.razaoSocial,
+          cnpj: proposal.company.cnpj,
+        },
+        value,
+        dueDate,
+        installmentNumber: i,
+        totalInstallments: input.installments,
+        proposalId: input.proposalId,
+      });
+
+      // Create boleto record
+      const boleto = await tx.boleto.create({
+        data: {
+          proposalId: input.proposalId,
+          bankReference: result.bankReference,
+          value: new Prisma.Decimal(value),
+          dueDate,
+          installmentNumber: i,
+          status: "GENERATED",
+          companyId: input.companyId,
+        },
+      });
+
+      // Create corresponding account receivable entry
+      await tx.accountReceivable.create({
+        data: {
+          clientId: proposal.clientId,
+          description: `Boleto ${i}/${input.installments} - Proposta #${proposal.id.slice(-6)}`,
+          value: new Prisma.Decimal(value),
+          dueDate,
+          status: "PENDING",
+          companyId: input.companyId,
+        },
+      });
+
+      createdBoletos.push({
+        id: boleto.id,
+        bankReference: boleto.bankReference,
+        value: boleto.value.toString(),
+        dueDate: boleto.dueDate.toISOString(),
+        installmentNumber: boleto.installmentNumber,
+        status: boleto.status,
+        createdAt: boleto.createdAt.toISOString(),
+      });
+    }
+  });
+
+  await logAuditEvent({
+    userId: session.userId,
+    action: "CREATE",
+    entity: "Boleto",
+    entityId: input.proposalId,
+    dataAfter: {
+      proposalId: input.proposalId,
+      installments: input.installments,
+      totalValue: totalValue.toString(),
+      boletoCount: createdBoletos.length,
+    } as unknown as Prisma.InputJsonValue,
+    companyId: input.companyId,
+  });
+
+  return { boletos: createdBoletos };
+}
+
+export async function listBoletosForProposal(
+  proposalId: string,
+  companyId: string
+): Promise<BoletoRow[]> {
+  await requireCompanyAccess(companyId);
+
+  const boletos = await prisma.boleto.findMany({
+    where: { proposalId, companyId },
+    orderBy: { installmentNumber: "asc" },
+  });
+
+  return boletos.map((b) => ({
+    id: b.id,
+    bankReference: b.bankReference,
+    value: b.value.toString(),
+    dueDate: b.dueDate.toISOString(),
+    installmentNumber: b.installmentNumber,
+    status: b.status,
+    createdAt: b.createdAt.toISOString(),
+  }));
+}
+
+export async function updateBoletoStatus(
+  boletoId: string,
+  newStatus: BoletoStatus,
+  companyId: string
+) {
+  const session = await requireCompanyAccess(companyId);
+
+  const boleto = await prisma.boleto.findFirst({
+    where: { id: boletoId, companyId },
+  });
+  if (!boleto) {
+    throw new Error("Boleto não encontrado");
+  }
+
+  const VALID_BOLETO_TRANSITIONS: Record<BoletoStatus, BoletoStatus[]> = {
+    GENERATED: ["SENT", "CANCELLED"],
+    SENT: ["PAID", "OVERDUE", "CANCELLED"],
+    PAID: [],
+    OVERDUE: ["PAID", "CANCELLED"],
+    CANCELLED: [],
+  };
+
+  const allowed = VALID_BOLETO_TRANSITIONS[boleto.status];
+  if (!allowed.includes(newStatus)) {
+    throw new Error(
+      `Transição de status inválida: ${boleto.status} → ${newStatus}`
+    );
+  }
+
+  await prisma.boleto.update({
+    where: { id: boletoId },
+    data: { status: newStatus },
+  });
+
+  await logAuditEvent({
+    userId: session.userId,
+    action: "STATUS_CHANGE",
+    entity: "Boleto",
+    entityId: boletoId,
+    dataBefore: { status: boleto.status },
+    dataAfter: { status: newStatus },
+    companyId,
+  });
+
+  return { success: true };
 }
