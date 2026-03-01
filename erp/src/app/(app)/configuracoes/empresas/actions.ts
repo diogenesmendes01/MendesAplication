@@ -5,6 +5,7 @@ import { requireAdmin } from "@/lib/session";
 import { isValidCnpj, stripCnpj, formatCnpj } from "@/lib/cnpj";
 import { logAuditEvent } from "@/lib/audit";
 import { Prisma } from "@prisma/client";
+import { seedDefaultChartOfAccounts } from "@/app/(app)/fiscal/plano-de-contas/actions";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -98,6 +99,13 @@ export async function createCompany(input: CompanyInput) {
     entityId: company.id,
     dataAfter: company as unknown as Prisma.InputJsonValue,
   });
+
+  // Seed default chart of accounts for the new company
+  try {
+    await seedDefaultChartOfAccounts(company.id);
+  } catch {
+    // Non-critical — admin can seed manually later
+  }
 
   return company;
 }
