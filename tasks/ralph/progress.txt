@@ -51,6 +51,8 @@
 - Filter dropdowns: use `__all__` as sentinel value for "all items" since Radix Select doesn't support empty string values
 - Dashboard data in `src/app/(app)/dashboard/actions.ts` — uses placeholder KPIs until financial tables exist; replace `generatePlaceholderKPI` with real queries after US-017+
 - Currency formatting: use `Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" })` for BRL values
+- Recharts installed for charts — use `ResponsiveContainer` + `BarChart`/`LineChart` for responsive charts; wrap in a fixed-height div
+- Chart currency formatting: use abbreviated format (R$ 10k, R$ 1.5M) for Y-axis labels via custom `tickFormatter`
 
 ## Completed Stories
 
@@ -345,5 +347,29 @@
   - Custom date range filter: only trigger data load when both start and end dates are set
   - Dashboard server action uses `requireSession()` (not `requireAdmin()`) since managers also need dashboard access
   - KPI data is placeholder — will be replaced with real financial data once US-017+ are implemented
+  - Browser testing not available — manual verification needed
+---
+
+## 2026-03-01 - US-015
+- What was implemented: Dashboard comparison charts with recharts and boleto summary cards
+  - `src/app/(app)/dashboard/actions.ts`: Added `BoletoSummary` and `RevenueChartEntry` types, `generatePlaceholderBoletoSummary()` helper, updated `DashboardData` and `getDashboardData` to return chart data and boleto summary
+  - `src/app/(app)/dashboard/page.tsx`: Added:
+    - Bar chart comparing revenue, expenses, and profit across companies using recharts `BarChart` + `ResponsiveContainer`
+    - 3 boleto summary cards: Emitidos (gray), Pagos (green), Vencidos (red) with placeholder counts
+    - Custom chart tooltip with formatted BRL currency
+    - Abbreviated Y-axis labels (R$ 10k, R$ 1.5M) for readability
+    - Charts respect the period filter from the dashboard
+    - Responsive layout: chart container uses `h-[350px]` with 100% width
+  - `erp/package.json`: Added `recharts` dependency
+- Files changed:
+  - erp/src/app/(app)/dashboard/actions.ts (updated — added chart + boleto types and data)
+  - erp/src/app/(app)/dashboard/page.tsx (updated — added charts and boleto summary cards)
+  - erp/package.json, erp/package-lock.json (added recharts)
+- **Learnings for future iterations:**
+  - Recharts requires wrapping charts in `ResponsiveContainer` with 100% width/height inside a fixed-height parent div
+  - Use custom `tickFormatter` on YAxis for abbreviated currency (R$ 10k, R$ 1.5M)
+  - When there are many companies, set XAxis `angle={-20}` and `textAnchor="end"` to avoid label overlap
+  - Recharts Tooltip can accept a custom `content` component for styled tooltips
+  - Placeholder boleto data scales by period type just like KPI data
   - Browser testing not available — manual verification needed
 ---
