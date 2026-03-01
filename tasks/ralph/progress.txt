@@ -112,7 +112,9 @@
 - Invoice model links to Proposal, Boleto (both optional), Client, and Company; issRate is Decimal(5,2)
 - ChartOfAccounts has self-relation (`parentId`→`ChartOfAccountsHierarchy`) for tree hierarchy; `@@unique([code, companyId])`
 - TaxEntry.period is String for flexible period (e.g., "2026-01", "2026-Q1")
-- Fiscal pages will go under `src/app/(app)/fiscal/`
+- Fiscal pages under `src/app/(app)/fiscal/` — `/fiscal` redirects to `/fiscal/plano-de-contas`
+- ChartOfAccounts CRUD in `src/app/(app)/fiscal/plano-de-contas/actions.ts` — tree view page at `/fiscal/plano-de-contas`
+- Default chart of accounts auto-seeded on company creation; `seedDefaultChartOfAccounts(companyId)` can also be called manually from UI
 
 ## Completed Stories
 
@@ -933,4 +935,21 @@
   - ChartOfAccounts has self-relation (parentId) for hierarchical tree; code is unique per company (`@@unique([code, companyId])`)
   - TaxEntry.period is a String field for flexible period representation (e.g., "2026-01", "2026-Q1")
   - Added `invoices` relation to Client, Proposal, and Boleto models for reverse lookups
+---
+
+## 2026-03-01 - US-043
+- What was implemented: Chart of accounts management page with full CRUD and default seeding
+- Files changed:
+  - `erp/src/app/(app)/fiscal/page.tsx` — Fiscal redirect to /fiscal/plano-de-contas
+  - `erp/src/app/(app)/fiscal/plano-de-contas/actions.ts` — Server actions: listChartOfAccounts, createAccount, updateAccount, deleteAccount, seedDefaultChartOfAccounts, listParentOptions
+  - `erp/src/app/(app)/fiscal/plano-de-contas/page.tsx` — Hierarchical tree view UI with expand/collapse, CRUD dialogs, delete confirmation, seed default chart dialog
+  - `erp/src/app/(app)/configuracoes/empresas/actions.ts` — Added auto-seeding of default chart on company creation
+- **Learnings for future iterations:**
+  - Fiscal pages go under `src/app/(app)/fiscal/` — `/fiscal` redirects to `/fiscal/plano-de-contas`
+  - ChartOfAccounts server actions in `src/app/(app)/fiscal/plano-de-contas/actions.ts` — `listChartOfAccounts`, `createAccount`, `updateAccount`, `deleteAccount`, `seedDefaultChartOfAccounts`, `listParentOptions`
+  - Tree view pattern: fetch flat list from DB, build tree client-side using Map for O(n) parent-child linking; use recursive component for rendering with indent via level
+  - Default chart of accounts (Brazilian standard): 5 root groups (Ativo, Passivo, PL, Receitas, Despesas) with hierarchical subgroups; seeded via `seedDefaultChartOfAccounts(companyId)`
+  - Company creation auto-seeds default chart of accounts; if seeding fails, it's silently caught (admin can seed manually)
+  - Delete account re-parents children to the deleted account's parent to preserve hierarchy
+  - Parent selector excludes the account itself and all descendants to prevent circular references
 ---
