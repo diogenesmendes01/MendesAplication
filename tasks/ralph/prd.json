@@ -291,7 +291,7 @@
         "Typecheck passes"
       ],
       "priority": 17,
-      "passes": false,
+      "passes": true,
       "notes": "Client table is created here as it is needed for receivables. Full CRM features are built in Phase 4."
     },
     {

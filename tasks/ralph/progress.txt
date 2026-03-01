@@ -58,6 +58,10 @@
 - Public auth pages (`/forgot-password`, `/reset-password`) live under `src/app/` (not `(app)` group) — update `PUBLIC_PATHS` in middleware when adding new public routes
 - Session inactivity timeout: 30 min sliding window — middleware re-sets accessToken cookie maxAge on every request; JWT expiry also 30 min
 - PasswordResetToken model stores reset tokens with 1-hour expiry and `usedAt` field for single-use enforcement
+- Financial enums: `ClientType` (PF/PJ), `PaymentStatus` (PENDING/PAID/OVERDUE), `FinancialCategoryType` (INCOME/EXPENSE), `Recurrence` (NONE/WEEKLY/MONTHLY/YEARLY)
+- Monetary values use `Decimal @db.Decimal(12, 2)` — never use Float for money
+- Client cpfCnpj is unique per company: `@@unique([cpfCnpj, companyId])` — not globally unique
+- Client model is used by both financial (receivables) and CRM (proposals, SAC) modules
 
 ## Completed Stories
 
@@ -413,4 +417,24 @@
   - `PUBLIC_PATHS` in middleware must be updated when adding new public routes
   - `$transaction` array syntax works for simple multi-operation atomicity (update user + mark token used)
   - Browser testing not available — manual verification needed
+---
+
+## 2026-03-01 - US-017
+- What was implemented: Financial database schema with Client, FinancialCategory, AccountReceivable, AccountPayable models
+  - `prisma/schema.prisma`: Added 4 new enums (ClientType, PaymentStatus, FinancialCategoryType, Recurrence) and 4 new models
+  - Client model: name, razaoSocial, cpfCnpj (unique per company via `@@unique([cpfCnpj, companyId])`), email, telefone, endereco, type (PF/PJ), scoped to company
+  - FinancialCategory model: name, type (INCOME/EXPENSE), scoped to company
+  - AccountReceivable model: clientId, description, value (Decimal 12,2), dueDate, status (PENDING/PAID/OVERDUE), paidAt, scoped to company
+  - AccountPayable model: supplier, description, value (Decimal 12,2), dueDate, status (PENDING/PAID/OVERDUE), categoryId (optional), recurrence (NONE/WEEKLY/MONTHLY/YEARLY), paidAt, scoped to company
+  - Migration `20260301001646_add_financial_schema` generated and applied
+- Files changed:
+  - erp/prisma/schema.prisma (updated — added 4 enums + 4 models + Company relations)
+  - erp/prisma/migrations/20260301001646_add_financial_schema/migration.sql (new)
+- **Learnings for future iterations:**
+  - Use `Decimal @db.Decimal(12, 2)` for monetary values — avoids floating-point precision issues
+  - `@@unique([cpfCnpj, companyId])` enforces per-tenant uniqueness for client CPF/CNPJ
+  - categoryId on AccountPayable is optional (`String?`) with `onDelete: SetNull` — deleting a category doesn't cascade to payables
+  - Client model is shared between financial (US-017) and CRM (US-031) — the full CRM UI is built later
+  - PaymentStatus enum (PENDING/PAID/OVERDUE) is reused by both AccountReceivable and AccountPayable
+  - No seed script needed for this story — financial data will be created via server actions in subsequent stories
 ---
