@@ -886,3 +886,17 @@
   - Email actions are in `src/lib/email-actions.ts` (not in page-specific actions.ts) since they're shared across modules
   - Client must have email field populated or the action throws "Cliente não possui e-mail cadastrado"
 ---
+
+## 2026-03-01 - US-040
+- What was implemented: Added email sending UI for proposals and boletos on the proposal detail page
+- Files changed:
+  - erp/src/app/(app)/comercial/propostas/[id]/page.tsx — Added "Enviar por E-mail" button for proposals (DRAFT/SENT status), per-boleto email send buttons (GENERATED/SENT status), confirmation dialogs with recipient email/subject preview for both
+  - erp/src/app/(app)/comercial/propostas/actions.ts — Extended ProposalDetail type with clientEmail field, updated getProposalById to include client email in query
+- **Learnings for future iterations:**
+  - ProposalDetail now includes `clientEmail` — used to show recipient in confirmation dialog and conditionally display email buttons
+  - Email send buttons check `proposal.clientEmail` — if null, buttons are hidden (email actions throw if no email)
+  - Confirmation dialogs show: recipient email, subject preview, attachment filename, and status transition notice
+  - Email sending reloads page data via `loadData()` to reflect status changes (DRAFT→SENT, GENERATED→SENT)
+  - `selectedCompany` from `useCompany()` provides `nomeFantasia` for building subject preview on the client side
+  - Boleto email dialog uses `selectedBoletoForEmail` state to track which boleto is being sent; cleared on dialog close
+---
