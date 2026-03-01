@@ -107,6 +107,7 @@
 - Boleto status badge colors: gray=GENERATED, blue=SENT, green=PAID, red=OVERDUE, orange=CANCELLED
 - Email template system in `src/lib/email-templates.ts`: `buildProposalEmailHtml(branding, data)`, `buildBoletoEmailHtml(branding, data)` — generates branded HTML emails with company header/footer
 - Email server actions in `src/lib/email-actions.ts`: `sendProposalEmail(proposalId, companyId)`, `sendBoletoEmail(boletoId, companyId)` — sends emails with attachments, updates status, logs audit events
+- Pipeline Kanban at `/comercial/pipeline` — server actions in `src/app/(app)/comercial/pipeline/actions.ts`; proposals classified into 5 stages: DRAFT, SENT, ACCEPTED, BOLETO_GENERATED, PAID based on proposal status + boleto state
 
 ## Completed Stories
 
@@ -899,4 +900,19 @@
   - Email sending reloads page data via `loadData()` to reflect status changes (DRAFT→SENT, GENERATED→SENT)
   - `selectedCompany` from `useCompany()` provides `nomeFantasia` for building subject preview on the client side
   - Boleto email dialog uses `selectedBoletoForEmail` state to track which boleto is being sent; cleared on dialog close
+---
+
+## 2026-03-01 - US-041
+- What was implemented: Commercial pipeline Kanban board at `/comercial/pipeline`
+- Files changed:
+  - `erp/src/app/(app)/comercial/pipeline/actions.ts` — server actions for pipeline data (listPipelineData, listClientsForPipeline)
+  - `erp/src/app/(app)/comercial/pipeline/page.tsx` — Kanban board UI with drag-and-drop, filters, and metrics
+- **Learnings for future iterations:**
+  - Pipeline stages go beyond proposal status: ACCEPTED proposals are split into "Aceita" (no boletos), "Boleto Gerado" (has boletos, not all paid), and "Pago" (all boletos paid) based on boleto state
+  - HTML5 Drag and Drop API works well for Kanban boards without needing extra dependencies — use `draggable`, `onDragStart`, `onDragOver`, `onDrop`, `onDragEnd` events
+  - Only DRAFT→SENT and SENT→ACCEPTED are valid DnD transitions; "Boleto Gerado" and "Pago" are derived stages (read-only)
+  - REJECTED and EXPIRED proposals are excluded from the pipeline view (they are terminal negative states)
+  - Conversion rate = proposals reaching PAID stage / total proposals in pipeline (excluding REJECTED/EXPIRED)
+  - Kanban columns use `overflow-x-auto` on the container with fixed-width columns (`w-72 min-w-[18rem]`) for horizontal scrolling
+  - Drop target visual feedback: `ring-2 ring-primary` for active hover, `ring-1 ring-primary/30` for valid target hint
 ---
