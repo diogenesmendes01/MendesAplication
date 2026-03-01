@@ -9,6 +9,8 @@ import {
   CheckCircle,
   Filter,
   Pencil,
+  AlertTriangle,
+  Clock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,9 +45,11 @@ import {
   updatePayable,
   markPayableAsPaid,
   listCategoriesForSelect,
+  getPayableAlerts,
   type PaginatedResult,
   type PayableRow,
   type CategoryOption,
+  type PayableAlertSummary,
 } from "./actions";
 
 // ---------------------------------------------------------------------------
@@ -85,6 +89,22 @@ function statusColor(status: string) {
   }
 }
 
+function rowHighlight(row: PayableRow): string {
+  if (row.status === "PAID") return "";
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const dueDate = new Date(row.dueDate);
+  if (row.status === "OVERDUE" || dueDate < startOfToday) {
+    return "bg-red-50";
+  }
+  const sevenDaysFromNow = new Date(startOfToday);
+  sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
+  if (dueDate <= sevenDaysFromNow) {
+    return "bg-yellow-50";
+  }
+  return "";
+}
+
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
@@ -120,6 +140,9 @@ export default function ContasPagarPage() {
   const [formCategoryId, setFormCategoryId] = useState("");
   const [formRecurrence, setFormRecurrence] = useState("NONE");
 
+  // Alerts summary
+  const [alerts, setAlerts] = useState<PayableAlertSummary | null>(null);
+
   // Mark as paid
   const [markingId, setMarkingId] = useState<string | null>(null);
 
@@ -138,6 +161,10 @@ export default function ContasPagarPage() {
     if (!selectedCompanyId) return;
     setLoading(true);
     try {
+      // Fetch alerts first (auto-updates overdue statuses), then payables
+      const alertsResult = await getPayableAlerts(selectedCompanyId);
+      setAlerts(alertsResult);
+
       const result = await listPayables({
         companyId: selectedCompanyId,
         page,
@@ -320,6 +347,32 @@ export default function ContasPagarPage() {
         </Button>
       </div>
 
+      {/* Alert summary banner */}
+      {alerts && (alerts.dueThisWeek > 0 || alerts.overdue > 0) && (
+        <div className="flex flex-wrap gap-3">
+          {alerts.overdue > 0 && (
+            <div className="flex items-center gap-2 rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800">
+              <AlertTriangle className="h-4 w-4" />
+              <span>
+                <strong>{alerts.overdue}</strong>{" "}
+                {alerts.overdue === 1 ? "conta vencida" : "contas vencidas"}
+              </span>
+            </div>
+          )}
+          {alerts.dueThisWeek > 0 && (
+            <div className="flex items-center gap-2 rounded-md border border-yellow-200 bg-yellow-50 px-4 py-2 text-sm text-yellow-800">
+              <Clock className="h-4 w-4" />
+              <span>
+                <strong>{alerts.dueThisWeek}</strong>{" "}
+                {alerts.dueThisWeek === 1
+                  ? "conta vence esta semana"
+                  : "contas vencem esta semana"}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Filters toggle */}
       <div className="flex items-center gap-2">
         <Button
@@ -455,7 +508,7 @@ export default function ContasPagarPage() {
               </TableRow>
             ) : (
               payables.data.map((row) => (
-                <TableRow key={row.id}>
+                <TableRow key={row.id} className={rowHighlight(row)}>
                   <TableCell className="font-medium">
                     {row.supplier}
                   </TableCell>

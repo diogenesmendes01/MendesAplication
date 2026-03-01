@@ -70,9 +70,62 @@ export interface CategoryOption {
   name: string;
 }
 
+export interface PayableAlertSummary {
+  dueThisWeek: number;
+  overdue: number;
+}
+
 // ---------------------------------------------------------------------------
 // Server Actions
 // ---------------------------------------------------------------------------
+
+/**
+ * Auto-update PENDING payables whose dueDate has passed to OVERDUE,
+ * then return summary counts for the alert banner.
+ */
+export async function getPayableAlerts(
+  companyId: string
+): Promise<PayableAlertSummary> {
+  await requireCompanyAccess(companyId);
+
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  // Auto-update: mark PENDING items with past due date as OVERDUE
+  await prisma.accountPayable.updateMany({
+    where: {
+      companyId,
+      status: "PENDING",
+      dueDate: { lt: startOfToday },
+    },
+    data: { status: "OVERDUE" },
+  });
+
+  // Count overdue items
+  const overdue = await prisma.accountPayable.count({
+    where: {
+      companyId,
+      status: "OVERDUE",
+    },
+  });
+
+  // Count items due within the next 7 days (PENDING only, not already paid/overdue)
+  const sevenDaysFromNow = new Date(startOfToday);
+  sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
+
+  const dueThisWeek = await prisma.accountPayable.count({
+    where: {
+      companyId,
+      status: "PENDING",
+      dueDate: {
+        gte: startOfToday,
+        lte: sevenDaysFromNow,
+      },
+    },
+  });
+
+  return { dueThisWeek, overdue };
+}
 
 export async function listPayables(
   params: ListPayablesParams
