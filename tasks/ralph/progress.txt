@@ -77,6 +77,10 @@
 - Multi-tab page pattern: split page into tab-specific components with shared state lifted to parent; use `onDataChanged` callback for cross-tab refresh
 - PDF export: `jspdf` + `jspdf-autotable` — client-side generation; use `autoTable(doc, {...})` with `didParseCell` for styling
 - Excel export: `xlsx` (SheetJS) — client-side; `XLSX.utils.aoa_to_sheet()` for data, `XLSX.writeFile(wb, name)` for download
+- SAC ticket actions in `src/app/(app)/sac/tickets/actions.ts` — `listTickets`, `createTicket`, `listClientsForSelect`, `listUsersForAssign`
+- SAC pages under `src/app/(app)/sac/` — `/sac` redirects to `/sac/tickets`; ticket listing at `/sac/tickets`
+- User→UserCompany relation name is `userCompanies` (not `companies`) — use `userCompanies: { some: { companyId } }` for filtering users with company access
+- Shadcn Textarea component in `src/components/ui/textarea.tsx` — available for multi-line text input
 
 ## Completed Stories
 
@@ -659,4 +663,18 @@
   - Ticket model uses named relations for User: `@relation("TicketAssignee")` for assignee and `@relation("TicketMessageSender")` for message sender — needed because both reference User
   - proposalId and boletoId are plain String? fields (not FK relations) since Proposal/Boleto models don't exist yet (US-033)
   - SAC pages go under `src/app/(app)/sac/` — follow same pattern as financeiro module
+---
+
+## 2026-03-01 - US-027
+- What was implemented: Ticket listing page at /sac/tickets with filters (status, priority, client, assignee), paginated table, and create ticket dialog. Server actions for listing tickets, creating tickets, listing clients for dropdown, and listing users for assignee dropdown. Redirect from /sac to /sac/tickets. Added Shadcn Textarea component.
+- Files changed:
+  - erp/src/app/(app)/sac/page.tsx — Redirect page from /sac → /sac/tickets
+  - erp/src/app/(app)/sac/tickets/actions.ts — Server actions: listTickets, createTicket, listClientsForSelect, listUsersForAssign
+  - erp/src/app/(app)/sac/tickets/page.tsx — Ticket listing page with filters, table, pagination, and create dialog
+  - erp/src/components/ui/textarea.tsx — Shadcn Textarea component (added via CLI)
+- **Learnings for future iterations:**
+  - User→UserCompany Prisma relation is named `userCompanies`, not `companies` — important for filtering users by company access
+  - `listUsersForAssign` fetches both ADMIN users (who bypass RBAC) and users with UserCompany assignment to the selected company
+  - Ticket create form supports optional proposalId/boletoId fields but they are not exposed in UI yet (will be needed when Proposal/Boleto models exist in US-033+)
+  - `/sac` redirect uses server-side `redirect()` from next/navigation — simple pattern for module root pages
 ---
