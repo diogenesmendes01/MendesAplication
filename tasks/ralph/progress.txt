@@ -807,3 +807,21 @@
   - Proposal items are ordered by `id` (creation order) in getProposalById
   - `listClientsForProposal` provides client dropdown data for proposal forms
 ---
+
+## 2026-03-01 - US-035
+- Implemented proposal form page at `/comercial/propostas/nova`
+- Client selector with search filtering and link to create new client
+- Dynamic item list: add/remove items with description, quantity, unit price
+- Auto-calculated subtotals per item and total displayed in real-time using `formatBRL`
+- Fields: payment conditions, validity date, observations
+- Save as draft button (creates proposal with DRAFT status)
+- Edit mode via `?edit=<id>` query param — loads existing proposal data
+- Files changed:
+  - `erp/src/app/(app)/comercial/propostas/nova/page.tsx` (new)
+- **Learnings for future iterations:**
+  - Proposal form uses `useSearchParams().get("edit")` for edit mode — pass `?edit=<proposalId>` to reuse form for editing
+  - Items use a `key` field (random string) for React list keys since they don't have DB IDs before saving
+  - Client selector uses `Select` + embedded `Input` for search inside the dropdown content
+  - Reuses existing `createProposal` and `updateProposal` server actions from `../actions`
+  - `calculateTotal` is computed client-side for real-time display; server action recalculates independently
+---
