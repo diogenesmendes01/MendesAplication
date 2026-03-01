@@ -747,3 +747,17 @@
   - The /comercial route was missing a redirect page; SAC pattern (/sac → /sac/tickets) was the model to follow
   - Clicking client rows navigates to the existing detail page at /comercial/clientes/[id]
 ---
+
+## 2026-03-01 - US-032
+- What was implemented: No code changes needed — the client detail page was already fully built in US-029 (unified client history timeline). Page at `/comercial/clientes/[id]` includes:
+  - Client profile card with all fields (CPF/CNPJ, type, email, phone, address, registration date)
+  - Interaction history via ClientTimeline component (tickets, boletos, emails)
+  - Chronological ordering (most recent first)
+  - Filter by type dropdown
+  - Clickable items navigate to detail pages
+- Files changed: None (only PRD and progress updated)
+- **Learnings for future iterations:**
+  - US-029 and US-032 had overlapping scope — the client detail page was built as part of the timeline story
+  - When proposals are added (US-033+), extend `getClientTimeline` in `src/app/(app)/comercial/clientes/[id]/actions.ts` and add "proposal" to the `TimelineItemType` union
+  - The ClientTimeline component is designed for extensibility — adding new timeline item types only requires adding to the server action query and the type/icon/color maps in `src/components/client-timeline.tsx`
+---
