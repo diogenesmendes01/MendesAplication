@@ -108,6 +108,11 @@
 - Email template system in `src/lib/email-templates.ts`: `buildProposalEmailHtml(branding, data)`, `buildBoletoEmailHtml(branding, data)` — generates branded HTML emails with company header/footer
 - Email server actions in `src/lib/email-actions.ts`: `sendProposalEmail(proposalId, companyId)`, `sendBoletoEmail(boletoId, companyId)` — sends emails with attachments, updates status, logs audit events
 - Pipeline Kanban at `/comercial/pipeline` — server actions in `src/app/(app)/comercial/pipeline/actions.ts`; proposals classified into 5 stages: DRAFT, SENT, ACCEPTED, BOLETO_GENERATED, PAID based on proposal status + boleto state
+- Fiscal enums: `InvoiceStatus` (PENDING/ISSUED/CANCELLED), `TaxType` (ISS/PIS/COFINS/IRPJ/CSLL), `TaxStatus` (PENDING/PAID), `AccountType` (ASSET/LIABILITY/EQUITY/REVENUE/EXPENSE)
+- Invoice model links to Proposal, Boleto (both optional), Client, and Company; issRate is Decimal(5,2)
+- ChartOfAccounts has self-relation (`parentId`→`ChartOfAccountsHierarchy`) for tree hierarchy; `@@unique([code, companyId])`
+- TaxEntry.period is String for flexible period (e.g., "2026-01", "2026-Q1")
+- Fiscal pages will go under `src/app/(app)/fiscal/`
 
 ## Completed Stories
 
@@ -915,4 +920,17 @@
   - Conversion rate = proposals reaching PAID stage / total proposals in pipeline (excluding REJECTED/EXPIRED)
   - Kanban columns use `overflow-x-auto` on the container with fixed-width columns (`w-72 min-w-[18rem]`) for horizontal scrolling
   - Drop target visual feedback: `ring-2 ring-primary` for active hover, `ring-1 ring-primary/30` for valid target hint
+---
+
+## 2026-03-01 - US-042
+- What was implemented: Fiscal database schema with three new models (Invoice/NFS-e, TaxEntry, ChartOfAccounts) and supporting enums
+- Files changed:
+  - erp/prisma/schema.prisma — Added 4 enums (InvoiceStatus, TaxType, TaxStatus, AccountType), 3 models (Invoice, TaxEntry, ChartOfAccounts), and relation fields on Company, Client, Proposal, Boleto
+  - erp/prisma/migrations/20260301020858_add_fiscal_schema/migration.sql — Migration creating invoices, tax_entries, chart_of_accounts tables with all FK constraints
+- **Learnings for future iterations:**
+  - Fiscal enums: `InvoiceStatus` (PENDING/ISSUED/CANCELLED), `TaxType` (ISS/PIS/COFINS/IRPJ/CSLL), `TaxStatus` (PENDING/PAID), `AccountType` (ASSET/LIABILITY/EQUITY/REVENUE/EXPENSE)
+  - Invoice links to Proposal (optional), Boleto (optional), Client (required), Company (required); issRate stored as Decimal(5,2)
+  - ChartOfAccounts has self-relation (parentId) for hierarchical tree; code is unique per company (`@@unique([code, companyId])`)
+  - TaxEntry.period is a String field for flexible period representation (e.g., "2026-01", "2026-Q1")
+  - Added `invoices` relation to Client, Proposal, and Boleto models for reverse lookups
 ---
