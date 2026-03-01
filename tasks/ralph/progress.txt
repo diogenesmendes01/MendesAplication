@@ -100,6 +100,9 @@
 - Proposal server actions in `src/app/(app)/comercial/propostas/actions.ts` — `listProposals`, `createProposal`, `updateProposal`, `getProposalById`, `updateProposalStatus`, `listClientsForProposal`
 - Proposal status transitions: DRAFT→SENT, SENT→ACCEPTED/REJECTED/EXPIRED — terminal states (ACCEPTED/REJECTED/EXPIRED) have no further transitions
 - Only DRAFT proposals can be edited; updateProposal replaces all items atomically in a $transaction
+- Boleto service in `src/lib/boleto.ts`: abstract `BoletoProvider` interface with `MockBoletoProvider`; follows same provider pattern as email service
+- Boleto server actions in `src/app/(app)/comercial/propostas/actions.ts`: `generateBoletosForProposal`, `listBoletosForProposal`, `updateBoletoStatus`
+- Boleto status transitions: GENERATED→SENT/CANCELLED, SENT→PAID/OVERDUE/CANCELLED, OVERDUE→PAID/CANCELLED; PAID and CANCELLED are terminal
 
 ## Completed Stories
 
@@ -835,4 +838,18 @@
   - Row click navigates to `/comercial/propostas/nova?edit=<id>` for both draft (edit) and non-draft (view) proposals — the edit page handles read-only display for non-DRAFT statuses
   - Value range filters use `filterValueMin`/`filterValueMax` parsed to float before passing to server actions
   - All types needed (`PaginatedResult`, `ProposalRow`, `ClientOption`) are already exported from the existing `actions.ts`
+---
+
+## 2026-03-01 - US-037
+- What was implemented: Abstract boleto generation service with provider pattern, PinBank mock adapter, and server actions for generating boletos from accepted proposals with automatic AccountReceivable creation
+- Files changed:
+  - `erp/src/lib/boleto.ts` — NEW: Abstract BoletoProvider interface, GenerateBoletoInput/Result types, MockBoletoProvider (PinBank mock), setBoletoProvider() and generateBoleto() public functions
+  - `erp/src/app/(app)/comercial/propostas/actions.ts` — UPDATED: Added generateBoletosForProposal(), listBoletosForProposal(), updateBoletoStatus() server actions with BoletoRow type
+- **Learnings for future iterations:**
+  - Boleto generation follows same provider pattern as email service in `src/lib/email.ts` — abstract interface with mock implementation
+  - `generateBoletosForProposal` validates proposal is ACCEPTED and has no existing boletos before generating
+  - Installment values are split evenly with rounding adjustment on last installment
+  - Each boleto automatically creates a corresponding AccountReceivable entry in the same transaction
+  - Boleto status transitions: GENERATED → SENT/CANCELLED, SENT → PAID/OVERDUE/CANCELLED, OVERDUE → PAID/CANCELLED; PAID and CANCELLED are terminal
+  - Boleto server actions are in the proposals actions file (`comercial/propostas/actions.ts`) since boletos are tightly coupled to proposals
 ---
