@@ -105,6 +105,8 @@
 - Boleto status transitions: GENERATED→SENT/CANCELLED, SENT→PAID/OVERDUE/CANCELLED, OVERDUE→PAID/CANCELLED; PAID and CANCELLED are terminal
 - Proposal detail page at `/comercial/propostas/[id]` — shows proposal info, items, and boletos; non-DRAFT proposals navigate here from listing
 - Boleto status badge colors: gray=GENERATED, blue=SENT, green=PAID, red=OVERDUE, orange=CANCELLED
+- Email template system in `src/lib/email-templates.ts`: `buildProposalEmailHtml(branding, data)`, `buildBoletoEmailHtml(branding, data)` — generates branded HTML emails with company header/footer
+- Email server actions in `src/lib/email-actions.ts`: `sendProposalEmail(proposalId, companyId)`, `sendBoletoEmail(boletoId, companyId)` — sends emails with attachments, updates status, logs audit events
 
 ## Completed Stories
 
@@ -868,4 +870,19 @@
   - `generateBoletosForProposal` from actions.ts handles all boleto creation logic; UI just passes installments count and first due date
   - Boletos can only be generated for ACCEPTED proposals with no existing boletos
   - Dialog pattern: use state for dialog open, form fields, and loading state; reset on close
+---
+
+## 2026-03-01 - US-039
+- What was implemented: Email template system with company branding and server actions for sending proposal and boleto emails
+- Files changed:
+  - erp/src/lib/email-templates.ts — New file: HTML email template builder with company branding (logo, colors, contact info), proposal template, and boleto template
+  - erp/src/lib/email-actions.ts — New file: Server actions `sendProposalEmail(proposalId, companyId)` and `sendBoletoEmail(boletoId, companyId)` with text-based PDF attachments, status updates, and audit logging
+- **Learnings for future iterations:**
+  - Email templates use `buildEmailHtml()` base function that wraps content in branded header/footer; specific templates (`buildProposalEmailHtml`, `buildBoletoEmailHtml`) build body content
+  - Company branding data: `nomeFantasia`, `logoUrl`, `email`, `telefone` — fetched from Company model via Prisma include
+  - `sendProposalEmail` auto-transitions DRAFT→SENT status; `sendBoletoEmail` auto-transitions GENERATED→SENT status
+  - Both actions log two audit events: one for status change (if applicable) and one for email send (entity="Email")
+  - PDF attachments are text-based for server-side compatibility; client-side PDF generation uses jspdf (see DRE export pattern)
+  - Email actions are in `src/lib/email-actions.ts` (not in page-specific actions.ts) since they're shared across modules
+  - Client must have email field populated or the action throws "Cliente não possui e-mail cadastrado"
 ---

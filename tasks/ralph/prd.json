@@ -657,7 +657,7 @@
         "Typecheck passes"
       ],
       "priority": 39,
-      "passes": false,
+      "passes": true,
       "notes": "Email provider TBD (SendGrid, SES). System uses abstract interface."
     },
     {
