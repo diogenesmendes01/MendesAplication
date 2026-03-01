@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowLeft, FileText } from "lucide-react";
+import { ArrowLeft, FileText, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,6 +38,10 @@ import {
   type ProposalDetail,
   type BoletoRow,
 } from "../actions";
+import {
+  sendProposalEmail,
+  sendBoletoEmail,
+} from "@/lib/email-actions";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -129,7 +133,7 @@ function boletoStatusColor(status: string) {
 export default function ProposalDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const { selectedCompanyId } = useCompany();
+  const { selectedCompanyId, selectedCompany } = useCompany();
   const proposalId = params.id as string;
 
   const [proposal, setProposal] = useState<ProposalDetail | null>(null);
@@ -141,6 +145,14 @@ export default function ProposalDetailPage() {
   const [installments, setInstallments] = useState("1");
   const [firstDueDate, setFirstDueDate] = useState("");
   const [generating, setGenerating] = useState(false);
+
+  // Email sending state
+  const [sendProposalDialogOpen, setSendProposalDialogOpen] = useState(false);
+  const [sendingProposal, setSendingProposal] = useState(false);
+  const [sendBoletoDialogOpen, setSendBoletoDialogOpen] = useState(false);
+  const [selectedBoletoForEmail, setSelectedBoletoForEmail] =
+    useState<BoletoRow | null>(null);
+  const [sendingBoleto, setSendingBoleto] = useState(false);
 
   // ---------------------------------------------------
   // Load proposal and boletos
@@ -213,6 +225,56 @@ export default function ProposalDetailPage() {
   }
 
   // ---------------------------------------------------
+  // Send proposal email
+  // ---------------------------------------------------
+
+  async function handleSendProposalEmail() {
+    if (!selectedCompanyId || !proposalId) return;
+
+    setSendingProposal(true);
+    try {
+      await sendProposalEmail(proposalId, selectedCompanyId);
+      toast.success("Proposta enviada por e-mail com sucesso");
+      setSendProposalDialogOpen(false);
+      await loadData();
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Erro ao enviar proposta por e-mail"
+      );
+    } finally {
+      setSendingProposal(false);
+    }
+  }
+
+  // ---------------------------------------------------
+  // Send boleto email
+  // ---------------------------------------------------
+
+  function openSendBoletoDialog(boleto: BoletoRow) {
+    setSelectedBoletoForEmail(boleto);
+    setSendBoletoDialogOpen(true);
+  }
+
+  async function handleSendBoletoEmail() {
+    if (!selectedCompanyId || !selectedBoletoForEmail) return;
+
+    setSendingBoleto(true);
+    try {
+      await sendBoletoEmail(selectedBoletoForEmail.id, selectedCompanyId);
+      toast.success("Boleto enviado por e-mail com sucesso");
+      setSendBoletoDialogOpen(false);
+      setSelectedBoletoForEmail(null);
+      await loadData();
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Erro ao enviar boleto por e-mail"
+      );
+    } finally {
+      setSendingBoleto(false);
+    }
+  }
+
+  // ---------------------------------------------------
   // No company selected
   // ---------------------------------------------------
 
@@ -249,6 +311,14 @@ export default function ProposalDetailPage() {
   const canGenerateBoletos =
     proposal.status === "ACCEPTED" && boletos.length === 0;
 
+  // Proposal can be emailed if DRAFT or SENT (DRAFT will transition to SENT)
+  const canSendProposalEmail =
+    (proposal.status === "DRAFT" || proposal.status === "SENT") &&
+    !!proposal.clientEmail;
+
+  const companyName = selectedCompany?.nomeFantasia || "Empresa";
+  const proposalSubjectPreview = `Proposta Comercial #${proposal.id.slice(-6)} - ${companyName}`;
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -267,11 +337,22 @@ export default function ProposalDetailPage() {
             </p>
           </div>
         </div>
-        <span
-          className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold ${proposalStatusColor(proposal.status)}`}
-        >
-          {proposalStatusLabel(proposal.status)}
-        </span>
+        <div className="flex items-center gap-3">
+          {canSendProposalEmail && (
+            <Button
+              variant="outline"
+              onClick={() => setSendProposalDialogOpen(true)}
+            >
+              <Mail className="mr-2 h-4 w-4" />
+              Enviar por E-mail
+            </Button>
+          )}
+          <span
+            className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold ${proposalStatusColor(proposal.status)}`}
+          >
+            {proposalStatusLabel(proposal.status)}
+          </span>
+        </div>
       </div>
 
       {/* Proposal info */}
@@ -409,32 +490,50 @@ export default function ProposalDetailPage() {
                   <TableHead>Vencimento</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Referência</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {boletos.map((boleto) => (
-                  <TableRow key={boleto.id}>
-                    <TableCell className="font-medium">
-                      {boleto.installmentNumber}/{boletos.length}
-                    </TableCell>
-                    <TableCell className="text-right font-mono">
-                      {currencyFmt.format(parseFloat(boleto.value))}
-                    </TableCell>
-                    <TableCell>
-                      {dateFmt.format(new Date(boleto.dueDate))}
-                    </TableCell>
-                    <TableCell>
-                      <span
-                        className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${boletoStatusColor(boleto.status)}`}
-                      >
-                        {boletoStatusLabel(boleto.status)}
-                      </span>
-                    </TableCell>
-                    <TableCell className="font-mono text-xs text-muted-foreground">
-                      {boleto.bankReference || "—"}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {boletos.map((boleto) => {
+                  const canSendBoletoEmail =
+                    (boleto.status === "GENERATED" || boleto.status === "SENT") &&
+                    !!proposal.clientEmail;
+                  return (
+                    <TableRow key={boleto.id}>
+                      <TableCell className="font-medium">
+                        {boleto.installmentNumber}/{boletos.length}
+                      </TableCell>
+                      <TableCell className="text-right font-mono">
+                        {currencyFmt.format(parseFloat(boleto.value))}
+                      </TableCell>
+                      <TableCell>
+                        {dateFmt.format(new Date(boleto.dueDate))}
+                      </TableCell>
+                      <TableCell>
+                        <span
+                          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${boletoStatusColor(boleto.status)}`}
+                        >
+                          {boletoStatusLabel(boleto.status)}
+                        </span>
+                      </TableCell>
+                      <TableCell className="font-mono text-xs text-muted-foreground">
+                        {boleto.bankReference || "—"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {canSendBoletoEmail && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openSendBoletoDialog(boleto)}
+                          >
+                            <Mail className="mr-2 h-4 w-4" />
+                            Enviar
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </CardContent>
@@ -503,6 +602,148 @@ export default function ProposalDetailPage() {
             </Button>
             <Button onClick={handleGenerateBoletos} disabled={generating}>
               {generating ? "Gerando..." : "Gerar Boletos"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Send Proposal Email Confirmation Dialog */}
+      <Dialog
+        open={sendProposalDialogOpen}
+        onOpenChange={setSendProposalDialogOpen}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Enviar Proposta por E-mail</DialogTitle>
+            <DialogDescription>
+              Confirme os dados antes de enviar a proposta por e-mail.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-4">
+            <div className="flex justify-between">
+              <span className="text-sm text-muted-foreground">
+                Destinatário
+              </span>
+              <span className="text-sm font-medium">
+                {proposal.clientEmail || "—"}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-sm text-muted-foreground">Assunto</span>
+              <span className="text-sm font-medium">
+                {proposalSubjectPreview}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-sm text-muted-foreground">Anexo</span>
+              <span className="text-sm font-medium">
+                Proposta_{proposal.id.slice(-6)}.txt
+              </span>
+            </div>
+            {proposal.status === "DRAFT" && (
+              <p className="text-xs text-blue-600 bg-blue-50 p-2 rounded">
+                O status da proposta será atualizado para &quot;Enviada&quot; após o envio.
+              </p>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setSendProposalDialogOpen(false)}
+              disabled={sendingProposal}
+            >
+              Cancelar
+            </Button>
+            <Button onClick={handleSendProposalEmail} disabled={sendingProposal}>
+              <Mail className="mr-2 h-4 w-4" />
+              {sendingProposal ? "Enviando..." : "Enviar E-mail"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Send Boleto Email Confirmation Dialog */}
+      <Dialog
+        open={sendBoletoDialogOpen}
+        onOpenChange={(open) => {
+          setSendBoletoDialogOpen(open);
+          if (!open) setSelectedBoletoForEmail(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Enviar Boleto por E-mail</DialogTitle>
+            <DialogDescription>
+              Confirme os dados antes de enviar o boleto por e-mail.
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedBoletoForEmail && (
+            <div className="space-y-3 py-4">
+              <div className="flex justify-between">
+                <span className="text-sm text-muted-foreground">
+                  Destinatário
+                </span>
+                <span className="text-sm font-medium">
+                  {proposal.clientEmail || "—"}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-sm text-muted-foreground">Assunto</span>
+                <span className="text-sm font-medium">
+                  Boleto - Parcela{" "}
+                  {selectedBoletoForEmail.installmentNumber}/{boletos.length} -{" "}
+                  {companyName}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-sm text-muted-foreground">Valor</span>
+                <span className="text-sm font-medium font-mono">
+                  {currencyFmt.format(
+                    parseFloat(selectedBoletoForEmail.value)
+                  )}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-sm text-muted-foreground">
+                  Vencimento
+                </span>
+                <span className="text-sm font-medium">
+                  {dateFmt.format(
+                    new Date(selectedBoletoForEmail.dueDate)
+                  )}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-sm text-muted-foreground">Anexo</span>
+                <span className="text-sm font-medium">
+                  Boleto_{selectedBoletoForEmail.bankReference || selectedBoletoForEmail.id.slice(-6)}.txt
+                </span>
+              </div>
+              {selectedBoletoForEmail.status === "GENERATED" && (
+                <p className="text-xs text-blue-600 bg-blue-50 p-2 rounded">
+                  O status do boleto será atualizado para &quot;Enviado&quot; após o envio.
+                </p>
+              )}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setSendBoletoDialogOpen(false);
+                setSelectedBoletoForEmail(null);
+              }}
+              disabled={sendingBoleto}
+            >
+              Cancelar
+            </Button>
+            <Button onClick={handleSendBoletoEmail} disabled={sendingBoleto}>
+              <Mail className="mr-2 h-4 w-4" />
+              {sendingBoleto ? "Enviando..." : "Enviar E-mail"}
             </Button>
           </DialogFooter>
         </DialogContent>

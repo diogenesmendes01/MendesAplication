@@ -74,6 +74,7 @@ export interface ProposalRow {
 }
 
 export interface ProposalDetail extends ProposalRow {
+  clientEmail: string | null;
   items: ProposalItemRow[];
 }
 
@@ -354,7 +355,7 @@ export async function getProposalById(proposalId: string, companyId: string): Pr
     where: { id: proposalId, companyId },
     include: {
       client: {
-        select: { id: true, name: true },
+        select: { id: true, name: true, email: true },
       },
       items: {
         orderBy: { id: "asc" },
@@ -370,6 +371,7 @@ export async function getProposalById(proposalId: string, companyId: string): Pr
     id: proposal.id,
     clientId: proposal.clientId,
     clientName: proposal.client.name,
+    clientEmail: proposal.client.email,
     status: proposal.status,
     paymentConditions: proposal.paymentConditions,
     validity: proposal.validity?.toISOString() ?? null,
