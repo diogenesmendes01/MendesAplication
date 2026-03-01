@@ -62,6 +62,7 @@ model Company {
   accountsReceivable AccountReceivable[]
   accountsPayable    AccountPayable[]
   bankTransactions   BankTransaction[]
+  tickets            Ticket[]
 
   @@map("companies")
 }
@@ -79,6 +80,8 @@ model User {
   userCompanies      UserCompany[]
   auditLogs          AuditLog[]
   passwordResetTokens PasswordResetToken[]
+  assignedTickets    Ticket[]        @relation("TicketAssignee")
+  ticketMessages     TicketMessage[] @relation("TicketMessageSender")
 
   @@map("users")
 }
@@ -141,6 +144,7 @@ model Client {
 
   company            Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
   accountsReceivable AccountReceivable[]
+  tickets            Ticket[]
 
   @@unique([cpfCnpj, companyId])
   @@map("clients")
@@ -194,6 +198,20 @@ model AccountPayable {
   @@map("accounts_payable")
 }
 
+enum TicketPriority {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  WAITING_CLIENT
+  RESOLVED
+  CLOSED
+}
+
 enum BankTransactionStatus {
   PENDING
   RECONCILED
@@ -213,4 +231,40 @@ model BankTransaction {
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@map("bank_transactions")
+}
+
+model Ticket {
+  id          String         @id @default(cuid())
+  clientId    String
+  subject     String
+  description String
+  priority    TicketPriority @default(MEDIUM)
+  status      TicketStatus   @default(OPEN)
+  assigneeId  String?
+  proposalId  String?
+  boletoId    String?
+  companyId   String
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  client   Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  assignee User?   @relation("TicketAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  company  Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  messages TicketMessage[]
+
+  @@map("tickets")
+}
+
+model TicketMessage {
+  id           String   @id @default(cuid())
+  ticketId     String
+  senderId     String
+  content      String
+  sentViaEmail Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  sender User   @relation("TicketMessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@map("ticket_messages")
 }
