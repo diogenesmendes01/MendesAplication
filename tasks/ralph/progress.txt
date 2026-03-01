@@ -94,6 +94,9 @@
 - Client CRM server actions in `src/app/(app)/comercial/clientes/actions.ts` — `listClients`, `createClient`, `updateClient`, `getClientForEdit`; supports PF/PJ with CPF/CNPJ validation
 - `/comercial` redirects to `/comercial/clientes` (same pattern as `/sac` → `/sac/tickets`)
 - Client listing uses CPF/CNPJ mask helpers (`applyCpfMask`, `applyCnpjMask`); type selector clears CPF/CNPJ field on change to avoid invalid state
+- Proposal/Boleto enums: `ProposalStatus` (DRAFT/SENT/ACCEPTED/REJECTED/EXPIRED), `BoletoStatus` (GENERATED/SENT/PAID/OVERDUE/CANCELLED)
+- Ticket→Proposal and Ticket→Boleto use named relations ("TicketProposal", "TicketBoleto") with `onDelete: SetNull`
+- Proposal.totalValue is stored but should be computed from items in server actions; ProposalItem.quantity is Decimal(10,2) for fractional quantities
 
 ## Completed Stories
 
@@ -760,4 +763,24 @@
   - US-029 and US-032 had overlapping scope — the client detail page was built as part of the timeline story
   - When proposals are added (US-033+), extend `getClientTimeline` in `src/app/(app)/comercial/clientes/[id]/actions.ts` and add "proposal" to the `TimelineItemType` union
   - The ClientTimeline component is designed for extensibility — adding new timeline item types only requires adding to the server action query and the type/icon/color maps in `src/components/client-timeline.tsx`
+---
+
+## 2026-03-01 - US-033
+- What was implemented:
+  - Added `ProposalStatus` enum (DRAFT/SENT/ACCEPTED/REJECTED/EXPIRED)
+  - Added `BoletoStatus` enum (GENERATED/SENT/PAID/OVERDUE/CANCELLED)
+  - Added `Proposal` model with clientId, status, paymentConditions, validity, observations, totalValue (Decimal 12,2), companyId
+  - Added `ProposalItem` model with proposalId, description, quantity (Decimal 10,2), unitPrice (Decimal 12,2)
+  - Added `Boleto` model with proposalId, bankReference, value (Decimal 12,2), dueDate, installmentNumber, status, companyId
+  - Updated `Ticket` model to have proper FK relations to Proposal and Boleto (previously just nullable String fields)
+  - Updated Company and Client models with new relation arrays
+  - Migration generated and applied successfully
+- Files changed:
+  - `erp/prisma/schema.prisma` — added enums, models, updated relations
+  - `erp/prisma/migrations/20260301013159_add_proposal_boleto_models/migration.sql` — new migration
+- **Learnings for future iterations:**
+  - Ticket.proposalId and Ticket.boletoId now have proper FK relations via named relations ("TicketProposal", "TicketBoleto") — use `include: { proposal: true, boleto: true }` to load them
+  - Proposal.totalValue uses `@default(0)` and should be computed as sum of items (quantity * unitPrice) in server actions
+  - ProposalItem.quantity uses `Decimal(10,2)` to support fractional quantities (e.g., 1.5 hours of service)
+  - When implementing US-034+ proposals, extend `getClientTimeline` to include proposals (as noted in US-032 learnings)
 ---
