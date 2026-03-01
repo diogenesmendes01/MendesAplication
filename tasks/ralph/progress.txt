@@ -644,3 +644,19 @@
   - jspdf-autotable exposes lastAutoTable.finalY on the doc object for positioning subsequent content (needs any cast)
   - Export buttons should only show when data is loaded (!loading && data !== null)
 ---
+
+## 2026-03-01 - US-026
+- What was implemented: SAC database schema with Ticket and TicketMessage models
+  - `TicketPriority` enum: HIGH, MEDIUM, LOW
+  - `TicketStatus` enum: OPEN, IN_PROGRESS, WAITING_CLIENT, RESOLVED, CLOSED
+  - `Ticket` model: id, clientId, subject, description, priority, status, assigneeId (nullable), proposalId (nullable), boletoId (nullable), companyId, createdAt, updatedAt
+  - `TicketMessage` model: id, ticketId, senderId, content, sentViaEmail (boolean), createdAt
+  - Relations: Ticket → Client, Ticket → User (assignee), Ticket → Company, TicketMessage → Ticket, TicketMessage → User (sender)
+- Files changed:
+  - erp/prisma/schema.prisma — Added TicketPriority, TicketStatus enums; Ticket, TicketMessage models; reverse relations on Company, User, Client
+  - erp/prisma/migrations/20260301005810_add_sac_schema/migration.sql — PostgreSQL migration
+- **Learnings for future iterations:**
+  - Ticket model uses named relations for User: `@relation("TicketAssignee")` for assignee and `@relation("TicketMessageSender")` for message sender — needed because both reference User
+  - proposalId and boletoId are plain String? fields (not FK relations) since Proposal/Boleto models don't exist yet (US-033)
+  - SAC pages go under `src/app/(app)/sac/` — follow same pattern as financeiro module
+---
