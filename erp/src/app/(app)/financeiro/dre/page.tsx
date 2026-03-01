@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
-import { Building2, FileText } from "lucide-react";
+import { Building2, Download, FileText } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
   Card,
@@ -35,6 +36,7 @@ import {
   type DREPeriodType,
   type DREPerCompany,
 } from "./actions";
+import { exportDREtoPDF, exportDREtoExcel } from "./export";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -338,6 +340,27 @@ export default function DREPage() {
 
   const showConsolidatedToggle = companies.length > 1;
 
+  const hasData =
+    !loading &&
+    ((viewMode === "company" && dreData !== null) ||
+      (viewMode === "consolidated" && consolidatedReport !== null));
+
+  function handleExportPDF() {
+    if (viewMode === "consolidated" && consolidatedReport) {
+      exportDREtoPDF(consolidatedReport.consolidated, consolidatedReport);
+    } else if (dreData) {
+      exportDREtoPDF(dreData);
+    }
+  }
+
+  function handleExportExcel() {
+    if (viewMode === "consolidated" && consolidatedReport) {
+      exportDREtoExcel(consolidatedReport.consolidated, consolidatedReport);
+    } else if (dreData) {
+      exportDREtoExcel(dreData);
+    }
+  }
+
   // Generate year options (current year +/- 5)
   const currentYear = getCurrentYear();
   const yearOptions = Array.from({ length: 11 }, (_, i) => currentYear - 5 + i);
@@ -368,11 +391,33 @@ export default function DREPage() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">DRE</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Demonstração do Resultado do Exercício
-          </p>
+        <div className="flex items-start gap-3">
+          <div>
+            <h1 className="text-3xl font-bold">DRE</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Demonstração do Resultado do Exercício
+            </p>
+          </div>
+          {hasData && (
+            <div className="flex gap-2 pt-1">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExportPDF}
+              >
+                <Download className="mr-1 h-4 w-4" />
+                PDF
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExportExcel}
+              >
+                <Download className="mr-1 h-4 w-4" />
+                Excel
+              </Button>
+            </div>
+          )}
         </div>
 
         {/* Filters */}
