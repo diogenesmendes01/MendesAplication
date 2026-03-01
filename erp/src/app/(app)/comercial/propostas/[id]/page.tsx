@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowLeft, FileText, Mail } from "lucide-react";
+import { ArrowLeft, FileText, Mail, Receipt } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -42,6 +42,7 @@ import {
   sendProposalEmail,
   sendBoletoEmail,
 } from "@/lib/email-actions";
+import { emitInvoiceForBoleto } from "@/lib/nfse-actions";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -153,6 +154,12 @@ export default function ProposalDetailPage() {
   const [selectedBoletoForEmail, setSelectedBoletoForEmail] =
     useState<BoletoRow | null>(null);
   const [sendingBoleto, setSendingBoleto] = useState(false);
+
+  // NFS-e emission state
+  const [emitNfseDialogOpen, setEmitNfseDialogOpen] = useState(false);
+  const [selectedBoletoForNfse, setSelectedBoletoForNfse] =
+    useState<BoletoRow | null>(null);
+  const [emittingNfse, setEmittingNfse] = useState(false);
 
   // ---------------------------------------------------
   // Load proposal and boletos
@@ -271,6 +278,37 @@ export default function ProposalDetailPage() {
       );
     } finally {
       setSendingBoleto(false);
+    }
+  }
+
+  // ---------------------------------------------------
+  // Emit NFS-e
+  // ---------------------------------------------------
+
+  function openEmitNfseDialog(boleto: BoletoRow) {
+    setSelectedBoletoForNfse(boleto);
+    setEmitNfseDialogOpen(true);
+  }
+
+  async function handleEmitNfse() {
+    if (!selectedCompanyId || !selectedBoletoForNfse) return;
+
+    setEmittingNfse(true);
+    try {
+      const result = await emitInvoiceForBoleto(
+        selectedBoletoForNfse.id,
+        selectedCompanyId
+      );
+      toast.success(`NFS-e emitida com sucesso: ${result.nfNumber}`);
+      setEmitNfseDialogOpen(false);
+      setSelectedBoletoForNfse(null);
+      await loadData();
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Erro ao emitir NFS-e"
+      );
+    } finally {
+      setEmittingNfse(false);
     }
   }
 
@@ -519,7 +557,7 @@ export default function ProposalDetailPage() {
                       <TableCell className="font-mono text-xs text-muted-foreground">
                         {boleto.bankReference || "—"}
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right space-x-1">
                         {canSendBoletoEmail && (
                           <Button
                             variant="ghost"
@@ -528,6 +566,17 @@ export default function ProposalDetailPage() {
                           >
                             <Mail className="mr-2 h-4 w-4" />
                             Enviar
+                          </Button>
+                        )}
+                        {boleto.status === "PAID" && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openEmitNfseDialog(boleto)}
+                            title="Emitir NFS-e para este boleto"
+                          >
+                            <Receipt className="mr-1 h-4 w-4" />
+                            Emitir NFS-e
                           </Button>
                         )}
                       </TableCell>
@@ -744,6 +793,74 @@ export default function ProposalDetailPage() {
             <Button onClick={handleSendBoletoEmail} disabled={sendingBoleto}>
               <Mail className="mr-2 h-4 w-4" />
               {sendingBoleto ? "Enviando..." : "Enviar E-mail"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Emit NFS-e Confirmation Dialog */}
+      <Dialog
+        open={emitNfseDialogOpen}
+        onOpenChange={(open) => {
+          setEmitNfseDialogOpen(open);
+          if (!open) setSelectedBoletoForNfse(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Emitir NFS-e</DialogTitle>
+            <DialogDescription>
+              Confirme a emissão da Nota Fiscal de Serviço Eletrônica para este boleto pago.
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedBoletoForNfse && (
+            <div className="space-y-3 py-4">
+              <div className="flex justify-between">
+                <span className="text-sm text-muted-foreground">Cliente</span>
+                <span className="text-sm font-medium">
+                  {proposal.clientName}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-sm text-muted-foreground">Valor</span>
+                <span className="text-sm font-medium font-mono">
+                  {currencyFmt.format(parseFloat(selectedBoletoForNfse.value))}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-sm text-muted-foreground">Parcela</span>
+                <span className="text-sm font-medium">
+                  {selectedBoletoForNfse.installmentNumber}/{boletos.length}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-sm text-muted-foreground">
+                  Alíquota ISS
+                </span>
+                <span className="text-sm font-medium">5,00%</span>
+              </div>
+              <p className="text-xs text-blue-600 bg-blue-50 p-2 rounded">
+                A NFS-e será emitida automaticamente e enviada por e-mail ao
+                cliente.
+              </p>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setEmitNfseDialogOpen(false);
+                setSelectedBoletoForNfse(null);
+              }}
+              disabled={emittingNfse}
+            >
+              Cancelar
+            </Button>
+            <Button onClick={handleEmitNfse} disabled={emittingNfse}>
+              <Receipt className="mr-2 h-4 w-4" />
+              {emittingNfse ? "Emitindo..." : "Emitir NFS-e"}
             </Button>
           </DialogFooter>
         </DialogContent>
