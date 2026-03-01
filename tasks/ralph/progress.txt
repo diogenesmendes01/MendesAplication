@@ -103,6 +103,8 @@
 - Boleto service in `src/lib/boleto.ts`: abstract `BoletoProvider` interface with `MockBoletoProvider`; follows same provider pattern as email service
 - Boleto server actions in `src/app/(app)/comercial/propostas/actions.ts`: `generateBoletosForProposal`, `listBoletosForProposal`, `updateBoletoStatus`
 - Boleto status transitions: GENERATED→SENT/CANCELLED, SENT→PAID/OVERDUE/CANCELLED, OVERDUE→PAID/CANCELLED; PAID and CANCELLED are terminal
+- Proposal detail page at `/comercial/propostas/[id]` — shows proposal info, items, and boletos; non-DRAFT proposals navigate here from listing
+- Boleto status badge colors: gray=GENERATED, blue=SENT, green=PAID, red=OVERDUE, orange=CANCELLED
 
 ## Completed Stories
 
@@ -852,4 +854,18 @@
   - Each boleto automatically creates a corresponding AccountReceivable entry in the same transaction
   - Boleto status transitions: GENERATED → SENT/CANCELLED, SENT → PAID/OVERDUE/CANCELLED, OVERDUE → PAID/CANCELLED; PAID and CANCELLED are terminal
   - Boleto server actions are in the proposals actions file (`comercial/propostas/actions.ts`) since boletos are tightly coupled to proposals
+---
+
+## 2026-03-01 - US-038
+- What was implemented: Boleto generation UI with proposal detail page
+- Files changed:
+  - erp/src/app/(app)/comercial/propostas/[id]/page.tsx — NEW: proposal detail page showing proposal info, items table, and boletos section with generation dialog
+  - erp/src/app/(app)/comercial/propostas/page.tsx — Updated row click to navigate to detail page for non-DRAFT proposals
+- **Learnings for future iterations:**
+  - Proposal detail page at `/comercial/propostas/[id]` shows proposal info + items + boletos
+  - Non-DRAFT proposals navigate to detail page; DRAFT proposals navigate to edit form
+  - Boleto status colors: gray=GENERATED, blue=SENT, green=PAID, red=OVERDUE, orange=CANCELLED
+  - `generateBoletosForProposal` from actions.ts handles all boleto creation logic; UI just passes installments count and first due date
+  - Boletos can only be generated for ACCEPTED proposals with no existing boletos
+  - Dialog pattern: use state for dialog open, form fields, and loading state; reset on close
 ---
