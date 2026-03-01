@@ -46,6 +46,9 @@
 - Two-dialog pattern: separate create/edit dialog from assignment/config dialog for complex entities
 - Audit logging: `logAuditEvent()` from `@/lib/audit` — fire-and-forget, never throws. Use `Prisma.InputJsonValue` for dataBefore/dataAfter types
 - Logout API at POST `/api/auth/logout` — clears both cookies, logs LOGOUT audit event
+- Audit log server actions in `src/app/(app)/configuracoes/auditoria/actions.ts` — `listAuditLogs`, `exportAuditLogsCsv`, `getAuditEntityTypes`, `getAuditUsers`, `getAuditCompanies`
+- CSV export pattern: generate CSV string server-side, create Blob with BOM (`\uFEFF`) client-side for proper Excel encoding, trigger download via temporary `<a>` element
+- Filter dropdowns: use `__all__` as sentinel value for "all items" since Radix Select doesn't support empty string values
 
 ## Completed Stories
 
@@ -292,4 +295,29 @@
   - IP extraction pattern: `req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? req.headers.get("x-real-ip")` — works behind proxies
   - Audit logging is fire-and-forget: wrapped in try/catch with console.error fallback, so failures never block the main operation
   - No UI changes in this story — purely backend service
+---
+
+## 2026-03-01 - US-013
+- What was implemented: Audit log viewer page with filters, pagination, and CSV export
+  - `src/app/(app)/configuracoes/auditoria/actions.ts`: Five server actions:
+    - `listAuditLogs`: Paginated listing with filters (user, action, entity, company, date range), includes joined user name and company name
+    - `exportAuditLogsCsv`: Generates CSV string with same filters (up to 10,000 records), includes BOM for Excel compatibility
+    - `getAuditEntityTypes`: Returns distinct entity types for filter dropdown
+    - `getAuditUsers`: Returns all users for filter dropdown
+    - `getAuditCompanies`: Returns all companies for filter dropdown
+  - `src/app/(app)/configuracoes/auditoria/page.tsx`: Client component with:
+    - Paginated table with columns: timestamp, user, action (color-coded badge), entity (with truncated ID), company
+    - Collapsible filter panel with 6 filters: user, action type, entity type, company, date from, date to
+    - CSV export button that downloads filtered results
+    - Chronological ordering (most recent first)
+- Files changed:
+  - erp/src/app/(app)/configuracoes/auditoria/actions.ts (new)
+  - erp/src/app/(app)/configuracoes/auditoria/page.tsx (new)
+- **Learnings for future iterations:**
+  - Radix Select doesn't support empty string values — use a sentinel like `__all__` and map back to empty string in the change handler
+  - CSV export with BOM (`\uFEFF` prefix) ensures Excel opens the file with correct encoding for Portuguese characters
+  - Prisma `distinct` option on `findMany` is useful for getting unique values (e.g., distinct entity types)
+  - Filter panels: toggle visibility with state, show indicator badge when filters are active
+  - Date range filtering: use `gte`/`lte` on `createdAt`, remember to set end date to 23:59:59.999 for inclusive end of day
+  - Browser testing not available — manual verification needed
 ---
