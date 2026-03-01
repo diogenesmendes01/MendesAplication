@@ -119,6 +119,8 @@
 - NFS-e service in `src/lib/nfse.ts`: abstract `NfseProvider` interface with `MockNfseProvider`; follows same provider pattern as boleto and email services
 - NFS-e server actions in `src/lib/nfse-actions.ts`: `emitInvoiceForBoleto(boletoId, companyId)` — creates Invoice with ISSUED status, calls NFS-e provider, auto-sends email to client
 - NFS-e email template: `buildNfseEmailHtml()` in `src/lib/email-templates.ts` — shows NF number, service description, value, ISS rate/value
+- Tax dashboard server actions in `src/app/(app)/fiscal/impostos/actions.ts` — `getTaxDashboardData`, `createTaxEntry`, `markTaxEntryAsPaid`
+- Tax calculations use hardcoded rates: ISS 5%, PIS 0.65%, COFINS 3%, IRPJ 4.8%, CSLL 2.88% — calculated from issued invoice totals for current month
 
 ## Completed Stories
 
@@ -986,4 +988,26 @@
   - Cancel invoice only works on ISSUED status (not PENDING); status change audited
   - Fiscal default page now redirects to notas-fiscais for easier access
   - Emit NFS-e button only shows for boletos with status "PAID" in the proposal detail page
+---
+
+## 2026-03-01 - US-046
+- Implemented tax dashboard at `/fiscal/impostos` with auto-calculated taxes from issued invoices
+- Tax overview cards: base value (NFs), total taxes, tax burden percentage
+- Per-tax breakdown table: ISS (5%), PIS (0.65%), COFINS (3%), IRPJ (4.8%), CSLL (2.88%)
+- Per-company tax cards showing individual tax summaries
+- Alert banners for overdue and upcoming (7-day) tax entries
+- Tax entries table with "mark as paid" functionality
+- Tabs: Detalhamento (consolidated breakdown), Por Empresa (per-company cards), Lançamentos (entries)
+- Admin sees all companies consolidated; Manager sees only assigned companies
+- Selected company context filters all views
+- Server actions: `getTaxDashboardData`, `createTaxEntry`, `markTaxEntryAsPaid`
+- Files changed:
+  - `erp/src/app/(app)/fiscal/impostos/actions.ts` (new)
+  - `erp/src/app/(app)/fiscal/impostos/page.tsx` (new)
+- **Learnings for future iterations:**
+  - Tax calculations are based on issued invoices for the current month period
+  - Tax rates are hardcoded constants (Simples Nacional defaults) — can be made configurable per company later
+  - TaxEntry model is used for manual tax obligation tracking; auto-calculated values come from invoice aggregation
+  - The dashboard doesn't require company selection — it auto-loads all companies based on user role
+  - Fiscal pages pattern: `/fiscal` redirects to `/fiscal/notas-fiscais`; impostos is a separate page at `/fiscal/impostos`
 ---
