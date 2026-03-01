@@ -67,6 +67,8 @@
 - Use `Prisma.Decimal` constructor for creating monetary values: `new Prisma.Decimal(numericValue)`
 - Payable server actions in `src/app/(app)/financeiro/pagar/actions.ts` — `listPayables`, `createPayable`, `updatePayable`, `markPayableAsPaid`, `listCategoriesForSelect`
 - Payable supplier is a free-text field — use `contains` with `mode: "insensitive"` for supplier search filter
+- Cash flow aggregation: use `Number(decimal)` for Prisma Decimal → number conversion in summation loops; `paidAt` for realized, `dueDate` for projections
+- Period grouping keys: generate all keys between date range to fill chart gaps; sort lexicographically (YYYY-MM-DD format)
 
 ## Completed Stories
 
@@ -520,5 +522,32 @@
   - Row highlighting uses `className` on `TableRow` — Shadcn Table supports arbitrary className props
   - Client-side date comparison for row highlighting: construct `startOfToday` using year/month/date to strip time, compare due dates
   - Plural/singular in Portuguese: use ternary for "conta vencida" (1) vs "contas vencidas" (>1)
+  - Browser testing not available — manual verification needed
+---
+
+## 2026-03-01 - US-021
+- What was implemented: Cash flow page with income/expense chart and projections
+  - `src/app/(app)/financeiro/fluxo-de-caixa/actions.ts`: Two server actions:
+    - `getCashFlowData`: Aggregates paid receivables (income) and paid payables (expenses) by period, includes pending items for projections, supports daily/weekly/monthly grouping, computes current balance (realized) and projected balance (includes pending)
+    - `getCompaniesForCashFlow`: Returns companies user can access for the consolidated view toggle
+  - `src/app/(app)/financeiro/fluxo-de-caixa/page.tsx`: Client component with:
+    - 4 KPI cards: Saldo Atual (realized balance), Saldo Projetado (includes pending), Total Receitas, Total Despesas
+    - Bar chart comparing income vs expenses per period using recharts BarChart
+    - Line chart showing net cash flow (projection) per period using recharts LineChart
+    - Toggle between per-company and consolidated (holding) view
+    - Period grouping selector: daily, weekly, monthly
+    - Date range selector with default of current month through 3 months ahead
+    - Empty state when no data or no company selected
+- Files changed:
+  - erp/src/app/(app)/financeiro/fluxo-de-caixa/actions.ts (new)
+  - erp/src/app/(app)/financeiro/fluxo-de-caixa/page.tsx (new)
+- **Learnings for future iterations:**
+  - Cash flow combines paid (realized) + pending (projected) data — use paidAt for realized income/expenses, dueDate for pending projections
+  - Period grouping helper: generate all period keys between from/to dates to ensure no gaps in chart even if no data exists
+  - Weekly grouping uses ISO week start (Monday) via getDay() adjustment
+  - `Number(decimal)` converts Prisma Decimal to number for aggregation — acceptable for display-only aggregation
+  - Consolidated view passes `companyId: undefined` to skip company filter in Prisma where clause
+  - Default date range: current month start to 3 months ahead for meaningful projection view
+  - Cash flow page route: `/financeiro/fluxo-de-caixa` — accessed via Financeiro sidebar link
   - Browser testing not available — manual verification needed
 ---
