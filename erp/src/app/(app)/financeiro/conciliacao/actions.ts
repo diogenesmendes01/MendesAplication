@@ -3,7 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireCompanyAccess } from "@/lib/rbac";
 import { logAuditEvent } from "@/lib/audit";
-import { Prisma, type BankTransactionStatus } from "@prisma/client";
+import { Prisma, type BankTransactionStatus, type PaymentStatus } from "@prisma/client";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -33,7 +33,32 @@ export interface BankTransactionRow {
   description: string;
   value: string;
   status: BankTransactionStatus;
+  matchedType: string | null;
+  matchedEntityId: string | null;
   createdAt: string;
+}
+
+export interface SystemRecordRow {
+  id: string;
+  type: "RECEIVABLE" | "PAYABLE";
+  description: string;
+  value: string;
+  dueDate: string;
+  status: PaymentStatus;
+  clientOrSupplier: string;
+}
+
+export interface MatchSuggestion {
+  bankTransaction: BankTransactionRow;
+  systemRecord: SystemRecordRow;
+  confidence: "HIGH" | "MEDIUM" | "LOW";
+}
+
+export interface ReconciliationSummary {
+  totalBankTransactions: number;
+  matched: number;
+  unmatched: number;
+  reconciliationPercentage: number;
 }
 
 export interface ImportResult {
@@ -332,6 +357,8 @@ export async function listBankTransactions(
       description: t.description,
       value: t.value.toString(),
       status: t.status,
+      matchedType: t.matchedType,
+      matchedEntityId: t.matchedEntityId,
       createdAt: t.createdAt.toISOString(),
     })),
     total,
@@ -355,6 +382,314 @@ export async function deleteBankTransaction(id: string, companyId: string): Prom
     entity: "BankTransaction",
     entityId: id,
     dataBefore: existing as unknown as Prisma.InputJsonValue,
+    companyId,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Reconciliation Summary
+// ---------------------------------------------------------------------------
+
+export async function getReconciliationSummary(
+  companyId: string
+): Promise<ReconciliationSummary> {
+  await requireCompanyAccess(companyId);
+
+  const [total, matched] = await Promise.all([
+    prisma.bankTransaction.count({ where: { companyId } }),
+    prisma.bankTransaction.count({ where: { companyId, status: "RECONCILED" } }),
+  ]);
+
+  const unmatched = total - matched;
+  const reconciliationPercentage = total > 0 ? Math.round((matched / total) * 100) : 0;
+
+  return { totalBankTransactions: total, matched, unmatched, reconciliationPercentage };
+}
+
+// ---------------------------------------------------------------------------
+// List Unmatched System Records (receivables + payables)
+// ---------------------------------------------------------------------------
+
+export async function listUnmatchedSystemRecords(
+  companyId: string
+): Promise<SystemRecordRow[]> {
+  await requireCompanyAccess(companyId);
+
+  // Get IDs of already-matched system records
+  const matchedTxns = await prisma.bankTransaction.findMany({
+    where: { companyId, status: "RECONCILED", matchedEntityId: { not: null } },
+    select: { matchedEntityId: true, matchedType: true },
+  });
+
+  const matchedReceivableIds = matchedTxns
+    .filter((t) => t.matchedType === "RECEIVABLE")
+    .map((t) => t.matchedEntityId!)
+    ;
+  const matchedPayableIds = matchedTxns
+    .filter((t) => t.matchedType === "PAYABLE")
+    .map((t) => t.matchedEntityId!)
+    ;
+
+  const [receivables, payables] = await Promise.all([
+    prisma.accountReceivable.findMany({
+      where: {
+        companyId,
+        id: { notIn: matchedReceivableIds.length > 0 ? matchedReceivableIds : undefined },
+      },
+      include: { client: { select: { name: true } } },
+      orderBy: { dueDate: "desc" },
+      take: 200,
+    }),
+    prisma.accountPayable.findMany({
+      where: {
+        companyId,
+        id: { notIn: matchedPayableIds.length > 0 ? matchedPayableIds : undefined },
+      },
+      orderBy: { dueDate: "desc" },
+      take: 200,
+    }),
+  ]);
+
+  const records: SystemRecordRow[] = [];
+
+  for (const r of receivables) {
+    records.push({
+      id: r.id,
+      type: "RECEIVABLE",
+      description: r.description,
+      value: r.value.toString(),
+      dueDate: r.dueDate.toISOString(),
+      status: r.status,
+      clientOrSupplier: r.client.name,
+    });
+  }
+
+  for (const p of payables) {
+    records.push({
+      id: p.id,
+      type: "PAYABLE",
+      description: p.description,
+      value: p.value.toString(),
+      dueDate: p.dueDate.toISOString(),
+      status: p.status,
+      clientOrSupplier: p.supplier,
+    });
+  }
+
+  return records;
+}
+
+// ---------------------------------------------------------------------------
+// Auto-match transactions
+// ---------------------------------------------------------------------------
+
+const DATE_PROXIMITY_DAYS = 5;
+
+export async function autoMatchTransactions(
+  companyId: string
+): Promise<{ matched: number }> {
+  const session = await requireCompanyAccess(companyId);
+
+  // Get all PENDING bank transactions
+  const pendingTxns = await prisma.bankTransaction.findMany({
+    where: { companyId, status: "PENDING" },
+    orderBy: { date: "asc" },
+  });
+
+  if (pendingTxns.length === 0) return { matched: 0 };
+
+  // Get unmatched system records
+  const matchedTxns = await prisma.bankTransaction.findMany({
+    where: { companyId, status: "RECONCILED", matchedEntityId: { not: null } },
+    select: { matchedEntityId: true, matchedType: true },
+  });
+
+  const matchedReceivableIds = new Set(
+    matchedTxns.filter((t) => t.matchedType === "RECEIVABLE").map((t) => t.matchedEntityId!)
+  );
+  const matchedPayableIds = new Set(
+    matchedTxns.filter((t) => t.matchedType === "PAYABLE").map((t) => t.matchedEntityId!)
+  );
+
+  const [receivables, payables] = await Promise.all([
+    prisma.accountReceivable.findMany({
+      where: { companyId },
+    }),
+    prisma.accountPayable.findMany({
+      where: { companyId },
+    }),
+  ]);
+
+  // Filter already-matched records
+  const availableReceivables = receivables.filter((r) => !matchedReceivableIds.has(r.id));
+  const availablePayables = payables.filter((p) => !matchedPayableIds.has(p.id));
+
+  // Track which records have been claimed during this run
+  const claimedReceivableIds = new Set<string>();
+  const claimedPayableIds = new Set<string>();
+
+  let matchedCount = 0;
+
+  for (const txn of pendingTxns) {
+    const txnValue = Number(txn.value);
+    const txnDate = txn.date.getTime();
+
+    // Positive values → receivables (income); Negative → payables (expense)
+    if (txnValue > 0) {
+      // Try to match against receivables
+      let bestMatch: { id: string; dateDiff: number } | null = null;
+
+      for (const rec of availableReceivables) {
+        if (claimedReceivableIds.has(rec.id)) continue;
+
+        const recValue = Number(rec.value);
+        if (Math.abs(txnValue - recValue) > 0.01) continue;
+
+        const dateDiff = Math.abs(txnDate - rec.dueDate.getTime()) / (1000 * 60 * 60 * 24);
+        if (dateDiff > DATE_PROXIMITY_DAYS) continue;
+
+        if (!bestMatch || dateDiff < bestMatch.dateDiff) {
+          bestMatch = { id: rec.id, dateDiff };
+        }
+      }
+
+      if (bestMatch) {
+        await prisma.bankTransaction.update({
+          where: { id: txn.id },
+          data: { status: "RECONCILED", matchedType: "RECEIVABLE", matchedEntityId: bestMatch.id },
+        });
+        claimedReceivableIds.add(bestMatch.id);
+        matchedCount++;
+      }
+    } else if (txnValue < 0) {
+      // Try to match against payables (compare absolute values)
+      const absTxnValue = Math.abs(txnValue);
+      let bestMatch: { id: string; dateDiff: number } | null = null;
+
+      for (const pay of availablePayables) {
+        if (claimedPayableIds.has(pay.id)) continue;
+
+        const payValue = Number(pay.value);
+        if (Math.abs(absTxnValue - payValue) > 0.01) continue;
+
+        const dateDiff = Math.abs(txnDate - pay.dueDate.getTime()) / (1000 * 60 * 60 * 24);
+        if (dateDiff > DATE_PROXIMITY_DAYS) continue;
+
+        if (!bestMatch || dateDiff < bestMatch.dateDiff) {
+          bestMatch = { id: pay.id, dateDiff };
+        }
+      }
+
+      if (bestMatch) {
+        await prisma.bankTransaction.update({
+          where: { id: txn.id },
+          data: { status: "RECONCILED", matchedType: "PAYABLE", matchedEntityId: bestMatch.id },
+        });
+        claimedPayableIds.add(bestMatch.id);
+        matchedCount++;
+      }
+    }
+  }
+
+  if (matchedCount > 0) {
+    await logAuditEvent({
+      userId: session.userId,
+      action: "UPDATE",
+      entity: "BankTransaction",
+      entityId: "auto-match",
+      dataAfter: { matchedCount } as unknown as Prisma.InputJsonValue,
+      companyId,
+    });
+  }
+
+  return { matched: matchedCount };
+}
+
+// ---------------------------------------------------------------------------
+// Manual match
+// ---------------------------------------------------------------------------
+
+export async function manualMatchTransaction(
+  bankTransactionId: string,
+  matchedType: "RECEIVABLE" | "PAYABLE",
+  matchedEntityId: string,
+  companyId: string
+): Promise<void> {
+  const session = await requireCompanyAccess(companyId);
+
+  const txn = await prisma.bankTransaction.findFirst({
+    where: { id: bankTransactionId, companyId },
+  });
+  if (!txn) throw new Error("Transação bancária não encontrada");
+
+  // Verify the system record exists
+  if (matchedType === "RECEIVABLE") {
+    const rec = await prisma.accountReceivable.findFirst({
+      where: { id: matchedEntityId, companyId },
+    });
+    if (!rec) throw new Error("Conta a receber não encontrada");
+  } else {
+    const pay = await prisma.accountPayable.findFirst({
+      where: { id: matchedEntityId, companyId },
+    });
+    if (!pay) throw new Error("Conta a pagar não encontrada");
+  }
+
+  // Check if this system record is already matched to another bank transaction
+  const alreadyMatched = await prisma.bankTransaction.findFirst({
+    where: {
+      companyId,
+      matchedType,
+      matchedEntityId,
+      status: "RECONCILED",
+      id: { not: bankTransactionId },
+    },
+  });
+  if (alreadyMatched) throw new Error("Este registro já está conciliado com outra transação bancária");
+
+  await prisma.bankTransaction.update({
+    where: { id: bankTransactionId },
+    data: { status: "RECONCILED", matchedType, matchedEntityId },
+  });
+
+  await logAuditEvent({
+    userId: session.userId,
+    action: "UPDATE",
+    entity: "BankTransaction",
+    entityId: bankTransactionId,
+    dataBefore: { status: txn.status } as unknown as Prisma.InputJsonValue,
+    dataAfter: { status: "RECONCILED", matchedType, matchedEntityId } as unknown as Prisma.InputJsonValue,
+    companyId,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Unmatch (undo reconciliation)
+// ---------------------------------------------------------------------------
+
+export async function unmatchTransaction(
+  bankTransactionId: string,
+  companyId: string
+): Promise<void> {
+  const session = await requireCompanyAccess(companyId);
+
+  const txn = await prisma.bankTransaction.findFirst({
+    where: { id: bankTransactionId, companyId, status: "RECONCILED" },
+  });
+  if (!txn) throw new Error("Transação não encontrada ou não está conciliada");
+
+  await prisma.bankTransaction.update({
+    where: { id: bankTransactionId },
+    data: { status: "PENDING", matchedType: null, matchedEntityId: null },
+  });
+
+  await logAuditEvent({
+    userId: session.userId,
+    action: "UPDATE",
+    entity: "BankTransaction",
+    entityId: bankTransactionId,
+    dataBefore: { status: "RECONCILED", matchedType: txn.matchedType, matchedEntityId: txn.matchedEntityId } as unknown as Prisma.InputJsonValue,
+    dataAfter: { status: "PENDING", matchedType: null, matchedEntityId: null } as unknown as Prisma.InputJsonValue,
     companyId,
   });
 }
