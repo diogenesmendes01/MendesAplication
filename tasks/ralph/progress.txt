@@ -53,6 +53,11 @@
 - Currency formatting: use `Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" })` for BRL values
 - Recharts installed for charts — use `ResponsiveContainer` + `BarChart`/`LineChart` for responsive charts; wrap in a fixed-height div
 - Chart currency formatting: use abbreviated format (R$ 10k, R$ 1.5M) for Y-axis labels via custom `tickFormatter`
+- Email service in `src/lib/email.ts`: `sendEmail(options)` with `EmailProvider` interface; uses ConsoleEmailProvider in dev (logs to console)
+- Password reset actions in `src/lib/password-reset.ts`: `requestPasswordReset(email)`, `validateResetToken(token)`, `resetPassword(token, newPassword)`
+- Public auth pages (`/forgot-password`, `/reset-password`) live under `src/app/` (not `(app)` group) — update `PUBLIC_PATHS` in middleware when adding new public routes
+- Session inactivity timeout: 30 min sliding window — middleware re-sets accessToken cookie maxAge on every request; JWT expiry also 30 min
+- PasswordResetToken model stores reset tokens with 1-hour expiry and `usedAt` field for single-use enforcement
 
 ## Completed Stories
 
@@ -371,5 +376,41 @@
   - When there are many companies, set XAxis `angle={-20}` and `textAnchor="end"` to avoid label overlap
   - Recharts Tooltip can accept a custom `content` component for styled tooltips
   - Placeholder boleto data scales by period type just like KPI data
+  - Browser testing not available — manual verification needed
+---
+
+## 2026-03-01 - US-016
+- What was implemented: Password recovery flow with forgot/reset password pages, email service, and session expiry
+  - `src/lib/email.ts`: Generic email sending interface with `EmailProvider` abstraction and `ConsoleEmailProvider` for development (logs to console)
+  - `src/lib/password-reset.ts`: Three server actions — `requestPasswordReset` (generates token, sends email, avoids enumeration), `validateResetToken`, `resetPassword` (with token single-use enforcement)
+  - `prisma/schema.prisma`: Added `PasswordResetToken` model with token, userId, expiresAt, usedAt fields
+  - `src/app/forgot-password/page.tsx`: Email input form, success message after submission (always shows success to prevent enumeration)
+  - `src/app/reset-password/page.tsx`: Token validation on load, new password + confirmation form, success/error states
+  - `src/app/login/page.tsx`: Added "Esqueci minha senha" link to forgot-password page
+  - `src/middleware.ts`: Added `/forgot-password` and `/reset-password` to PUBLIC_PATHS; added sliding session window (re-sets accessToken cookie maxAge=30min on each request)
+  - `src/lib/auth.ts`: Changed ACCESS_TOKEN_EXPIRY from 15m to 30m
+  - `src/app/api/auth/login/route.ts`: Updated cookie maxAge to 30 minutes
+  - `src/app/api/auth/refresh/route.ts`: Updated cookie maxAge to 30 minutes
+- Files changed:
+  - erp/prisma/schema.prisma (updated — added PasswordResetToken model + User relation)
+  - erp/prisma/migrations/20260301001127_add_password_reset_tokens/migration.sql (new)
+  - erp/src/lib/email.ts (new)
+  - erp/src/lib/password-reset.ts (new)
+  - erp/src/app/forgot-password/page.tsx (new)
+  - erp/src/app/reset-password/page.tsx (new)
+  - erp/src/app/login/page.tsx (updated — added forgot password link)
+  - erp/src/middleware.ts (updated — public paths + sliding session)
+  - erp/src/lib/auth.ts (updated — 30m token expiry)
+  - erp/src/app/api/auth/login/route.ts (updated — 30m cookie maxAge)
+  - erp/src/app/api/auth/refresh/route.ts (updated — 30m cookie maxAge)
+- **Learnings for future iterations:**
+  - `crypto.randomBytes(32).toString("hex")` generates secure random tokens for password reset
+  - Always return generic success response for password reset requests to avoid email enumeration attacks
+  - `usedAt` field on tokens enables single-use enforcement — check `usedAt === null` before accepting token
+  - Invalidate existing unused tokens before creating new ones to prevent token accumulation
+  - Sliding session window: middleware re-sets cookie maxAge on every authenticated request, so cookie only expires after N min of inactivity
+  - Public auth pages (`/forgot-password`, `/reset-password`) go under `src/app/` directly, not under `(app)` route group
+  - `PUBLIC_PATHS` in middleware must be updated when adding new public routes
+  - `$transaction` array syntax works for simple multi-operation atomicity (update user + mark token used)
   - Browser testing not available — manual verification needed
 ---
