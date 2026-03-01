@@ -97,6 +97,9 @@
 - Proposal/Boleto enums: `ProposalStatus` (DRAFT/SENT/ACCEPTED/REJECTED/EXPIRED), `BoletoStatus` (GENERATED/SENT/PAID/OVERDUE/CANCELLED)
 - Ticket→Proposal and Ticket→Boleto use named relations ("TicketProposal", "TicketBoleto") with `onDelete: SetNull`
 - Proposal.totalValue is stored but should be computed from items in server actions; ProposalItem.quantity is Decimal(10,2) for fractional quantities
+- Proposal server actions in `src/app/(app)/comercial/propostas/actions.ts` — `listProposals`, `createProposal`, `updateProposal`, `getProposalById`, `updateProposalStatus`, `listClientsForProposal`
+- Proposal status transitions: DRAFT→SENT, SENT→ACCEPTED/REJECTED/EXPIRED — terminal states (ACCEPTED/REJECTED/EXPIRED) have no further transitions
+- Only DRAFT proposals can be edited; updateProposal replaces all items atomically in a $transaction
 
 ## Completed Stories
 
@@ -783,4 +786,24 @@
   - Proposal.totalValue uses `@default(0)` and should be computed as sum of items (quantity * unitPrice) in server actions
   - ProposalItem.quantity uses `Decimal(10,2)` to support fractional quantities (e.g., 1.5 hours of service)
   - When implementing US-034+ proposals, extend `getClientTimeline` to include proposals (as noted in US-032 learnings)
+---
+
+## 2026-03-01 - US-034
+- What was implemented: Proposal CRUD server actions with full validation, status transitions, and auto-calculated totals
+- Files changed:
+  - `erp/src/app/(app)/comercial/propostas/actions.ts` — new file with all proposal server actions
+- Server actions created:
+  - `createProposal` — creates proposal with client + items, auto-calculates totalValue
+  - `updateProposal` — updates proposal (DRAFT only), replaces items in transaction
+  - `listProposals` — paginated listing with filters (status, client, date range, value range)
+  - `getProposalById` — fetches proposal with all items and client name
+  - `updateProposalStatus` — enforces valid status transitions (DRAFT→SENT→ACCEPTED/REJECTED/EXPIRED)
+  - `listClientsForProposal` — client dropdown helper
+- **Learnings for future iterations:**
+  - Proposal totalValue is auto-computed from items; stored as Decimal(12,2) in DB
+  - Status transitions map: DRAFT→SENT, SENT→ACCEPTED/REJECTED/EXPIRED; terminal states have no further transitions
+  - Update replaces all items in a transaction (delete old + create new) — simpler than diffing
+  - Only DRAFT proposals can be edited; sent/accepted/rejected proposals are immutable
+  - Proposal items are ordered by `id` (creation order) in getProposalById
+  - `listClientsForProposal` provides client dropdown data for proposal forms
 ---
