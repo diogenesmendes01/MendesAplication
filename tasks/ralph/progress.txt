@@ -70,8 +70,11 @@
 - Cash flow aggregation: use `Number(decimal)` for Prisma Decimal → number conversion in summation loops; `paidAt` for realized, `dueDate` for projections
 - Period grouping keys: generate all keys between date range to fill chart gaps; sort lexicographically (YYYY-MM-DD format)
 - `logAuditEvent` takes a single params object: `logAuditEvent({ userId, action, entity, entityId, dataBefore?, dataAfter?, ipAddress?, companyId? })`
-- BankTransaction model: date, description, value (Decimal), status (PENDING/RECONCILED), companyId — used for bank reconciliation
+- BankTransaction model: date, description, value (Decimal), status (PENDING/RECONCILED), matchedType, matchedEntityId, companyId — used for bank reconciliation
 - File upload pattern: hidden `<input type="file" ref={...}>` triggered by button, read content with `file.text()`, pass string to server action
+- Bank reconciliation matching: auto-match by value (exact, within 0.01) and date proximity (5 days); positive bank txns match receivables, negative match payables
+- Shadcn Tabs component in `src/components/ui/tabs.tsx`, Badge in `src/components/ui/badge.tsx` — available for UI
+- Multi-tab page pattern: split page into tab-specific components with shared state lifted to parent; use `onDataChanged` callback for cross-tab refresh
 
 ## Completed Stories
 
@@ -586,5 +589,26 @@
   - CSV header detection: support both Portuguese (`data`, `descricao`, `valor`) and English (`date`, `description`, `value`) column names
   - File upload uses hidden `<input type="file">` triggered by button click via `useRef` — reset `.value = ""` after import to allow re-selecting same file
   - `file.text()` reads file content as string client-side — pass string to server action (no File object transfer needed)
+  - Browser testing not available — manual verification needed
+---
+
+## 2026-03-01 - US-023
+- What was implemented: Bank reconciliation matching UI with auto-matching, manual matching, and reconciliation summary
+- Files changed:
+  - erp/prisma/schema.prisma — Added `matchedType` and `matchedEntityId` optional fields to BankTransaction model
+  - erp/prisma/migrations/20260301004132_add_bank_transaction_matching_fields/migration.sql — Migration for new fields
+  - erp/src/app/(app)/financeiro/conciliacao/actions.ts — Added server actions: `getReconciliationSummary`, `listUnmatchedSystemRecords`, `autoMatchTransactions`, `manualMatchTransaction`, `unmatchTransaction`
+  - erp/src/app/(app)/financeiro/conciliacao/page.tsx — Rewrote with Tabs: "Conciliação" tab (matching view with summary, side-by-side, manual match dialog) and "Importação" tab (existing import)
+  - erp/src/components/ui/tabs.tsx — Added Shadcn Tabs component
+  - erp/src/components/ui/badge.tsx — Added Shadcn Badge component
+- **Learnings for future iterations:**
+  - Auto-matching logic: positive bank transactions match receivables, negative match payables (absolute value comparison)
+  - Match by exact value (0.01 tolerance) and date proximity (5 days window) — pick closest date match
+  - Use `matchedType` (string: "RECEIVABLE"/"PAYABLE") + `matchedEntityId` for flexible entity linking without foreign keys
+  - Track claimed IDs during auto-match batch to prevent duplicate matching in same run
+  - Side-by-side layout uses `grid-cols-1 lg:grid-cols-2` for responsive two-column view
+  - Multi-tab page: split into sub-components (ImportTab, MatchingTab) with shared summary state in parent
+  - Manual match dialog: show bank transaction details in Card, searchable system records list below
+  - Unmatch action resets both status and matching fields (status→PENDING, matchedType→null, matchedEntityId→null)
   - Browser testing not available — manual verification needed
 ---
