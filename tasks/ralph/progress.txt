@@ -49,6 +49,8 @@
 - Audit log server actions in `src/app/(app)/configuracoes/auditoria/actions.ts` — `listAuditLogs`, `exportAuditLogsCsv`, `getAuditEntityTypes`, `getAuditUsers`, `getAuditCompanies`
 - CSV export pattern: generate CSV string server-side, create Blob with BOM (`\uFEFF`) client-side for proper Excel encoding, trigger download via temporary `<a>` element
 - Filter dropdowns: use `__all__` as sentinel value for "all items" since Radix Select doesn't support empty string values
+- Dashboard data in `src/app/(app)/dashboard/actions.ts` — uses placeholder KPIs until financial tables exist; replace `generatePlaceholderKPI` with real queries after US-017+
+- Currency formatting: use `Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" })` for BRL values
 
 ## Completed Stories
 
@@ -319,5 +321,29 @@
   - Prisma `distinct` option on `findMany` is useful for getting unique values (e.g., distinct entity types)
   - Filter panels: toggle visibility with state, show indicator badge when filters are active
   - Date range filtering: use `gte`/`lte` on `createdAt`, remember to set end date to 23:59:59.999 for inclusive end of day
+  - Browser testing not available — manual verification needed
+---
+
+## 2026-03-01 - US-014
+- What was implemented: Consolidated dashboard with KPI cards and per-company breakdown
+  - `src/app/(app)/dashboard/actions.ts`: Server action `getDashboardData()` — fetches companies based on user role (Admin=all, Manager=assigned), generates placeholder KPI data (revenue, expenses, profit) scaled by period type
+  - `src/app/(app)/dashboard/page.tsx`: Client component with:
+    - 3 KPI cards: Receita Total (green), Despesas Totais (red), Lucro Total (blue)
+    - Period filter dropdown: Hoje, Esta Semana, Este Mês, Este Ano, Personalizado (with custom date range inputs)
+    - Per-company breakdown table with columns: Empresa, Receita, Despesas, Lucro, Margem (%)
+    - Consolidated totals row when multiple companies exist
+    - Loading skeleton animation for KPI cards
+    - Empty state for no companies
+    - Currency formatting with Intl.NumberFormat pt-BR
+- Files changed:
+  - erp/src/app/(app)/dashboard/actions.ts (new)
+  - erp/src/app/(app)/dashboard/page.tsx (rewritten from placeholder)
+- **Learnings for future iterations:**
+  - Placeholder KPI data uses deterministic hash from companyId for stable, varied numbers across companies
+  - Period scaling: day=1x, week=7x, month=30x, year=365x of base values
+  - `Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" })` for proper Brazilian currency formatting
+  - Custom date range filter: only trigger data load when both start and end dates are set
+  - Dashboard server action uses `requireSession()` (not `requireAdmin()`) since managers also need dashboard access
+  - KPI data is placeholder — will be replaced with real financial data once US-017+ are implemented
   - Browser testing not available — manual verification needed
 ---
