@@ -81,6 +81,10 @@
 - SAC pages under `src/app/(app)/sac/` — `/sac` redirects to `/sac/tickets`; ticket listing at `/sac/tickets`
 - User→UserCompany relation name is `userCompanies` (not `companies`) — use `userCompanies: { some: { companyId } }` for filtering users with company access
 - Shadcn Textarea component in `src/components/ui/textarea.tsx` — available for multi-line text input
+- Detail pages pattern: create `[id]/page.tsx` under the listing page dir; use `useParams()` for route params, `useRouter()` for back navigation
+- Status transitions: define `VALID_STATUS_TRANSITIONS` map server-side and `STATUS_TRANSITIONS` (with labels) client-side for controlled state machines
+- Ticket detail actions in `src/app/(app)/sac/tickets/actions.ts`: `getTicketById`, `updateTicketStatus`, `reassignTicket`
+- Ticket listing rows are clickable — navigate to `/sac/tickets/[id]` detail page
 
 ## Completed Stories
 
@@ -677,4 +681,18 @@
   - `listUsersForAssign` fetches both ADMIN users (who bypass RBAC) and users with UserCompany assignment to the selected company
   - Ticket create form supports optional proposalId/boletoId fields but they are not exposed in UI yet (will be needed when Proposal/Boleto models exist in US-033+)
   - `/sac` redirect uses server-side `redirect()` from next/navigation — simple pattern for module root pages
+---
+
+## 2026-03-01 - US-028
+- What was implemented: Ticket detail page at /sac/tickets/[id] with full ticket information, status management, and reassignment
+- Files changed:
+  - erp/src/app/(app)/sac/tickets/actions.ts — Added server actions: getTicketById, updateTicketStatus, reassignTicket; TicketDetail type; VALID_STATUS_TRANSITIONS map
+  - erp/src/app/(app)/sac/tickets/[id]/page.tsx — Ticket detail page with description card, info sidebar (client, company, priority, dates, linked proposal/boleto), status transition buttons, and assignee dropdown
+  - erp/src/app/(app)/sac/tickets/page.tsx — Added clickable rows with router navigation to detail page; added useRouter import
+- **Learnings for future iterations:**
+  - First [id] detail page in the codebase — use `useParams()` from `next/navigation` to get route params, `useRouter().push()` for navigation
+  - Status transitions are enforced server-side via `VALID_STATUS_TRANSITIONS` map — OPEN → IN_PROGRESS → WAITING_CLIENT/RESOLVED → CLOSED; prevents invalid transitions
+  - Client-side `STATUS_TRANSITIONS` provides user-facing labels for buttons (e.g., "Iniciar Atendimento" for OPEN → IN_PROGRESS)
+  - Linked proposal/boleto IDs are displayed with truncated IDs (`slice(-8)`) — will become clickable links once /comercial/propostas/[id] pages exist (US-035+)
+  - Reassignment updates ticket in-place via `setTicket` state update — no need to reload the full ticket
 ---
