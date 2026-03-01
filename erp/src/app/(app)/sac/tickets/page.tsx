@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Plus, ChevronLeft, ChevronRight, Filter } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -112,6 +113,7 @@ function statusColor(s: string) {
 // ---------------------------------------------------------------------------
 
 export default function TicketsPage() {
+  const router = useRouter();
   const { selectedCompanyId } = useCompany();
 
   const [tickets, setTickets] =
@@ -428,7 +430,11 @@ export default function TicketsPage() {
               </TableRow>
             ) : (
               tickets.data.map((row) => (
-                <TableRow key={row.id}>
+                <TableRow
+                  key={row.id}
+                  className="cursor-pointer hover:bg-muted/50"
+                  onClick={() => router.push(`/sac/tickets/${row.id}`)}
+                >
                   <TableCell className="font-medium">
                     {row.client.name}
                   </TableCell>

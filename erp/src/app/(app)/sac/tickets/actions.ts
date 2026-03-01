@@ -221,3 +221,154 @@ export async function listUsersForAssign(companyId: string) {
 
   return users;
 }
+
+// ---------------------------------------------------------------------------
+// Ticket Detail
+// ---------------------------------------------------------------------------
+
+export interface TicketDetail {
+  id: string;
+  subject: string;
+  description: string;
+  priority: TicketPriority;
+  status: TicketStatus;
+  proposalId: string | null;
+  boletoId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  client: { id: string; name: string; email: string | null };
+  assignee: { id: string; name: string } | null;
+  company: { id: string; nomeFantasia: string };
+}
+
+export async function getTicketById(
+  ticketId: string,
+  companyId: string
+): Promise<TicketDetail> {
+  await requireCompanyAccess(companyId);
+
+  const ticket = await prisma.ticket.findFirst({
+    where: { id: ticketId, companyId },
+    include: {
+      client: { select: { id: true, name: true, email: true } },
+      assignee: { select: { id: true, name: true } },
+      company: { select: { id: true, nomeFantasia: true } },
+    },
+  });
+
+  if (!ticket) {
+    throw new Error("Ticket não encontrado");
+  }
+
+  return {
+    id: ticket.id,
+    subject: ticket.subject,
+    description: ticket.description,
+    priority: ticket.priority,
+    status: ticket.status,
+    proposalId: ticket.proposalId,
+    boletoId: ticket.boletoId,
+    createdAt: ticket.createdAt.toISOString(),
+    updatedAt: ticket.updatedAt.toISOString(),
+    client: ticket.client,
+    assignee: ticket.assignee,
+    company: ticket.company,
+  };
+}
+
+const VALID_STATUS_TRANSITIONS: Record<TicketStatus, TicketStatus[]> = {
+  OPEN: ["IN_PROGRESS"],
+  IN_PROGRESS: ["WAITING_CLIENT", "RESOLVED"],
+  WAITING_CLIENT: ["IN_PROGRESS", "RESOLVED"],
+  RESOLVED: ["CLOSED", "IN_PROGRESS"],
+  CLOSED: [],
+};
+
+export async function updateTicketStatus(
+  ticketId: string,
+  companyId: string,
+  newStatus: TicketStatus
+) {
+  const session = await requireCompanyAccess(companyId);
+
+  const ticket = await prisma.ticket.findFirst({
+    where: { id: ticketId, companyId },
+  });
+
+  if (!ticket) {
+    throw new Error("Ticket não encontrado");
+  }
+
+  const allowed = VALID_STATUS_TRANSITIONS[ticket.status];
+  if (!allowed.includes(newStatus)) {
+    throw new Error(
+      `Transição de status inválida: ${ticket.status} → ${newStatus}`
+    );
+  }
+
+  const updated = await prisma.ticket.update({
+    where: { id: ticketId },
+    data: { status: newStatus },
+  });
+
+  await logAuditEvent({
+    userId: session.userId,
+    action: "STATUS_CHANGE",
+    entity: "Ticket",
+    entityId: ticketId,
+    dataBefore: { status: ticket.status } as unknown as Prisma.InputJsonValue,
+    dataAfter: { status: newStatus } as unknown as Prisma.InputJsonValue,
+    companyId,
+  });
+
+  return { status: updated.status };
+}
+
+export async function reassignTicket(
+  ticketId: string,
+  companyId: string,
+  assigneeId: string | null
+) {
+  const session = await requireCompanyAccess(companyId);
+
+  const ticket = await prisma.ticket.findFirst({
+    where: { id: ticketId, companyId },
+  });
+
+  if (!ticket) {
+    throw new Error("Ticket não encontrado");
+  }
+
+  if (assigneeId) {
+    const user = await prisma.user.findFirst({
+      where: { id: assigneeId, status: "ACTIVE" },
+    });
+    if (!user) {
+      throw new Error("Usuário responsável não encontrado");
+    }
+  }
+
+  const updated = await prisma.ticket.update({
+    where: { id: ticketId },
+    data: { assigneeId: assigneeId || null },
+    include: {
+      assignee: { select: { id: true, name: true } },
+    },
+  });
+
+  await logAuditEvent({
+    userId: session.userId,
+    action: "UPDATE",
+    entity: "Ticket",
+    entityId: ticketId,
+    dataBefore: {
+      assigneeId: ticket.assigneeId,
+    } as unknown as Prisma.InputJsonValue,
+    dataAfter: {
+      assigneeId: updated.assigneeId,
+    } as unknown as Prisma.InputJsonValue,
+    companyId,
+  });
+
+  return { assignee: updated.assignee };
+}
