@@ -62,6 +62,9 @@
 - Monetary values use `Decimal @db.Decimal(12, 2)` — never use Float for money
 - Client cpfCnpj is unique per company: `@@unique([cpfCnpj, companyId])` — not globally unique
 - Client model is used by both financial (receivables) and CRM (proposals, SAC) modules
+- Prisma Decimal values must be serialized to strings for server action transfer — `.toString()` server-side, `parseFloat()` client-side
+- Financial pages go under `src/app/(app)/financeiro/` — use `requireCompanyAccess(companyId)` for auth
+- Use `Prisma.Decimal` constructor for creating monetary values: `new Prisma.Decimal(numericValue)`
 
 ## Completed Stories
 
@@ -437,4 +440,32 @@
   - Client model is shared between financial (US-017) and CRM (US-031) — the full CRM UI is built later
   - PaymentStatus enum (PENDING/PAID/OVERDUE) is reused by both AccountReceivable and AccountPayable
   - No seed script needed for this story — financial data will be created via server actions in subsequent stories
+---
+
+## 2026-03-01 - US-018
+- What was implemented: Accounts receivable server actions and listing page
+  - `src/app/(app)/financeiro/receber/actions.ts`: Four server actions:
+    - `listReceivables`: Paginated listing with filters (status, client, date range), includes joined client name, serializes Decimal values to string
+    - `createReceivable`: Creates receivable with validation (client exists in company, value > 0), uses `Prisma.Decimal` for monetary value
+    - `markReceivableAsPaid`: Manual write-off — sets status to PAID and paidAt to current date
+    - `listClientsForSelect`: Returns clients for dropdown (id + name)
+  - `src/app/(app)/financeiro/receber/page.tsx`: Client component with:
+    - Paginated table with columns: client, description, value (BRL formatted), due date, status (color-coded badge), actions
+    - Collapsible filter panel: status, client, date range (from/to)
+    - Status badge colors: gray=pendente, green=pago, red=vencido
+    - "Baixar" (write-off) button for non-paid receivables
+    - Create receivable dialog: client selector, description, value, due date
+    - Company-scoped via `useCompany()` context
+- Files changed:
+  - erp/src/app/(app)/financeiro/receber/actions.ts (new)
+  - erp/src/app/(app)/financeiro/receber/page.tsx (new)
+- **Learnings for future iterations:**
+  - Prisma `Decimal` values must be serialized to strings for client-side transfer — use `.toString()` in server action, `parseFloat()` on client
+  - Company-scoped server actions use `requireCompanyAccess(companyId)` from `@/lib/rbac` — returns session for audit logging
+  - Use `Prisma.Decimal` constructor for creating monetary values: `new Prisma.Decimal(numericValue)`
+  - Client select dropdown uses `listClientsForSelect()` — loads once on company change, reused in both filter and form
+  - Filter panel pattern: toggle visibility, show indicator badge when active, "Limpar filtros" button
+  - `__none__` sentinel for disabled placeholder in Select (Radix doesn't support empty/disabled default)
+  - Financial pages go under `src/app/(app)/financeiro/` — the "Financeiro" sidebar link already points to `/financeiro`
+  - Browser testing not available — manual verification needed
 ---
