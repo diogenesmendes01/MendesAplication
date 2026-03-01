@@ -85,6 +85,9 @@
 - Status transitions: define `VALID_STATUS_TRANSITIONS` map server-side and `STATUS_TRANSITIONS` (with labels) client-side for controlled state machines
 - Ticket detail actions in `src/app/(app)/sac/tickets/actions.ts`: `getTicketById`, `updateTicketStatus`, `reassignTicket`
 - Ticket listing rows are clickable — navigate to `/sac/tickets/[id]` detail page
+- ClientTimeline reusable component in `src/components/client-timeline.tsx` — accepts `clientId` and `companyId` props; aggregates tickets, receivables (boletos), and email messages into a unified chronological timeline with filter-by-type dropdown
+- Client detail actions in `src/app/(app)/comercial/clientes/[id]/actions.ts` — `getClientById`, `getClientTimeline` (unified timeline data fetcher)
+- Comercial pages go under `src/app/(app)/comercial/` — client detail page at `/comercial/clientes/[id]`
 
 ## Completed Stories
 
@@ -695,4 +698,18 @@
   - Client-side `STATUS_TRANSITIONS` provides user-facing labels for buttons (e.g., "Iniciar Atendimento" for OPEN → IN_PROGRESS)
   - Linked proposal/boleto IDs are displayed with truncated IDs (`slice(-8)`) — will become clickable links once /comercial/propostas/[id] pages exist (US-035+)
   - Reassignment updates ticket in-place via `setTicket` state update — no need to reload the full ticket
+---
+
+## 2026-03-01 - US-029
+- What was implemented: Unified client history timeline with client detail page
+- Files changed:
+  - erp/src/app/(app)/comercial/clientes/[id]/actions.ts — Server actions: `getClientById` (fetches client profile) and `getClientTimeline` (aggregates tickets, receivables/boletos, and email messages into unified chronological timeline with optional type filter)
+  - erp/src/app/(app)/comercial/clientes/[id]/page.tsx — Client detail page showing profile card (name, razão social, CPF/CNPJ, type, email, phone, address, creation date) and the timeline component
+  - erp/src/components/client-timeline.tsx — Reusable `ClientTimeline` component with vertical timeline UI, filter-by-type dropdown (all/ticket/boleto/email), type icons (Headphones/CreditCard/Mail), status badges, clickable "Ver detalhes" links
+- **Learnings for future iterations:**
+  - Timeline aggregation pattern: query multiple models (Ticket, AccountReceivable, TicketMessage) independently, merge into a flat `TimelineItem[]` array, then sort by date descending — avoids complex SQL unions
+  - TicketMessage with `sentViaEmail: true` serves as the "email" type in timeline until a dedicated EmailLog model exists
+  - Proposals don't have a model yet (US-033) — the filter includes the type but no data is returned; `getClientTimeline` is structured so adding new entity types (proposals, boletos) only requires adding a new query block
+  - The `comercial` directory didn't exist — created as `src/app/(app)/comercial/clientes/[id]/` for the client detail; US-031 will add the listing page and US-032 will enhance the detail page
+  - `Number(decimal)` converts Prisma Decimal to JS number for currency formatting in server actions
 ---
