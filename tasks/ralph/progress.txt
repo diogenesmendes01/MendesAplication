@@ -75,6 +75,8 @@
 - Bank reconciliation matching: auto-match by value (exact, within 0.01) and date proximity (5 days); positive bank txns match receivables, negative match payables
 - Shadcn Tabs component in `src/components/ui/tabs.tsx`, Badge in `src/components/ui/badge.tsx` — available for UI
 - Multi-tab page pattern: split page into tab-specific components with shared state lifted to parent; use `onDataChanged` callback for cross-tab refresh
+- PDF export: `jspdf` + `jspdf-autotable` — client-side generation; use `autoTable(doc, {...})` with `didParseCell` for styling
+- Excel export: `xlsx` (SheetJS) — client-side; `XLSX.utils.aoa_to_sheet()` for data, `XLSX.writeFile(wb, name)` for download
 
 ## Completed Stories
 
@@ -626,4 +628,19 @@
   - CompanyComparisonTable component shows side-by-side comparison of all companies in consolidated view
   - DRE page follows same viewMode (company/consolidated) pattern as cash flow page
   - The DRE structure: Receita Bruta → Deduções → Receita Líquida → Custos → Lucro Bruto → Despesas Operacionais → Resultado Operacional
+---
+
+## 2026-03-01 - US-025
+- What was implemented: PDF and Excel export buttons for the DRE (income statement) report
+- Files changed:
+  - erp/package.json — Added jspdf, jspdf-autotable, xlsx dependencies
+  - erp/src/app/(app)/financeiro/dre/export.ts — New file with exportDREtoPDF and exportDREtoExcel functions
+  - erp/src/app/(app)/financeiro/dre/page.tsx — Added export buttons (PDF/Excel) to header, import export functions
+- **Learnings for future iterations:**
+  - jspdf + jspdf-autotable works well for tabular PDF reports; use autoTable(doc, {...}) with didParseCell for row styling
+  - xlsx (SheetJS) uses XLSX.utils.aoa_to_sheet for array-of-arrays → worksheet conversion, XLSX.writeFile to trigger download
+  - Both PDF and Excel exports run client-side since data is already loaded in component state — no server action needed
+  - For PDF column alignment, use columnStyles with halign: "right" for numeric columns
+  - jspdf-autotable exposes lastAutoTable.finalY on the doc object for positioning subsequent content (needs any cast)
+  - Export buttons should only show when data is loaded (!loading && data !== null)
 ---
