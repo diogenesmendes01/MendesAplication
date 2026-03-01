@@ -6,6 +6,7 @@ import { logAuditEvent } from "@/lib/audit";
 import { isValidCpf, stripCpf, formatCpf } from "@/lib/cpf";
 import { isValidCnpj, stripCnpj, formatCnpj } from "@/lib/cnpj";
 import { Prisma } from "@prisma/client";
+import { getSharedCompanyIds } from "@/lib/shared-clients";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -90,8 +91,11 @@ export async function listClients(
   const pageSize = Math.min(100, Math.max(1, params.pageSize ?? 10));
   const skip = (page - 1) * pageSize;
 
+  // Include clients from shared companies
+  const sharedIds = await getSharedCompanyIds(params.companyId);
+
   const where: Prisma.ClientWhereInput = {
-    companyId: params.companyId,
+    companyId: { in: sharedIds },
     ...(params.search
       ? {
           OR: [
@@ -235,8 +239,9 @@ export async function updateClient(
 export async function getClientForEdit(clientId: string, companyId: string) {
   await requireCompanyAccess(companyId);
 
+  const sharedIds = await getSharedCompanyIds(companyId);
   const client = await prisma.client.findFirst({
-    where: { id: clientId, companyId },
+    where: { id: clientId, companyId: { in: sharedIds } },
   });
 
   if (!client) {

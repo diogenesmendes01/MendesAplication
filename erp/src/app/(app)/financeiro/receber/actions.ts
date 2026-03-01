@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requireCompanyAccess } from "@/lib/rbac";
 import { logAuditEvent } from "@/lib/audit";
 import { Prisma, type PaymentStatus } from "@prisma/client";
+import { getSharedCompanyIds } from "@/lib/shared-clients";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -208,8 +209,9 @@ export async function markReceivableAsPaid(id: string, companyId: string) {
 export async function listClientsForSelect(companyId: string) {
   await requireCompanyAccess(companyId);
 
+  const sharedIds = await getSharedCompanyIds(companyId);
   const clients = await prisma.client.findMany({
-    where: { companyId },
+    where: { companyId: { in: sharedIds } },
     select: { id: true, name: true },
     orderBy: { name: "asc" },
   });

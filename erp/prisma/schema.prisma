@@ -40,21 +40,33 @@ enum Recurrence {
   YEARLY
 }
 
-model Company {
-  id                String   @id @default(cuid())
-  razaoSocial       String
-  nomeFantasia      String
-  cnpj              String   @unique
-  inscricaoEstadual String?
-  endereco          String?
-  telefone          String?
-  email             String?
-  segmento          String?
-  logoUrl           String?
-  status            Status   @default(ACTIVE)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+model SharedClientGroup {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
 
+  companies Company[]
+
+  @@map("shared_client_groups")
+}
+
+model Company {
+  id                    String   @id @default(cuid())
+  razaoSocial           String
+  nomeFantasia          String
+  cnpj                  String   @unique
+  inscricaoEstadual     String?
+  endereco              String?
+  telefone              String?
+  email                 String?
+  segmento              String?
+  logoUrl               String?
+  status                Status   @default(ACTIVE)
+  sharedClientGroupId   String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  sharedClientGroup  SharedClientGroup? @relation(fields: [sharedClientGroupId], references: [id], onDelete: SetNull)
   userCompanies      UserCompany[]
   auditLogs          AuditLog[]
   clients            Client[]
