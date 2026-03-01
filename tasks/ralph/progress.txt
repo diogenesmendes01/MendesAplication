@@ -69,6 +69,9 @@
 - Payable supplier is a free-text field — use `contains` with `mode: "insensitive"` for supplier search filter
 - Cash flow aggregation: use `Number(decimal)` for Prisma Decimal → number conversion in summation loops; `paidAt` for realized, `dueDate` for projections
 - Period grouping keys: generate all keys between date range to fill chart gaps; sort lexicographically (YYYY-MM-DD format)
+- `logAuditEvent` takes a single params object: `logAuditEvent({ userId, action, entity, entityId, dataBefore?, dataAfter?, ipAddress?, companyId? })`
+- BankTransaction model: date, description, value (Decimal), status (PENDING/RECONCILED), companyId — used for bank reconciliation
+- File upload pattern: hidden `<input type="file" ref={...}>` triggered by button, read content with `file.text()`, pass string to server action
 
 ## Completed Stories
 
@@ -549,5 +552,39 @@
   - Consolidated view passes `companyId: undefined` to skip company filter in Prisma where clause
   - Default date range: current month start to 3 months ahead for meaningful projection view
   - Cash flow page route: `/financeiro/fluxo-de-caixa` — accessed via Financeiro sidebar link
+  - Browser testing not available — manual verification needed
+---
+
+## 2026-03-01 - US-022
+- What was implemented: Bank reconciliation page with file import (OFX and CSV)
+  - `prisma/schema.prisma`: Added `BankTransactionStatus` enum (PENDING/RECONCILED) and `BankTransaction` model with date, description, value (Decimal 12,2), status, companyId
+  - `prisma/migrations/20260301003612_add_bank_transactions/migration.sql`: Migration for BankTransaction table
+  - `src/app/(app)/financeiro/conciliacao/actions.ts`: Server actions:
+    - `importBankTransactions`: Parses OFX or CSV file content, creates BankTransaction records, returns import result (imported/skipped/errors count)
+    - `listBankTransactions`: Paginated listing with filters (status, date range, description search)
+    - `deleteBankTransaction`: Delete individual pending transactions
+    - OFX parser: Extracts STMTTRN blocks, supports SGML and XML tag formats, parses DTPOSTED dates
+    - CSV parser: Auto-detects delimiter (`;` or `,`), supports Portuguese and English header names, falls back to positional parsing (date, description, value), handles Brazilian number format (1.234,56)
+  - `src/app/(app)/financeiro/conciliacao/page.tsx`: Client component with:
+    - File upload button accepting .ofx, .qfx, .csv, .txt formats
+    - Import instructions card explaining supported formats
+    - Transactions table with columns: date, description, value (color-coded green/red), status badge, actions
+    - Collapsible filter panel: status, description search, date range
+    - Pagination with total count
+    - Delete button for pending transactions
+    - Company-scoped via useCompany() context
+- Files changed:
+  - erp/prisma/schema.prisma (updated — added BankTransactionStatus enum + BankTransaction model + Company relation)
+  - erp/prisma/migrations/20260301003612_add_bank_transactions/migration.sql (new)
+  - erp/src/app/(app)/financeiro/conciliacao/actions.ts (new)
+  - erp/src/app/(app)/financeiro/conciliacao/page.tsx (new)
+- **Learnings for future iterations:**
+  - `logAuditEvent` takes a single params object (not positional args) — use `logAuditEvent({ userId, action, entity, entityId, ... })`
+  - OFX format: transactions in `<STMTTRN>` blocks, date in `DTPOSTED` (YYYYMMDD), amount in `TRNAMT`, description in `MEMO` or `NAME`
+  - OFX uses SGML-style tags (no closing tags) — parser must handle both SGML (`<FIELD>value`) and XML (`<FIELD>value</FIELD>`) formats
+  - Brazilian CSV bank statements commonly use `;` delimiter and `1.234,56` number format
+  - CSV header detection: support both Portuguese (`data`, `descricao`, `valor`) and English (`date`, `description`, `value`) column names
+  - File upload uses hidden `<input type="file">` triggered by button click via `useRef` — reset `.value = ""` after import to allow re-selecting same file
+  - `file.text()` reads file content as string client-side — pass string to server action (no File object transfer needed)
   - Browser testing not available — manual verification needed
 ---
