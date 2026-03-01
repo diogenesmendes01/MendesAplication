@@ -121,6 +121,8 @@
 - NFS-e email template: `buildNfseEmailHtml()` in `src/lib/email-templates.ts` — shows NF number, service description, value, ISS rate/value
 - Tax dashboard server actions in `src/app/(app)/fiscal/impostos/actions.ts` — `getTaxDashboardData`, `createTaxEntry`, `markTaxEntryAsPaid`
 - Tax calculations use hardcoded rates: ISS 5%, PIS 0.65%, COFINS 3%, IRPJ 4.8%, CSLL 2.88% — calculated from issued invoice totals for current month
+- Client sharing: `getSharedCompanyIds(companyId)` from `@/lib/shared-clients` — use `{ companyId: { in: sharedIds } }` in client queries to include shared companies' clients
+- SharedClientGroup config at `/configuracoes/compartilhamento` — admin only; companies have optional `sharedClientGroupId` FK
 
 ## Completed Stories
 
@@ -1010,4 +1012,26 @@
   - TaxEntry model is used for manual tax obligation tracking; auto-calculated values come from invoice aggregation
   - The dashboard doesn't require company selection — it auto-loads all companies based on user role
   - Fiscal pages pattern: `/fiscal` redirects to `/fiscal/notas-fiscais`; impostos is a separate page at `/fiscal/impostos`
+---
+
+## 2026-03-01 - US-047
+- What was implemented: Client sharing between companies via SharedClientGroup model
+- Files changed:
+  - `erp/prisma/schema.prisma` (added SharedClientGroup model, sharedClientGroupId FK on Company)
+  - `erp/prisma/migrations/20260301023432_add_shared_client_groups/migration.sql` (new)
+  - `erp/src/lib/shared-clients.ts` (new — `getSharedCompanyIds()` utility)
+  - `erp/src/app/(app)/configuracoes/compartilhamento/actions.ts` (new — CRUD for sharing groups)
+  - `erp/src/app/(app)/configuracoes/compartilhamento/page.tsx` (new — config UI)
+  - `erp/src/app/(app)/comercial/clientes/actions.ts` (updated `listClients`, `getClientForEdit` to use shared IDs)
+  - `erp/src/app/(app)/comercial/propostas/actions.ts` (updated `listClientsForProposal` to use shared IDs)
+  - `erp/src/app/(app)/financeiro/receber/actions.ts` (updated `listClientsForSelect` to use shared IDs)
+  - `erp/src/app/(app)/fiscal/notas-fiscais/actions.ts` (updated `listClientsForSelect` to use shared IDs)
+  - `erp/src/app/(app)/sac/tickets/actions.ts` (updated `listClientsForSelect` to use shared IDs)
+- **Learnings for future iterations:**
+  - SharedClientGroup uses a simple FK on Company (`sharedClientGroupId`) — each company can only belong to one sharing group
+  - `getSharedCompanyIds(companyId)` from `@/lib/shared-clients` resolves all company IDs in the same sharing group; returns just `[companyId]` if not in a group
+  - All `listClientsForSelect` / `listClientsForProposal` / `listClients` functions updated to use `companyId: { in: sharedIds }` instead of `companyId`
+  - Interaction history (proposals, tickets, boletos) remains scoped to the selected company — only the client base is shared
+  - Sharing config page at `/configuracoes/compartilhamento` — admin only, uses existing dialog pattern
+  - Companies already in another group cannot be added to a new group (validation enforced server-side)
 ---
