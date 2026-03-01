@@ -88,6 +88,8 @@
 - ClientTimeline reusable component in `src/components/client-timeline.tsx` — accepts `clientId` and `companyId` props; aggregates tickets, receivables (boletos), and email messages into a unified chronological timeline with filter-by-type dropdown
 - Client detail actions in `src/app/(app)/comercial/clientes/[id]/actions.ts` — `getClientById`, `getClientTimeline` (unified timeline data fetcher)
 - Comercial pages go under `src/app/(app)/comercial/` — client detail page at `/comercial/clientes/[id]`
+- Ticket message server actions in `src/app/(app)/sac/tickets/actions.ts`: `listTicketMessages`, `createTicketReply` — messages ordered chronologically (ASC) for chat-style display
+- `createTicketReply` optionally sends email to client via `sendEmail()` from `@/lib/email`; email failure is caught silently so the reply is still saved
 
 ## Completed Stories
 
@@ -712,4 +714,17 @@
   - Proposals don't have a model yet (US-033) — the filter includes the type but no data is returned; `getClientTimeline` is structured so adding new entity types (proposals, boletos) only requires adding a new query block
   - The `comercial` directory didn't exist — created as `src/app/(app)/comercial/clientes/[id]/` for the client detail; US-031 will add the listing page and US-032 will enhance the detail page
   - `Number(decimal)` converts Prisma Decimal to JS number for currency formatting in server actions
+---
+
+## 2026-03-01 - US-030
+- What was implemented: Ticket reply and communication system with chat-style message thread and optional email notification
+- Files changed:
+  - erp/src/app/(app)/sac/tickets/actions.ts — Added `listTicketMessages`, `createTicketReply` server actions, `TicketMessageRow` and `CreateTicketReplyInput` types; imported `sendEmail` from email service
+  - erp/src/app/(app)/sac/tickets/[id]/page.tsx — Added message thread section with chat-style bubbles (sender avatar initial, name, timestamp, email badge), reply form with Textarea and "Send via email" checkbox, scroll-to-bottom on new messages
+- **Learnings for future iterations:**
+  - The TicketMessage model already existed in schema from US-026 — no migration needed
+  - Messages are ordered ASC (oldest first) for natural chat reading flow, with auto-scroll to newest
+  - Email sending is fire-and-forget in replies — caught silently so the reply record is always created even if email fails
+  - The `sendEmail` service uses ConsoleEmailProvider in dev which just logs to console
+  - `useRef` + `scrollIntoView({ behavior: "smooth" })` is the pattern for auto-scrolling to bottom of message thread
 ---
