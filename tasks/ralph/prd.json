@@ -525,7 +525,7 @@
         "Verify in browser using dev-browser skill"
       ],
       "priority": 31,
-      "passes": false,
+      "passes": true,
       "notes": "Client table already created in US-017. This story adds the full CRM UI."
     },
     {

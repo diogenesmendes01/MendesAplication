@@ -90,6 +90,10 @@
 - Comercial pages go under `src/app/(app)/comercial/` — client detail page at `/comercial/clientes/[id]`
 - Ticket message server actions in `src/app/(app)/sac/tickets/actions.ts`: `listTicketMessages`, `createTicketReply` — messages ordered chronologically (ASC) for chat-style display
 - `createTicketReply` optionally sends email to client via `sendEmail()` from `@/lib/email`; email failure is caught silently so the reply is still saved
+- CPF validation utility in `src/lib/cpf.ts`: `isValidCpf()`, `stripCpf()`, `formatCpf()` — validates check digits, mirrors CNPJ utility pattern
+- Client CRM server actions in `src/app/(app)/comercial/clientes/actions.ts` — `listClients`, `createClient`, `updateClient`, `getClientForEdit`; supports PF/PJ with CPF/CNPJ validation
+- `/comercial` redirects to `/comercial/clientes` (same pattern as `/sac` → `/sac/tickets`)
+- Client listing uses CPF/CNPJ mask helpers (`applyCpfMask`, `applyCnpjMask`); type selector clears CPF/CNPJ field on change to avoid invalid state
 
 ## Completed Stories
 
@@ -727,4 +731,19 @@
   - Email sending is fire-and-forget in replies — caught silently so the reply record is always created even if email fails
   - The `sendEmail` service uses ConsoleEmailProvider in dev which just logs to console
   - `useRef` + `scrollIntoView({ behavior: "smooth" })` is the pattern for auto-scrolling to bottom of message thread
+---
+
+## 2026-03-01 - US-031
+- What was implemented: Full client management CRM page with PF/PJ support
+- Files changed:
+  - `erp/src/lib/cpf.ts` — New CPF validation utility (stripCpf, formatCpf, isValidCpf)
+  - `erp/src/app/(app)/comercial/clientes/actions.ts` — Server actions: listClients (paginated, search by name/CPF/CNPJ/email), createClient, updateClient, getClientForEdit
+  - `erp/src/app/(app)/comercial/clientes/page.tsx` — Client listing page with table (name, CPF/CNPJ, email, type), search, pagination, create/edit dialog with PF/PJ type selector, CPF/CNPJ mask and inline validation
+  - `erp/src/app/(app)/comercial/page.tsx` — Redirect /comercial → /comercial/clientes
+- **Learnings for future iterations:**
+  - CPF validation follows same check-digit algorithm pattern as CNPJ but with 11 digits and weights (10-2, 11-2)
+  - When switching PF/PJ type in forms, clear the document field to avoid keeping invalid digits from the previous type's mask
+  - Client cpfCnpj uniqueness is per company (@@unique([cpfCnpj, companyId])), not global — error messages should reflect this
+  - The /comercial route was missing a redirect page; SAC pattern (/sac → /sac/tickets) was the model to follow
+  - Clicking client rows navigates to the existing detail page at /comercial/clientes/[id]
 ---
