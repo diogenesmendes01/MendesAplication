@@ -194,7 +194,7 @@ export default function PropostasPage() {
     if (row.status === "DRAFT") {
       router.push(`/comercial/propostas/nova?edit=${row.id}`);
     } else {
-      router.push(`/comercial/propostas/nova?edit=${row.id}`);
+      router.push(`/comercial/propostas/${row.id}`);
     }
   }
 
