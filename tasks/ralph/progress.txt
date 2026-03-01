@@ -65,6 +65,8 @@
 - Prisma Decimal values must be serialized to strings for server action transfer — `.toString()` server-side, `parseFloat()` client-side
 - Financial pages go under `src/app/(app)/financeiro/` — use `requireCompanyAccess(companyId)` for auth
 - Use `Prisma.Decimal` constructor for creating monetary values: `new Prisma.Decimal(numericValue)`
+- Payable server actions in `src/app/(app)/financeiro/pagar/actions.ts` — `listPayables`, `createPayable`, `updatePayable`, `markPayableAsPaid`, `listCategoriesForSelect`
+- Payable supplier is a free-text field — use `contains` with `mode: "insensitive"` for supplier search filter
 
 ## Completed Stories
 
@@ -467,5 +469,33 @@
   - Filter panel pattern: toggle visibility, show indicator badge when active, "Limpar filtros" button
   - `__none__` sentinel for disabled placeholder in Select (Radix doesn't support empty/disabled default)
   - Financial pages go under `src/app/(app)/financeiro/` — the "Financeiro" sidebar link already points to `/financeiro`
+  - Browser testing not available — manual verification needed
+---
+
+## 2026-03-01 - US-019
+- What was implemented: Accounts payable CRUD and listing page
+  - `src/app/(app)/financeiro/pagar/actions.ts`: Five server actions:
+    - `listPayables`: Paginated listing with filters (status, supplier text search, category, date range), includes joined category name, serializes Decimal values
+    - `createPayable`: Creates payable with validation (supplier required, value > 0, optional category verified in company), supports recurrence setting
+    - `updatePayable`: Updates payable fields with same validations, prevents editing paid items, logs dataBefore/dataAfter
+    - `markPayableAsPaid`: Manual write-off — sets status to PAID and paidAt to current date
+    - `listCategoriesForSelect`: Returns EXPENSE-type categories for dropdown
+  - `src/app/(app)/financeiro/pagar/page.tsx`: Client component with:
+    - Paginated table with columns: supplier, value (BRL formatted), due date, category, status (color-coded badge), actions
+    - Collapsible filter panel: status, supplier (text search), category, date range (from/to)
+    - Status badge colors: gray=pendente, green=pago, red=vencido
+    - Create/edit dialog with fields: supplier, description, value, due date, category (optional dropdown), recurrence (dropdown)
+    - Edit button (pencil icon) for non-paid payables
+    - "Baixar" (write-off) button for non-paid payables
+    - Company-scoped via `useCompany()` context
+- Files changed:
+  - erp/src/app/(app)/financeiro/pagar/actions.ts (new)
+  - erp/src/app/(app)/financeiro/pagar/page.tsx (new)
+- **Learnings for future iterations:**
+  - Payable supplier is a free-text field (not FK) — use text search (`contains`, case-insensitive) for filtering
+  - `listCategoriesForSelect` filters by `type: "EXPENSE"` — payables only show expense categories
+  - `updatePayable` prevents editing paid items — check `existing.status === "PAID"` before update
+  - Create/edit dialog reuses same Dialog component, distinguished by `editingId` state (null = create, string = edit)
+  - Form grid layout uses `sm:grid-cols-2` for value/date and category/recurrence pairs
   - Browser testing not available — manual verification needed
 ---
