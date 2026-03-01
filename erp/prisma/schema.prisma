@@ -61,6 +61,7 @@ model Company {
   financialCategories FinancialCategory[]
   accountsReceivable AccountReceivable[]
   accountsPayable    AccountPayable[]
+  bankTransactions   BankTransaction[]
 
   @@map("companies")
 }
@@ -191,4 +192,23 @@ model AccountPayable {
   company  Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@map("accounts_payable")
+}
+
+enum BankTransactionStatus {
+  PENDING
+  RECONCILED
+}
+
+model BankTransaction {
+  id          String                @id @default(cuid())
+  date        DateTime
+  description String
+  value       Decimal               @db.Decimal(12, 2)
+  status      BankTransactionStatus @default(PENDING)
+  companyId   String
+  createdAt   DateTime              @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@map("bank_transactions")
 }
