@@ -179,7 +179,7 @@ export interface BoletoEmailData {
 
 export function buildBoletoEmailHtml(
   company: CompanyBranding,
-  data: BoletoEmailData
+  data: BoletoEmailData,
 ): string {
   const currencyFmt = new Intl.NumberFormat("pt-BR", {
     style: "currency",
@@ -227,6 +227,67 @@ export function buildBoletoEmailHtml(
   return buildEmailHtml({
     company,
     subject: `Boleto - ${installmentLabel} - ${company.name}`,
+    bodyContent,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// NFS-e Email Template
+// ---------------------------------------------------------------------------
+
+export interface NfseEmailData {
+  nfNumber: string;
+  clientName: string;
+  serviceDescription: string;
+  value: string;
+  issRate: string;
+  issValue: string;
+  companyName: string;
+}
+
+export function buildNfseEmailHtml(
+  company: CompanyBranding,
+  data: NfseEmailData
+): string {
+  const currencyFmt = new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  });
+
+  const bodyContent = `
+    <h2 style="color:#1e293b;margin:0 0 16px;">Nota Fiscal de Serviço Eletrônica</h2>
+    <p style="color:#475569;line-height:1.6;">
+      Prezado(a) <strong>${data.clientName}</strong>,
+    </p>
+    <p style="color:#475569;line-height:1.6;">
+      Segue em anexo a Nota Fiscal de Serviço emitida pela empresa <strong>${company.name}</strong>.
+    </p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0;border:1px solid #e5e7eb;border-radius:4px;overflow:hidden;">
+      <tr style="background-color:#f8fafc;">
+        <td style="padding:8px 12px;font-weight:bold;border-bottom:1px solid #e5e7eb;">Número NFS-e</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-family:monospace;">${data.nfNumber}</td>
+      </tr>
+      <tr>
+        <td style="padding:8px 12px;font-weight:bold;border-bottom:1px solid #e5e7eb;">Serviço</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${data.serviceDescription}</td>
+      </tr>
+      <tr>
+        <td style="padding:8px 12px;font-weight:bold;border-bottom:1px solid #e5e7eb;">Valor</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-weight:bold;color:${PRIMARY_COLOR};">${currencyFmt.format(parseFloat(data.value))}</td>
+      </tr>
+      <tr>
+        <td style="padding:8px 12px;font-weight:bold;border-bottom:1px solid #e5e7eb;">ISS (${data.issRate}%)</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${currencyFmt.format(parseFloat(data.issValue))}</td>
+      </tr>
+    </table>
+    <p style="color:#475569;line-height:1.6;">
+      A nota fiscal em formato PDF segue em anexo para sua conveniência.
+    </p>
+  `;
+
+  return buildEmailHtml({
+    company,
+    subject: `NFS-e ${data.nfNumber} - ${company.name}`,
     bodyContent,
   });
 }
