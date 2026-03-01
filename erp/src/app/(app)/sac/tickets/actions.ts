@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireCompanyAccess } from "@/lib/rbac";
 import { logAuditEvent } from "@/lib/audit";
+import { sendEmail } from "@/lib/email";
 import { Prisma, type TicketStatus, type TicketPriority } from "@prisma/client";
 
 // ---------------------------------------------------------------------------
@@ -371,4 +372,133 @@ export async function reassignTicket(
   });
 
   return { assignee: updated.assignee };
+}
+
+// ---------------------------------------------------------------------------
+// Ticket Messages
+// ---------------------------------------------------------------------------
+
+export interface TicketMessageRow {
+  id: string;
+  content: string;
+  sentViaEmail: boolean;
+  createdAt: string;
+  sender: {
+    id: string;
+    name: string;
+  };
+}
+
+export async function listTicketMessages(
+  ticketId: string,
+  companyId: string
+): Promise<TicketMessageRow[]> {
+  await requireCompanyAccess(companyId);
+
+  const ticket = await prisma.ticket.findFirst({
+    where: { id: ticketId, companyId },
+    select: { id: true },
+  });
+
+  if (!ticket) {
+    throw new Error("Ticket não encontrado");
+  }
+
+  const messages = await prisma.ticketMessage.findMany({
+    where: { ticketId },
+    orderBy: { createdAt: "asc" },
+    include: {
+      sender: { select: { id: true, name: true } },
+    },
+  });
+
+  return messages.map((m) => ({
+    id: m.id,
+    content: m.content,
+    sentViaEmail: m.sentViaEmail,
+    createdAt: m.createdAt.toISOString(),
+    sender: m.sender,
+  }));
+}
+
+export interface CreateTicketReplyInput {
+  ticketId: string;
+  companyId: string;
+  content: string;
+  sendViaEmail: boolean;
+}
+
+export async function createTicketReply(input: CreateTicketReplyInput) {
+  const session = await requireCompanyAccess(input.companyId);
+
+  if (!input.content?.trim()) {
+    throw new Error("Conteúdo da resposta é obrigatório");
+  }
+
+  const ticket = await prisma.ticket.findFirst({
+    where: { id: input.ticketId, companyId: input.companyId },
+    include: {
+      client: { select: { name: true, email: true } },
+      company: { select: { nomeFantasia: true } },
+    },
+  });
+
+  if (!ticket) {
+    throw new Error("Ticket não encontrado");
+  }
+
+  const message = await prisma.ticketMessage.create({
+    data: {
+      ticketId: input.ticketId,
+      senderId: session.userId,
+      content: input.content.trim(),
+      sentViaEmail: input.sendViaEmail,
+    },
+    include: {
+      sender: { select: { id: true, name: true } },
+    },
+  });
+
+  // Send email if requested and client has an email address
+  if (input.sendViaEmail && ticket.client.email) {
+    try {
+      await sendEmail({
+        to: ticket.client.email,
+        subject: `Re: ${ticket.subject} - ${ticket.company.nomeFantasia}`,
+        htmlBody: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px;">
+            <h3>Resposta ao ticket: ${ticket.subject}</h3>
+            <p>${input.content.trim().replace(/\n/g, "<br>")}</p>
+            <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 16px 0;" />
+            <p style="color: #6b7280; font-size: 12px;">
+              ${ticket.company.nomeFantasia} - SAC
+            </p>
+          </div>
+        `,
+      });
+    } catch {
+      // Email failure should not block the reply creation
+      console.error("Failed to send ticket reply email");
+    }
+  }
+
+  await logAuditEvent({
+    userId: session.userId,
+    action: "CREATE",
+    entity: "TicketMessage",
+    entityId: message.id,
+    dataAfter: {
+      ticketId: input.ticketId,
+      sentViaEmail: input.sendViaEmail,
+    } as unknown as Prisma.InputJsonValue,
+    companyId: input.companyId,
+  });
+
+  return {
+    id: message.id,
+    content: message.content,
+    sentViaEmail: message.sentViaEmail,
+    createdAt: message.createdAt.toISOString(),
+    sender: message.sender,
+  } as TicketMessageRow;
 }

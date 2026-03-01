@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -11,6 +11,8 @@ import {
   Building2,
   FileText,
   CreditCard,
+  Send,
+  Mail,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,13 +24,18 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useCompany } from "@/contexts/company-context";
 import {
   getTicketById,
   updateTicketStatus,
   reassignTicket,
   listUsersForAssign,
+  listTicketMessages,
+  createTicketReply,
   type TicketDetail,
+  type TicketMessageRow,
 } from "../actions";
 import type { TicketStatus } from "@prisma/client";
 
@@ -133,6 +140,14 @@ export default function TicketDetailPage() {
   const [updatingAssignee, setUpdatingAssignee] = useState(false);
   const [users, setUsers] = useState<{ id: string; name: string }[]>([]);
 
+  // Message thread state
+  const [messages, setMessages] = useState<TicketMessageRow[]>([]);
+  const [loadingMessages, setLoadingMessages] = useState(true);
+  const [replyContent, setReplyContent] = useState("");
+  const [sendViaEmail, setSendViaEmail] = useState(false);
+  const [submittingReply, setSubmittingReply] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
   // ---------------------------------------------------
   // Load ticket
   // ---------------------------------------------------
@@ -161,6 +176,63 @@ export default function TicketDetailPage() {
     if (!selectedCompanyId) return;
     listUsersForAssign(selectedCompanyId).then(setUsers).catch(() => {});
   }, [selectedCompanyId]);
+
+  // ---------------------------------------------------
+  // Load messages
+  // ---------------------------------------------------
+
+  const loadMessages = useCallback(async () => {
+    if (!selectedCompanyId || !ticketId) return;
+    setLoadingMessages(true);
+    try {
+      const data = await listTicketMessages(ticketId, selectedCompanyId);
+      setMessages(data);
+    } catch {
+      // silent — messages section will show empty state
+    } finally {
+      setLoadingMessages(false);
+    }
+  }, [ticketId, selectedCompanyId]);
+
+  useEffect(() => {
+    loadMessages();
+  }, [loadMessages]);
+
+  // Scroll to bottom when new messages arrive
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  // ---------------------------------------------------
+  // Submit reply
+  // ---------------------------------------------------
+
+  async function handleSubmitReply() {
+    if (!selectedCompanyId || !ticket || !replyContent.trim()) return;
+    setSubmittingReply(true);
+    try {
+      const newMsg = await createTicketReply({
+        ticketId: ticket.id,
+        companyId: selectedCompanyId,
+        content: replyContent.trim(),
+        sendViaEmail,
+      });
+      setMessages((prev) => [...prev, newMsg]);
+      setReplyContent("");
+      setSendViaEmail(false);
+      toast.success(
+        sendViaEmail
+          ? "Resposta enviada e email encaminhado ao cliente"
+          : "Resposta enviada"
+      );
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Erro ao enviar resposta"
+      );
+    } finally {
+      setSubmittingReply(false);
+    }
+  }
 
   // ---------------------------------------------------
   // Status change
@@ -305,7 +377,7 @@ export default function TicketDetailPage() {
           {/* Description */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Descrição</CardTitle>
+              <CardTitle className="text-lg">Descricao</CardTitle>
             </CardHeader>
             <CardContent>
               <p className="whitespace-pre-wrap text-sm leading-relaxed">
@@ -336,6 +408,91 @@ export default function TicketDetailPage() {
               </CardContent>
             </Card>
           )}
+
+          {/* Message thread */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Mensagens</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {/* Chat-style thread */}
+              <div className="space-y-4 max-h-[500px] overflow-y-auto mb-6">
+                {loadingMessages ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    Carregando mensagens...
+                  </p>
+                ) : messages.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    Nenhuma mensagem ainda. Envie a primeira resposta abaixo.
+                  </p>
+                ) : (
+                  messages.map((msg) => (
+                    <div key={msg.id} className="flex gap-3">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary text-sm font-semibold">
+                        {msg.sender.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-semibold">
+                            {msg.sender.name}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {dateFmt.format(new Date(msg.createdAt))}
+                          </span>
+                          {msg.sentViaEmail && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-700">
+                              <Mail className="h-3 w-3" />
+                              Enviado por email
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-1 text-sm whitespace-pre-wrap leading-relaxed">
+                          {msg.content}
+                        </p>
+                      </div>
+                    </div>
+                  ))
+                )}
+                <div ref={messagesEndRef} />
+              </div>
+
+              {/* Reply form */}
+              <div className="border-t pt-4 space-y-3">
+                <Textarea
+                  placeholder="Escreva sua resposta..."
+                  value={replyContent}
+                  onChange={(e) => setReplyContent(e.target.value)}
+                  rows={3}
+                  disabled={submittingReply}
+                />
+                <div className="flex items-center justify-between flex-wrap gap-3">
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="sendViaEmail"
+                      checked={sendViaEmail}
+                      onCheckedChange={(checked) =>
+                        setSendViaEmail(checked === true)
+                      }
+                      disabled={submittingReply}
+                    />
+                    <Label
+                      htmlFor="sendViaEmail"
+                      className="text-sm font-normal cursor-pointer"
+                    >
+                      Enviar resposta ao cliente por email
+                    </Label>
+                  </div>
+                  <Button
+                    onClick={handleSubmitReply}
+                    disabled={submittingReply || !replyContent.trim()}
+                  >
+                    <Send className="mr-2 h-4 w-4" />
+                    {submittingReply ? "Enviando..." : "Enviar Resposta"}
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
         {/* Sidebar info */}
@@ -343,7 +500,7 @@ export default function TicketDetailPage() {
           {/* Ticket info */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Informações</CardTitle>
+              <CardTitle className="text-lg">Informacoes</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-start gap-3">
@@ -444,7 +601,7 @@ export default function TicketDetailPage() {
           {/* Reassign */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Responsável</CardTitle>
+              <CardTitle className="text-lg">Responsavel</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               <div>
@@ -455,7 +612,7 @@ export default function TicketDetailPage() {
                   disabled={updatingAssignee}
                 >
                   <SelectTrigger id="assignee">
-                    <SelectValue placeholder="Selecione um responsável" />
+                    <SelectValue placeholder="Selecione um responsavel" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__none__">Nenhum</SelectItem>
