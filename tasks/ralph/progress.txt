@@ -499,3 +499,26 @@
   - Form grid layout uses `sm:grid-cols-2` for value/date and category/recurrence pairs
   - Browser testing not available — manual verification needed
 ---
+
+## 2026-03-01 - US-020
+- What was implemented: Accounts payable due date alerts with auto-update, summary banner, and row highlighting
+  - `src/app/(app)/financeiro/pagar/actions.ts`: Added `getPayableAlerts(companyId)` server action that:
+    - Auto-updates PENDING payables with past due dates to OVERDUE status (`updateMany`)
+    - Returns counts: `dueThisWeek` (PENDING items due within 7 days) and `overdue` (total OVERDUE items)
+  - `src/app/(app)/financeiro/pagar/page.tsx`: Updated with:
+    - Alert summary banner at top: red badge for overdue count, yellow badge for due-this-week count
+    - Row highlighting: `bg-red-50` for overdue rows, `bg-yellow-50` for rows due within 7 days
+    - `getPayableAlerts` called before `listPayables` on each load to ensure statuses are up-to-date
+    - Added `AlertTriangle` and `Clock` icons from lucide-react
+  - Exported `PayableAlertSummary` type for potential reuse
+- Files changed:
+  - erp/src/app/(app)/financeiro/pagar/actions.ts (updated — added getPayableAlerts + PayableAlertSummary type)
+  - erp/src/app/(app)/financeiro/pagar/page.tsx (updated — added alert banner, row highlighting, alerts state)
+- **Learnings for future iterations:**
+  - `updateMany` is the efficient way to bulk-update statuses — no need to loop individual records
+  - Alert summary pattern: fetch alerts before listing data so auto-update runs first and listing reflects updated statuses
+  - Row highlighting uses `className` on `TableRow` — Shadcn Table supports arbitrary className props
+  - Client-side date comparison for row highlighting: construct `startOfToday` using year/month/date to strip time, compare due dates
+  - Plural/singular in Portuguese: use ternary for "conta vencida" (1) vs "contas vencidas" (>1)
+  - Browser testing not available — manual verification needed
+---
