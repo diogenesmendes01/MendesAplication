@@ -612,3 +612,18 @@
   - Unmatch action resets both status and matching fields (status→PENDING, matchedType→null, matchedEntityId→null)
   - Browser testing not available — manual verification needed
 ---
+
+## 2026-03-01 - US-024
+- What was implemented: DRE (Demonstração do Resultado do Exercício) income statement report page
+- Files changed:
+  - erp/src/app/(app)/financeiro/dre/actions.ts — Server actions for DRE data aggregation (getDREData, getDREConsolidated, getCompaniesForDRE)
+  - erp/src/app/(app)/financeiro/dre/page.tsx — Full DRE page with income statement table, per-company/consolidated views, period filters
+- **Learnings for future iterations:**
+  - DRE uses PAID receivables for revenue and PAID payables grouped by category for expenses
+  - Deductions and cost of services are placeholder (0) until fiscal module (US-042+) is built
+  - Period filters use year + period number (month 1-12, quarter 1-4, or annual with no sub-period)
+  - Consolidated view requires querying per-company then aggregating — use computeDREForCompany helper
+  - CompanyComparisonTable component shows side-by-side comparison of all companies in consolidated view
+  - DRE page follows same viewMode (company/consolidated) pattern as cash flow page
+  - The DRE structure: Receita Bruta → Deduções → Receita Líquida → Custos → Lucro Bruto → Despesas Operacionais → Resultado Operacional
+---
