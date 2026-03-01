@@ -57,7 +57,7 @@ export async function POST() {
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
-    maxAge: 15 * 60, // 15 minutes
+    maxAge: 30 * 60, // 30 minutes (session inactivity timeout)
   });
 
   // Set new refresh token as httpOnly cookie

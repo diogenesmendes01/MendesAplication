@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/auth/refresh"];
+const PUBLIC_PATHS = [
+  "/login",
+  "/forgot-password",
+  "/reset-password",
+  "/api/auth/login",
+  "/api/auth/refresh",
+];
+
+const SESSION_MAX_AGE = 30 * 60; // 30 minutes in seconds
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -22,7 +30,17 @@ export function middleware(req: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  return NextResponse.next();
+  // Sliding session: refresh the cookie maxAge on every authenticated request
+  const response = NextResponse.next();
+  response.cookies.set("accessToken", accessToken, {
+    httpOnly: false,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: SESSION_MAX_AGE,
+  });
+
+  return response;
 }
 
 export const config = {

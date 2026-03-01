@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       path: "/",
-      maxAge: 15 * 60, // 15 minutes
+      maxAge: 30 * 60, // 30 minutes (session inactivity timeout)
     });
 
     // Refresh token cookie — httpOnly for security
