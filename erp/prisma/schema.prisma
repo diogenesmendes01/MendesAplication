@@ -17,6 +17,29 @@ enum Status {
   INACTIVE
 }
 
+enum ClientType {
+  PF
+  PJ
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  OVERDUE
+}
+
+enum FinancialCategoryType {
+  INCOME
+  EXPENSE
+}
+
+enum Recurrence {
+  NONE
+  WEEKLY
+  MONTHLY
+  YEARLY
+}
+
 model Company {
   id                String   @id @default(cuid())
   razaoSocial       String
@@ -32,8 +55,12 @@ model Company {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  userCompanies UserCompany[]
-  auditLogs     AuditLog[]
+  userCompanies      UserCompany[]
+  auditLogs          AuditLog[]
+  clients            Client[]
+  financialCategories FinancialCategory[]
+  accountsReceivable AccountReceivable[]
+  accountsPayable    AccountPayable[]
 
   @@map("companies")
 }
@@ -96,4 +123,72 @@ model AuditLog {
   company Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
 
   @@map("audit_logs")
+}
+
+model Client {
+  id           String     @id @default(cuid())
+  name         String
+  razaoSocial  String?
+  cpfCnpj      String
+  email        String?
+  telefone     String?
+  endereco     String?
+  type         ClientType @default(PF)
+  companyId    String
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  company            Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  accountsReceivable AccountReceivable[]
+
+  @@unique([cpfCnpj, companyId])
+  @@map("clients")
+}
+
+model FinancialCategory {
+  id        String                @id @default(cuid())
+  name      String
+  type      FinancialCategoryType
+  companyId String
+
+  company         Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  accountsPayable AccountPayable[]
+
+  @@map("financial_categories")
+}
+
+model AccountReceivable {
+  id          String        @id @default(cuid())
+  clientId    String
+  description String
+  value       Decimal       @db.Decimal(12, 2)
+  dueDate     DateTime
+  status      PaymentStatus @default(PENDING)
+  paidAt      DateTime?
+  companyId   String
+  createdAt   DateTime      @default(now())
+
+  client  Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@map("accounts_receivable")
+}
+
+model AccountPayable {
+  id          String        @id @default(cuid())
+  supplier    String
+  description String
+  value       Decimal       @db.Decimal(12, 2)
+  dueDate     DateTime
+  status      PaymentStatus @default(PENDING)
+  categoryId  String?
+  recurrence  Recurrence    @default(NONE)
+  paidAt      DateTime?
+  companyId   String
+  createdAt   DateTime      @default(now())
+
+  category FinancialCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  company  Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@map("accounts_payable")
 }
