@@ -10,6 +10,7 @@
 - Quality checks: `npx tsc --noEmit` for typecheck, `npm run lint` for ESLint
 - PostgreSQL needs `sudo service postgresql start` before db operations in devcontainer
 - Prisma compound unique with nullable fields: use `findFirst` + `create` instead of `upsert`
+- Prisma JSON fields need `as Prisma.InputJsonValue` cast for Record<string, unknown>
 - `.env` is gitignored; `.env.example` has the template
 - Working directory for git commands: `/workspaces/app/` (root repo)
 - Prisma seed config goes in `package.json` under `"prisma": { "seed": "npx tsx prisma/seed.ts" }`
@@ -184,4 +185,18 @@
   - In Next.js 14.2, route handler params are `Promise<{path: string[]}>` — must await
   - File serving uses `new NextResponse(buffer)` directly for binary responses
   - Path traversal prevention: check for `..` in storage paths
+---
+
+## 2026-03-02 - US-063
+- Created channel server actions: listChannels, createChannel, updateChannel, toggleChannel, testChannelConnection
+- Implemented AES-128-CBC encryption for sensitive config fields (password, apiKey) using ENCRYPTION_KEY env var
+- Admin validation via requireAdmin() for all mutation/test actions
+- testChannelConnection validates config completeness for EMAIL and tests Evolution API for WHATSAPP
+- Added ENCRYPTION_KEY to .env.example
+- Files changed: `erp/src/app/(app)/configuracoes/canais/actions.ts`, `erp/.env.example`
+- **Learnings for future iterations:**
+  - Prisma JSON fields need `as Prisma.InputJsonValue` cast for Record<string, unknown>
+  - Use `requireAdmin()` from session.ts for admin-only actions (not requireSession)
+  - Channel config encryption: iv:ciphertext format with AES-128-CBC
+  - Decrypt wraps in try-catch to handle unencrypted legacy values
 ---
