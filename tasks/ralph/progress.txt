@@ -376,3 +376,17 @@
   - Badge component with `variant="secondary"` and a small X button makes good tag chips
   - When expanding TicketDetail, remember to update both the interface and the getTicketById include/return
 ---
+
+## 2026-03-02 - US-076
+- Added slaFirstReply, slaResolution, slaBreached to TicketDetail type and getTicketById return
+- Created getClientFinancialSummary(clientId, companyId) server action: aggregates AccountReceivable by status, calculates adimplente/atraso/inadimplente (30d threshold), returns totals and last payment
+- Added SlaCard component: shows label, status (OK/Em Risco/Estourado), time remaining, progress bar (green<70% yellow 70-90% red>90%)
+- SLA section shows cards for 1a Resposta and Resolucao (only when SLA is set and ticket not resolved/closed)
+- Financial section shows: status badge (color-coded), total pendente/vencido, ultimo pagamento, link to financeiro
+- Files changed: `erp/src/app/(app)/sac/tickets/actions.ts`, `erp/src/app/(app)/sac/tickets/[id]/page.tsx`
+- **Learnings for future iterations:**
+  - Prisma `aggregate` with `_sum` returns Decimal type — use Number() to convert
+  - Financial status logic: overdue > 30 days = inadimplente, overdue <= 30 days = atraso, no overdue = adimplente
+  - SLA progress bar uses time-remaining to calculate percentage — color thresholds at 70% and 90%
+  - Financial summary loaded after ticket loads (separate call) to not block page rendering
+---
