@@ -126,3 +126,11 @@
 - Note: accountPayable and creditNote back-relations to be added in US-059
 - Files changed: `erp/prisma/schema.prisma`
 ---
+
+## 2026-03-02 - US-057
+- Added channelId, contactId, slaFirstReply, slaResolution, slaBreached, tags fields to Ticket
+- Added channel (Channel), contact (AdditionalContact) relations to Ticket
+- Added tickets[] back-relations to Channel and AdditionalContact
+- Seed continues working without errors
+- Files changed: `erp/prisma/schema.prisma`
+---
