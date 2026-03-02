@@ -110,3 +110,10 @@
   - SLA deadlines in minutes: Alta first_reply=30, resolution=240; Media 120/1440; Baixa 480/2880
   - Refund SLAs use priority=null since they don't vary by priority
 ---
+
+## 2026-03-02 - US-055
+- Created Attachment model with ticketMessageId/ticketId (both optional), fileName, fileSize, mimeType, storagePath
+- Added named relations: TicketMessage.attachments ("TicketMessageAttachments"), Ticket.attachments ("TicketAttachments")
+- Created `erp/uploads/` directory with `.gitkeep`; added gitignore rules for uploads content
+- Files changed: `erp/prisma/schema.prisma`, `.gitignore`, `erp/uploads/.gitkeep`
+---
