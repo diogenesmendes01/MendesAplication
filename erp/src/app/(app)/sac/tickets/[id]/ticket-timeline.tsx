@@ -15,14 +15,26 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   listTimelineEvents,
   createInternalNote,
   attachFileToTicket,
+  getEmailRecipients,
+  sendEmailReply,
   type TimelineEvent,
+  type EmailRecipient,
 } from "../actions";
 
 // ---------------------------------------------------------------------------
@@ -148,7 +160,7 @@ function EventIcon({ event }: { event: TimelineEvent }) {
 }
 
 // ---------------------------------------------------------------------------
-// Timeline Event Item
+// Timeline Event Item (Todos tab)
 // ---------------------------------------------------------------------------
 
 function TimelineItem({ event }: { event: TimelineEvent }) {
@@ -257,17 +269,108 @@ function TimelineItem({ event }: { event: TimelineEvent }) {
 }
 
 // ---------------------------------------------------------------------------
+// Email Thread Item
+// ---------------------------------------------------------------------------
+
+interface EmailThreadItemProps {
+  event: TimelineEvent;
+  ticketSubject: string;
+}
+
+function EmailThreadItem({ event, ticketSubject }: EmailThreadItemProps) {
+  const origin = originLabel(event);
+  const isInbound = event.direction === "INBOUND";
+  const senderName = isInbound
+    ? event.contactName ?? "Remetente desconhecido"
+    : event.sender?.name ?? "Atendente";
+  const senderRole = isInbound ? event.contactRole : null;
+
+  return (
+    <div className="rounded-lg border bg-card p-4">
+      {/* Email header */}
+      <div className="space-y-1 text-sm border-b pb-3 mb-3">
+        <div className="flex items-center gap-2">
+          <span className="text-muted-foreground font-medium w-16 shrink-0">De:</span>
+          <span className="font-semibold">
+            {senderName}
+            {senderRole && (
+              <span className="font-normal text-muted-foreground"> ({senderRole})</span>
+            )}
+          </span>
+          {isInbound && (
+            <Badge variant="outline" className="text-xs px-1.5 py-0 border-green-300 text-green-700">
+              Recebido
+            </Badge>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-muted-foreground font-medium w-16 shrink-0">Para:</span>
+          <span>
+            {isInbound ? "Suporte" : event.contactName ?? "Cliente"}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-muted-foreground font-medium w-16 shrink-0">Assunto:</span>
+          <span>Re: {ticketSubject}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-muted-foreground font-medium w-16 shrink-0">Data:</span>
+          <span className="text-muted-foreground">
+            {dateFmt.format(new Date(event.createdAt))}
+          </span>
+          {origin && (
+            <span className="text-xs text-muted-foreground italic ml-2">
+              {origin}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Email body */}
+      <p className="text-sm whitespace-pre-wrap leading-relaxed">
+        {event.content}
+      </p>
+
+      {/* Attachments */}
+      {event.attachments.length > 0 && (
+        <div className="mt-3 border-t pt-3 space-y-1">
+          <span className="text-xs font-medium text-muted-foreground">Anexos:</span>
+          {event.attachments.map((att) => (
+            <a
+              key={att.id}
+              href={att.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 text-xs text-primary hover:underline"
+            >
+              <Paperclip className="h-3 w-3" />
+              <span>{att.fileName}</span>
+              <span className="text-muted-foreground">
+                ({formatFileSize(att.fileSize)})
+              </span>
+              <Download className="h-3 w-3" />
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main Component
 // ---------------------------------------------------------------------------
 
 interface TicketTimelineProps {
   ticketId: string;
   companyId: string;
+  ticketSubject: string;
 }
 
 export default function TicketTimeline({
   ticketId,
   companyId,
+  ticketSubject,
 }: TicketTimelineProps) {
   const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -276,6 +379,19 @@ export default function TicketTimeline({
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const timelineEndRef = useRef<HTMLDivElement>(null);
+
+  // Email tab state
+  const [recipients, setRecipients] = useState<EmailRecipient[]>([]);
+  const [emailTo, setEmailTo] = useState("");
+  const [emailSubject, setEmailSubject] = useState(`Re: ${ticketSubject}`);
+  const [emailContent, setEmailContent] = useState("");
+  const [sendingEmail, setSendingEmail] = useState(false);
+  const [emailUploading, setEmailUploading] = useState(false);
+  const [emailAttachments, setEmailAttachments] = useState<
+    { id: string; fileName: string }[]
+  >([]);
+  const emailFileInputRef = useRef<HTMLInputElement>(null);
+  const emailEndRef = useRef<HTMLDivElement>(null);
 
   const loadEvents = useCallback(async () => {
     if (!ticketId || !companyId) return;
@@ -297,6 +413,25 @@ export default function TicketTimeline({
   useEffect(() => {
     timelineEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [events]);
+
+  // Load email recipients
+  useEffect(() => {
+    if (!ticketId || !companyId) return;
+    getEmailRecipients(ticketId, companyId)
+      .then((r) => {
+        setRecipients(r);
+        if (r.length > 0 && !emailTo) {
+          setEmailTo(r[0].email);
+        }
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ticketId, companyId]);
+
+  // Filter email-only events (no internal notes, only channel=EMAIL)
+  const emailEvents = events.filter(
+    (e) => e.channel === "EMAIL" && e.type === "message"
+  );
 
   // ---------------------------------------------------
   // Submit internal note
@@ -366,6 +501,82 @@ export default function TicketTimeline({
   }
 
   // ---------------------------------------------------
+  // Email reply
+  // ---------------------------------------------------
+
+  async function handleSendEmail() {
+    if (!emailContent.trim() || !emailTo) return;
+    setSendingEmail(true);
+    try {
+      const attachmentIds = emailAttachments.map((a) => a.id);
+      await sendEmailReply(
+        ticketId,
+        companyId,
+        emailTo,
+        emailSubject,
+        emailContent.trim(),
+        attachmentIds.length > 0 ? attachmentIds : undefined
+      );
+      setEmailContent("");
+      setEmailAttachments([]);
+      setEmailSubject(`Re: ${ticketSubject}`);
+      toast.success("Email enviado");
+      await loadEvents();
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Erro ao enviar email"
+      );
+    } finally {
+      setSendingEmail(false);
+    }
+  }
+
+  async function handleEmailFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setEmailUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("companyId", companyId);
+
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Erro no upload");
+      }
+
+      const uploaded = await res.json();
+      const att = await attachFileToTicket(ticketId, companyId, {
+        fileName: uploaded.fileName,
+        fileSize: uploaded.fileSize,
+        mimeType: uploaded.mimeType,
+        storagePath: uploaded.storagePath,
+      });
+
+      setEmailAttachments((prev) => [
+        ...prev,
+        { id: att.id, fileName: uploaded.fileName },
+      ]);
+      toast.success(`Anexo "${file.name}" adicionado`);
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Erro ao anexar arquivo"
+      );
+    } finally {
+      setEmailUploading(false);
+      if (emailFileInputRef.current) {
+        emailFileInputRef.current.value = "";
+      }
+    }
+  }
+
+  // ---------------------------------------------------
   // Render
   // ---------------------------------------------------
 
@@ -378,16 +589,16 @@ export default function TicketTimeline({
         <Tabs defaultValue="todos">
           <TabsList>
             <TabsTrigger value="todos">Todos</TabsTrigger>
-            <TabsTrigger value="email" disabled>
-              Email
-            </TabsTrigger>
+            <TabsTrigger value="email">Email</TabsTrigger>
             <TabsTrigger value="whatsapp" disabled>
               WhatsApp
             </TabsTrigger>
           </TabsList>
 
+          {/* ============================================================ */}
+          {/* Todos Tab */}
+          {/* ============================================================ */}
           <TabsContent value="todos" className="mt-4">
-            {/* Timeline events */}
             <div className="space-y-4 max-h-[500px] overflow-y-auto mb-6">
               {loading ? (
                 <p className="text-sm text-muted-foreground text-center py-4">
@@ -438,6 +649,127 @@ export default function TicketTimeline({
                 >
                   <Send className="mr-2 h-4 w-4" />
                   {submittingNote ? "Enviando..." : "Comentar"}
+                </Button>
+              </div>
+            </div>
+          </TabsContent>
+
+          {/* ============================================================ */}
+          {/* Email Tab */}
+          {/* ============================================================ */}
+          <TabsContent value="email" className="mt-4">
+            {/* Email thread */}
+            <div className="space-y-4 max-h-[500px] overflow-y-auto mb-6">
+              {loading ? (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  Carregando emails...
+                </p>
+              ) : emailEvents.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  Nenhum email neste ticket.
+                </p>
+              ) : (
+                emailEvents.map((evt) => (
+                  <EmailThreadItem
+                    key={evt.id}
+                    event={evt}
+                    ticketSubject={ticketSubject}
+                  />
+                ))
+              )}
+              <div ref={emailEndRef} />
+            </div>
+
+            {/* Email reply form */}
+            <div className="border-t pt-4 space-y-3">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <Label htmlFor="email-to" className="text-sm font-medium">
+                    Para
+                  </Label>
+                  <Select value={emailTo} onValueChange={setEmailTo}>
+                    <SelectTrigger id="email-to">
+                      <SelectValue placeholder="Selecione destinatario" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {recipients.map((r) => (
+                        <SelectItem key={r.email} value={r.email}>
+                          {r.name}
+                          {r.role ? ` (${r.role})` : ""} — {r.email}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="email-subject" className="text-sm font-medium">
+                    Assunto
+                  </Label>
+                  <Input
+                    id="email-subject"
+                    value={emailSubject}
+                    onChange={(e) => setEmailSubject(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <Textarea
+                placeholder="Escreva sua resposta por email..."
+                value={emailContent}
+                onChange={(e) => setEmailContent(e.target.value)}
+                rows={4}
+                disabled={sendingEmail}
+              />
+
+              {/* Attachment list */}
+              {emailAttachments.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {emailAttachments.map((att) => (
+                    <Badge key={att.id} variant="secondary" className="text-xs">
+                      <Paperclip className="mr-1 h-3 w-3" />
+                      {att.fileName}
+                      <button
+                        type="button"
+                        className="ml-1 text-muted-foreground hover:text-foreground"
+                        onClick={() =>
+                          setEmailAttachments((prev) =>
+                            prev.filter((a) => a.id !== att.id)
+                          )
+                        }
+                      >
+                        x
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div>
+                  <input
+                    ref={emailFileInputRef}
+                    type="file"
+                    className="hidden"
+                    onChange={handleEmailFileUpload}
+                    accept=".pdf,.png,.jpg,.jpeg,.gif,.doc,.docx,.xls,.xlsx,.csv,.txt"
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => emailFileInputRef.current?.click()}
+                    disabled={emailUploading}
+                  >
+                    <Paperclip className="mr-2 h-4 w-4" />
+                    {emailUploading ? "Enviando..." : "Anexar"}
+                  </Button>
+                </div>
+                <Button
+                  onClick={handleSendEmail}
+                  disabled={sendingEmail || !emailContent.trim() || !emailTo}
+                  size="sm"
+                >
+                  <Send className="mr-2 h-4 w-4" />
+                  {sendingEmail ? "Enviando..." : "Enviar"}
                 </Button>
               </div>
             </div>

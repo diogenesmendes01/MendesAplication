@@ -861,6 +861,141 @@ export async function createInternalNote(
 // Ticket Attachments
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Email Recipients
+// ---------------------------------------------------------------------------
+
+export interface EmailRecipient {
+  email: string;
+  name: string;
+  role: string | null;
+}
+
+export async function getEmailRecipients(
+  ticketId: string,
+  companyId: string
+): Promise<EmailRecipient[]> {
+  await requireCompanyAccess(companyId);
+
+  const ticket = await prisma.ticket.findFirst({
+    where: { id: ticketId, companyId },
+    include: {
+      client: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          additionalContacts: {
+            select: { name: true, email: true, role: true },
+            orderBy: { name: "asc" },
+          },
+        },
+      },
+    },
+  });
+
+  if (!ticket) {
+    throw new Error("Ticket não encontrado");
+  }
+
+  const recipients: EmailRecipient[] = [];
+
+  if (ticket.client.email) {
+    recipients.push({
+      email: ticket.client.email,
+      name: ticket.client.name,
+      role: "Cliente",
+    });
+  }
+
+  for (const c of ticket.client.additionalContacts) {
+    if (c.email) {
+      recipients.push({
+        email: c.email,
+        name: c.name,
+        role: c.role,
+      });
+    }
+  }
+
+  return recipients;
+}
+
+// ---------------------------------------------------------------------------
+// Send Email Reply
+// ---------------------------------------------------------------------------
+
+export async function sendEmailReply(
+  ticketId: string,
+  companyId: string,
+  to: string,
+  subject: string,
+  content: string,
+  attachmentIds?: string[]
+) {
+  const session = await requireCompanyAccess(companyId);
+
+  if (!content?.trim()) {
+    throw new Error("Conteúdo é obrigatório");
+  }
+  if (!to?.trim()) {
+    throw new Error("Destinatário é obrigatório");
+  }
+
+  const ticket = await prisma.ticket.findFirst({
+    where: { id: ticketId, companyId },
+    select: { id: true },
+  });
+  if (!ticket) {
+    throw new Error("Ticket não encontrado");
+  }
+
+  const message = await prisma.ticketMessage.create({
+    data: {
+      ticketId,
+      senderId: session.userId,
+      content: content.trim(),
+      channel: "EMAIL",
+      direction: "OUTBOUND",
+      origin: "SYSTEM",
+      sentViaEmail: true,
+    },
+    include: {
+      sender: { select: { id: true, name: true } },
+    },
+  });
+
+  if (attachmentIds?.length) {
+    await prisma.attachment.updateMany({
+      where: { id: { in: attachmentIds } },
+      data: { ticketMessageId: message.id },
+    });
+  }
+
+  // TODO: US-077 will enqueue email-outbound job via BullMQ for actual SMTP send
+
+  await logAuditEvent({
+    userId: session.userId,
+    action: "CREATE",
+    entity: "TicketMessage",
+    entityId: message.id,
+    dataAfter: {
+      ticketId,
+      channel: "EMAIL",
+      direction: "OUTBOUND",
+      to,
+      subject,
+    } as unknown as Prisma.InputJsonValue,
+    companyId,
+  });
+
+  return { id: message.id, createdAt: message.createdAt.toISOString() };
+}
+
+// ---------------------------------------------------------------------------
+// Ticket Attachments
+// ---------------------------------------------------------------------------
+
 export async function attachFileToTicket(
   ticketId: string,
   companyId: string,

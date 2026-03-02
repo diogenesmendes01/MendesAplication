@@ -339,7 +339,11 @@ export default function TicketDetailPage() {
           )}
 
           {/* Timeline */}
-          <TicketTimeline ticketId={ticketId} companyId={selectedCompanyId} />
+          <TicketTimeline
+            ticketId={ticketId}
+            companyId={selectedCompanyId}
+            ticketSubject={ticket.subject}
+          />
         </div>
 
         {/* Sidebar info */}
