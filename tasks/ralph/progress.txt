@@ -554,3 +554,23 @@
   - For CREDIT_NOTE, reference the most recent non-cancelled STANDARD invoice as originalInvoiceId
   - RefundAttachment type REFUND_PROOF copies file info from existing Attachment record (same pattern as PAYMENT_PROOF in US-082)
 ---
+
+## 2026-03-02 - US-085
+- Added complete refund UI to ticket sidebar with full lifecycle management
+- Created `getTicketRefunds(ticketId, companyId)` server action: returns RefundSummary[] with amount, status, SLA, requestedBy, approvedBy
+- Created `getUserRole(companyId)` server action: returns user role for client-side RBAC checks
+- Refund card in sidebar shows: status badge (color-coded), amount, solicitante, date, SLA indicator (time remaining + status)
+- "Solicitar Reembolso" button opens dialog: valor (number), comprovante upload (obrigatorio), justificativa (textarea), boleto auto-linked if ticket has one
+- AWAITING_APPROVAL + ADMIN/MANAGER: Aprovar (green) and Rejeitar (red) buttons inline in refund card
+- Rejeitar opens dialog with mandatory rejection reason textarea
+- APPROVED + ADMIN/MANAGER: "Executar Reembolso" button opens dialog: metodo PIX/TED (conditional fields), acao NFS-e (Cancelar/Nota de Credito/Nenhuma), comprovante upload
+- File upload flow: POST /api/upload → attachFileToTicket → gets Attachment ID for requestRefund/executeRefund
+- All actions reload refund list after completion
+- Files changed: `erp/src/app/(app)/sac/tickets/actions.ts`, `erp/src/app/(app)/sac/tickets/[id]/page.tsx`
+- **Learnings for future iterations:**
+  - For upload-then-reference pattern: upload file via /api/upload, then create Attachment via attachFileToTicket, then pass attachment.id to refund actions
+  - RefundSummary type keeps serialized dates (ISO strings) and number amounts — same pattern as TicketDetail
+  - Client-side RBAC: getUserRole returns session.role, check `isAdminOrManager` before showing action buttons
+  - SLA display in sidebar: calculate diffMs from deadline, show colored text (green/yellow/red) with formatted time
+  - Refund status color mapping: AWAITING_APPROVAL=yellow, APPROVED=blue, COMPLETED=green, REJECTED=destructive
+---
