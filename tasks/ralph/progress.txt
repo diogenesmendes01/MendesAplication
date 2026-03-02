@@ -604,3 +604,20 @@
   - Prisma `updateMany` returns `{ count }` for tracking how many rows were updated
   - SLA at-risk detection requires fetching SlaConfig alertBeforeMinutes per company, then checking deadline within that threshold window
 ---
+
+## 2026-03-02 - US-088
+- Created `getSlaAlertCounts(companyId)` server action returning `{ breached, atRisk }` counts
+- breached: tickets with slaBreached=true (not resolved/closed)
+- atRisk: tickets within 30min of SLA deadline but not yet breached (not resolved/closed)
+- Added red badge to SAC sidebar item showing total critical SLA count (breached + atRisk)
+- Badge shows on both collapsed (over icon) and expanded (right side) sidebar states
+- Added SLA alert banner between Dashboard KPIs and Tabs on tickets list page
+- Banner shows "X estourados | Y em risco" with AlertTriangle icon and "Ver SLA Crítico" button that switches to sla_critical tab
+- Banner only visible when there are breached or at-risk tickets
+- Files changed: `erp/src/app/(app)/sac/tickets/actions.ts`, `erp/src/app/(app)/sac/tickets/page.tsx`, `erp/src/components/sidebar.tsx`
+- **Learnings for future iterations:**
+  - Sidebar is a client component — can import server actions directly and call in useEffect
+  - useCompany() hook available in sidebar for selectedCompanyId
+  - Badge pattern: relative container on icon + absolute positioned span for collapsed mode
+  - SLA alert banner uses border-red-200 bg-red-50 for subtle but noticeable alert styling
+---
