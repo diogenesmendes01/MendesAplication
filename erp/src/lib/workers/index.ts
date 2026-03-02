@@ -1,6 +1,7 @@
 import { QUEUE_NAMES } from '../queue'
 import { createWorker } from './base'
 import { processEmailOutbound } from './email-outbound'
+import { processWhatsAppInbound } from './whatsapp-inbound'
 import { processWhatsAppOutbound } from './whatsapp-outbound'
 
 console.log('Starting workers...')
@@ -11,9 +12,7 @@ const emailInboundWorker = createWorker(QUEUE_NAMES.EMAIL_INBOUND, async (job) =
 
 const emailOutboundWorker = createWorker(QUEUE_NAMES.EMAIL_OUTBOUND, processEmailOutbound)
 
-const whatsappInboundWorker = createWorker(QUEUE_NAMES.WHATSAPP_INBOUND, async (job) => {
-  console.log('Processing whatsapp inbound:', job.data)
-})
+const whatsappInboundWorker = createWorker(QUEUE_NAMES.WHATSAPP_INBOUND, processWhatsAppInbound)
 
 const whatsappOutboundWorker = createWorker(QUEUE_NAMES.WHATSAPP_OUTBOUND, processWhatsAppOutbound)
 

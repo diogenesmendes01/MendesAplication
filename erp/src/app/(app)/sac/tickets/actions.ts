@@ -522,7 +522,7 @@ export interface TicketMessageRow {
   sender: {
     id: string;
     name: string;
-  };
+  } | null;
 }
 
 export async function listTicketMessages(

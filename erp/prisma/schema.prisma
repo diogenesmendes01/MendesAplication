@@ -450,7 +450,7 @@ model Ticket {
 model TicketMessage {
   id           String            @id @default(cuid())
   ticketId     String
-  senderId     String
+  senderId     String?
   content      String
   sentViaEmail Boolean           @default(false)
   channel      ChannelType?
@@ -462,7 +462,7 @@ model TicketMessage {
   createdAt    DateTime          @default(now())
 
   ticket      Ticket              @relation(fields: [ticketId], references: [id], onDelete: Cascade)
-  sender      User                @relation("TicketMessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  sender      User?               @relation("TicketMessageSender", fields: [senderId], references: [id], onDelete: Cascade)
   contact     AdditionalContact?  @relation("TicketMessageContact", fields: [contactId], references: [id], onDelete: SetNull)
   attachments Attachment[]        @relation("TicketMessageAttachments")
 

@@ -161,7 +161,7 @@ export async function getClientTimeline(
         id: m.id,
         type: "email",
         date: m.createdAt.toISOString(),
-        summary: `Email de ${m.sender.name}: ${preview}`,
+        summary: `Email de ${m.sender?.name ?? "Desconhecido"}: ${preview}`,
         status: "SENT",
         href: `/sac/tickets/${m.ticketId}`,
       });
