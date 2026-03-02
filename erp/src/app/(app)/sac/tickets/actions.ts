@@ -1184,7 +1184,20 @@ export async function sendWhatsAppMessage(
     });
   }
 
-  // TODO: US-078 will enqueue whatsapp-outbound job via BullMQ for actual send via Evolution API
+  // Enqueue WhatsApp send job
+  try {
+    const { whatsappOutboundQueue } = await import("@/lib/queue");
+    await whatsappOutboundQueue.add("send-whatsapp", {
+      messageId: message.id,
+      ticketId,
+      companyId,
+      to,
+      content: content.trim(),
+      attachmentIds: attachmentIds ?? [],
+    });
+  } catch (err) {
+    console.error("Failed to enqueue whatsapp-outbound job:", err);
+  }
 
   await logAuditEvent({
     userId: session.userId,
