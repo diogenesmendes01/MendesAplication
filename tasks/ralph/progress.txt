@@ -296,3 +296,23 @@
   - For tab badge counts in Prisma, `refunds: { some: {} }` checks for existence of related refunds
   - SLA time-left formatting: negative values prefixed with `-` for breached tickets
 ---
+
+## 2026-03-02 - US-071
+- Replaced old chat-style message thread with new unified Timeline component in ticket detail page
+- Created `ticket-timeline.tsx` with Tabs (Todos default, Email/WhatsApp disabled for US-072/073)
+- Timeline shows 4 event types: messages (email/WhatsApp/web), internal notes (yellow bg + lock icon), refund events (coin icon), status changes (gear icon)
+- Each event displays: sender name, contact name+role, date/time, channel badge, origin label (via ERP/WhatsApp Web/Email Externo)
+- Attachments shown inline with file name, size, and download link
+- Removed old reply form, added: internal note textarea + "Comentar" button, "Anexar ao ticket" button with file upload
+- Created `listTimelineEvents` server action combining TicketMessage + Refund + AuditLog (STATUS_CHANGE) sorted chronologically
+- Created `createInternalNote` server action (isInternal=true, direction=OUTBOUND, origin=SYSTEM) with attachment support and audit log
+- Created `attachFileToTicket` server action for ticket-level file attachments via /api/upload
+- Files changed: `erp/src/app/(app)/sac/tickets/actions.ts`, `erp/src/app/(app)/sac/tickets/[id]/page.tsx`, `erp/src/app/(app)/sac/tickets/[id]/ticket-timeline.tsx` (new)
+- **Learnings for future iterations:**
+  - Timeline events are synthesized from 3 sources: TicketMessage, Refund, and AuditLog — merged and sorted by createdAt
+  - Internal notes use TicketMessage with isInternal=true, direction=OUTBOUND, origin=SYSTEM
+  - Prisma includes `contact` relation on TicketMessage via named relation "TicketMessageContact" — gives name + role for display
+  - File upload flow: POST /api/upload → get storagePath → call attachFileToTicket server action to create Attachment record
+  - Email/WhatsApp tab content is placeholder (disabled triggers) — to be implemented in US-072/US-073
+  - Existing `listTicketMessages` and `createTicketReply` kept in actions.ts for backward compatibility
+---
