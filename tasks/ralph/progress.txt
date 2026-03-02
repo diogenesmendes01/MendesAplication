@@ -362,3 +362,17 @@
   - US-071 timeline implementation preemptively built the createInternalNote action — check existing code before implementing
   - Always verify acceptance criteria against existing codebase before writing new code
 ---
+
+## 2026-03-02 - US-075
+- Expanded TicketDetail type and getTicketById to include: cpfCnpj (client), contact (name+role from AdditionalContact), channelType (from Channel), tags
+- Created addTag(ticketId, companyId, tag) server action: pushes tag to array, deduplicates, audit log
+- Created removeTag(ticketId, companyId, tag) server action: filters tag from array, audit log
+- Updated sidebar Informacoes section: shows cliente+CNPJ, contato (nome+cargo), empresa, canal de origem (with icon), dates, linked proposal/boleto
+- Kept existing Responsavel section with dropdown
+- Added Tags section: badges with X remove button, input + Enter/Plus to add
+- Files changed: `erp/src/app/(app)/sac/tickets/actions.ts`, `erp/src/app/(app)/sac/tickets/[id]/page.tsx`
+- **Learnings for future iterations:**
+  - Prisma `tags: { push: value }` appends to a String[] field — no need to read-update-write
+  - Badge component with `variant="secondary"` and a small X button makes good tag chips
+  - When expanding TicketDetail, remember to update both the interface and the getTicketById include/return
+---
