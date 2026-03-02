@@ -621,3 +621,30 @@
   - Badge pattern: relative container on icon + absolute positioned span for collapsed mode
   - SLA alert banner uses border-red-200 bg-red-50 for subtle but noticeable alert styling
 ---
+
+## 2026-03-02 - US-089
+- Implemented PDF export for tickets using jspdf (v4.2.0, already installed)
+- Created `erp/src/lib/ticket-pdf.ts` with `generateTicketPdf()` function:
+  - Company header with export timestamp
+  - Ticket info section (ID, subject, status, priority, channel, dates, tags)
+  - Client section (name, CNPJ/CPF, email, contact, assignee)
+  - SLA section (1st response, resolution deadlines, breach status)
+  - Description section
+  - Complete numbered timeline (messages, notes, refunds, status changes) with date/time, channel, direction, sender, content, attachments
+  - Internal notes shown with yellow background highlight
+  - Refund details section
+  - Attachment list section
+  - Footer with company name, ticket ID, and page number
+  - Auto page-break with proper footer on each page
+- Added Export PDF card in ticket detail sidebar with "Exportar PDF" button
+- Export dialog with checkboxes: "Incluir notas internas" and "Incluir lista de anexos"
+- Automatic download with filename `ticket-{id}-{date}.pdf`
+- Files changed: `erp/src/lib/ticket-pdf.ts` (new), `erp/src/app/(app)/sac/tickets/[id]/page.tsx`
+- **Learnings for future iterations:**
+  - jspdf v4.2.0 was already installed as a dependency (along with jspdf-autotable)
+  - jsPDF constructor: `new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })` — A4 is 210x297mm
+  - Use `doc.splitTextToSize(text, maxWidth)` for automatic text wrapping
+  - Page break logic: check `y + neededHeight > 297 - marginBottom` before each section
+  - Shadcn/UI Checkbox: `onCheckedChange` gives `boolean | "indeterminate"`, compare with `=== true`
+  - `listTimelineEvents` must be imported from actions.ts to fetch events on-demand for PDF export
+---
