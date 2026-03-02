@@ -590,3 +590,17 @@
   - Regex `/s` flag (dotAll) not available in TS target — use `[\s\S]` instead
   - When boleto is cancelled and type is "both", also cancel other boletos from the same proposal via proposalId
 ---
+
+## 2026-03-02 - US-087
+- Implemented SLA check worker that runs every 1 minute via BullMQ repeatable job
+- Worker checks open tickets (OPEN, IN_PROGRESS, WAITING_CLIENT) with slaFirstReply or slaResolution deadlines past current time → marks slaBreached=true
+- Worker checks active refunds (AWAITING_APPROVAL, APPROVED, PROCESSING) with slaDeadline past current time → marks slaBreached=true
+- Logs at-risk tickets/refunds using alertBeforeMinutes from SlaConfig
+- Uses updateMany for efficient batch updates, findMany for at-risk detection
+- Files changed: `erp/src/lib/workers/sla-check.ts` (new), `erp/src/lib/workers/index.ts`
+- **Learnings for future iterations:**
+  - BullMQ repeatable jobs use `upsertJobScheduler` with `{ every: ms }` pattern — see email-inbound-poll for reference
+  - Worker processor functions must accept `(job: Job)` param even if unused — use eslint-disable comment for unused var
+  - Prisma `updateMany` returns `{ count }` for tracking how many rows were updated
+  - SLA at-risk detection requires fetching SlaConfig alertBeforeMinutes per company, then checking deadline within that threshold window
+---
