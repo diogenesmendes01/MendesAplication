@@ -186,7 +186,8 @@ model AdditionalContact {
   whatsapp  String?
   createdAt DateTime @default(now())
 
-  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client  Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  tickets Ticket[]
 
   @@map("additional_contacts")
 }
@@ -204,7 +205,8 @@ model Channel {
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 
-  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  tickets Ticket[]
 
   @@map("channels")
 }
@@ -408,26 +410,34 @@ model BankTransaction {
 }
 
 model Ticket {
-  id          String         @id @default(cuid())
-  clientId    String
-  subject     String
-  description String
-  priority    TicketPriority @default(MEDIUM)
-  status      TicketStatus   @default(OPEN)
-  assigneeId  String?
-  proposalId  String?
-  boletoId    String?
-  companyId   String
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  id             String         @id @default(cuid())
+  clientId       String
+  subject        String
+  description    String
+  priority       TicketPriority @default(MEDIUM)
+  status         TicketStatus   @default(OPEN)
+  assigneeId     String?
+  proposalId     String?
+  boletoId       String?
+  companyId      String
+  channelId      String?
+  contactId      String?
+  slaFirstReply  DateTime?
+  slaResolution  DateTime?
+  slaBreached    Boolean        @default(false)
+  tags           String[]       @default([])
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 
-  client   Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  assignee User?     @relation("TicketAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
-  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  proposal Proposal? @relation("TicketProposal", fields: [proposalId], references: [id], onDelete: SetNull)
-  boleto   Boleto?   @relation("TicketBoleto", fields: [boletoId], references: [id], onDelete: SetNull)
+  client      Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  assignee    User?               @relation("TicketAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  company     Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  proposal    Proposal?           @relation("TicketProposal", fields: [proposalId], references: [id], onDelete: SetNull)
+  boleto      Boleto?             @relation("TicketBoleto", fields: [boletoId], references: [id], onDelete: SetNull)
+  channel     Channel?            @relation(fields: [channelId], references: [id], onDelete: SetNull)
+  contact     AdditionalContact?  @relation(fields: [contactId], references: [id], onDelete: SetNull)
   messages    TicketMessage[]
-  attachments Attachment[]    @relation("TicketAttachments")
+  attachments Attachment[]        @relation("TicketAttachments")
   refunds     Refund[]
 
   @@map("tickets")
