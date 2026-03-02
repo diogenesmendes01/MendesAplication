@@ -40,6 +40,7 @@ import {
   type PaginatedResult,
   type TicketRow,
 } from "./actions";
+import { TicketDashboardKpis } from "./ticket-dashboard";
 import type { TicketStatus, TicketPriority } from "@prisma/client";
 
 // ---------------------------------------------------------------------------
@@ -282,6 +283,9 @@ export default function TicketsPage() {
           Novo Ticket
         </Button>
       </div>
+
+      {/* Dashboard KPIs */}
+      <TicketDashboardKpis companyId={selectedCompanyId} />
 
       {/* Filters toggle */}
       <div className="flex items-center gap-2">
