@@ -16,6 +16,9 @@ import {
   X,
   Plus,
   UserCircle,
+  Clock,
+  DollarSign,
+  ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -37,7 +40,9 @@ import {
   listUsersForAssign,
   addTag,
   removeTag,
+  getClientFinancialSummary,
   type TicketDetail,
+  type ClientFinancialSummary,
 } from "../actions";
 import type { TicketStatus } from "@prisma/client";
 import TicketTimeline from "./ticket-timeline";
@@ -110,6 +115,62 @@ function statusColor(s: string) {
   }
 }
 
+function SlaCard({ label, deadline, breached }: { label: string; deadline: string; breached: boolean }) {
+  const deadlineDate = new Date(deadline);
+  const now = Date.now();
+  const diffMs = deadlineDate.getTime() - now;
+
+  const isBreached = breached || diffMs <= 0;
+  const progressPct = isBreached ? 100 : Math.min(100, Math.max(0, 100 - (diffMs / (60 * 60_000)) * 10));
+
+  let barColor = "bg-green-500";
+  if (progressPct >= 90 || isBreached) barColor = "bg-red-500";
+  else if (progressPct >= 70) barColor = "bg-yellow-500";
+
+  let statusLabel = "OK";
+  let statusColor = "text-green-600";
+  if (isBreached) {
+    statusLabel = "Estourado";
+    statusColor = "text-red-600";
+  } else if (progressPct >= 70) {
+    statusLabel = "Em Risco";
+    statusColor = "text-yellow-600";
+  }
+
+  // Time remaining
+  let timeText: string;
+  if (diffMs <= 0) {
+    const overMs = Math.abs(diffMs);
+    const h = Math.floor(overMs / 3_600_000);
+    const m = Math.floor((overMs % 3_600_000) / 60_000);
+    timeText = `-${h}h${String(m).padStart(2, "0")}m`;
+  } else {
+    const h = Math.floor(diffMs / 3_600_000);
+    const m = Math.floor((diffMs % 3_600_000) / 60_000);
+    timeText = `${h}h${String(m).padStart(2, "0")}m`;
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-medium">{label}</p>
+        <span className={`text-xs font-semibold ${statusColor}`}>{statusLabel}</span>
+      </div>
+      <div className="flex items-center gap-2">
+        <div className="flex-1 h-2 rounded-full bg-gray-100 overflow-hidden">
+          <div
+            className={`h-full rounded-full transition-all ${barColor}`}
+            style={{ width: `${Math.min(100, progressPct)}%` }}
+          />
+        </div>
+        <span className="text-xs font-mono text-muted-foreground w-16 text-right">
+          {timeText}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 const STATUS_TRANSITIONS: Record<string, { value: TicketStatus; label: string }[]> = {
   OPEN: [{ value: "IN_PROGRESS", label: "Iniciar Atendimento" }],
   IN_PROGRESS: [
@@ -144,6 +205,7 @@ export default function TicketDetailPage() {
   const [users, setUsers] = useState<{ id: string; name: string }[]>([]);
   const [tags, setTags] = useState<string[]>([]);
   const [newTag, setNewTag] = useState("");
+  const [financial, setFinancial] = useState<ClientFinancialSummary | null>(null);
 
   // ---------------------------------------------------
   // Load ticket
@@ -156,6 +218,9 @@ export default function TicketDetailPage() {
       const data = await getTicketById(ticketId, selectedCompanyId);
       setTicket(data);
       setTags(data.tags);
+      getClientFinancialSummary(data.client.id, selectedCompanyId)
+        .then(setFinancial)
+        .catch(() => {});
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : "Erro ao carregar ticket"
@@ -590,6 +655,98 @@ export default function TicketDetailPage() {
               </div>
             </CardContent>
           </Card>
+
+          {/* SLA */}
+          {(ticket.slaFirstReply || ticket.slaResolution) && !["RESOLVED", "CLOSED"].includes(ticket.status) && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Clock className="h-4 w-4" />
+                  SLA
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {ticket.slaFirstReply && (
+                  <SlaCard
+                    label="1a Resposta"
+                    deadline={ticket.slaFirstReply}
+                    breached={ticket.slaBreached}
+                  />
+                )}
+                {ticket.slaResolution && (
+                  <SlaCard
+                    label="Resolucao"
+                    deadline={ticket.slaResolution}
+                    breached={ticket.slaBreached}
+                  />
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Financial */}
+          {financial && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <DollarSign className="h-4 w-4" />
+                  Situacao Financeira
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div>
+                  <Badge
+                    variant={financial.status === "adimplente" ? "default" : "destructive"}
+                    className={
+                      financial.status === "adimplente"
+                        ? "bg-green-100 text-green-800 hover:bg-green-100"
+                        : financial.status === "atraso"
+                          ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-100"
+                          : ""
+                    }
+                  >
+                    {financial.status === "adimplente"
+                      ? "Adimplente"
+                      : financial.status === "atraso"
+                        ? "Em Atraso"
+                        : "Inadimplente"}
+                  </Badge>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Total Pendente</p>
+                    <p className="font-medium">
+                      R$ {financial.pendingTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Total Vencido</p>
+                    <p className="font-medium text-red-600">
+                      R$ {financial.overdueTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                    </p>
+                  </div>
+                </div>
+
+                {financial.lastPayment && (
+                  <div className="text-sm">
+                    <p className="text-xs text-muted-foreground">Ultimo Pagamento</p>
+                    <p>{dateFmt.format(new Date(financial.lastPayment))}</p>
+                  </div>
+                )}
+
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="h-auto p-0 text-xs"
+                  onClick={() => router.push("/financeiro/receber")}
+                >
+                  <ExternalLink className="mr-1 h-3 w-3" />
+                  Ver financeiro
+                </Button>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
     </div>

@@ -360,6 +360,9 @@ export interface TicketDetail {
   createdAt: string;
   updatedAt: string;
   tags: string[];
+  slaFirstReply: string | null;
+  slaResolution: string | null;
+  slaBreached: boolean;
   client: { id: string; name: string; email: string | null; cpfCnpj: string };
   assignee: { id: string; name: string } | null;
   company: { id: string; nomeFantasia: string };
@@ -399,6 +402,9 @@ export async function getTicketById(
     createdAt: ticket.createdAt.toISOString(),
     updatedAt: ticket.updatedAt.toISOString(),
     tags: ticket.tags,
+    slaFirstReply: ticket.slaFirstReply?.toISOString() ?? null,
+    slaResolution: ticket.slaResolution?.toISOString() ?? null,
+    slaBreached: ticket.slaBreached,
     client: ticket.client,
     assignee: ticket.assignee,
     company: ticket.company,
@@ -1181,6 +1187,64 @@ export async function sendWhatsAppMessage(
   });
 
   return { id: message.id, createdAt: message.createdAt.toISOString() };
+}
+
+// ---------------------------------------------------------------------------
+// Client Financial Summary
+// ---------------------------------------------------------------------------
+
+export interface ClientFinancialSummary {
+  status: "adimplente" | "atraso" | "inadimplente";
+  pendingTotal: number;
+  overdueTotal: number;
+  lastPayment: string | null;
+}
+
+export async function getClientFinancialSummary(
+  clientId: string,
+  companyId: string
+): Promise<ClientFinancialSummary> {
+  await requireCompanyAccess(companyId);
+
+  const [pending, overdue, lastPaid] = await Promise.all([
+    prisma.accountReceivable.aggregate({
+      where: { clientId, companyId, status: "PENDING" },
+      _sum: { value: true },
+    }),
+    prisma.accountReceivable.aggregate({
+      where: { clientId, companyId, status: "OVERDUE" },
+      _sum: { value: true },
+    }),
+    prisma.accountReceivable.findFirst({
+      where: { clientId, companyId, status: "PAID" },
+      orderBy: { paidAt: "desc" },
+      select: { paidAt: true },
+    }),
+  ]);
+
+  const pendingTotal = Number(pending._sum.value ?? 0);
+  const overdueTotal = Number(overdue._sum.value ?? 0);
+
+  let status: ClientFinancialSummary["status"] = "adimplente";
+  if (overdueTotal > 0) {
+    // More than 30 days overdue = inadimplente
+    const oldOverdue = await prisma.accountReceivable.findFirst({
+      where: {
+        clientId,
+        companyId,
+        status: "OVERDUE",
+        dueDate: { lt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
+      },
+    });
+    status = oldOverdue ? "inadimplente" : "atraso";
+  }
+
+  return {
+    status,
+    pendingTotal,
+    overdueTotal,
+    lastPayment: lastPaid?.paidAt?.toISOString() ?? null,
+  };
 }
 
 // ---------------------------------------------------------------------------
