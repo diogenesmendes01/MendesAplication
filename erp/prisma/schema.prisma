@@ -269,10 +269,13 @@ model AccountPayable {
   recurrence  Recurrence    @default(NONE)
   paidAt      DateTime?
   companyId   String
+  origin      PayableOrigin @default(MANUAL)
+  refundId    String?       @unique
   createdAt   DateTime      @default(now())
 
   category FinancialCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   company  Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  refund   Refund?            @relation(fields: [refundId], references: [id], onDelete: SetNull)
 
   @@map("accounts_payable")
 }
@@ -511,8 +514,10 @@ model Refund {
   company      Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
   requestedBy  User               @relation("RefundRequestedBy", fields: [requestedById], references: [id])
   approvedBy   User?              @relation("RefundApprovedBy", fields: [approvedById], references: [id])
-  executedBy   User?              @relation("RefundExecutedBy", fields: [executedById], references: [id])
-  attachments  RefundAttachment[]
+  executedBy     User?              @relation("RefundExecutedBy", fields: [executedById], references: [id])
+  attachments    RefundAttachment[]
+  accountPayable AccountPayable?
+  creditNote     Invoice?
 
   @@map("refunds")
 }
@@ -588,22 +593,30 @@ model Boleto {
 }
 
 model Invoice {
-  id                 String        @id @default(cuid())
-  proposalId         String?
-  boletoId           String?
-  clientId           String
-  serviceDescription String
-  value              Decimal       @db.Decimal(12, 2)
-  issRate            Decimal       @db.Decimal(5, 2) @default(0)
-  status             InvoiceStatus @default(PENDING)
-  nfNumber           String?
-  companyId          String
-  createdAt          DateTime      @default(now())
+  id                  String        @id @default(cuid())
+  proposalId          String?
+  boletoId            String?
+  clientId            String
+  serviceDescription  String
+  value               Decimal       @db.Decimal(12, 2)
+  issRate             Decimal       @db.Decimal(5, 2) @default(0)
+  status              InvoiceStatus @default(PENDING)
+  nfNumber            String?
+  companyId           String
+  type                InvoiceType   @default(STANDARD)
+  cancelledAt         DateTime?
+  cancellationReason  String?
+  refundId            String?       @unique
+  originalInvoiceId   String?
+  createdAt           DateTime      @default(now())
 
-  proposal Proposal? @relation(fields: [proposalId], references: [id], onDelete: SetNull)
-  boleto   Boleto?   @relation(fields: [boletoId], references: [id], onDelete: SetNull)
-  client   Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  proposal        Proposal? @relation(fields: [proposalId], references: [id], onDelete: SetNull)
+  boleto          Boleto?   @relation(fields: [boletoId], references: [id], onDelete: SetNull)
+  client          Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  company         Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  refund          Refund?   @relation(fields: [refundId], references: [id], onDelete: SetNull)
+  originalInvoice Invoice?  @relation("CreditNote", fields: [originalInvoiceId], references: [id], onDelete: SetNull)
+  creditNotes     Invoice[] @relation("CreditNote")
 
   @@map("invoices")
 }
