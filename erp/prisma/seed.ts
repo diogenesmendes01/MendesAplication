@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
@@ -37,9 +38,7 @@ async function main() {
   });
 
   // Create 1 admin user with a bcrypt-hashed password ("admin123")
-  // Hash generated for "admin123" using bcrypt with 10 rounds
-  const adminPasswordHash =
-    "$2b$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36PQm2Pro7QNGGmuTGGtiU2";
+  const adminPasswordHash = await bcrypt.hash("admin123", 10);
 
   const adminUser = await prisma.user.upsert({
     where: { email: "admin@mendeserp.com.br" },
@@ -93,9 +92,73 @@ async function main() {
     },
   });
 
+  // Create sample clients for company1
+  const client1 = await prisma.client.upsert({
+    where: { cpfCnpj_companyId: { cpfCnpj: "12.345.678/0001-90", companyId: company1.id } },
+    update: {},
+    create: {
+      name: "ABC Tecnologia Ltda",
+      razaoSocial: "ABC Tecnologia Ltda",
+      cpfCnpj: "12.345.678/0001-90",
+      email: "contato@abctech.com.br",
+      telefone: "(11) 3333-1001",
+      type: "PJ",
+      companyId: company1.id,
+    },
+  });
+
+  const client2 = await prisma.client.upsert({
+    where: { cpfCnpj_companyId: { cpfCnpj: "98.765.432/0001-10", companyId: company1.id } },
+    update: {},
+    create: {
+      name: "XYZ Serviços S.A.",
+      razaoSocial: "XYZ Serviços S.A.",
+      cpfCnpj: "98.765.432/0001-10",
+      email: "contato@xyz.com.br",
+      telefone: "(11) 3333-2002",
+      type: "PJ",
+      companyId: company1.id,
+    },
+  });
+
+  // Create additional contacts for clients
+  const existingContacts = await prisma.additionalContact.findMany({
+    where: { clientId: { in: [client1.id, client2.id] } },
+  });
+
+  if (existingContacts.length === 0) {
+    await prisma.additionalContact.createMany({
+      data: [
+        {
+          clientId: client1.id,
+          name: "Carlos Silva",
+          role: "Diretor Comercial",
+          email: "carlos.silva@abctech.com.br",
+          whatsapp: "5511999990001",
+        },
+        {
+          clientId: client1.id,
+          name: "Maria Santos",
+          role: "Gerente de TI",
+          email: "maria.santos@abctech.com.br",
+          whatsapp: "5511999990002",
+        },
+        {
+          clientId: client2.id,
+          name: "João Pereira",
+          role: "Coordenador Financeiro",
+          email: "joao.pereira@xyz.com.br",
+          whatsapp: "5511999990003",
+        },
+      ],
+    });
+  }
+
   console.log("Seed completed:");
   console.log(`  Companies: ${company1.nomeFantasia}, ${company2.nomeFantasia}`);
   console.log(`  Admin user: ${adminUser.email}`);
+  console.log(`  Clients: ${client1.name}, ${client2.name}`);
+  console.log(`  Additional contacts: 3 (for ${client1.name} and ${client2.name})`);
 }
 
 main()

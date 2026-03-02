@@ -159,14 +159,29 @@ model Client {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
-  company            Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company            Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
   accountsReceivable AccountReceivable[]
   tickets            Ticket[]
   proposals          Proposal[]
   invoices           Invoice[]
+  additionalContacts AdditionalContact[]
 
   @@unique([cpfCnpj, companyId])
   @@map("clients")
+}
+
+model AdditionalContact {
+  id        String   @id @default(cuid())
+  clientId  String
+  name      String
+  role      String?
+  email     String?
+  whatsapp  String?
+  createdAt DateTime @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@map("additional_contacts")
 }
 
 model FinancialCategory {
