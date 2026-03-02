@@ -316,3 +316,20 @@
   - Email/WhatsApp tab content is placeholder (disabled triggers) — to be implemented in US-072/US-073
   - Existing `listTicketMessages` and `createTicketReply` kept in actions.ts for backward compatibility
 ---
+
+## 2026-03-02 - US-072
+- Enabled Email tab in ticket timeline with thread-style layout
+- Created `EmailThreadItem` component showing De, Para, Assunto, data/hora, origem for each email message
+- Filters events to `channel === "EMAIL"` and `type === "message"` (no internal notes shown)
+- Created `getEmailRecipients(ticketId, companyId)` server action — returns client email + additional contacts with emails
+- Created `sendEmailReply(ticketId, companyId, to, subject, content, attachmentIds?)` server action — creates TicketMessage with channel=EMAIL, direction=OUTBOUND, origin=SYSTEM
+- Reply form: To dropdown (client + contacts), Subject (Re: ticket subject), textarea, attach button, send button
+- Attachment support: files uploaded via /api/upload, then linked to message
+- Updated TicketTimelineProps to accept `ticketSubject` prop
+- Files changed: `erp/src/app/(app)/sac/tickets/actions.ts`, `erp/src/app/(app)/sac/tickets/[id]/ticket-timeline.tsx`, `erp/src/app/(app)/sac/tickets/[id]/page.tsx`
+- **Learnings for future iterations:**
+  - Email recipients derived from client.email + client.additionalContacts (filtered to those with email)
+  - sendEmailReply creates the TicketMessage record immediately; actual SMTP sending will be handled by US-077 worker
+  - Email thread items show structured header (De/Para/Assunto/Data) unlike the Todos tab's inline header
+  - Attachment state in email reply form is separate from ticket-level attachments — uses local state array
+---
