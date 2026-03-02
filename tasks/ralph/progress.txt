@@ -162,3 +162,12 @@
 - Access validation checks contact's client.companyId matches requested companyId
 - Files changed: `erp/src/app/(app)/comercial/clientes/[id]/contacts-actions.ts`
 ---
+
+## 2026-03-02 - US-061
+- Created AdditionalContacts component with list, create/edit dialog, and delete confirmation
+- Shows name, role, email, whatsapp for each contact with edit/delete buttons
+- Integrated into client detail page between profile card and timeline
+- Toast notifications for success/error on all operations
+- Browser verification not available (no dev-browser MCP tool)
+- Files changed: `erp/src/app/(app)/comercial/clientes/[id]/additional-contacts.tsx`, `.../[id]/page.tsx`
+---
