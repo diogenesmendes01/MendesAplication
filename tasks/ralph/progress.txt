@@ -153,3 +153,12 @@
 - Added accountPayable and creditNote back-relations to Refund (completing US-056 deferred work)
 - Files changed: `erp/prisma/schema.prisma`
 ---
+
+## 2026-03-02 - US-060
+- Created contacts-actions.ts with 4 server actions: listAdditionalContacts, createAdditionalContact, updateAdditionalContact, deleteAdditionalContact
+- All actions validate company access via requireCompanyAccess
+- Create/update validate at least email or whatsapp is provided
+- All mutations include audit logging via logAuditEvent
+- Access validation checks contact's client.companyId matches requested companyId
+- Files changed: `erp/src/app/(app)/comercial/clientes/[id]/contacts-actions.ts`
+---
