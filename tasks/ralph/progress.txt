@@ -574,3 +574,19 @@
   - SLA display in sidebar: calculate diffMs from deadline, show colored text (green/yellow/red) with formatted time
   - Refund status color mapping: AWAITING_APPROVAL=yellow, APPROVED=blue, COMPLETED=green, REJECTED=destructive
 ---
+
+## 2026-03-02 - US-086
+- Created `requestCancellation(ticketId, companyId, type, justification)` server action: validates ticket has linked proposal/boleto matching requested type, adds "Cancelamento Pendente" tag, creates structured internal note `[CANCELAMENTO] Tipo: {type} | Justificativa: {text}` for parsing, and visible timeline event
+- Created `approveCancellation(ticketId, companyId)` server action: validates ADMIN/MANAGER role, parses cancellation type from structured note, executes in transaction: cancels Proposal (CANCELLED), cancels Boleto(s) (CANCELLED), marks pending AccountReceivable as PAID, removes tag, creates timeline proof event
+- Created `getCancellationInfo(ticketId, companyId)` server action: reads tag + structured note to return pending status, type, justification, requester info
+- Added Cancellation card in ticket sidebar: shows pending request with details and approval button (admin/manager only), or "Solicitar Cancelamento" button when no pending request
+- Added cancellation dialog: type selector (Proposta/Boletos/Ambos based on ticket links), justification textarea
+- Files changed: `erp/src/app/(app)/sac/tickets/actions.ts`, `erp/src/app/(app)/sac/tickets/[id]/page.tsx`
+- **Learnings for future iterations:**
+  - Cancellation requests tracked via tag "Cancelamento Pendente" + structured internal note — no new DB model needed
+  - Structured notes with `[CANCELAMENTO]` prefix allow parsing type and justification on approval
+  - AccountReceivable has no CANCELLED status — use PAID with paidAt to effectively cancel (same as refund flow)
+  - ProposalStatus and BoletoStatus both have CANCELLED — can set directly
+  - Regex `/s` flag (dotAll) not available in TS target — use `[\s\S]` instead
+  - When boleto is cancelled and type is "both", also cancel other boletos from the same proposal via proposalId
+---
