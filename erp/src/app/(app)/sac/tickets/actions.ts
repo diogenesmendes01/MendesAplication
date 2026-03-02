@@ -1505,6 +1505,63 @@ export async function createClientAndLink(
 }
 
 // ---------------------------------------------------------------------------
+// Refund Data for Sidebar (US-085)
+// ---------------------------------------------------------------------------
+
+export interface RefundSummary {
+  id: string;
+  amount: number;
+  status: RefundStatus;
+  requestedAt: string;
+  approvedAt: string | null;
+  executedAt: string | null;
+  completedAt: string | null;
+  slaDeadline: string | null;
+  slaBreached: boolean;
+  rejectionReason: string | null;
+  paymentMethod: string | null;
+  requestedBy: { id: string; name: string };
+  approvedBy: { id: string; name: string } | null;
+}
+
+export async function getTicketRefunds(
+  ticketId: string,
+  companyId: string
+): Promise<RefundSummary[]> {
+  await requireCompanyAccess(companyId);
+
+  const refunds = await prisma.refund.findMany({
+    where: { ticketId, companyId },
+    include: {
+      requestedBy: { select: { id: true, name: true } },
+      approvedBy: { select: { id: true, name: true } },
+    },
+    orderBy: { requestedAt: "desc" },
+  });
+
+  return refunds.map((r) => ({
+    id: r.id,
+    amount: Number(r.amount),
+    status: r.status,
+    requestedAt: r.requestedAt.toISOString(),
+    approvedAt: r.approvedAt?.toISOString() ?? null,
+    executedAt: r.executedAt?.toISOString() ?? null,
+    completedAt: r.completedAt?.toISOString() ?? null,
+    slaDeadline: r.slaDeadline?.toISOString() ?? null,
+    slaBreached: r.slaBreached,
+    rejectionReason: r.rejectionReason,
+    paymentMethod: r.paymentMethod,
+    requestedBy: r.requestedBy,
+    approvedBy: r.approvedBy,
+  }));
+}
+
+export async function getUserRole(companyId: string): Promise<string> {
+  const session = await requireCompanyAccess(companyId);
+  return session.role;
+}
+
+// ---------------------------------------------------------------------------
 // Refund Request (US-082)
 // ---------------------------------------------------------------------------
 

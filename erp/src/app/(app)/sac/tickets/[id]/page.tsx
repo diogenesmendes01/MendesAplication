@@ -24,6 +24,11 @@ import {
   UserPlus,
   Search,
   Loader2,
+  Upload,
+  Coins,
+  CheckCircle,
+  XCircle,
+  Banknote,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -45,6 +50,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { useCompany } from "@/contexts/company-context";
+import { Textarea } from "@/components/ui/textarea";
 import {
   getTicketById,
   updateTicketStatus,
@@ -53,12 +59,20 @@ import {
   addTag,
   removeTag,
   getClientFinancialSummary,
+  getTicketRefunds,
+  getUserRole,
+  requestRefund,
+  approveRefund,
+  rejectRefund,
+  executeRefund,
+  attachFileToTicket,
   searchClientsForLink,
   linkContactToClient,
   createClientAndLink,
   type TicketDetail,
   type ClientFinancialSummary,
   type ClientForLink,
+  type RefundSummary,
 } from "../actions";
 import type { TicketStatus } from "@prisma/client";
 import TicketTimeline from "./ticket-timeline";
@@ -240,6 +254,44 @@ export default function TicketDetailPage() {
     endereco: "",
   });
 
+  // Refund state (US-085)
+  const [refunds, setRefunds] = useState<RefundSummary[]>([]);
+  const [userRole, setUserRole] = useState<string>("");
+  const [requestRefundOpen, setRequestRefundOpen] = useState(false);
+  const [refundForm, setRefundForm] = useState({
+    amount: "",
+    justification: "",
+    boletoId: "",
+  });
+  const [refundProofFile, setRefundProofFile] = useState<{ id: string; name: string } | null>(null);
+  const [uploadingProof, setUploadingProof] = useState(false);
+  const [submittingRefund, setSubmittingRefund] = useState(false);
+
+  // Reject dialog
+  const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
+  const [rejectRefundId, setRejectRefundId] = useState<string>("");
+  const [rejectReason, setRejectReason] = useState("");
+  const [submittingReject, setSubmittingReject] = useState(false);
+
+  // Execute dialog
+  const [executeDialogOpen, setExecuteDialogOpen] = useState(false);
+  const [executeRefundId, setExecuteRefundId] = useState<string>("");
+  const [executeForm, setExecuteForm] = useState({
+    paymentMethod: "PIX" as "PIX" | "TED",
+    bankName: "",
+    bankAgency: "",
+    bankAccount: "",
+    pixKey: "",
+    invoiceAction: "NONE" as "CANCEL_INVOICE" | "CREDIT_NOTE" | "NONE",
+    invoiceCancelReason: "",
+  });
+  const [executeProofFile, setExecuteProofFile] = useState<{ id: string; name: string } | null>(null);
+  const [uploadingExecuteProof, setUploadingExecuteProof] = useState(false);
+  const [submittingExecute, setSubmittingExecute] = useState(false);
+
+  // Approve loading
+  const [approvingRefundId, setApprovingRefundId] = useState<string | null>(null);
+
   // ---------------------------------------------------
   // Load ticket
   // ---------------------------------------------------
@@ -254,6 +306,9 @@ export default function TicketDetailPage() {
       getClientFinancialSummary(data.client.id, selectedCompanyId)
         .then(setFinancial)
         .catch(() => {});
+      getTicketRefunds(ticketId, selectedCompanyId)
+        .then(setRefunds)
+        .catch(() => {});
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : "Erro ao carregar ticket"
@@ -267,10 +322,11 @@ export default function TicketDetailPage() {
     loadTicket();
   }, [loadTicket]);
 
-  // Load users for reassignment
+  // Load users for reassignment and user role
   useEffect(() => {
     if (!selectedCompanyId) return;
     listUsersForAssign(selectedCompanyId).then(setUsers).catch(() => {});
+    getUserRole(selectedCompanyId).then(setUserRole).catch(() => {});
   }, [selectedCompanyId]);
 
   // ---------------------------------------------------
@@ -417,6 +473,146 @@ export default function TicketDetailPage() {
       toast.error(err instanceof Error ? err.message : "Erro ao criar cliente");
     } finally {
       setLinking(false);
+    }
+  }
+
+  // ---------------------------------------------------
+  // Refund handlers (US-085)
+  // ---------------------------------------------------
+
+  const isAdminOrManager = userRole === "ADMIN" || userRole === "MANAGER";
+
+  async function handleUploadProof(
+    e: React.ChangeEvent<HTMLInputElement>,
+    target: "request" | "execute"
+  ) {
+    const file = e.target.files?.[0];
+    if (!file || !selectedCompanyId) return;
+    const setter = target === "request" ? setUploadingProof : setUploadingExecuteProof;
+    setter(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("companyId", selectedCompanyId);
+      const res = await fetch("/api/upload", { method: "POST", body: formData });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Erro ao fazer upload");
+      }
+      const data = await res.json();
+
+      // Create Attachment record (requestRefund expects an existing Attachment id)
+      const attachment = await attachFileToTicket(ticketId, selectedCompanyId, {
+        fileName: data.fileName,
+        fileSize: data.fileSize,
+        mimeType: data.mimeType,
+        storagePath: data.storagePath,
+      });
+
+      if (target === "request") {
+        setRefundProofFile({ id: attachment.id, name: data.fileName });
+      } else {
+        setExecuteProofFile({ id: attachment.id, name: data.fileName });
+      }
+      toast.success("Arquivo enviado");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao fazer upload");
+    } finally {
+      setter(false);
+      e.target.value = "";
+    }
+  }
+
+  async function handleSubmitRefund() {
+    if (!selectedCompanyId || !ticket || !refundProofFile) return;
+    setSubmittingRefund(true);
+    try {
+      await requestRefund(
+        ticketId,
+        selectedCompanyId,
+        parseFloat(refundForm.amount),
+        refundForm.justification,
+        refundProofFile.id,
+        ticket.boletoId || undefined
+      );
+      toast.success("Reembolso solicitado com sucesso");
+      setRequestRefundOpen(false);
+      setRefundForm({ amount: "", justification: "", boletoId: "" });
+      setRefundProofFile(null);
+      // Reload refunds
+      getTicketRefunds(ticketId, selectedCompanyId).then(setRefunds).catch(() => {});
+      loadTicket();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao solicitar reembolso");
+    } finally {
+      setSubmittingRefund(false);
+    }
+  }
+
+  async function handleApproveRefund(refundId: string) {
+    if (!selectedCompanyId) return;
+    setApprovingRefundId(refundId);
+    try {
+      await approveRefund(refundId, selectedCompanyId);
+      toast.success("Reembolso aprovado");
+      getTicketRefunds(ticketId, selectedCompanyId).then(setRefunds).catch(() => {});
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao aprovar reembolso");
+    } finally {
+      setApprovingRefundId(null);
+    }
+  }
+
+  async function handleRejectRefund() {
+    if (!selectedCompanyId || !rejectRefundId) return;
+    setSubmittingReject(true);
+    try {
+      await rejectRefund(rejectRefundId, selectedCompanyId, rejectReason);
+      toast.success("Reembolso rejeitado");
+      setRejectDialogOpen(false);
+      setRejectRefundId("");
+      setRejectReason("");
+      getTicketRefunds(ticketId, selectedCompanyId).then(setRefunds).catch(() => {});
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao rejeitar reembolso");
+    } finally {
+      setSubmittingReject(false);
+    }
+  }
+
+  async function handleExecuteRefund() {
+    if (!selectedCompanyId || !executeRefundId) return;
+    setSubmittingExecute(true);
+    try {
+      await executeRefund(executeRefundId, selectedCompanyId, {
+        paymentMethod: executeForm.paymentMethod,
+        bankName: executeForm.bankName || undefined,
+        bankAgency: executeForm.bankAgency || undefined,
+        bankAccount: executeForm.bankAccount || undefined,
+        pixKey: executeForm.pixKey || undefined,
+        invoiceAction: executeForm.invoiceAction,
+        invoiceCancelReason: executeForm.invoiceCancelReason || undefined,
+        refundProofId: executeProofFile?.id,
+      });
+      toast.success("Reembolso executado com sucesso");
+      setExecuteDialogOpen(false);
+      setExecuteRefundId("");
+      setExecuteForm({
+        paymentMethod: "PIX",
+        bankName: "",
+        bankAgency: "",
+        bankAccount: "",
+        pixKey: "",
+        invoiceAction: "NONE",
+        invoiceCancelReason: "",
+      });
+      setExecuteProofFile(null);
+      getTicketRefunds(ticketId, selectedCompanyId).then(setRefunds).catch(() => {});
+      loadTicket();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao executar reembolso");
+    } finally {
+      setSubmittingExecute(false);
     }
   }
 
@@ -893,6 +1089,149 @@ export default function TicketDetailPage() {
               </CardContent>
             </Card>
           )}
+
+          {/* Refund Section (US-085) */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Coins className="h-4 w-4" />
+                Reembolso
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {refunds.length === 0 && (
+                <p className="text-xs text-muted-foreground">Nenhum reembolso solicitado</p>
+              )}
+
+              {refunds.map((refund) => (
+                <div key={refund.id} className="rounded-lg border p-3 space-y-2">
+                  {/* Status and amount */}
+                  <div className="flex items-center justify-between">
+                    <Badge
+                      variant={
+                        refund.status === "COMPLETED" ? "default" :
+                        refund.status === "REJECTED" ? "destructive" :
+                        "secondary"
+                      }
+                      className={
+                        refund.status === "COMPLETED" ? "bg-green-100 text-green-800 hover:bg-green-100" :
+                        refund.status === "APPROVED" ? "bg-blue-100 text-blue-800 hover:bg-blue-100" :
+                        refund.status === "AWAITING_APPROVAL" ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-100" :
+                        ""
+                      }
+                    >
+                      {refund.status === "AWAITING_APPROVAL" ? "Aguardando Aprovacao" :
+                       refund.status === "APPROVED" ? "Aprovado" :
+                       refund.status === "REJECTED" ? "Rejeitado" :
+                       refund.status === "PROCESSING" ? "Processando" :
+                       "Concluido"}
+                    </Badge>
+                    <span className="text-sm font-semibold">
+                      R$ {refund.amount.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+
+                  {/* Solicitante and date */}
+                  <div className="text-xs text-muted-foreground space-y-0.5">
+                    <p>Solicitante: {refund.requestedBy.name}</p>
+                    <p>Data: {dateFmt.format(new Date(refund.requestedAt))}</p>
+                    {refund.approvedBy && (
+                      <p>
+                        {refund.status === "REJECTED" ? "Rejeitado" : "Aprovado"} por: {refund.approvedBy.name}
+                      </p>
+                    )}
+                    {refund.rejectionReason && (
+                      <p className="text-red-600">Motivo: {refund.rejectionReason}</p>
+                    )}
+                    {refund.paymentMethod && (
+                      <p>Metodo: {refund.paymentMethod}</p>
+                    )}
+                  </div>
+
+                  {/* SLA indicator */}
+                  {refund.slaDeadline && !["COMPLETED", "REJECTED"].includes(refund.status) && (
+                    <div className="text-xs">
+                      {(() => {
+                        const dl = new Date(refund.slaDeadline);
+                        const diffMs = dl.getTime() - Date.now();
+                        const isBreached = refund.slaBreached || diffMs <= 0;
+                        const atRisk = !isBreached && diffMs < 60 * 60_000;
+                        return (
+                          <span className={
+                            isBreached ? "text-red-600 font-medium" :
+                            atRisk ? "text-yellow-600 font-medium" :
+                            "text-green-600"
+                          }>
+                            SLA: {isBreached ? "Estourado" : atRisk ? "Em Risco" : "OK"}
+                            {" - "}
+                            {isBreached
+                              ? `-${Math.floor(Math.abs(diffMs) / 3_600_000)}h${String(Math.floor((Math.abs(diffMs) % 3_600_000) / 60_000)).padStart(2, "0")}m`
+                              : `${Math.floor(diffMs / 3_600_000)}h${String(Math.floor((diffMs % 3_600_000) / 60_000)).padStart(2, "0")}m`
+                            }
+                          </span>
+                        );
+                      })()}
+                    </div>
+                  )}
+
+                  {/* Action buttons */}
+                  {refund.status === "AWAITING_APPROVAL" && isAdminOrManager && (
+                    <div className="flex gap-2 pt-1">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="flex-1 border-green-300 text-green-700 hover:bg-green-50"
+                        disabled={approvingRefundId === refund.id}
+                        onClick={() => handleApproveRefund(refund.id)}
+                      >
+                        {approvingRefundId === refund.id ? (
+                          <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                        ) : (
+                          <CheckCircle className="mr-1 h-3 w-3" />
+                        )}
+                        Aprovar
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="flex-1 border-red-300 text-red-700 hover:bg-red-50"
+                        onClick={() => {
+                          setRejectRefundId(refund.id);
+                          setRejectDialogOpen(true);
+                        }}
+                      >
+                        <XCircle className="mr-1 h-3 w-3" />
+                        Rejeitar
+                      </Button>
+                    </div>
+                  )}
+
+                  {refund.status === "APPROVED" && isAdminOrManager && (
+                    <Button
+                      size="sm"
+                      className="w-full"
+                      onClick={() => {
+                        setExecuteRefundId(refund.id);
+                        setExecuteDialogOpen(true);
+                      }}
+                    >
+                      <Banknote className="mr-1.5 h-3.5 w-3.5" />
+                      Executar Reembolso
+                    </Button>
+                  )}
+                </div>
+              ))}
+
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => setRequestRefundOpen(true)}
+              >
+                <Coins className="mr-1.5 h-3.5 w-3.5" />
+                Solicitar Reembolso
+              </Button>
+            </CardContent>
+          </Card>
         </div>
       </div>
 
@@ -1040,6 +1379,321 @@ export default function TicketDetailPage() {
                 </>
               ) : (
                 "Criar e Vincular"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Request Refund Dialog (US-085) */}
+      <Dialog open={requestRefundOpen} onOpenChange={setRequestRefundOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Solicitar Reembolso</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="refund-amount">Valor (R$) *</Label>
+              <Input
+                id="refund-amount"
+                type="number"
+                step="0.01"
+                min="0.01"
+                value={refundForm.amount}
+                onChange={(e) => setRefundForm((f) => ({ ...f, amount: e.target.value }))}
+                placeholder="0,00"
+              />
+            </div>
+
+            {ticket?.boletoId && (
+              <div>
+                <Label htmlFor="refund-boleto">Boleto Vinculado</Label>
+                <Input
+                  id="refund-boleto"
+                  value={ticket.boletoId}
+                  disabled
+                  className="text-xs"
+                />
+                <input
+                  type="hidden"
+                  value={ticket.boletoId}
+                  onChange={() => setRefundForm((f) => ({ ...f, boletoId: ticket.boletoId ?? "" }))}
+                />
+              </div>
+            )}
+
+            <div>
+              <Label>Comprovante de Pagamento *</Label>
+              {refundProofFile ? (
+                <div className="flex items-center gap-2 mt-1 rounded border p-2 text-sm">
+                  <FileText className="h-4 w-4 text-muted-foreground" />
+                  <span className="flex-1 truncate">{refundProofFile.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => setRefundProofFile(null)}
+                    className="rounded p-0.5 hover:bg-muted"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ) : (
+                <div className="mt-1">
+                  <label className="flex cursor-pointer items-center gap-2 rounded border border-dashed p-3 text-sm text-muted-foreground hover:bg-muted/50 transition-colors">
+                    {uploadingProof ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Upload className="h-4 w-4" />
+                    )}
+                    {uploadingProof ? "Enviando..." : "Clique para enviar comprovante"}
+                    <input
+                      type="file"
+                      className="hidden"
+                      accept=".pdf,.png,.jpg,.jpeg,.gif"
+                      disabled={uploadingProof}
+                      onChange={(e) => handleUploadProof(e, "request")}
+                    />
+                  </label>
+                </div>
+              )}
+            </div>
+
+            <div>
+              <Label htmlFor="refund-justification">Justificativa *</Label>
+              <Textarea
+                id="refund-justification"
+                value={refundForm.justification}
+                onChange={(e) => setRefundForm((f) => ({ ...f, justification: e.target.value }))}
+                placeholder="Descreva o motivo do reembolso..."
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRequestRefundOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleSubmitRefund}
+              disabled={
+                submittingRefund ||
+                !refundForm.amount ||
+                parseFloat(refundForm.amount) <= 0 ||
+                !refundForm.justification.trim() ||
+                !refundProofFile
+              }
+            >
+              {submittingRefund ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Solicitando...
+                </>
+              ) : (
+                "Solicitar Reembolso"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reject Refund Dialog (US-085) */}
+      <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Rejeitar Reembolso</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="reject-reason">Motivo da Rejeicao *</Label>
+              <Textarea
+                id="reject-reason"
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                placeholder="Descreva o motivo da rejeição..."
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRejectDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleRejectRefund}
+              disabled={submittingReject || !rejectReason.trim()}
+            >
+              {submittingReject ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Rejeitando...
+                </>
+              ) : (
+                "Confirmar Rejeicao"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Execute Refund Dialog (US-085) */}
+      <Dialog open={executeDialogOpen} onOpenChange={setExecuteDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Executar Reembolso</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Metodo de Pagamento *</Label>
+              <Select
+                value={executeForm.paymentMethod}
+                onValueChange={(v) =>
+                  setExecuteForm((f) => ({ ...f, paymentMethod: v as "PIX" | "TED" }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="PIX">PIX</SelectItem>
+                  <SelectItem value="TED">TED</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {executeForm.paymentMethod === "PIX" && (
+              <div>
+                <Label htmlFor="exec-pix-key">Chave PIX *</Label>
+                <Input
+                  id="exec-pix-key"
+                  value={executeForm.pixKey}
+                  onChange={(e) => setExecuteForm((f) => ({ ...f, pixKey: e.target.value }))}
+                  placeholder="CPF, CNPJ, email, telefone ou chave aleatória"
+                />
+              </div>
+            )}
+
+            {executeForm.paymentMethod === "TED" && (
+              <div className="grid grid-cols-3 gap-3">
+                <div className="col-span-3">
+                  <Label htmlFor="exec-bank-name">Banco *</Label>
+                  <Input
+                    id="exec-bank-name"
+                    value={executeForm.bankName}
+                    onChange={(e) => setExecuteForm((f) => ({ ...f, bankName: e.target.value }))}
+                    placeholder="Nome do banco"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="exec-bank-agency">Agencia *</Label>
+                  <Input
+                    id="exec-bank-agency"
+                    value={executeForm.bankAgency}
+                    onChange={(e) => setExecuteForm((f) => ({ ...f, bankAgency: e.target.value }))}
+                    placeholder="0000"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <Label htmlFor="exec-bank-account">Conta *</Label>
+                  <Input
+                    id="exec-bank-account"
+                    value={executeForm.bankAccount}
+                    onChange={(e) => setExecuteForm((f) => ({ ...f, bankAccount: e.target.value }))}
+                    placeholder="00000-0"
+                  />
+                </div>
+              </div>
+            )}
+
+            <div>
+              <Label>Acao NFS-e</Label>
+              <Select
+                value={executeForm.invoiceAction}
+                onValueChange={(v) =>
+                  setExecuteForm((f) => ({
+                    ...f,
+                    invoiceAction: v as "CANCEL_INVOICE" | "CREDIT_NOTE" | "NONE",
+                  }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="NONE">Nenhuma</SelectItem>
+                  <SelectItem value="CANCEL_INVOICE">Cancelar NFS-e</SelectItem>
+                  <SelectItem value="CREDIT_NOTE">Emitir Nota de Credito</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {executeForm.invoiceAction === "CANCEL_INVOICE" && (
+              <div>
+                <Label htmlFor="exec-cancel-reason">Motivo do Cancelamento *</Label>
+                <Textarea
+                  id="exec-cancel-reason"
+                  value={executeForm.invoiceCancelReason}
+                  onChange={(e) => setExecuteForm((f) => ({ ...f, invoiceCancelReason: e.target.value }))}
+                  placeholder="Motivo do cancelamento da NFS-e..."
+                  rows={2}
+                />
+              </div>
+            )}
+
+            <div>
+              <Label>Comprovante de Reembolso</Label>
+              {executeProofFile ? (
+                <div className="flex items-center gap-2 mt-1 rounded border p-2 text-sm">
+                  <FileText className="h-4 w-4 text-muted-foreground" />
+                  <span className="flex-1 truncate">{executeProofFile.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => setExecuteProofFile(null)}
+                    className="rounded p-0.5 hover:bg-muted"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ) : (
+                <div className="mt-1">
+                  <label className="flex cursor-pointer items-center gap-2 rounded border border-dashed p-3 text-sm text-muted-foreground hover:bg-muted/50 transition-colors">
+                    {uploadingExecuteProof ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Upload className="h-4 w-4" />
+                    )}
+                    {uploadingExecuteProof ? "Enviando..." : "Clique para enviar comprovante"}
+                    <input
+                      type="file"
+                      className="hidden"
+                      accept=".pdf,.png,.jpg,.jpeg,.gif"
+                      disabled={uploadingExecuteProof}
+                      onChange={(e) => handleUploadProof(e, "execute")}
+                    />
+                  </label>
+                </div>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setExecuteDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleExecuteRefund}
+              disabled={
+                submittingExecute ||
+                (executeForm.paymentMethod === "PIX" && !executeForm.pixKey.trim()) ||
+                (executeForm.paymentMethod === "TED" && (!executeForm.bankName.trim() || !executeForm.bankAgency.trim() || !executeForm.bankAccount.trim())) ||
+                (executeForm.invoiceAction === "CANCEL_INVOICE" && !executeForm.invoiceCancelReason.trim())
+              }
+            >
+              {submittingExecute ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Executando...
+                </>
+              ) : (
+                "Executar Reembolso"
               )}
             </Button>
           </DialogFooter>
