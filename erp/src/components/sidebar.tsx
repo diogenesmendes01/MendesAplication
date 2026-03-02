@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -14,6 +15,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { useCompany } from "@/contexts/company-context";
+import { getSlaAlertCounts } from "@/app/(app)/sac/tickets/actions";
 
 const navItems = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -31,6 +34,18 @@ interface SidebarProps {
 
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const pathname = usePathname();
+  const { selectedCompanyId } = useCompany();
+  const [sacBadge, setSacBadge] = useState(0);
+
+  useEffect(() => {
+    if (!selectedCompanyId) {
+      setSacBadge(0);
+      return;
+    }
+    getSlaAlertCounts(selectedCompanyId)
+      .then(({ breached, atRisk }) => setSacBadge(breached + atRisk))
+      .catch(() => setSacBadge(0));
+  }, [selectedCompanyId]);
 
   return (
     <aside
@@ -54,6 +69,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         {navItems.map((item) => {
           const isActive =
             pathname === item.href || pathname.startsWith(item.href + "/");
+          const badge = item.href === "/sac" ? sacBadge : 0;
           return (
             <Link
               key={item.href}
@@ -67,8 +83,22 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
               )}
               title={collapsed ? item.label : undefined}
             >
-              <item.icon className="h-5 w-5 shrink-0" />
-              {!collapsed && <span>{item.label}</span>}
+              <div className="relative shrink-0">
+                <item.icon className="h-5 w-5" />
+                {badge > 0 && collapsed && (
+                  <span className="absolute -right-1.5 -top-1.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-600 px-1 text-[9px] font-bold text-white">
+                    {badge > 99 ? "99+" : badge}
+                  </span>
+                )}
+              </div>
+              {!collapsed && (
+                <span className="flex-1">{item.label}</span>
+              )}
+              {!collapsed && badge > 0 && (
+                <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-bold text-white">
+                  {badge > 99 ? "99+" : badge}
+                </span>
+              )}
             </Link>
           );
         })}

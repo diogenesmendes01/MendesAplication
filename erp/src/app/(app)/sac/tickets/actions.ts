@@ -253,6 +253,40 @@ export async function getTicketTabCounts(companyId: string): Promise<{
   return { slaCritical, refunds };
 }
 
+/** Get SLA alert counts for sidebar badge and banner */
+export async function getSlaAlertCounts(companyId: string): Promise<{
+  breached: number;
+  atRisk: number;
+}> {
+  await requireCompanyAccess(companyId);
+
+  const now = new Date();
+  const soon = new Date(now.getTime() + 30 * 60_000);
+
+  const [breached, atRisk] = await Promise.all([
+    prisma.ticket.count({
+      where: {
+        companyId,
+        status: { notIn: ["RESOLVED", "CLOSED"] },
+        slaBreached: true,
+      },
+    }),
+    prisma.ticket.count({
+      where: {
+        companyId,
+        status: { notIn: ["RESOLVED", "CLOSED"] },
+        slaBreached: { not: true },
+        OR: [
+          { slaResolution: { not: null, lte: soon } },
+          { slaFirstReply: { not: null, lte: soon } },
+        ],
+      },
+    }),
+  ]);
+
+  return { breached, atRisk };
+}
+
 export async function createTicket(input: CreateTicketInput) {
   const session = await requireCompanyAccess(input.companyId);
 

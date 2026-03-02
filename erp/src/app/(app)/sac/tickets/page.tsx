@@ -12,6 +12,7 @@ import {
   MessageSquare,
   Globe,
   Tag,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,6 +50,7 @@ import {
   listClientsForSelect,
   listUsersForAssign,
   getTicketTabCounts,
+  getSlaAlertCounts,
   type PaginatedResult,
   type TicketRow,
   type TicketTab,
@@ -167,6 +169,10 @@ export default function TicketsPage() {
     slaCritical: number;
     refunds: number;
   }>({ slaCritical: 0, refunds: 0 });
+  const [slaAlerts, setSlaAlerts] = useState<{
+    breached: number;
+    atRisk: number;
+  }>({ breached: 0, atRisk: 0 });
 
   // Dropdown data
   const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
@@ -210,10 +216,11 @@ export default function TicketsPage() {
     loadTickets();
   }, [loadTickets]);
 
-  // Load tab counts
+  // Load tab counts and SLA alerts
   useEffect(() => {
     if (!selectedCompanyId) return;
     getTicketTabCounts(selectedCompanyId).then(setTabCounts).catch(() => {});
+    getSlaAlertCounts(selectedCompanyId).then(setSlaAlerts).catch(() => {});
   }, [selectedCompanyId]);
 
   // Load dropdown data
@@ -319,6 +326,39 @@ export default function TicketsPage() {
 
       {/* Dashboard KPIs */}
       <TicketDashboardKpis companyId={selectedCompanyId} />
+
+      {/* SLA Alert Banner */}
+      {(slaAlerts.breached > 0 || slaAlerts.atRisk > 0) && (
+        <div className="flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+          <AlertTriangle className="h-5 w-5 shrink-0 text-red-600" />
+          <div className="flex flex-1 flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+            {slaAlerts.breached > 0 && (
+              <span className="font-semibold text-red-700">
+                {slaAlerts.breached} {slaAlerts.breached === 1 ? "estourado" : "estourados"}
+              </span>
+            )}
+            {slaAlerts.breached > 0 && slaAlerts.atRisk > 0 && (
+              <span className="text-red-400">|</span>
+            )}
+            {slaAlerts.atRisk > 0 && (
+              <span className="font-semibold text-yellow-700">
+                {slaAlerts.atRisk} em risco
+              </span>
+            )}
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0 border-red-300 text-red-700 hover:bg-red-100"
+            onClick={() => {
+              setActiveTab("sla_critical");
+              setPage(1);
+            }}
+          >
+            Ver SLA Crítico
+          </Button>
+        </div>
+      )}
 
       {/* Tabs + Search */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
