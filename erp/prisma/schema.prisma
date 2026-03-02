@@ -82,6 +82,7 @@ model Company {
   chartOfAccounts    ChartOfAccounts[]
   channels           Channel[]
   slaConfigs         SlaConfig[]
+  refunds            Refund[]
 
   @@map("companies")
 }
@@ -96,11 +97,15 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  userCompanies      UserCompany[]
-  auditLogs          AuditLog[]
+  userCompanies       UserCompany[]
+  auditLogs           AuditLog[]
   passwordResetTokens PasswordResetToken[]
-  assignedTickets    Ticket[]        @relation("TicketAssignee")
-  ticketMessages     TicketMessage[] @relation("TicketMessageSender")
+  assignedTickets     Ticket[]        @relation("TicketAssignee")
+  ticketMessages      TicketMessage[] @relation("TicketMessageSender")
+  refundsRequested    Refund[]        @relation("RefundRequestedBy")
+  refundsApproved     Refund[]        @relation("RefundApprovedBy")
+  refundsExecuted     Refund[]        @relation("RefundExecutedBy")
+  refundAttachments   RefundAttachment[]
 
   @@map("users")
 }
@@ -423,6 +428,7 @@ model Ticket {
   boleto   Boleto?   @relation("TicketBoleto", fields: [boletoId], references: [id], onDelete: SetNull)
   messages    TicketMessage[]
   attachments Attachment[]    @relation("TicketAttachments")
+  refunds     Refund[]
 
   @@map("tickets")
 }
@@ -456,6 +462,57 @@ model Attachment {
   ticket        Ticket?        @relation("TicketAttachments", fields: [ticketId], references: [id], onDelete: Cascade)
 
   @@map("attachments")
+}
+
+model Refund {
+  id                 String              @id @default(cuid())
+  ticketId           String
+  companyId          String
+  requestedById      String
+  approvedById       String?
+  executedById       String?
+  amount             Decimal             @db.Decimal(12, 2)
+  paymentMethod      RefundPaymentMethod?
+  bankName           String?
+  bankAgency         String?
+  bankAccount        String?
+  pixKey             String?
+  status             RefundStatus        @default(AWAITING_APPROVAL)
+  rejectionReason    String?
+  requestedAt        DateTime            @default(now())
+  approvedAt         DateTime?
+  executedAt         DateTime?
+  completedAt        DateTime?
+  slaDeadline        DateTime?
+  slaBreached        Boolean             @default(false)
+  invoiceAction      RefundInvoiceAction?
+  invoiceCancelReason String?
+
+  ticket       Ticket             @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  company      Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  requestedBy  User               @relation("RefundRequestedBy", fields: [requestedById], references: [id])
+  approvedBy   User?              @relation("RefundApprovedBy", fields: [approvedById], references: [id])
+  executedBy   User?              @relation("RefundExecutedBy", fields: [executedById], references: [id])
+  attachments  RefundAttachment[]
+
+  @@map("refunds")
+}
+
+model RefundAttachment {
+  id           String               @id @default(cuid())
+  refundId     String
+  type         RefundAttachmentType
+  fileName     String
+  fileSize     Int
+  mimeType     String
+  storagePath  String
+  uploadedById String
+  createdAt    DateTime             @default(now())
+
+  refund     Refund @relation(fields: [refundId], references: [id], onDelete: Cascade)
+  uploadedBy User   @relation(fields: [uploadedById], references: [id])
+
+  @@map("refund_attachments")
 }
 
 model Proposal {
