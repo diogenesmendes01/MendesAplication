@@ -9,6 +9,7 @@
 - Shadcn/UI components in `src/components/ui/` — use Sonner for toasts (not the old Toaster)
 - Quality checks: `npx tsc --noEmit` for typecheck, `npm run lint` for ESLint
 - PostgreSQL needs `sudo service postgresql start` before db operations in devcontainer
+- Prisma compound unique with nullable fields: use `findFirst` + `create` instead of `upsert`
 - `.env` is gitignored; `.env.example` has the template
 - Working directory for git commands: `/workspaces/app/` (root repo)
 - Prisma seed config goes in `package.json` under `"prisma": { "seed": "npx tsx prisma/seed.ts" }`
@@ -97,4 +98,15 @@
 - Created Channel model with all fields: id, companyId, type (ChannelType), name, config (Json), isActive, lastSyncUid, lastSyncUidSent, lastSyncAt, createdAt, updatedAt
 - Added Company.channels relation (1:N, onDelete Cascade)
 - Files changed: `erp/prisma/schema.prisma`
+---
+
+## 2026-03-02 - US-054
+- Created SlaConfig model with unique constraint [companyId, type, priority, stage]
+- Added Company.slaConfigs relation (1:N, onDelete Cascade)
+- Seeded 9 SLA configs per company: 6 ticket SLAs (3 priorities x 2 stages) + 3 refund SLAs
+- Files changed: `erp/prisma/schema.prisma`, `erp/prisma/seed.ts`
+- **Learnings for future iterations:**
+  - Prisma compound unique with nullable fields doesn't work well with `upsert` — use `findFirst` + `create` pattern instead
+  - SLA deadlines in minutes: Alta first_reply=30, resolution=240; Media 120/1440; Baixa 480/2880
+  - Refund SLAs use priority=null since they don't vary by priority
 ---
