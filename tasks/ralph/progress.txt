@@ -277,3 +277,22 @@
   - Use `Cell` component from recharts to apply different colors per bar in a single Bar series
   - KPI cards follow pattern: Card > CardHeader (title + icon row) > CardContent (big value)
 ---
+
+## 2026-03-02 - US-070
+- Replaced filter panel with 4 tabs: Todos, SLA Crítico (badge count), Reembolsos (badge count), Meus Tickets
+- Added text search across client name and ticket subject
+- Added 3 new table columns: Canal (icon), SLA (colored badge + time left), Tags (badges)
+- Updated `listTickets` server action with `tab` parameter for tab-based filtering and `search` for text search across client+subject
+- Created `getTicketTabCounts` server action for tab badge counts (SLA critical, refunds)
+- Expanded `TicketRow` type with `channelType`, `slaStatus`, `slaTimeLeft`, `tags`
+- SLA status calculated from `slaResolution`/`slaFirstReply` deadlines with time-left formatting (e.g. "2h30m", "-0h15m")
+- Tab filters: sla_critical uses slaBreached OR deadline within 30min, refunds uses `refunds: { some: {} }`, my_tickets uses session userId
+- Files changed: `erp/src/app/(app)/sac/tickets/actions.ts`, `erp/src/app/(app)/sac/tickets/page.tsx`
+- **Learnings for future iterations:**
+  - Shadcn Tabs component uses `Tabs > TabsList > TabsTrigger` from `@/components/ui/tabs`
+  - Badge component from `@/components/ui/badge` supports variant prop (default, secondary, destructive, outline)
+  - `requireCompanyAccess` already returns the session with userId — no need to import `requireSession` separately
+  - Prisma `where.OR` combined with search needs careful handling: use `where.AND = [{ OR: tabFilter }, searchFilter]` when both exist
+  - For tab badge counts in Prisma, `refunds: { some: {} }` checks for existence of related refunds
+  - SLA time-left formatting: negative values prefixed with `-` for breached tickets
+---
