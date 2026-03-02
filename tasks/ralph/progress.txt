@@ -26,3 +26,33 @@
 - Abstract interfaces for email provider in `src/lib/email.ts`
 - Design doc: `docs/plans/2026-03-02-sac-omnichannel-design.md`
 - PRD: `tasks/prd-sac-omnichannel.md`
+- Redis devcontainer feature: `ghcr.io/itsmechlark/features/redis-server:1` — after devcontainer rebuild, redis-server is auto-started
+- REDIS_URL env var: `redis://localhost:6379` — used by BullMQ and ioredis
+
+## 2026-03-02 - US-048
+- Installed Redis via devcontainer feature (`ghcr.io/itsmechlark/features/redis-server:1`)
+- Added REDIS_URL=redis://localhost:6379 to .env.example
+- Verified redis-cli ping returns PONG
+- Typecheck passes
+- Files changed: `.devcontainer/devcontainer.json`, `erp/.env.example`
+- **Learnings for future iterations:**
+  - The devcontainer feature `ghcr.io/itsmechlark/features/redis-server:1` installs and auto-starts Redis on port 6379
+  - In a running container, the feature won't take effect until rebuild — install redis-server manually with apt for immediate testing
+  - `.env` is gitignored; always update `.env.example` for template and `.env` locally for runtime
+---
+
+## 2026-03-02 - US-049
+- Configured BullMQ infrastructure with 5 named queues: email-inbound, email-outbound, whatsapp-inbound, whatsapp-outbound, sla-check
+- Created `erp/src/lib/queue.ts` with Redis connection config (parses REDIS_URL env var) and queue exports
+- Created `erp/src/lib/workers/base.ts` with `createWorker()` factory function that logs job processing
+- Created `erp/src/lib/workers/index.ts` with worker instances for all 5 queues and graceful shutdown
+- Added `"workers"` npm script: `npx tsx src/lib/workers/index.ts`
+- Added bullmq@5.70.1 dependency (ioredis@5.9.3 comes as transitive dep)
+- Files changed: `erp/package.json`, `erp/package-lock.json`, `erp/src/lib/queue.ts`, `erp/src/lib/workers/base.ts`, `erp/src/lib/workers/index.ts`
+- **Learnings for future iterations:**
+  - BullMQ connection config uses plain object `{ host, port, password, maxRetriesPerRequest: null }` — maxRetriesPerRequest must be null for workers
+  - Workers run via `npx tsx` from erp/ directory — the `@/` path alias works because tsx respects tsconfig paths
+  - `createWorker()` factory in base.ts handles logging, error handling, and events — use it for all new workers
+  - Queue names are constants in `QUEUE_NAMES` object — import from `@/lib/queue`
+  - Graceful shutdown in index.ts listens for SIGINT/SIGTERM and closes all workers
+---
