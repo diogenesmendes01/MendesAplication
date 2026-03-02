@@ -480,3 +480,21 @@
   - Email text extraction from raw source: split on `\r\n\r\n`, strip HTML tags, decode quoted-printable
   - Attachment parts identified by `disposition === "attachment"` or `"inline"` with filename in bodyStructure
 ---
+
+## 2026-03-02 - US-081
+- Created banner UI for tickets with "Pendente Vinculação" tag — shows sender info (phone/email) extracted from description
+- Banner has two actions: "Vincular" (link to existing client) and "Criar cliente" (create new client)
+- Link dialog: search clients by name/CNPJ with debounced search, click to link
+- Create dialog: full client form (name, type, CPF/CNPJ, email, telefone, razão social, endereço) with pre-filled email/phone from ticket description
+- Created `searchClientsForLink(companyId, search)` server action: filters out placeholder client (cpfCnpj="00000000000"), returns top 10 matches
+- Created `linkContactToClient(ticketId, companyId, clientId)` server action: validates unknown client, updates ticket.clientId, creates AdditionalContact from sender info, removes "Pendente Vinculação" tag, audit log
+- Created `createClientAndLink(ticketId, companyId, clientData)` server action: creates new Client, links ticket, removes tag, audit log
+- Helper `extractSenderInfo(description)` extracts email/phone from ticket description patterns
+- Files changed: `erp/src/app/(app)/sac/tickets/actions.ts`, `erp/src/app/(app)/sac/tickets/[id]/page.tsx`
+- **Learnings for future iterations:**
+  - Unknown client sentinel: cpfCnpj="00000000000", name="Contato Desconhecido" — use this for detection
+  - Ticket description embeds sender info: WhatsApp uses "Número: {phone}", Email uses "Email recebido de {email}"
+  - When linking, also create AdditionalContact so future messages from same sender get matched
+  - Shadcn Dialog needs import from `@/components/ui/dialog`: Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter
+  - Search with minimum 2 chars avoids empty broad queries
+---
