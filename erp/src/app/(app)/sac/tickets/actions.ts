@@ -5,7 +5,7 @@ import { requireCompanyAccess } from "@/lib/rbac";
 import { logAuditEvent } from "@/lib/audit";
 import { sendEmail } from "@/lib/email";
 import { getSlaStatus, type SlaStatusValue } from "@/lib/sla";
-import { Prisma, type TicketStatus, type TicketPriority, type ChannelType } from "@prisma/client";
+import { Prisma, type TicketStatus, type TicketPriority, type ChannelType, type MessageDirection, type MessageOrigin, type RefundStatus } from "@prisma/client";
 import { getSharedCompanyIds } from "@/lib/shared-clients";
 
 // ---------------------------------------------------------------------------
@@ -623,4 +623,291 @@ export async function createTicketReply(input: CreateTicketReplyInput) {
     createdAt: message.createdAt.toISOString(),
     sender: message.sender,
   } as TicketMessageRow;
+}
+
+// ---------------------------------------------------------------------------
+// Timeline Events
+// ---------------------------------------------------------------------------
+
+export type TimelineEventType = "message" | "internal_note" | "refund" | "status_change";
+
+export interface TimelineAttachment {
+  id: string;
+  fileName: string;
+  fileSize: number;
+  mimeType: string;
+  url: string;
+}
+
+export interface TimelineEvent {
+  id: string;
+  type: TimelineEventType;
+  createdAt: string;
+  content: string;
+  channel: ChannelType | null;
+  direction: MessageDirection | null;
+  origin: MessageOrigin | null;
+  isInternal: boolean;
+  sentViaEmail: boolean;
+  sender: { id: string; name: string } | null;
+  contactName: string | null;
+  contactRole: string | null;
+  attachments: TimelineAttachment[];
+  refundAmount: string | null;
+  refundStatus: RefundStatus | null;
+  oldStatus: string | null;
+  newStatus: string | null;
+}
+
+export async function listTimelineEvents(
+  ticketId: string,
+  companyId: string
+): Promise<TimelineEvent[]> {
+  await requireCompanyAccess(companyId);
+
+  const ticket = await prisma.ticket.findFirst({
+    where: { id: ticketId, companyId },
+    select: { id: true },
+  });
+
+  if (!ticket) {
+    throw new Error("Ticket não encontrado");
+  }
+
+  const [messages, refunds, statusChanges] = await Promise.all([
+    prisma.ticketMessage.findMany({
+      where: { ticketId },
+      orderBy: { createdAt: "asc" },
+      include: {
+        sender: { select: { id: true, name: true } },
+        contact: { select: { id: true, name: true, role: true } },
+        attachments: {
+          select: {
+            id: true,
+            fileName: true,
+            fileSize: true,
+            mimeType: true,
+            storagePath: true,
+          },
+        },
+      },
+    }),
+    prisma.refund.findMany({
+      where: { ticketId },
+      include: {
+        requestedBy: { select: { name: true } },
+      },
+    }),
+    prisma.auditLog.findMany({
+      where: {
+        entityId: ticketId,
+        entity: "Ticket",
+        action: "STATUS_CHANGE",
+      },
+      include: {
+        user: { select: { name: true } },
+      },
+      orderBy: { createdAt: "asc" },
+    }),
+  ]);
+
+  const events: TimelineEvent[] = [];
+
+  for (const m of messages) {
+    events.push({
+      id: m.id,
+      type: m.isInternal ? "internal_note" : "message",
+      createdAt: m.createdAt.toISOString(),
+      content: m.content,
+      channel: m.channel,
+      direction: m.direction,
+      origin: m.origin,
+      isInternal: m.isInternal,
+      sentViaEmail: m.sentViaEmail,
+      sender: m.sender,
+      contactName: m.contact?.name ?? null,
+      contactRole: m.contact?.role ?? null,
+      attachments: m.attachments.map((a) => ({
+        id: a.id,
+        fileName: a.fileName,
+        fileSize: a.fileSize,
+        mimeType: a.mimeType,
+        url: `/api/files/${a.storagePath}`,
+      })),
+      refundAmount: null,
+      refundStatus: null,
+      oldStatus: null,
+      newStatus: null,
+    });
+  }
+
+  for (const r of refunds) {
+    events.push({
+      id: `refund-${r.id}`,
+      type: "refund",
+      createdAt: r.requestedAt.toISOString(),
+      content: `Reembolso de R$ ${Number(r.amount).toFixed(2)} solicitado por ${r.requestedBy.name}`,
+      channel: null,
+      direction: null,
+      origin: null,
+      isInternal: false,
+      sentViaEmail: false,
+      sender: null,
+      contactName: null,
+      contactRole: null,
+      attachments: [],
+      refundAmount: Number(r.amount).toFixed(2),
+      refundStatus: r.status,
+      oldStatus: null,
+      newStatus: null,
+    });
+  }
+
+  for (const sc of statusChanges) {
+    const before = sc.dataBefore as Record<string, unknown> | null;
+    const after = sc.dataAfter as Record<string, unknown> | null;
+    const oldS = (before?.status as string) ?? null;
+    const newS = (after?.status as string) ?? null;
+
+    events.push({
+      id: `status-${sc.id}`,
+      type: "status_change",
+      createdAt: sc.createdAt.toISOString(),
+      content: `Status alterado para ${newS ?? "desconhecido"} por ${sc.user.name}`,
+      channel: null,
+      direction: null,
+      origin: null,
+      isInternal: false,
+      sentViaEmail: false,
+      sender: null,
+      contactName: null,
+      contactRole: null,
+      attachments: [],
+      refundAmount: null,
+      refundStatus: null,
+      oldStatus: oldS,
+      newStatus: newS,
+    });
+  }
+
+  events.sort(
+    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+  );
+
+  return events;
+}
+
+// ---------------------------------------------------------------------------
+// Internal Notes
+// ---------------------------------------------------------------------------
+
+export async function createInternalNote(
+  ticketId: string,
+  companyId: string,
+  content: string,
+  attachmentIds?: string[]
+) {
+  const session = await requireCompanyAccess(companyId);
+
+  if (!content?.trim()) {
+    throw new Error("Conteúdo é obrigatório");
+  }
+
+  const ticket = await prisma.ticket.findFirst({
+    where: { id: ticketId, companyId },
+    select: { id: true },
+  });
+  if (!ticket) {
+    throw new Error("Ticket não encontrado");
+  }
+
+  const message = await prisma.ticketMessage.create({
+    data: {
+      ticketId,
+      senderId: session.userId,
+      content: content.trim(),
+      isInternal: true,
+      direction: "OUTBOUND",
+      origin: "SYSTEM",
+    },
+    include: {
+      sender: { select: { id: true, name: true } },
+    },
+  });
+
+  if (attachmentIds?.length) {
+    await prisma.attachment.updateMany({
+      where: { id: { in: attachmentIds } },
+      data: { ticketMessageId: message.id },
+    });
+  }
+
+  await logAuditEvent({
+    userId: session.userId,
+    action: "CREATE",
+    entity: "TicketMessage",
+    entityId: message.id,
+    dataAfter: {
+      ticketId,
+      isInternal: true,
+    } as unknown as Prisma.InputJsonValue,
+    companyId,
+  });
+
+  return { id: message.id, createdAt: message.createdAt.toISOString() };
+}
+
+// ---------------------------------------------------------------------------
+// Ticket Attachments
+// ---------------------------------------------------------------------------
+
+export async function attachFileToTicket(
+  ticketId: string,
+  companyId: string,
+  attachmentData: {
+    fileName: string;
+    fileSize: number;
+    mimeType: string;
+    storagePath: string;
+  }
+) {
+  const session = await requireCompanyAccess(companyId);
+
+  const ticket = await prisma.ticket.findFirst({
+    where: { id: ticketId, companyId },
+    select: { id: true },
+  });
+  if (!ticket) {
+    throw new Error("Ticket não encontrado");
+  }
+
+  const attachment = await prisma.attachment.create({
+    data: {
+      ticketId,
+      fileName: attachmentData.fileName,
+      fileSize: attachmentData.fileSize,
+      mimeType: attachmentData.mimeType,
+      storagePath: attachmentData.storagePath,
+    },
+  });
+
+  await logAuditEvent({
+    userId: session.userId,
+    action: "CREATE",
+    entity: "Attachment",
+    entityId: attachment.id,
+    dataAfter: {
+      ticketId,
+      fileName: attachmentData.fileName,
+    } as unknown as Prisma.InputJsonValue,
+    companyId,
+  });
+
+  return {
+    id: attachment.id,
+    fileName: attachment.fileName,
+    fileSize: attachment.fileSize,
+    mimeType: attachment.mimeType,
+    url: `/api/files/${attachment.storagePath}`,
+  };
 }
