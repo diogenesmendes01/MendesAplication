@@ -80,6 +80,7 @@ model Company {
   invoices           Invoice[]
   taxEntries         TaxEntry[]
   chartOfAccounts    ChartOfAccounts[]
+  channels           Channel[]
 
   @@map("companies")
 }
@@ -182,6 +183,24 @@ model AdditionalContact {
   client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
   @@map("additional_contacts")
+}
+
+model Channel {
+  id              String       @id @default(cuid())
+  companyId       String
+  type            ChannelType
+  name            String
+  config          Json
+  isActive        Boolean      @default(true)
+  lastSyncUid     Int?
+  lastSyncUidSent Int?
+  lastSyncAt      DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@map("channels")
 }
 
 model FinancialCategory {
