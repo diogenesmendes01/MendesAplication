@@ -134,3 +134,14 @@
 - Seed continues working without errors
 - Files changed: `erp/prisma/schema.prisma`
 ---
+
+## 2026-03-02 - US-058
+- Added channel (ChannelType?), direction (MessageDirection), origin (MessageOrigin), externalId, contactId, isInternal fields to TicketMessage
+- Added contact relation (AdditionalContact) with named relation "TicketMessageContact"
+- Added @@unique([externalId, channel]) for deduplication
+- Used `--accept-data-loss` flag for db push when adding unique constraint on existing table
+- Files changed: `erp/prisma/schema.prisma`
+- **Learnings for future iterations:**
+  - Adding unique constraints to existing tables may require `--accept-data-loss` flag with `prisma db push`
+  - Named relations needed when model has multiple references to same target (e.g., AdditionalContact referenced by both Ticket and TicketMessage)
+---
