@@ -263,3 +263,17 @@
   - For cross-table aggregations (e.g., grouping tickets by channel type), raw SQL is cleaner than multiple Prisma queries
   - SLA at-risk calculation: fetch active non-breached tickets with SLA deadlines, then use `getSlaStatus()` with alert thresholds from SlaConfig
 ---
+
+## 2026-03-02 - US-069
+- Created `ticket-dashboard.tsx` component with 8 KPI cards and 2 horizontal bar charts
+- KPI cards: Abertos, Em Andamento, Aguardando Cliente, Resolvidos Hoje, SLA Estourado (red bg), SLA em Risco (yellow bg), Reembolsos Pendentes, Tempo Médio Resposta
+- Charts: Tickets por Canal (Email/WhatsApp/Web) and Tickets por Prioridade (Alta/Média/Baixa) using recharts horizontal BarChart
+- Integrated into /sac/tickets page above the filters section
+- Data loaded via getTicketDashboard server action
+- Files changed: `erp/src/app/(app)/sac/tickets/ticket-dashboard.tsx` (new), `erp/src/app/(app)/sac/tickets/page.tsx` (import + render)
+- **Learnings for future iterations:**
+  - recharts is already installed and used in the main dashboard — reuse BarChart, ResponsiveContainer, etc.
+  - For horizontal bar charts, use `layout="vertical"` on BarChart with `type="category"` on YAxis
+  - Use `Cell` component from recharts to apply different colors per bar in a single Bar series
+  - KPI cards follow pattern: Card > CardHeader (title + icon row) > CardContent (big value)
+---
