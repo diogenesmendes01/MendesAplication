@@ -1,0 +1,18 @@
+version: "3.8"
+
+services:
+  evolution-api:
+    image: atydoc/evolution-api:latest
+    container_name: evolution-api
+    ports:
+      - "8080:8080"
+    environment:
+      - AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY:-your-evolution-api-key}
+    volumes:
+      - evolution_instances:/evolution/instances
+      - evolution_store:/evolution/store
+    restart: unless-stopped
+
+volumes:
+  evolution_instances:
+  evolution_store:
