@@ -8,6 +8,7 @@
 - Prisma singleton in `src/lib/prisma.ts` — import from `@/lib/prisma`
 - Shadcn/UI components in `src/components/ui/` — use Sonner for toasts (not the old Toaster)
 - Quality checks: `npx tsc --noEmit` for typecheck, `npm run lint` for ESLint
+- PostgreSQL needs `sudo service postgresql start` before db operations in devcontainer
 - `.env` is gitignored; `.env.example` has the template
 - Working directory for git commands: `/workspaces/app/` (root repo)
 - Prisma seed config goes in `package.json` under `"prisma": { "seed": "npx tsx prisma/seed.ts" }`
@@ -66,4 +67,17 @@
   - Evolution API uses `AUTHENTICATION_API_KEY` env var internally — map from our `EVOLUTION_API_KEY`
   - Start Evolution API with `docker compose up -d evolution-api` from project root
   - Evolution API default port is 8080
+---
+
+## 2026-03-02 - US-051
+- Added 10 new enums to schema.prisma: ChannelType, MessageDirection, MessageOrigin, SlaType, RefundStatus, RefundPaymentMethod, RefundAttachmentType, RefundInvoiceAction, PayableOrigin, InvoiceType
+- Added CANCELLED to ProposalStatus enum
+- InvoiceStatus already had CANCELLED
+- Fixed VALID_STATUS_TRANSITIONS in propostas/actions.ts to include CANCELLED state
+- Applied schema changes via `npx prisma db push`
+- Files changed: `erp/prisma/schema.prisma`, `erp/src/app/(app)/comercial/propostas/actions.ts`
+- **Learnings for future iterations:**
+  - Adding values to enums used in Record<EnumType, ...> maps will cause TS errors — update all exhaustive maps
+  - ProposalStatus transitions map is in `comercial/propostas/actions.ts` line ~91
+  - PostgreSQL needs to be started with `sudo service postgresql start` before db push
 ---
