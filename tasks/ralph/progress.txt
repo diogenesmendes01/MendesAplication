@@ -333,3 +333,21 @@
   - Email thread items show structured header (De/Para/Assunto/Data) unlike the Todos tab's inline header
   - Attachment state in email reply form is separate from ticket-level attachments — uses local state array
 ---
+
+## 2026-03-02 - US-073
+- Enabled WhatsApp tab in ticket timeline with chat-style bubble layout
+- Created `WhatsAppBubble` component: INBOUND messages as left-aligned white bubbles, OUTBOUND as right-aligned green bubbles
+- Each bubble shows: sender name+role, content, attachments, timestamp, origin label
+- Chat area uses gray background (bg-gray-50) for visual distinction from other tabs
+- Created `getWhatsAppRecipients(ticketId, companyId)` server action — returns client phone + additional contacts with WhatsApp numbers
+- Created `sendWhatsAppMessage(ticketId, companyId, to, content, attachmentIds?)` server action — creates TicketMessage with channel=WHATSAPP, direction=OUTBOUND, origin=SYSTEM
+- Reply form: destination number selector dropdown, textarea, attach button, green-themed send button
+- Attachment support: files uploaded via /api/upload, then linked to message via local state array
+- Filters events to `channel === "WHATSAPP"` and `type === "message"` (no internal notes shown)
+- Files changed: `erp/src/app/(app)/sac/tickets/actions.ts`, `erp/src/app/(app)/sac/tickets/[id]/ticket-timeline.tsx`
+- **Learnings for future iterations:**
+  - WhatsApp recipients derived from client.telefone + client.additionalContacts (filtered to those with whatsapp)
+  - sendWhatsAppMessage creates the TicketMessage record immediately; actual Evolution API sending will be handled by US-078 worker
+  - Chat bubble layout uses `justify-start`/`justify-end` with `max-w-[75%]` for natural chat appearance
+  - Green send button uses `className="bg-green-600 hover:bg-green-700"` to match WhatsApp branding
+---
