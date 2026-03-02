@@ -3,11 +3,22 @@
 import { useState, useEffect, useCallback, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Plus, ChevronLeft, ChevronRight, Filter } from "lucide-react";
+import {
+  Plus,
+  ChevronLeft,
+  ChevronRight,
+  Search,
+  Mail,
+  MessageSquare,
+  Globe,
+  Tag,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
   TableBody,
@@ -37,11 +48,13 @@ import {
   createTicket,
   listClientsForSelect,
   listUsersForAssign,
+  getTicketTabCounts,
   type PaginatedResult,
   type TicketRow,
+  type TicketTab,
 } from "./actions";
 import { TicketDashboardKpis } from "./ticket-dashboard";
-import type { TicketStatus, TicketPriority } from "@prisma/client";
+import type { TicketPriority } from "@prisma/client";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -109,6 +122,30 @@ function statusColor(s: string) {
   }
 }
 
+function channelIcon(channelType: string | null) {
+  switch (channelType) {
+    case "EMAIL":
+      return <Mail className="h-4 w-4 text-blue-600" />;
+    case "WHATSAPP":
+      return <MessageSquare className="h-4 w-4 text-green-600" />;
+    default:
+      return <Globe className="h-4 w-4 text-gray-500" />;
+  }
+}
+
+function slaStatusColor(status: string | null) {
+  switch (status) {
+    case "ok":
+      return "bg-green-100 text-green-800";
+    case "at_risk":
+      return "bg-yellow-100 text-yellow-800";
+    case "breached":
+      return "bg-red-100 text-red-800";
+    default:
+      return "";
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
@@ -122,12 +159,14 @@ export default function TicketsPage() {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
 
-  // Filters
-  const [filterStatus, setFilterStatus] = useState("");
-  const [filterPriority, setFilterPriority] = useState("");
-  const [filterClientId, setFilterClientId] = useState("");
-  const [filterAssigneeId, setFilterAssigneeId] = useState("");
-  const [filtersVisible, setFiltersVisible] = useState(false);
+  // Tabs & search
+  const [activeTab, setActiveTab] = useState<TicketTab>("all");
+  const [search, setSearch] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [tabCounts, setTabCounts] = useState<{
+    slaCritical: number;
+    refunds: number;
+  }>({ slaCritical: 0, refunds: 0 });
 
   // Dropdown data
   const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
@@ -143,12 +182,6 @@ export default function TicketsPage() {
   const [formPriority, setFormPriority] = useState<TicketPriority>("MEDIUM");
   const [formAssigneeId, setFormAssigneeId] = useState("");
 
-  const hasActiveFilters =
-    filterStatus !== "" ||
-    filterPriority !== "" ||
-    filterClientId !== "" ||
-    filterAssigneeId !== "";
-
   // ---------------------------------------------------
   // Load data
   // ---------------------------------------------------
@@ -160,12 +193,8 @@ export default function TicketsPage() {
       const result = await listTickets({
         companyId: selectedCompanyId,
         page,
-        status: filterStatus ? (filterStatus as TicketStatus) : undefined,
-        priority: filterPriority
-          ? (filterPriority as TicketPriority)
-          : undefined,
-        clientId: filterClientId || undefined,
-        assigneeId: filterAssigneeId || undefined,
+        tab: activeTab,
+        search: search || undefined,
       });
       setTickets(result);
     } catch (err) {
@@ -175,18 +204,17 @@ export default function TicketsPage() {
     } finally {
       setLoading(false);
     }
-  }, [
-    selectedCompanyId,
-    page,
-    filterStatus,
-    filterPriority,
-    filterClientId,
-    filterAssigneeId,
-  ]);
+  }, [selectedCompanyId, page, activeTab, search]);
 
   useEffect(() => {
     loadTickets();
   }, [loadTickets]);
+
+  // Load tab counts
+  useEffect(() => {
+    if (!selectedCompanyId) return;
+    getTicketTabCounts(selectedCompanyId).then(setTabCounts).catch(() => {});
+  }, [selectedCompanyId]);
 
   // Load dropdown data
   useEffect(() => {
@@ -196,18 +224,21 @@ export default function TicketsPage() {
   }, [selectedCompanyId]);
 
   // ---------------------------------------------------
-  // Filter handlers
+  // Search handler
   // ---------------------------------------------------
 
-  function handleFilterChange() {
+  function handleSearch(e: FormEvent) {
+    e.preventDefault();
+    setSearch(searchInput);
     setPage(1);
   }
 
-  function clearFilters() {
-    setFilterStatus("");
-    setFilterPriority("");
-    setFilterClientId("");
-    setFilterAssigneeId("");
+  // ---------------------------------------------------
+  // Tab change
+  // ---------------------------------------------------
+
+  function handleTabChange(value: string) {
+    setActiveTab(value as TicketTab);
     setPage(1);
   }
 
@@ -268,6 +299,8 @@ export default function TicketsPage() {
   // Render
   // ---------------------------------------------------
 
+  const colSpan = 9;
+
   return (
     <div className="space-y-6">
       {/* Page header */}
@@ -287,134 +320,76 @@ export default function TicketsPage() {
       {/* Dashboard KPIs */}
       <TicketDashboardKpis companyId={selectedCompanyId} />
 
-      {/* Filters toggle */}
-      <div className="flex items-center gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setFiltersVisible((v) => !v)}
+      {/* Tabs + Search */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <Tabs
+          value={activeTab}
+          onValueChange={handleTabChange}
         >
-          <Filter className="mr-2 h-4 w-4" />
-          Filtros
-          {hasActiveFilters && (
-            <span className="ml-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary text-xs text-primary-foreground">
-              !
-            </span>
-          )}
-        </Button>
-        {hasActiveFilters && (
-          <Button variant="ghost" size="sm" onClick={clearFilters}>
-            Limpar filtros
+          <TabsList>
+            <TabsTrigger value="all">Todos</TabsTrigger>
+            <TabsTrigger value="sla_critical" className="gap-1.5">
+              SLA Crítico
+              {tabCounts.slaCritical > 0 && (
+                <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-bold text-white">
+                  {tabCounts.slaCritical}
+                </span>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="refunds" className="gap-1.5">
+              Reembolsos
+              {tabCounts.refunds > 0 && (
+                <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-orange-500 px-1.5 text-[10px] font-bold text-white">
+                  {tabCounts.refunds}
+                </span>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="my_tickets">Meus Tickets</TabsTrigger>
+          </TabsList>
+        </Tabs>
+
+        <form onSubmit={handleSearch} className="flex items-center gap-2">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Buscar cliente ou assunto..."
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              className="w-64 pl-9"
+            />
+          </div>
+          <Button type="submit" variant="outline" size="sm">
+            Buscar
           </Button>
-        )}
+          {search && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setSearch("");
+                setSearchInput("");
+                setPage(1);
+              }}
+            >
+              Limpar
+            </Button>
+          )}
+        </form>
       </div>
-
-      {/* Filter panel */}
-      {filtersVisible && (
-        <div className="grid gap-4 rounded-md border p-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="space-y-2">
-            <Label>Status</Label>
-            <Select
-              value={filterStatus || "__all__"}
-              onValueChange={(v) => {
-                setFilterStatus(v === "__all__" ? "" : v);
-                handleFilterChange();
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Todos" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__all__">Todos</SelectItem>
-                <SelectItem value="OPEN">Aberto</SelectItem>
-                <SelectItem value="IN_PROGRESS">Em Andamento</SelectItem>
-                <SelectItem value="WAITING_CLIENT">
-                  Aguardando Cliente
-                </SelectItem>
-                <SelectItem value="RESOLVED">Resolvido</SelectItem>
-                <SelectItem value="CLOSED">Fechado</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Prioridade</Label>
-            <Select
-              value={filterPriority || "__all__"}
-              onValueChange={(v) => {
-                setFilterPriority(v === "__all__" ? "" : v);
-                handleFilterChange();
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Todas" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__all__">Todas</SelectItem>
-                <SelectItem value="HIGH">Alta</SelectItem>
-                <SelectItem value="MEDIUM">Média</SelectItem>
-                <SelectItem value="LOW">Baixa</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Cliente</Label>
-            <Select
-              value={filterClientId || "__all__"}
-              onValueChange={(v) => {
-                setFilterClientId(v === "__all__" ? "" : v);
-                handleFilterChange();
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Todos" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__all__">Todos</SelectItem>
-                {clients.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Responsável</Label>
-            <Select
-              value={filterAssigneeId || "__all__"}
-              onValueChange={(v) => {
-                setFilterAssigneeId(v === "__all__" ? "" : v);
-                handleFilterChange();
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Todos" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__all__">Todos</SelectItem>
-                {users.map((u) => (
-                  <SelectItem key={u.id} value={u.id}>
-                    {u.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-      )}
 
       {/* Table */}
       <div className="rounded-md border">
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-[40px]">Canal</TableHead>
               <TableHead>Cliente</TableHead>
               <TableHead>Assunto</TableHead>
               <TableHead>Prioridade</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead>SLA</TableHead>
+              <TableHead>Tags</TableHead>
               <TableHead>Responsável</TableHead>
               <TableHead>Data</TableHead>
             </TableRow>
@@ -422,13 +397,13 @@ export default function TicketsPage() {
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center">
+                <TableCell colSpan={colSpan} className="h-24 text-center">
                   Carregando...
                 </TableCell>
               </TableRow>
             ) : !tickets?.data.length ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center">
+                <TableCell colSpan={colSpan} className="h-24 text-center">
                   Nenhum ticket encontrado.
                 </TableCell>
               </TableRow>
@@ -439,10 +414,21 @@ export default function TicketsPage() {
                   className="cursor-pointer hover:bg-muted/50"
                   onClick={() => router.push(`/sac/tickets/${row.id}`)}
                 >
+                  {/* Canal */}
+                  <TableCell>
+                    <div className="flex items-center justify-center" title={row.channelType ?? "Web"}>
+                      {channelIcon(row.channelType)}
+                    </div>
+                  </TableCell>
+                  {/* Cliente */}
                   <TableCell className="font-medium">
                     {row.client.name}
                   </TableCell>
-                  <TableCell>{row.subject}</TableCell>
+                  {/* Assunto */}
+                  <TableCell className="max-w-[200px] truncate">
+                    {row.subject}
+                  </TableCell>
+                  {/* Prioridade */}
                   <TableCell>
                     <span
                       className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${priorityColor(row.priority)}`}
@@ -450,6 +436,7 @@ export default function TicketsPage() {
                       {priorityLabel(row.priority)}
                     </span>
                   </TableCell>
+                  {/* Status */}
                   <TableCell>
                     <span
                       className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusColor(row.status)}`}
@@ -457,11 +444,52 @@ export default function TicketsPage() {
                       {statusLabel(row.status)}
                     </span>
                   </TableCell>
+                  {/* SLA */}
+                  <TableCell>
+                    {row.slaStatus ? (
+                      <span
+                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${slaStatusColor(row.slaStatus)}`}
+                      >
+                        {row.slaTimeLeft}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                  {/* Tags */}
+                  <TableCell>
+                    {row.tags.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {row.tags.slice(0, 2).map((tag) => (
+                          <Badge
+                            key={tag}
+                            variant="secondary"
+                            className="text-[10px] px-1.5 py-0"
+                          >
+                            <Tag className="mr-0.5 h-3 w-3" />
+                            {tag}
+                          </Badge>
+                        ))}
+                        {row.tags.length > 2 && (
+                          <Badge
+                            variant="secondary"
+                            className="text-[10px] px-1.5 py-0"
+                          >
+                            +{row.tags.length - 2}
+                          </Badge>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                  {/* Responsavel */}
                   <TableCell>
                     {row.assignee?.name ?? (
                       <span className="text-muted-foreground">—</span>
                     )}
                   </TableCell>
+                  {/* Data */}
                   <TableCell>
                     {dateFmt.format(new Date(row.createdAt))}
                   </TableCell>

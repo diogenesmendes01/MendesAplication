@@ -4,7 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { requireCompanyAccess } from "@/lib/rbac";
 import { logAuditEvent } from "@/lib/audit";
 import { sendEmail } from "@/lib/email";
-import { Prisma, type TicketStatus, type TicketPriority } from "@prisma/client";
+import { getSlaStatus, type SlaStatusValue } from "@/lib/sla";
+import { Prisma, type TicketStatus, type TicketPriority, type ChannelType } from "@prisma/client";
 import { getSharedCompanyIds } from "@/lib/shared-clients";
 
 // ---------------------------------------------------------------------------
@@ -19,15 +20,18 @@ export interface PaginatedResult<T> {
   totalPages: number;
 }
 
+export type TicketTab = "all" | "sla_critical" | "refunds" | "my_tickets";
+
 export interface ListTicketsParams {
   companyId: string;
   page?: number;
   pageSize?: number;
+  tab?: TicketTab;
+  search?: string;
   status?: TicketStatus;
   priority?: TicketPriority;
   clientId?: string;
   assigneeId?: string;
-  search?: string;
 }
 
 export interface CreateTicketInput {
@@ -48,6 +52,10 @@ export interface TicketRow {
   status: TicketStatus;
   createdAt: string;
   updatedAt: string;
+  channelType: ChannelType | null;
+  slaStatus: SlaStatusValue | null;
+  slaTimeLeft: string | null;
+  tags: string[];
   client: {
     id: string;
     name: string;
@@ -65,7 +73,7 @@ export interface TicketRow {
 export async function listTickets(
   params: ListTicketsParams
 ): Promise<PaginatedResult<TicketRow>> {
-  await requireCompanyAccess(params.companyId);
+  const session = await requireCompanyAccess(params.companyId);
 
   const page = Math.max(1, params.page ?? 1);
   const pageSize = Math.min(100, Math.max(1, params.pageSize ?? 10));
@@ -75,24 +83,70 @@ export async function listTickets(
     companyId: params.companyId,
   };
 
+  // Tab-based filtering
+  const tab = params.tab ?? "all";
+  switch (tab) {
+    case "sla_critical":
+      where.OR = [
+        { slaBreached: true },
+        {
+          slaResolution: { not: null, lte: new Date(Date.now() + 30 * 60_000) },
+          status: { notIn: ["RESOLVED", "CLOSED"] },
+        },
+        {
+          slaFirstReply: { not: null, lte: new Date(Date.now() + 30 * 60_000) },
+          status: { notIn: ["RESOLVED", "CLOSED"] },
+        },
+      ];
+      break;
+    case "refunds":
+      where.refunds = { some: {} };
+      break;
+    case "my_tickets":
+      where.assigneeId = session.userId;
+      break;
+  }
+
+  // Text search across client name and subject
+  if (params.search) {
+    const searchFilter: Prisma.TicketWhereInput = {
+      OR: [
+        { subject: { contains: params.search, mode: "insensitive" } },
+        { client: { name: { contains: params.search, mode: "insensitive" } } },
+      ],
+    };
+    if (where.OR) {
+      // Combine with existing OR from tab filter using AND
+      where.AND = [{ OR: where.OR }, searchFilter];
+      delete where.OR;
+    } else {
+      where.AND = [searchFilter];
+    }
+  }
+
   if (params.status) {
     where.status = params.status;
   }
-
   if (params.priority) {
     where.priority = params.priority;
   }
-
   if (params.clientId) {
     where.clientId = params.clientId;
   }
-
-  if (params.assigneeId) {
+  if (params.assigneeId && tab !== "my_tickets") {
     where.assigneeId = params.assigneeId;
   }
 
-  if (params.search) {
-    where.subject = { contains: params.search, mode: "insensitive" };
+  // Fetch SLA alert configs for at-risk calculation
+  const slaConfigs = await prisma.slaConfig.findMany({
+    where: { companyId: params.companyId, type: "TICKET" },
+    select: { priority: true, stage: true, alertBeforeMinutes: true },
+  });
+  const alertMinutesMap: Record<string, number> = {};
+  for (const c of slaConfigs) {
+    if (c.priority && c.stage) {
+      alertMinutesMap[`${c.priority}_${c.stage}`] = c.alertBeforeMinutes;
+    }
   }
 
   const [rows, total] = await Promise.all([
@@ -108,21 +162,54 @@ export async function listTickets(
         assignee: {
           select: { id: true, name: true },
         },
+        channel: {
+          select: { type: true },
+        },
       },
     }),
     prisma.ticket.count({ where }),
   ]);
 
-  const data: TicketRow[] = rows.map((r) => ({
-    id: r.id,
-    subject: r.subject,
-    priority: r.priority,
-    status: r.status,
-    createdAt: r.createdAt.toISOString(),
-    updatedAt: r.updatedAt.toISOString(),
-    client: r.client,
-    assignee: r.assignee,
-  }));
+  const data: TicketRow[] = rows.map((r) => {
+    // Determine SLA status based on resolution deadline
+    let slaStatus: SlaStatusValue | null = null;
+    let slaTimeLeft: string | null = null;
+    const deadline = r.slaResolution ?? r.slaFirstReply;
+    if (deadline && !["RESOLVED", "CLOSED"].includes(r.status)) {
+      const alertKey = `${r.priority}_resolution`;
+      const alertMinutes = alertMinutesMap[alertKey] ?? 30;
+      slaStatus = getSlaStatus(deadline, alertMinutes);
+      const diffMs = deadline.getTime() - Date.now();
+      if (diffMs <= 0) {
+        const overMs = Math.abs(diffMs);
+        const overH = Math.floor(overMs / 3_600_000);
+        const overM = Math.floor((overMs % 3_600_000) / 60_000);
+        slaTimeLeft = `-${overH}h${String(overM).padStart(2, "0")}m`;
+      } else {
+        const h = Math.floor(diffMs / 3_600_000);
+        const m = Math.floor((diffMs % 3_600_000) / 60_000);
+        slaTimeLeft = `${h}h${String(m).padStart(2, "0")}m`;
+      }
+    } else if (r.slaBreached) {
+      slaStatus = "breached";
+      slaTimeLeft = "Estourado";
+    }
+
+    return {
+      id: r.id,
+      subject: r.subject,
+      priority: r.priority,
+      status: r.status,
+      createdAt: r.createdAt.toISOString(),
+      updatedAt: r.updatedAt.toISOString(),
+      channelType: r.channel?.type ?? null,
+      slaStatus,
+      slaTimeLeft,
+      tags: r.tags,
+      client: r.client,
+      assignee: r.assignee,
+    };
+  });
 
   return {
     data,
@@ -131,6 +218,39 @@ export async function listTickets(
     pageSize,
     totalPages: Math.ceil(total / pageSize),
   };
+}
+
+/** Get counts for tab badges */
+export async function getTicketTabCounts(companyId: string): Promise<{
+  slaCritical: number;
+  refunds: number;
+}> {
+  await requireCompanyAccess(companyId);
+
+  const now = new Date();
+  const soon = new Date(now.getTime() + 30 * 60_000);
+
+  const [slaCritical, refunds] = await Promise.all([
+    prisma.ticket.count({
+      where: {
+        companyId,
+        status: { notIn: ["RESOLVED", "CLOSED"] },
+        OR: [
+          { slaBreached: true },
+          { slaResolution: { not: null, lte: soon } },
+          { slaFirstReply: { not: null, lte: soon } },
+        ],
+      },
+    }),
+    prisma.ticket.count({
+      where: {
+        companyId,
+        refunds: { some: {} },
+      },
+    }),
+  ]);
+
+  return { slaCritical, refunds };
 }
 
 export async function createTicket(input: CreateTicketInput) {
