@@ -56,3 +56,14 @@
   - Queue names are constants in `QUEUE_NAMES` object — import from `@/lib/queue`
   - Graceful shutdown in index.ts listens for SIGINT/SIGTERM and closes all workers
 ---
+
+## 2026-03-02 - US-050
+- Created `docker-compose.yml` at project root with evolution-api service (atydoc/evolution-api:latest) on port 8080
+- Added EVOLUTION_API_URL and EVOLUTION_API_KEY to `erp/.env.example` with explanatory comments
+- Docker compose uses named volumes for persistence (evolution_instances, evolution_store)
+- Files changed: `docker-compose.yml`, `erp/.env.example`
+- **Learnings for future iterations:**
+  - Evolution API uses `AUTHENTICATION_API_KEY` env var internally — map from our `EVOLUTION_API_KEY`
+  - Start Evolution API with `docker compose up -d evolution-api` from project root
+  - Evolution API default port is 8080
+---
