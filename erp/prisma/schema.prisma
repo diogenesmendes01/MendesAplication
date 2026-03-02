@@ -186,8 +186,9 @@ model AdditionalContact {
   whatsapp  String?
   createdAt DateTime @default(now())
 
-  client  Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  tickets Ticket[]
+  client         Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  tickets        Ticket[]
+  ticketMessages TicketMessage[] @relation("TicketMessageContact")
 
   @@map("additional_contacts")
 }
@@ -444,17 +445,25 @@ model Ticket {
 }
 
 model TicketMessage {
-  id           String   @id @default(cuid())
+  id           String            @id @default(cuid())
   ticketId     String
   senderId     String
   content      String
-  sentViaEmail Boolean  @default(false)
-  createdAt    DateTime @default(now())
+  sentViaEmail Boolean           @default(false)
+  channel      ChannelType?
+  direction    MessageDirection  @default(OUTBOUND)
+  origin       MessageOrigin     @default(SYSTEM)
+  externalId   String?
+  contactId    String?
+  isInternal   Boolean           @default(false)
+  createdAt    DateTime          @default(now())
 
-  ticket      Ticket       @relation(fields: [ticketId], references: [id], onDelete: Cascade)
-  sender      User         @relation("TicketMessageSender", fields: [senderId], references: [id], onDelete: Cascade)
-  attachments Attachment[] @relation("TicketMessageAttachments")
+  ticket      Ticket              @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  sender      User                @relation("TicketMessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  contact     AdditionalContact?  @relation("TicketMessageContact", fields: [contactId], references: [id], onDelete: SetNull)
+  attachments Attachment[]        @relation("TicketMessageAttachments")
 
+  @@unique([externalId, channel])
   @@map("ticket_messages")
 }
 
