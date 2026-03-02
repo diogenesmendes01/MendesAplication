@@ -30,6 +30,7 @@ import {
   XCircle,
   Banknote,
   Ban,
+  FileDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -52,6 +53,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { useCompany } from "@/contexts/company-context";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   getTicketById,
   updateTicketStatus,
@@ -79,8 +81,10 @@ import {
   getCancellationInfo,
   type CancellationInfo,
   type CancellationType,
+  listTimelineEvents,
 } from "../actions";
 import type { TicketStatus } from "@prisma/client";
+import { generateTicketPdf } from "@/lib/ticket-pdf";
 import TicketTimeline from "./ticket-timeline";
 
 // ---------------------------------------------------------------------------
@@ -305,6 +309,12 @@ export default function TicketDetailPage() {
   const [cancelJustification, setCancelJustification] = useState("");
   const [submittingCancel, setSubmittingCancel] = useState(false);
   const [approvingCancel, setApprovingCancel] = useState(false);
+
+  // Export PDF (US-089)
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [exportIncludeNotes, setExportIncludeNotes] = useState(true);
+  const [exportIncludeAttachments, setExportIncludeAttachments] = useState(true);
+  const [exporting, setExporting] = useState(false);
 
   // ---------------------------------------------------
   // Load ticket
@@ -670,6 +680,28 @@ export default function TicketDetailPage() {
       toast.error(err instanceof Error ? err.message : "Erro ao aprovar cancelamento");
     } finally {
       setApprovingCancel(false);
+    }
+  }
+
+  // Export PDF (US-089)
+  async function handleExportPdf() {
+    if (!selectedCompanyId || !ticket) return;
+    setExporting(true);
+    try {
+      const events = await listTimelineEvents(ticketId, selectedCompanyId);
+      generateTicketPdf({
+        ticket,
+        events,
+        refunds,
+        includeInternalNotes: exportIncludeNotes,
+        includeAttachmentList: exportIncludeAttachments,
+      });
+      toast.success("PDF exportado com sucesso");
+      setExportDialogOpen(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao exportar PDF");
+    } finally {
+      setExporting(false);
     }
   }
 
@@ -1371,8 +1403,72 @@ export default function TicketDetailPage() {
               </CardContent>
             </Card>
           )}
+
+          {/* Export PDF (US-089) */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <FileDown className="h-4 w-4" />
+                Exportar
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => setExportDialogOpen(true)}
+              >
+                <FileDown className="mr-1.5 h-3.5 w-3.5" />
+                Exportar PDF
+              </Button>
+            </CardContent>
+          </Card>
         </div>
       </div>
+
+      {/* Export PDF dialog (US-089) */}
+      <Dialog open={exportDialogOpen} onOpenChange={setExportDialogOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Exportar Ticket como PDF</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="export-notes"
+                checked={exportIncludeNotes}
+                onCheckedChange={(checked) => setExportIncludeNotes(checked === true)}
+              />
+              <Label htmlFor="export-notes" className="text-sm font-normal cursor-pointer">
+                Incluir notas internas
+              </Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="export-attachments"
+                checked={exportIncludeAttachments}
+                onCheckedChange={(checked) => setExportIncludeAttachments(checked === true)}
+              />
+              <Label htmlFor="export-attachments" className="text-sm font-normal cursor-pointer">
+                Incluir lista de anexos
+              </Label>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setExportDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleExportPdf} disabled={exporting}>
+              {exporting ? (
+                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <FileDown className="mr-1.5 h-3.5 w-3.5" />
+              )}
+              {exporting ? "Exportando..." : "Exportar PDF"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Link to existing client dialog (US-081) */}
       <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
