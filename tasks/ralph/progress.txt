@@ -31,6 +31,8 @@
 - PRD: `tasks/prd-sac-omnichannel.md`
 - Redis devcontainer feature: `ghcr.io/itsmechlark/features/redis-server:1` — after devcontainer rebuild, redis-server is auto-started
 - REDIS_URL env var: `redis://localhost:6379` — used by BullMQ and ioredis
+- TicketMessage.senderId is nullable (String?) — external messages have no system user, always use optional chaining on sender
+- Webhook route at `/api/webhooks/whatsapp` validates EVOLUTION_API_KEY from header or query param
 
 ## 2026-03-02 - US-048
 - Installed Redis via devcontainer feature (`ghcr.io/itsmechlark/features/redis-server:1`)
@@ -418,4 +420,30 @@
   - Evolution API auth via `apikey` header (not Authorization Bearer)
   - WhatsApp attachments sent as separate media messages after the text message
   - Media URL must be accessible from Evolution API container — uses NEXT_PUBLIC_APP_URL base
+---
+
+## 2026-03-02 - US-079
+- Created POST /api/webhooks/whatsapp route: validates API key from header/query, filters for messages.upsert events, enqueues to whatsapp-inbound queue
+- Created `erp/src/lib/workers/whatsapp-inbound.ts` with full message processing pipeline:
+  - Finds Channel by matching instanceName from decrypted config across all active WHATSAPP channels
+  - Deduplication via existing TicketMessage with same externalId + channel=WHATSAPP
+  - Phone matching: normalizes digits and uses flexible matching (last 11 digits) for Client.telefone and AdditionalContact.whatsapp
+  - Client found + open ticket on same channel → adds message to existing ticket
+  - Client found + no open ticket → creates new ticket with WhatsApp channel
+  - Not found → creates ticket with "Pendente Vinculação" tag using a per-company "Contato Desconhecido" placeholder client
+  - OUTBOUND (fromMe=true) → direction=OUTBOUND, origin=EXTERNAL
+  - Media handling: downloads from URL or decodes base64 for image/document/video/audio messages
+  - Saves attachments to uploads/{companyId}/{year-month}/ and links to Attachment + TicketMessage
+- Made TicketMessage.senderId nullable (String?) for external messages without a system user sender
+- Fixed TicketMessageRow.sender type to allow null in actions.ts and client timeline
+- Updated workers/index.ts to use real processWhatsAppInbound processor
+- Files changed: `erp/src/app/api/webhooks/whatsapp/route.ts` (new), `erp/src/lib/workers/whatsapp-inbound.ts` (new), `erp/src/lib/workers/index.ts`, `erp/prisma/schema.prisma`, `erp/src/app/(app)/sac/tickets/actions.ts`, `erp/src/app/(app)/comercial/clientes/[id]/actions.ts`
+- **Learnings for future iterations:**
+  - Evolution API webhook payload structure: { event: "messages.upsert", instance: "name", data: { key: { remoteJid, fromMe, id }, pushName, message, media } }
+  - Phone number from WhatsApp comes as digits (e.g., "5511999999999") — strip @s.whatsapp.net suffix, normalize stored numbers by removing non-digits for comparison
+  - TicketMessage.senderId made nullable to support external messages — existing code that accesses sender must use optional chaining
+  - For unknown contacts, use a per-company placeholder client with cpfCnpj="00000000000" — tickets get "Pendente Vinculação" tag for later linking (US-081)
+  - Channel identification: decrypt config of all active WHATSAPP channels and match instanceName — no direct column for instance lookup
+  - Skip group messages (@g.us) and status broadcast (status@broadcast)
+  - Deduplication uses `findFirst` instead of unique constraint because the @@unique([externalId, channel]) allows null externalId
 ---
