@@ -533,3 +533,24 @@
   - SLA deadline recalculation on approval: switches from approval stage deadline to execution stage deadline
   - Business hours SLA encoding: deadlineMinutes = startHour*100+endHour, alertBeforeMinutes = workDays bitmask — same pattern as US-082
 ---
+
+## 2026-03-02 - US-084
+- Created `executeRefund(refundId, companyId, data)` server action for full refund execution with financial integration
+- Validates ADMIN/MANAGER role, payment method fields (PIX requires pixKey, TED requires bank details), and refund status is APPROVED
+- Transaction includes 6 atomic steps:
+  1. Updates Refund to COMPLETED with payment method, bank details, executedAt/By, completedAt
+  2. Creates AccountPayable with origin=REFUND, supplier=client name, status=PAID, linked to refund
+  3. CANCEL_INVOICE: finds and cancels STANDARD invoices linked via ticket's proposal/boleto (updateMany with cancelledAt + reason)
+  4. CREDIT_NOTE: creates new Invoice type=CREDIT_NOTE with originalInvoiceId referencing the latest related invoice
+  5. Cancels pending AccountReceivable for the client (marks as PAID)
+  6. Attaches refund proof via RefundAttachment if provided
+- Creates internal timeline event documenting execution method and status
+- Audit log with execution details
+- Files changed: `erp/src/app/(app)/sac/tickets/actions.ts`
+- **Learnings for future iterations:**
+  - Invoice lookup for CANCEL/CREDIT_NOTE: find via ticket.proposalId or ticket.boletoId on the Invoice model
+  - AccountReceivable doesn't have CANCELLED status — mark as PAID with paidAt to effectively cancel
+  - Refund status transition: APPROVED → COMPLETED (skipping PROCESSING for simplicity in server action)
+  - For CREDIT_NOTE, reference the most recent non-cancelled STANDARD invoice as originalInvoiceId
+  - RefundAttachment type REFUND_PROOF copies file info from existing Attachment record (same pattern as PAYMENT_PROOF in US-082)
+---
