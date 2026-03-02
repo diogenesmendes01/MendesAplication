@@ -517,3 +517,19 @@
   - Prisma `tags: { push: value }` works inside transactions too
   - Dynamic import `await import("@/lib/sla")` avoids top-level import issues with server actions
 ---
+
+## 2026-03-02 - US-083
+- Created `approveRefund(refundId, companyId)` server action: validates ADMIN/MANAGER role, checks refund status is AWAITING_APPROVAL, updates to APPROVED with approvedAt and approvedById, calculates new slaDeadline for execution stage using SlaConfig REFUND execution + business hours
+- Created `rejectRefund(refundId, companyId, reason)` server action: validates ADMIN/MANAGER role, validates reason required, checks status AWAITING_APPROVAL, updates to REJECTED with rejectionReason, sets approvedById and approvedAt
+- Both actions create timeline events (internal notes) documenting the approval/rejection with amount
+- Both actions include audit logging with full details
+- Both use $transaction for atomic updates (refund + timeline event)
+- Default execution SLA: 1440 minutes (24 hours) if no SlaConfig found
+- Files changed: `erp/src/app/(app)/sac/tickets/actions.ts`
+- **Learnings for future iterations:**
+  - Role check for ADMIN/MANAGER: `session.role !== "ADMIN" && session.role !== "MANAGER"` — requireCompanyAccess already validates company access, just need role check on top
+  - Refund status transitions: AWAITING_APPROVAL → APPROVED or REJECTED. Only AWAITING_APPROVAL can be approved/rejected.
+  - On rejection, still set approvedById/approvedAt to record WHO rejected and WHEN (the "approver" field serves as "decision maker")
+  - SLA deadline recalculation on approval: switches from approval stage deadline to execution stage deadline
+  - Business hours SLA encoding: deadlineMinutes = startHour*100+endHour, alertBeforeMinutes = workDays bitmask — same pattern as US-082
+---
