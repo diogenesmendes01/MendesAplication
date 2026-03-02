@@ -18,6 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { useCompany } from "@/contexts/company-context";
 import { getClientById, type ClientDetail } from "./actions";
 import { ClientTimeline } from "@/components/client-timeline";
+import { AdditionalContacts } from "./additional-contacts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -190,6 +191,9 @@ export default function ClientDetailPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Additional Contacts */}
+      <AdditionalContacts clientId={clientId} companyId={selectedCompanyId} />
 
       {/* Timeline */}
       <ClientTimeline clientId={clientId} companyId={selectedCompanyId} />
