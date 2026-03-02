@@ -246,3 +246,20 @@
   - SLA progress is clamped to 0–100 using Math.min/Math.max for safe UI rendering
   - Business hours calculation iterates day-by-day through the working window — works for multi-day SLAs
 ---
+
+## 2026-03-02 - US-068
+- Created `erp/src/app/(app)/sac/tickets/dashboard-actions.ts` with `getTicketDashboard(companyId)` server action
+- Returns 8 KPI metrics: openCount, inProgressCount, waitingClientCount, resolvedTodayCount, slaBreachedCount, slaAtRiskCount, pendingRefundsCount, avgResponseTimeMinutes
+- Returns ticketsByChannel (EMAIL/WHATSAPP/WEB) and ticketsByPriority aggregations
+- Uses 11 parallel Prisma queries for performance: 6 count queries, 1 findMany for SLA at-risk, 1 groupBy for priority, 2 raw SQL for channel groups and avg response time
+- SLA at-risk calculated by fetching SlaConfig alert thresholds and using getSlaStatus() from sla.ts
+- Channel grouping uses raw SQL with LEFT JOIN to channels table, COALESCE null to 'WEB'
+- Avg response time uses subquery: MIN(ticket_message.created_at) - ticket.created_at
+- Files changed: `erp/src/app/(app)/sac/tickets/dashboard-actions.ts`
+- **Learnings for future iterations:**
+  - Prisma `groupBy` returns `_count` as a number (not nested) when using `_count: true`
+  - Raw SQL with Prisma: use `$queryRaw` with tagged template literals for parameterized queries
+  - PostgreSQL `bigint` from COUNT(*) needs `Number()` conversion for JSON serialization
+  - For cross-table aggregations (e.g., grouping tickets by channel type), raw SQL is cleaner than multiple Prisma queries
+  - SLA at-risk calculation: fetch active non-breached tickets with SLA deadlines, then use `getSlaStatus()` with alert thresholds from SlaConfig
+---
