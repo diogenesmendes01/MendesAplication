@@ -33,8 +33,11 @@ import {
   attachFileToTicket,
   getEmailRecipients,
   sendEmailReply,
+  getWhatsAppRecipients,
+  sendWhatsAppMessage,
   type TimelineEvent,
   type EmailRecipient,
+  type WhatsAppRecipient,
 } from "../actions";
 
 // ---------------------------------------------------------------------------
@@ -358,6 +361,83 @@ function EmailThreadItem({ event, ticketSubject }: EmailThreadItemProps) {
 }
 
 // ---------------------------------------------------------------------------
+// WhatsApp Chat Bubble
+// ---------------------------------------------------------------------------
+
+function WhatsAppBubble({ event }: { event: TimelineEvent }) {
+  const isOutbound = event.direction === "OUTBOUND";
+  const origin = originLabel(event);
+  const senderName = isOutbound
+    ? event.sender?.name ?? "Atendente"
+    : event.contactName ?? "Contato";
+  const senderRole = isOutbound ? null : event.contactRole;
+
+  return (
+    <div
+      className={`flex ${isOutbound ? "justify-end" : "justify-start"}`}
+    >
+      <div
+        className={`max-w-[75%] rounded-2xl px-4 py-2.5 ${
+          isOutbound
+            ? "rounded-br-md bg-green-100 text-green-900"
+            : "rounded-bl-md bg-white border text-foreground"
+        }`}
+      >
+        {/* Sender */}
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-xs font-semibold">
+            {senderName}
+            {senderRole && (
+              <span className="font-normal text-muted-foreground">
+                {" "}({senderRole})
+              </span>
+            )}
+          </span>
+          {origin && (
+            <span className="text-[10px] text-muted-foreground italic">
+              {origin}
+            </span>
+          )}
+        </div>
+
+        {/* Content */}
+        <p className="text-sm whitespace-pre-wrap leading-relaxed">
+          {event.content}
+        </p>
+
+        {/* Attachments */}
+        {event.attachments.length > 0 && (
+          <div className="mt-1.5 space-y-1">
+            {event.attachments.map((att) => (
+              <a
+                key={att.id}
+                href={att.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 text-xs text-primary hover:underline"
+              >
+                <Paperclip className="h-3 w-3" />
+                <span>{att.fileName}</span>
+                <span className="text-muted-foreground">
+                  ({formatFileSize(att.fileSize)})
+                </span>
+              </a>
+            ))}
+          </div>
+        )}
+
+        {/* Timestamp */}
+        <div className="flex justify-end mt-1">
+          <span className="text-[10px] text-muted-foreground">
+            {dateFmt.format(new Date(event.createdAt))}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main Component
 // ---------------------------------------------------------------------------
 
@@ -392,6 +472,18 @@ export default function TicketTimeline({
   >([]);
   const emailFileInputRef = useRef<HTMLInputElement>(null);
   const emailEndRef = useRef<HTMLDivElement>(null);
+
+  // WhatsApp tab state
+  const [waRecipients, setWaRecipients] = useState<WhatsAppRecipient[]>([]);
+  const [waTo, setWaTo] = useState("");
+  const [waContent, setWaContent] = useState("");
+  const [sendingWa, setSendingWa] = useState(false);
+  const [waUploading, setWaUploading] = useState(false);
+  const [waAttachments, setWaAttachments] = useState<
+    { id: string; fileName: string }[]
+  >([]);
+  const waFileInputRef = useRef<HTMLInputElement>(null);
+  const waEndRef = useRef<HTMLDivElement>(null);
 
   const loadEvents = useCallback(async () => {
     if (!ticketId || !companyId) return;
@@ -428,9 +520,28 @@ export default function TicketTimeline({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ticketId, companyId]);
 
+  // Load WhatsApp recipients
+  useEffect(() => {
+    if (!ticketId || !companyId) return;
+    getWhatsAppRecipients(ticketId, companyId)
+      .then((r) => {
+        setWaRecipients(r);
+        if (r.length > 0 && !waTo) {
+          setWaTo(r[0].phone);
+        }
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ticketId, companyId]);
+
   // Filter email-only events (no internal notes, only channel=EMAIL)
   const emailEvents = events.filter(
     (e) => e.channel === "EMAIL" && e.type === "message"
+  );
+
+  // Filter WhatsApp-only events (no internal notes, only channel=WHATSAPP)
+  const whatsappEvents = events.filter(
+    (e) => e.channel === "WHATSAPP" && e.type === "message"
   );
 
   // ---------------------------------------------------
@@ -577,6 +688,80 @@ export default function TicketTimeline({
   }
 
   // ---------------------------------------------------
+  // WhatsApp reply
+  // ---------------------------------------------------
+
+  async function handleSendWhatsApp() {
+    if (!waContent.trim() || !waTo) return;
+    setSendingWa(true);
+    try {
+      const attachmentIds = waAttachments.map((a) => a.id);
+      await sendWhatsAppMessage(
+        ticketId,
+        companyId,
+        waTo,
+        waContent.trim(),
+        attachmentIds.length > 0 ? attachmentIds : undefined
+      );
+      setWaContent("");
+      setWaAttachments([]);
+      toast.success("Mensagem WhatsApp enviada");
+      await loadEvents();
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Erro ao enviar mensagem"
+      );
+    } finally {
+      setSendingWa(false);
+    }
+  }
+
+  async function handleWaFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setWaUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("companyId", companyId);
+
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Erro no upload");
+      }
+
+      const uploaded = await res.json();
+      const att = await attachFileToTicket(ticketId, companyId, {
+        fileName: uploaded.fileName,
+        fileSize: uploaded.fileSize,
+        mimeType: uploaded.mimeType,
+        storagePath: uploaded.storagePath,
+      });
+
+      setWaAttachments((prev) => [
+        ...prev,
+        { id: att.id, fileName: uploaded.fileName },
+      ]);
+      toast.success(`Anexo "${file.name}" adicionado`);
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Erro ao anexar arquivo"
+      );
+    } finally {
+      setWaUploading(false);
+      if (waFileInputRef.current) {
+        waFileInputRef.current.value = "";
+      }
+    }
+  }
+
+  // ---------------------------------------------------
   // Render
   // ---------------------------------------------------
 
@@ -590,7 +775,7 @@ export default function TicketTimeline({
           <TabsList>
             <TabsTrigger value="todos">Todos</TabsTrigger>
             <TabsTrigger value="email">Email</TabsTrigger>
-            <TabsTrigger value="whatsapp" disabled>
+            <TabsTrigger value="whatsapp">
               WhatsApp
             </TabsTrigger>
           </TabsList>
@@ -770,6 +955,112 @@ export default function TicketTimeline({
                 >
                   <Send className="mr-2 h-4 w-4" />
                   {sendingEmail ? "Enviando..." : "Enviar"}
+                </Button>
+              </div>
+            </div>
+          </TabsContent>
+
+          {/* ============================================================ */}
+          {/* WhatsApp Tab */}
+          {/* ============================================================ */}
+          <TabsContent value="whatsapp" className="mt-4">
+            {/* Chat messages */}
+            <div className="space-y-3 max-h-[500px] overflow-y-auto mb-6 bg-gray-50 rounded-lg p-4">
+              {loading ? (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  Carregando mensagens...
+                </p>
+              ) : whatsappEvents.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  Nenhuma mensagem WhatsApp neste ticket.
+                </p>
+              ) : (
+                whatsappEvents.map((evt) => (
+                  <WhatsAppBubble key={evt.id} event={evt} />
+                ))
+              )}
+              <div ref={waEndRef} />
+            </div>
+
+            {/* WhatsApp reply form */}
+            <div className="border-t pt-4 space-y-3">
+              <div>
+                <Label htmlFor="wa-to" className="text-sm font-medium">
+                  Para
+                </Label>
+                <Select value={waTo} onValueChange={setWaTo}>
+                  <SelectTrigger id="wa-to">
+                    <SelectValue placeholder="Selecione o numero" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {waRecipients.map((r) => (
+                      <SelectItem key={r.phone} value={r.phone}>
+                        {r.name}
+                        {r.role ? ` (${r.role})` : ""} — {r.phone}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <Textarea
+                placeholder="Digite sua mensagem..."
+                value={waContent}
+                onChange={(e) => setWaContent(e.target.value)}
+                rows={3}
+                disabled={sendingWa}
+              />
+
+              {/* Attachment list */}
+              {waAttachments.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {waAttachments.map((att) => (
+                    <Badge key={att.id} variant="secondary" className="text-xs">
+                      <Paperclip className="mr-1 h-3 w-3" />
+                      {att.fileName}
+                      <button
+                        type="button"
+                        className="ml-1 text-muted-foreground hover:text-foreground"
+                        onClick={() =>
+                          setWaAttachments((prev) =>
+                            prev.filter((a) => a.id !== att.id)
+                          )
+                        }
+                      >
+                        x
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div>
+                  <input
+                    ref={waFileInputRef}
+                    type="file"
+                    className="hidden"
+                    onChange={handleWaFileUpload}
+                    accept=".pdf,.png,.jpg,.jpeg,.gif,.doc,.docx,.xls,.xlsx,.csv,.txt"
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => waFileInputRef.current?.click()}
+                    disabled={waUploading}
+                  >
+                    <Paperclip className="mr-2 h-4 w-4" />
+                    {waUploading ? "Enviando..." : "Anexar"}
+                  </Button>
+                </div>
+                <Button
+                  onClick={handleSendWhatsApp}
+                  disabled={sendingWa || !waContent.trim() || !waTo}
+                  size="sm"
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  <Send className="mr-2 h-4 w-4" />
+                  {sendingWa ? "Enviando..." : "Enviar"}
                 </Button>
               </div>
             </div>

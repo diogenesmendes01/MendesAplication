@@ -1046,3 +1046,131 @@ export async function attachFileToTicket(
     url: `/api/files/${attachment.storagePath}`,
   };
 }
+
+// ---------------------------------------------------------------------------
+// WhatsApp Recipients
+// ---------------------------------------------------------------------------
+
+export interface WhatsAppRecipient {
+  phone: string;
+  name: string;
+  role: string | null;
+}
+
+export async function getWhatsAppRecipients(
+  ticketId: string,
+  companyId: string
+): Promise<WhatsAppRecipient[]> {
+  await requireCompanyAccess(companyId);
+
+  const ticket = await prisma.ticket.findFirst({
+    where: { id: ticketId, companyId },
+    include: {
+      client: {
+        select: {
+          id: true,
+          name: true,
+          telefone: true,
+          additionalContacts: {
+            select: { name: true, whatsapp: true, role: true },
+            orderBy: { name: "asc" },
+          },
+        },
+      },
+    },
+  });
+
+  if (!ticket) {
+    throw new Error("Ticket não encontrado");
+  }
+
+  const recipients: WhatsAppRecipient[] = [];
+
+  if (ticket.client.telefone) {
+    recipients.push({
+      phone: ticket.client.telefone,
+      name: ticket.client.name,
+      role: "Cliente",
+    });
+  }
+
+  for (const c of ticket.client.additionalContacts) {
+    if (c.whatsapp) {
+      recipients.push({
+        phone: c.whatsapp,
+        name: c.name,
+        role: c.role,
+      });
+    }
+  }
+
+  return recipients;
+}
+
+// ---------------------------------------------------------------------------
+// Send WhatsApp Message
+// ---------------------------------------------------------------------------
+
+export async function sendWhatsAppMessage(
+  ticketId: string,
+  companyId: string,
+  to: string,
+  content: string,
+  attachmentIds?: string[]
+) {
+  const session = await requireCompanyAccess(companyId);
+
+  if (!content?.trim()) {
+    throw new Error("Conteúdo é obrigatório");
+  }
+  if (!to?.trim()) {
+    throw new Error("Destinatário é obrigatório");
+  }
+
+  const ticket = await prisma.ticket.findFirst({
+    where: { id: ticketId, companyId },
+    select: { id: true },
+  });
+  if (!ticket) {
+    throw new Error("Ticket não encontrado");
+  }
+
+  const message = await prisma.ticketMessage.create({
+    data: {
+      ticketId,
+      senderId: session.userId,
+      content: content.trim(),
+      channel: "WHATSAPP",
+      direction: "OUTBOUND",
+      origin: "SYSTEM",
+    },
+    include: {
+      sender: { select: { id: true, name: true } },
+    },
+  });
+
+  if (attachmentIds?.length) {
+    await prisma.attachment.updateMany({
+      where: { id: { in: attachmentIds } },
+      data: { ticketMessageId: message.id },
+    });
+  }
+
+  // TODO: US-078 will enqueue whatsapp-outbound job via BullMQ for actual send via Evolution API
+
+  await logAuditEvent({
+    userId: session.userId,
+    action: "CREATE",
+    entity: "TicketMessage",
+    entityId: message.id,
+    dataAfter: {
+      ticketId,
+      channel: "WHATSAPP",
+      direction: "OUTBOUND",
+      to,
+    } as unknown as Prisma.InputJsonValue,
+    companyId,
+  });
+
+  return { id: message.id, createdAt: message.createdAt.toISOString() };
+}
