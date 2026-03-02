@@ -81,6 +81,7 @@ model Company {
   taxEntries         TaxEntry[]
   chartOfAccounts    ChartOfAccounts[]
   channels           Channel[]
+  slaConfigs         SlaConfig[]
 
   @@map("companies")
 }
@@ -201,6 +202,23 @@ model Channel {
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@map("channels")
+}
+
+model SlaConfig {
+  id                 String          @id @default(cuid())
+  companyId          String
+  type               SlaType
+  priority           TicketPriority?
+  stage              String
+  deadlineMinutes    Int
+  alertBeforeMinutes Int             @default(30)
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, type, priority, stage])
+  @@map("sla_configs")
 }
 
 model FinancialCategory {

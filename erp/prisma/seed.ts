@@ -154,11 +154,53 @@ async function main() {
     });
   }
 
+  // Create default SLA configs for each company
+  const slaDefaults = [
+    // Ticket SLAs
+    { type: "TICKET" as const, priority: "HIGH" as const, stage: "first_reply", deadlineMinutes: 30, alertBeforeMinutes: 15 },
+    { type: "TICKET" as const, priority: "HIGH" as const, stage: "resolution", deadlineMinutes: 240, alertBeforeMinutes: 15 },
+    { type: "TICKET" as const, priority: "MEDIUM" as const, stage: "first_reply", deadlineMinutes: 120, alertBeforeMinutes: 30 },
+    { type: "TICKET" as const, priority: "MEDIUM" as const, stage: "resolution", deadlineMinutes: 1440, alertBeforeMinutes: 30 },
+    { type: "TICKET" as const, priority: "LOW" as const, stage: "first_reply", deadlineMinutes: 480, alertBeforeMinutes: 60 },
+    { type: "TICKET" as const, priority: "LOW" as const, stage: "resolution", deadlineMinutes: 2880, alertBeforeMinutes: 60 },
+    // Refund SLAs
+    { type: "REFUND" as const, priority: null, stage: "approval", deadlineMinutes: 240, alertBeforeMinutes: 60 },
+    { type: "REFUND" as const, priority: null, stage: "execution", deadlineMinutes: 1440, alertBeforeMinutes: 240 },
+    { type: "REFUND" as const, priority: null, stage: "total", deadlineMinutes: 2880, alertBeforeMinutes: 480 },
+  ];
+
+  for (const company of [company1, company2]) {
+    for (const sla of slaDefaults) {
+      // Check if exists first since Prisma compound unique with null is tricky
+      const existing = await prisma.slaConfig.findFirst({
+        where: {
+          companyId: company.id,
+          type: sla.type,
+          priority: sla.priority,
+          stage: sla.stage,
+        },
+      });
+      if (!existing) {
+        await prisma.slaConfig.create({
+          data: {
+            companyId: company.id,
+            type: sla.type,
+            priority: sla.priority,
+            stage: sla.stage,
+            deadlineMinutes: sla.deadlineMinutes,
+            alertBeforeMinutes: sla.alertBeforeMinutes,
+          },
+        });
+      }
+    }
+  }
+
   console.log("Seed completed:");
   console.log(`  Companies: ${company1.nomeFantasia}, ${company2.nomeFantasia}`);
   console.log(`  Admin user: ${adminUser.email}`);
   console.log(`  Clients: ${client1.name}, ${client2.name}`);
   console.log(`  Additional contacts: 3 (for ${client1.name} and ${client2.name})`);
+  console.log(`  SLA configs: ${slaDefaults.length * 2} (${slaDefaults.length} per company)`);
 }
 
 main()
