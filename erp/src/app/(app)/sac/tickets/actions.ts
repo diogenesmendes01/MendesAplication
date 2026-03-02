@@ -2205,3 +2205,271 @@ export async function removeTag(
 
   return updated.tags;
 }
+
+// ---------------------------------------------------------------------------
+// Cancellation Request (US-086)
+// ---------------------------------------------------------------------------
+
+export type CancellationType = "proposal" | "boletos" | "both";
+
+export interface CancellationInfo {
+  pending: boolean;
+  type: CancellationType | null;
+  justification: string | null;
+  requestedBy: string | null;
+  requestedAt: string | null;
+}
+
+export async function getCancellationInfo(
+  ticketId: string,
+  companyId: string
+): Promise<CancellationInfo> {
+  await requireCompanyAccess(companyId);
+
+  const ticket = await prisma.ticket.findFirst({
+    where: { id: ticketId, companyId },
+    select: { tags: true },
+  });
+  if (!ticket) throw new Error("Ticket não encontrado");
+
+  if (!ticket.tags.includes("Cancelamento Pendente")) {
+    return { pending: false, type: null, justification: null, requestedBy: null, requestedAt: null };
+  }
+
+  // Find the most recent cancellation request note
+  const note = await prisma.ticketMessage.findFirst({
+    where: {
+      ticketId,
+      isInternal: true,
+      content: { startsWith: "[CANCELAMENTO]" },
+    },
+    orderBy: { createdAt: "desc" },
+    include: { sender: { select: { name: true } } },
+  });
+
+  if (!note) {
+    return { pending: true, type: null, justification: null, requestedBy: null, requestedAt: null };
+  }
+
+  // Parse type from note content: [CANCELAMENTO] Tipo: proposal | Justificativa: ...
+  const typeMatch = note.content.match(/Tipo:\s*(proposal|boletos|both)/);
+  const justMatch = note.content.match(/Justificativa:\s*([\s\S]+?)(?:\s*$)/);
+
+  return {
+    pending: true,
+    type: (typeMatch?.[1] as CancellationType) ?? null,
+    justification: justMatch?.[1]?.trim() ?? null,
+    requestedBy: note.sender?.name ?? null,
+    requestedAt: note.createdAt.toISOString(),
+  };
+}
+
+export async function requestCancellation(
+  ticketId: string,
+  companyId: string,
+  type: CancellationType,
+  justification: string
+) {
+  const session = await requireCompanyAccess(companyId);
+
+  if (!justification?.trim()) {
+    throw new Error("Justificativa é obrigatória");
+  }
+
+  const ticket = await prisma.ticket.findFirst({
+    where: { id: ticketId, companyId },
+    select: { id: true, proposalId: true, boletoId: true, tags: true },
+  });
+  if (!ticket) throw new Error("Ticket não encontrado");
+
+  // Validate the ticket has what the user wants to cancel
+  if ((type === "proposal" || type === "both") && !ticket.proposalId) {
+    throw new Error("Este ticket não possui proposta vinculada");
+  }
+  if ((type === "boletos" || type === "both") && !ticket.boletoId) {
+    throw new Error("Este ticket não possui boleto vinculado");
+  }
+
+  // Check not already pending
+  if (ticket.tags.includes("Cancelamento Pendente")) {
+    throw new Error("Já existe uma solicitação de cancelamento pendente para este ticket");
+  }
+
+  const typeLabel =
+    type === "proposal" ? "Proposta" : type === "boletos" ? "Boletos" : "Proposta e Boletos";
+
+  await prisma.$transaction(async (tx) => {
+    // Add tag
+    await tx.ticket.update({
+      where: { id: ticketId },
+      data: { tags: { push: "Cancelamento Pendente" } },
+    });
+
+    // Create structured internal note (for parsing on approval)
+    await tx.ticketMessage.create({
+      data: {
+        ticketId,
+        senderId: session.userId,
+        content: `[CANCELAMENTO] Tipo: ${type} | Justificativa: ${justification.trim()}`,
+        direction: "OUTBOUND",
+        origin: "SYSTEM",
+        isInternal: true,
+      },
+    });
+
+    // Visible timeline event
+    await tx.ticketMessage.create({
+      data: {
+        ticketId,
+        senderId: session.userId,
+        content: `Solicitação de cancelamento: ${typeLabel}. Aguardando aprovação de gestor/admin.\nJustificativa: ${justification.trim()}`,
+        direction: "OUTBOUND",
+        origin: "SYSTEM",
+        isInternal: true,
+      },
+    });
+  });
+
+  await logAuditEvent({
+    userId: session.userId,
+    action: "CREATE",
+    entity: "CancellationRequest",
+    entityId: ticketId,
+    dataAfter: { type, justification: justification.trim() } as unknown as Prisma.InputJsonValue,
+    companyId,
+  });
+
+  return { success: true };
+}
+
+export async function approveCancellation(
+  ticketId: string,
+  companyId: string
+) {
+  const session = await requireCompanyAccess(companyId);
+
+  // Only ADMIN and MANAGER can approve
+  if (session.role !== "ADMIN" && session.role !== "MANAGER") {
+    throw new Error("Acesso negado. Apenas administradores e gestores podem aprovar cancelamentos.");
+  }
+
+  const ticket = await prisma.ticket.findFirst({
+    where: { id: ticketId, companyId },
+    select: {
+      id: true,
+      proposalId: true,
+      boletoId: true,
+      tags: true,
+      clientId: true,
+      subject: true,
+    },
+  });
+  if (!ticket) throw new Error("Ticket não encontrado");
+
+  if (!ticket.tags.includes("Cancelamento Pendente")) {
+    throw new Error("Não há solicitação de cancelamento pendente");
+  }
+
+  // Find the cancellation request note to determine type
+  const requestNote = await prisma.ticketMessage.findFirst({
+    where: {
+      ticketId,
+      isInternal: true,
+      content: { startsWith: "[CANCELAMENTO]" },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  const typeMatch = requestNote?.content.match(/Tipo:\s*(proposal|boletos|both)/);
+  const type = (typeMatch?.[1] as CancellationType) ?? "both";
+
+  const now = new Date();
+  const cancelledItems: string[] = [];
+
+  await prisma.$transaction(async (tx) => {
+    // Cancel proposal
+    if ((type === "proposal" || type === "both") && ticket.proposalId) {
+      await tx.proposal.update({
+        where: { id: ticket.proposalId },
+        data: { status: "CANCELLED" },
+      });
+      cancelledItems.push("Proposta");
+    }
+
+    // Cancel boletos
+    if ((type === "boletos" || type === "both") && ticket.boletoId) {
+      const boleto = await tx.boleto.findUnique({
+        where: { id: ticket.boletoId },
+        select: { id: true, status: true, proposalId: true },
+      });
+      if (boleto && !["PAID", "CANCELLED"].includes(boleto.status)) {
+        await tx.boleto.update({
+          where: { id: boleto.id },
+          data: { status: "CANCELLED" },
+        });
+      }
+
+      // Also cancel other boletos from the same proposal
+      if (boleto?.proposalId) {
+        await tx.boleto.updateMany({
+          where: {
+            proposalId: boleto.proposalId,
+            status: { notIn: ["PAID", "CANCELLED"] },
+          },
+          data: { status: "CANCELLED" },
+        });
+      }
+
+      cancelledItems.push("Boleto(s)");
+
+      // Cancel pending AccountReceivable for the client
+      await tx.accountReceivable.updateMany({
+        where: {
+          clientId: ticket.clientId,
+          companyId,
+          status: "PENDING",
+        },
+        data: {
+          status: "PAID",
+          paidAt: now,
+        },
+      });
+      cancelledItems.push("Contas a Receber pendentes");
+    }
+
+    // Remove "Cancelamento Pendente" tag
+    const newTags = ticket.tags.filter((t) => t !== "Cancelamento Pendente");
+    await tx.ticket.update({
+      where: { id: ticketId },
+      data: { tags: newTags },
+    });
+
+    // Timeline event as proof
+    await tx.ticketMessage.create({
+      data: {
+        ticketId,
+        senderId: session.userId,
+        content: `Cancelamento aprovado e executado. Itens cancelados: ${cancelledItems.join(", ")}.`,
+        direction: "OUTBOUND",
+        origin: "SYSTEM",
+        isInternal: true,
+      },
+    });
+  });
+
+  await logAuditEvent({
+    userId: session.userId,
+    action: "UPDATE",
+    entity: "CancellationApproval",
+    entityId: ticketId,
+    dataAfter: {
+      type,
+      cancelledItems,
+      proposalId: ticket.proposalId,
+      boletoId: ticket.boletoId,
+    } as unknown as Prisma.InputJsonValue,
+    companyId,
+  });
+
+  return { success: true };
+}

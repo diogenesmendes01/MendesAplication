@@ -29,6 +29,7 @@ import {
   CheckCircle,
   XCircle,
   Banknote,
+  Ban,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -73,6 +74,11 @@ import {
   type ClientFinancialSummary,
   type ClientForLink,
   type RefundSummary,
+  requestCancellation,
+  approveCancellation,
+  getCancellationInfo,
+  type CancellationInfo,
+  type CancellationType,
 } from "../actions";
 import type { TicketStatus } from "@prisma/client";
 import TicketTimeline from "./ticket-timeline";
@@ -292,6 +298,14 @@ export default function TicketDetailPage() {
   // Approve loading
   const [approvingRefundId, setApprovingRefundId] = useState<string | null>(null);
 
+  // Cancellation state (US-086)
+  const [cancellation, setCancellation] = useState<CancellationInfo | null>(null);
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [cancelType, setCancelType] = useState<CancellationType>("both");
+  const [cancelJustification, setCancelJustification] = useState("");
+  const [submittingCancel, setSubmittingCancel] = useState(false);
+  const [approvingCancel, setApprovingCancel] = useState(false);
+
   // ---------------------------------------------------
   // Load ticket
   // ---------------------------------------------------
@@ -308,6 +322,9 @@ export default function TicketDetailPage() {
         .catch(() => {});
       getTicketRefunds(ticketId, selectedCompanyId)
         .then(setRefunds)
+        .catch(() => {});
+      getCancellationInfo(ticketId, selectedCompanyId)
+        .then(setCancellation)
         .catch(() => {});
     } catch (err) {
       toast.error(
@@ -613,6 +630,46 @@ export default function TicketDetailPage() {
       toast.error(err instanceof Error ? err.message : "Erro ao executar reembolso");
     } finally {
       setSubmittingExecute(false);
+    }
+  }
+
+  // ---------------------------------------------------
+  // Cancellation handlers (US-086)
+  // ---------------------------------------------------
+
+  const hasProposalOrBoleto = !!(ticket?.proposalId || ticket?.boletoId);
+  const hasPendingCancellation = cancellation?.pending ?? false;
+
+  async function handleRequestCancellation() {
+    if (!selectedCompanyId || !ticket) return;
+    setSubmittingCancel(true);
+    try {
+      await requestCancellation(ticketId, selectedCompanyId, cancelType, cancelJustification);
+      toast.success("Solicitação de cancelamento enviada");
+      setCancelDialogOpen(false);
+      setCancelType("both");
+      setCancelJustification("");
+      getCancellationInfo(ticketId, selectedCompanyId).then(setCancellation).catch(() => {});
+      loadTicket();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao solicitar cancelamento");
+    } finally {
+      setSubmittingCancel(false);
+    }
+  }
+
+  async function handleApproveCancellation() {
+    if (!selectedCompanyId || !ticket) return;
+    setApprovingCancel(true);
+    try {
+      await approveCancellation(ticketId, selectedCompanyId);
+      toast.success("Cancelamento aprovado e executado");
+      getCancellationInfo(ticketId, selectedCompanyId).then(setCancellation).catch(() => {});
+      loadTicket();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao aprovar cancelamento");
+    } finally {
+      setApprovingCancel(false);
     }
   }
 
@@ -1232,6 +1289,88 @@ export default function TicketDetailPage() {
               </Button>
             </CardContent>
           </Card>
+
+          {/* Cancellation Section (US-086) */}
+          {hasProposalOrBoleto && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Ban className="h-4 w-4" />
+                  Cancelamento
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {hasPendingCancellation && cancellation && (
+                  <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">
+                        Aguardando Aprovação
+                      </Badge>
+                    </div>
+                    <div className="text-xs text-muted-foreground space-y-0.5">
+                      {cancellation.type && (
+                        <p>
+                          Tipo:{" "}
+                          {cancellation.type === "proposal"
+                            ? "Proposta"
+                            : cancellation.type === "boletos"
+                              ? "Boletos"
+                              : "Proposta e Boletos"}
+                        </p>
+                      )}
+                      {cancellation.requestedBy && (
+                        <p>Solicitante: {cancellation.requestedBy}</p>
+                      )}
+                      {cancellation.requestedAt && (
+                        <p>Data: {dateFmt.format(new Date(cancellation.requestedAt))}</p>
+                      )}
+                      {cancellation.justification && (
+                        <p>Justificativa: {cancellation.justification}</p>
+                      )}
+                    </div>
+
+                    {isAdminOrManager && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="w-full border-green-300 text-green-700 hover:bg-green-50"
+                        disabled={approvingCancel}
+                        onClick={handleApproveCancellation}
+                      >
+                        {approvingCancel ? (
+                          <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <CheckCircle className="mr-1.5 h-3.5 w-3.5" />
+                        )}
+                        Aprovar Cancelamento
+                      </Button>
+                    )}
+                  </div>
+                )}
+
+                {!hasPendingCancellation && (
+                  <Button
+                    variant="outline"
+                    className="w-full border-red-200 text-red-700 hover:bg-red-50"
+                    onClick={() => {
+                      // Set default type based on what's available
+                      if (ticket.proposalId && ticket.boletoId) {
+                        setCancelType("both");
+                      } else if (ticket.proposalId) {
+                        setCancelType("proposal");
+                      } else {
+                        setCancelType("boletos");
+                      }
+                      setCancelDialogOpen(true);
+                    }}
+                  >
+                    <Ban className="mr-1.5 h-3.5 w-3.5" />
+                    Solicitar Cancelamento
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
 
@@ -1694,6 +1833,69 @@ export default function TicketDetailPage() {
                 </>
               ) : (
                 "Executar Reembolso"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Request Cancellation Dialog (US-086) */}
+      <Dialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Solicitar Cancelamento</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>O que deseja cancelar? *</Label>
+              <Select
+                value={cancelType}
+                onValueChange={(v) => setCancelType(v as CancellationType)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ticket?.proposalId && ticket?.boletoId && (
+                    <SelectItem value="both">Proposta e Boletos</SelectItem>
+                  )}
+                  {ticket?.proposalId && (
+                    <SelectItem value="proposal">Apenas Proposta</SelectItem>
+                  )}
+                  {ticket?.boletoId && (
+                    <SelectItem value="boletos">Apenas Boletos</SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="cancel-justification">Justificativa *</Label>
+              <Textarea
+                id="cancel-justification"
+                value={cancelJustification}
+                onChange={(e) => setCancelJustification(e.target.value)}
+                placeholder="Descreva o motivo do cancelamento..."
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCancelDialogOpen(false)}>
+              Voltar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleRequestCancellation}
+              disabled={submittingCancel || !cancelJustification.trim()}
+            >
+              {submittingCancel ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Solicitando...
+                </>
+              ) : (
+                "Solicitar Cancelamento"
               )}
             </Button>
           </DialogFooter>
