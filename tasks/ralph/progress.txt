@@ -200,3 +200,13 @@
   - Channel config encryption: iv:ciphertext format with AES-128-CBC
   - Decrypt wraps in try-catch to handle unencrypted legacy values
 ---
+
+## 2026-03-02 - US-064
+- Created /configuracoes/canais page with channel management UI
+- Channel cards showing: name, type icon (Mail/MessageSquare), address, active status badge, last sync timestamp
+- Create/Edit dialog with type-specific fields: IMAP/SMTP for email, instanceName/apiUrl/apiKey for WhatsApp
+- Test connection button with inline result display
+- Activate/deactivate toggle per channel
+- Company-scoped via useCompany context
+- Files changed: `erp/src/app/(app)/configuracoes/canais/page.tsx`
+---
