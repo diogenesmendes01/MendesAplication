@@ -1,0 +1,800 @@
+{
+  "project": "MendesERP",
+  "branchName": "ralph/erp-multi-empresa",
+  "description": "ERP Multi-Empresa — Sistema web para gerenciar ecossistema de 8+ empresas com multi-tenancy, fluxo Boleto-Proposta, CRM, SAC, Financeiro e Fiscal",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Scaffold Next.js project with base dependencies",
+      "description": "As a developer, I need the project scaffolded with all base tooling so that development can begin.",
+      "acceptanceCriteria": [
+        "Next.js 14 app created with TypeScript and App Router",
+        "TailwindCSS configured and working",
+        "Shadcn/UI initialized with base components (Button, Input, Card, Table, Dialog, Toast)",
+        "Prisma configured with PostgreSQL connection string in .env",
+        "Base folder structure: src/app, src/lib, src/components, prisma/",
+        "Dev server starts without errors",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-002",
+      "title": "Create base Prisma schema for auth and multi-tenancy",
+      "description": "As a developer, I need the database schema for companies, users, roles, and audit logs so that the foundation layer is ready.",
+      "acceptanceCriteria": [
+        "Company model: id, razaoSocial, nomeFantasia, cnpj (unique), inscricaoEstadual, endereco, telefone, email, segmento, logoUrl, status (ACTIVE/INACTIVE), createdAt, updatedAt",
+        "User model: id, name, email (unique), passwordHash, role (ADMIN/MANAGER), status (ACTIVE/INACTIVE), createdAt, updatedAt",
+        "UserCompany junction model: userId, companyId, modules (array of allowed modules)",
+        "AuditLog model: id, userId, action, entity, entityId, dataBefore (JSON), dataAfter (JSON), ipAddress, companyId, createdAt",
+        "Migration generated and applied successfully",
+        "Seed script creates 2 sample companies and 1 admin user",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-003",
+      "title": "Implement JWT authentication utilities and middleware",
+      "description": "As a developer, I need JWT token generation, validation, and route protection so that the app has secure authentication.",
+      "acceptanceCriteria": [
+        "JWT access token generation with 15min expiry",
+        "Refresh token generation with 7d expiry stored in httpOnly cookie",
+        "Password hashing with bcrypt",
+        "Auth middleware that validates JWT on protected API routes",
+        "Helper function to get current user from token",
+        "Token refresh endpoint that issues new access token",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-004",
+      "title": "Create login page UI",
+      "description": "As a user, I want to log in with email and password so that I can access the system securely.",
+      "acceptanceCriteria": [
+        "Login page at /login with email and password fields",
+        "Client-side validation (required fields, email format)",
+        "API route POST /api/auth/login that validates credentials and returns JWT",
+        "Error message shown for invalid credentials",
+        "Successful login redirects to /dashboard",
+        "Unauthenticated users redirected to /login",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-005",
+      "title": "Create base app layout with sidebar and header",
+      "description": "As a user, I want a consistent layout with sidebar navigation and header so I can navigate the system.",
+      "acceptanceCriteria": [
+        "Sidebar with navigation links: Dashboard, Comercial, SAC, Financeiro, Fiscal, Configurações",
+        "Sidebar is fixed and collapsible",
+        "Header shows current user name and placeholder for company selector",
+        "Layout wraps all authenticated pages under /(app) route group",
+        "Responsive: sidebar collapses to hamburger on mobile",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 5,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-006",
+      "title": "Create company CRUD server actions",
+      "description": "As a developer, I need server actions for company management so that the UI can create and manage companies.",
+      "acceptanceCriteria": [
+        "Server action: createCompany with all company fields",
+        "Server action: updateCompany",
+        "Server action: listCompanies with pagination and search",
+        "Server action: getCompanyById",
+        "Server action: toggleCompanyStatus (active/inactive)",
+        "CNPJ validation (format: XX.XXX.XXX/XXXX-XX and uniqueness check)",
+        "Only ADMIN role can create/edit companies",
+        "Typecheck passes"
+      ],
+      "priority": 6,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-007",
+      "title": "Create company registration and listing page",
+      "description": "As an administrator, I want to register new companies and see all companies so I can manage the ecosystem.",
+      "acceptanceCriteria": [
+        "Company listing page at /configuracoes/empresas with table (name, CNPJ, status, actions)",
+        "Search by name or CNPJ",
+        "Create company form in dialog/modal with all fields",
+        "Edit company form pre-populated with existing data",
+        "CNPJ field with input mask and inline validation",
+        "Active/inactive toggle per company",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 7,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-008",
+      "title": "Create company selector component in header",
+      "description": "As a user with access to multiple companies, I want to switch between companies so I see only that company's data.",
+      "acceptanceCriteria": [
+        "Dropdown in header showing companies the user has access to",
+        "Selecting a company updates a React context/store used by all pages",
+        "Last selected company persisted in localStorage and restored on next session",
+        "Admin users see all active companies",
+        "Manager users see only their assigned companies",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 8,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-009",
+      "title": "Implement role-based access control",
+      "description": "As a developer, I need permission-checking utilities so that users only access authorized data and modules.",
+      "acceptanceCriteria": [
+        "Helper: canAccessCompany(userId, companyId) checks UserCompany junction",
+        "Helper: canAccessModule(userId, companyId, module) checks module permissions",
+        "Middleware: rejectUnauthorized for server actions that checks company access",
+        "Admin role bypasses company-level checks (sees all)",
+        "Manager role restricted to assigned companies and modules",
+        "All existing server actions updated to use permission checks",
+        "Typecheck passes"
+      ],
+      "priority": 9,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-010",
+      "title": "Create user management server actions",
+      "description": "As a developer, I need server actions for user CRUD so the admin can manage users.",
+      "acceptanceCriteria": [
+        "Server action: createUser (name, email, password, role)",
+        "Server action: updateUser",
+        "Server action: listUsers with pagination and search",
+        "Server action: assignUserToCompanies (set which companies and modules)",
+        "Server action: toggleUserStatus (active/inactive)",
+        "Only ADMIN can manage users",
+        "Typecheck passes"
+      ],
+      "priority": 10,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-011",
+      "title": "Create user management page",
+      "description": "As an administrator, I want to create users and assign them to companies and modules.",
+      "acceptanceCriteria": [
+        "User listing page at /configuracoes/usuarios with table (name, email, role, status)",
+        "Search by name or email",
+        "Create user form: name, email, password, role (Admin/Manager)",
+        "Company assignment: multi-select of companies with module checkboxes per company",
+        "Edit user form with existing data pre-populated",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 11,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-012",
+      "title": "Implement audit logging service",
+      "description": "As an administrator, I need all user actions logged for traceability and security.",
+      "acceptanceCriteria": [
+        "Utility function: logAuditEvent(userId, action, entity, entityId, dataBefore, dataAfter, ipAddress, companyId)",
+        "Audit log calls added to all existing server actions (company CRUD, user CRUD, login, logout)",
+        "Logs are insert-only — no update or delete endpoints exist",
+        "Action types: CREATE, UPDATE, DELETE, LOGIN, LOGOUT, STATUS_CHANGE",
+        "Typecheck passes"
+      ],
+      "priority": 12,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-013",
+      "title": "Create audit log viewer page",
+      "description": "As an administrator, I want to view and export audit logs to monitor system activity.",
+      "acceptanceCriteria": [
+        "Audit log page at /configuracoes/auditoria with paginated table",
+        "Columns: timestamp, user, action, entity, company",
+        "Filters: user, action type, date range, company, entity type",
+        "Chronological ordering (most recent first)",
+        "CSV export button that downloads filtered results",
+        "Only ADMIN role can access this page",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 13,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-014",
+      "title": "Create consolidated dashboard with KPIs",
+      "description": "As an administrator, I want a dashboard with key performance indicators across all companies.",
+      "acceptanceCriteria": [
+        "Dashboard page at /dashboard as the main landing page",
+        "KPI cards: total revenue, total expenses, total profit (placeholder data for now)",
+        "Per-company breakdown table showing each company's metrics",
+        "Period filter: day, week, month, year, custom date range",
+        "Admin sees consolidated view; Manager sees only their company",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 14,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-015",
+      "title": "Add dashboard comparison charts",
+      "description": "As an administrator, I want visual charts comparing company performance.",
+      "acceptanceCriteria": [
+        "Bar or line chart comparing revenue across companies",
+        "Boleto summary cards: emitted, paid, overdue counts (placeholder data until CRM module)",
+        "Charts respect the period filter from the dashboard",
+        "Use a chart library (recharts or chart.js)",
+        "Responsive layout for charts",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 15,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-016",
+      "title": "Implement password recovery flow",
+      "description": "As a user, I want to recover my password via email so I can regain access if I forget it.",
+      "acceptanceCriteria": [
+        "Forgot password page at /forgot-password with email input",
+        "Generic email sending interface: sendEmail(to, subject, htmlBody, attachments) abstracted behind a provider interface",
+        "Password reset token generated and stored with expiry (1 hour)",
+        "Reset password page at /reset-password?token=xxx with new password form",
+        "Token validated and password updated on submission",
+        "Session expiry after 30 minutes of inactivity",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 16,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-017",
+      "title": "Create financial database schema",
+      "description": "As a developer, I need the financial tables so that the financial module can be built.",
+      "acceptanceCriteria": [
+        "Client model: id, name, razaoSocial, cpfCnpj (unique per tenant), email, telefone, endereco, type (PF/PJ), companyId, createdAt, updatedAt",
+        "FinancialCategory model: id, name, type (INCOME/EXPENSE), companyId",
+        "AccountReceivable model: id, clientId, description, value, dueDate, status (PENDING/PAID/OVERDUE), paidAt, companyId, createdAt",
+        "AccountPayable model: id, supplier, description, value, dueDate, status (PENDING/PAID/OVERDUE), categoryId, recurrence (NONE/WEEKLY/MONTHLY/YEARLY), paidAt, companyId, createdAt",
+        "Migration generated and applied successfully",
+        "Typecheck passes"
+      ],
+      "priority": 17,
+      "passes": true,
+      "notes": "Client table is created here as it is needed for receivables. Full CRM features are built in Phase 4."
+    },
+    {
+      "id": "US-018",
+      "title": "Create accounts receivable server actions and listing page",
+      "description": "As a financial manager, I want to manage accounts receivable to control incoming payments.",
+      "acceptanceCriteria": [
+        "Server actions: listReceivables (with filters), createReceivable, markAsPaid (manual write-off)",
+        "Listing page at /financeiro/receber with table: client, description, value, due date, status",
+        "Filters: status (pending/paid/overdue), date range, client",
+        "Status badge colors: gray=pending, green=paid, red=overdue",
+        "Manual write-off button that marks as paid with current date",
+        "Scoped to selected company (tenant)",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 18,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-019",
+      "title": "Create accounts payable CRUD and listing page",
+      "description": "As a financial manager, I want to register and manage accounts payable to control expenses.",
+      "acceptanceCriteria": [
+        "Server actions: listPayables (with filters), createPayable, updatePayable, markAsPaid",
+        "Create/edit form: supplier, description, value, due date, category, recurrence",
+        "Listing page at /financeiro/pagar with table: supplier, value, due date, category, status",
+        "Filters: status, date range, supplier, category",
+        "Recurrence options: none, weekly, monthly, yearly",
+        "Scoped to selected company (tenant)",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 19,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-020",
+      "title": "Add accounts payable due date alerts",
+      "description": "As a financial manager, I want visual alerts for upcoming and overdue payables.",
+      "acceptanceCriteria": [
+        "Payables listing highlights rows due within 7 days in yellow",
+        "Overdue payables highlighted in red",
+        "Summary banner at top: X payables due this week, Y overdue",
+        "Auto-update status to OVERDUE for past-due items (server action or query logic)",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 20,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-021",
+      "title": "Create cash flow page with chart and projections",
+      "description": "As a financial manager, I want to visualize cash flow to understand income vs expenses over time.",
+      "acceptanceCriteria": [
+        "Cash flow page at /financeiro/fluxo-de-caixa",
+        "Line or bar chart showing income vs expenses by period (daily/weekly/monthly)",
+        "Toggle between per-company and consolidated (holding) view",
+        "Future projection based on pending receivables and payables",
+        "Display current balance and projected balance",
+        "Period selector for chart range",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 21,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-022",
+      "title": "Create bank reconciliation - file import",
+      "description": "As a financial manager, I want to import bank statements so I can reconcile with system records.",
+      "acceptanceCriteria": [
+        "Bank reconciliation page at /financeiro/conciliacao",
+        "File upload accepting OFX and CSV formats",
+        "Parse imported file and display transactions in a table",
+        "Store imported transactions in a BankTransaction table (date, description, value, status)",
+        "Migration for BankTransaction model",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 22,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-023",
+      "title": "Create bank reconciliation - matching UI",
+      "description": "As a financial manager, I want to match bank transactions with system records to reconcile accounts.",
+      "acceptanceCriteria": [
+        "Auto-matching: compare bank transactions against receivables/payables by value and date proximity",
+        "Display matched and unmatched transactions side by side",
+        "Manual matching: select a bank transaction and link to a system record",
+        "Mark matched items as reconciled",
+        "Summary: total matched, total unmatched, reconciliation percentage",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 23,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-024",
+      "title": "Create DRE (income statement) report page",
+      "description": "As an administrator, I want to generate DRE reports per company and consolidated for decision-making.",
+      "acceptanceCriteria": [
+        "DRE page at /financeiro/dre",
+        "Income statement structure: revenue - deductions = net revenue - costs = gross profit - expenses = operating profit",
+        "Per-company DRE view",
+        "Consolidated group DRE view",
+        "Period filter: monthly, quarterly, annual",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 24,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-025",
+      "title": "Add DRE export to PDF and Excel",
+      "description": "As an administrator, I want to export DRE reports for sharing with stakeholders.",
+      "acceptanceCriteria": [
+        "Export DRE to PDF button (using a PDF generation library)",
+        "Export DRE to Excel button (using xlsx or similar library)",
+        "Exported file includes company name, period, and all DRE line items",
+        "Typecheck passes"
+      ],
+      "priority": 25,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-026",
+      "title": "Create SAC database schema",
+      "description": "As a developer, I need the SAC tables so that the customer service module can be built.",
+      "acceptanceCriteria": [
+        "Ticket model: id, clientId, subject, description, priority (HIGH/MEDIUM/LOW), status (OPEN/IN_PROGRESS/WAITING_CLIENT/RESOLVED/CLOSED), assigneeId, proposalId (nullable), boletoId (nullable), companyId, createdAt, updatedAt",
+        "TicketMessage model: id, ticketId, senderId, content, sentViaEmail (boolean), createdAt",
+        "Migration generated and applied successfully",
+        "Typecheck passes"
+      ],
+      "priority": 26,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-027",
+      "title": "Create ticket opening form and listing page",
+      "description": "As a customer service agent, I want to create support tickets and see all tickets for my company.",
+      "acceptanceCriteria": [
+        "Ticket listing page at /sac/tickets with table: client, subject, priority, status, assignee, date",
+        "Filters: status, priority, assignee, client",
+        "Create ticket form: select client, subject, description, priority",
+        "Optional: link ticket to existing proposal or boleto",
+        "Assign responsible user from dropdown",
+        "Scoped to selected company",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 27,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-028",
+      "title": "Create ticket detail page with status management",
+      "description": "As a customer service agent, I want to view ticket details and update status.",
+      "acceptanceCriteria": [
+        "Ticket detail page at /sac/tickets/[id]",
+        "Show all ticket info: client, subject, description, priority, status, assignee",
+        "Status transition buttons: Open → In Progress → Waiting Client → Resolved → Closed",
+        "Reassign ticket to another user",
+        "Show linked proposal/boleto with clickable links",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 28,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-029",
+      "title": "Create unified client history timeline",
+      "description": "As a customer service agent, I want to see all interactions with a client in one place.",
+      "acceptanceCriteria": [
+        "Timeline component on client detail page showing: tickets, proposals, boletos, emails sent",
+        "Chronological ordering (most recent first)",
+        "Filter by type: ticket, proposal, boleto, email",
+        "Each item shows: date, type icon, summary, status",
+        "Clickable items navigate to the detail page",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 29,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-030",
+      "title": "Create ticket reply and communication system",
+      "description": "As a customer service agent, I want to reply to tickets and optionally notify the client by email.",
+      "acceptanceCriteria": [
+        "Reply form at the bottom of ticket detail page",
+        "Text area for response content",
+        "Checkbox: 'Send reply to client via email'",
+        "Message history displayed as chat-style thread (newest at bottom)",
+        "Each message shows sender name, timestamp, and whether it was sent via email",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 30,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-031",
+      "title": "Enhance client management with full CRM fields",
+      "description": "As a sales manager, I want full client management with PF/PJ support and search.",
+      "acceptanceCriteria": [
+        "Client listing page at /comercial/clientes with table: name, CPF/CNPJ, email, type",
+        "Create/edit client form: nome/razão social, CPF/CNPJ with mask, email, telefone, endereço, type (PF/PJ)",
+        "Search by name, CPF/CNPJ, or email",
+        "Clients scoped to company (tenant) — already exists in schema",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 31,
+      "passes": true,
+      "notes": "Client table already created in US-017. This story adds the full CRM UI."
+    },
+    {
+      "id": "US-032",
+      "title": "Create client detail page with interaction history",
+      "description": "As a sales manager, I want to see a client's full profile and interaction history.",
+      "acceptanceCriteria": [
+        "Client detail page at /comercial/clientes/[id]",
+        "Client profile card with all fields",
+        "Interaction history section showing proposals, boletos, tickets, emails",
+        "Timeline ordered chronologically (most recent first)",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 32,
+      "passes": true,
+      "notes": "Page already built in US-029. Proposals will be added to timeline when US-033 schema exists."
+    },
+    {
+      "id": "US-033",
+      "title": "Create proposal and boleto database schema",
+      "description": "As a developer, I need the CRM commercial tables so that proposals and boletos can be managed.",
+      "acceptanceCriteria": [
+        "Proposal model: id, clientId, status (DRAFT/SENT/ACCEPTED/REJECTED/EXPIRED), paymentConditions, validity (date), observations, totalValue (computed), companyId, createdAt, updatedAt",
+        "ProposalItem model: id, proposalId, description, quantity, unitPrice",
+        "Boleto model: id, proposalId, bankReference, value, dueDate, installmentNumber, status (GENERATED/SENT/PAID/OVERDUE/CANCELLED), companyId, createdAt",
+        "Migration generated and applied successfully",
+        "Typecheck passes"
+      ],
+      "priority": 33,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-034",
+      "title": "Create proposal CRUD server actions",
+      "description": "As a developer, I need server actions for proposal management.",
+      "acceptanceCriteria": [
+        "Server action: createProposal with client and items",
+        "Server action: updateProposal",
+        "Server action: listProposals with filters (status, client, date, value)",
+        "Server action: getProposalById with items included",
+        "Auto-calculate totalValue from sum of items (quantity * unitPrice)",
+        "Status transitions enforced: DRAFT → SENT → ACCEPTED/REJECTED; SENT → EXPIRED",
+        "Scoped to selected company",
+        "Typecheck passes"
+      ],
+      "priority": 34,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-035",
+      "title": "Create proposal form UI with item management",
+      "description": "As a sales manager, I want to create proposals with line items and automatic totals.",
+      "acceptanceCriteria": [
+        "Proposal form page at /comercial/propostas/nova",
+        "Client selector: search and select existing client or link to create new",
+        "Dynamic item list: add/remove items with description, quantity, unit price",
+        "Auto-calculated total displayed and updated in real-time",
+        "Fields: payment conditions, proposal validity date, observations",
+        "Save as draft button",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 35,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-036",
+      "title": "Create proposal listing page",
+      "description": "As a sales manager, I want to see all proposals with their statuses and filter them.",
+      "acceptanceCriteria": [
+        "Proposal listing at /comercial/propostas with table: client, total value, status, date, actions",
+        "Status badge with colors: gray=draft, blue=sent, green=accepted, red=rejected, orange=expired",
+        "Filters: status, client, date range, value range",
+        "Click row to view/edit proposal",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 36,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-037",
+      "title": "Create boleto generation service",
+      "description": "As a developer, I need an abstracted boleto generation service for integration with banking APIs.",
+      "acceptanceCriteria": [
+        "Abstract interface: generateBoleto(clientData, value, dueDate, installment) returning boleto reference",
+        "PinBank adapter implementing the interface (mock/stub if no real credentials)",
+        "Support for installments: generate N boletos from one proposal",
+        "Boleto status tracking: GENERATED → SENT → PAID/OVERDUE/CANCELLED",
+        "Server action: generateBoletosForProposal(proposalId, installments)",
+        "Generated boletos automatically create AccountReceivable entries",
+        "Typecheck passes"
+      ],
+      "priority": 37,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-038",
+      "title": "Create boleto generation UI",
+      "description": "As a sales manager, I want to generate boletos from accepted proposals.",
+      "acceptanceCriteria": [
+        "Generate Boleto button visible on accepted proposals",
+        "Dialog to configure: number of installments, first due date",
+        "Show generated boletos list with: value, due date, status, bank reference",
+        "Each boleto has status badge: gray=generated, blue=sent, green=paid, red=overdue",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 38,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-039",
+      "title": "Create email sending service with templates",
+      "description": "As a developer, I need a generic email service with company-branded templates.",
+      "acceptanceCriteria": [
+        "Abstract interface: sendEmail(to, subject, htmlBody, attachments) with provider adapter",
+        "Mock/console adapter for development (logs email to console)",
+        "Email template system: load HTML template with company variables (logo, colors, name)",
+        "Server action: sendProposalEmail(proposalId) that generates PDF and sends",
+        "Server action: sendBoletoEmail(boletoId) that generates PDF and sends",
+        "Typecheck passes"
+      ],
+      "priority": 39,
+      "passes": true,
+      "notes": "Email provider TBD (SendGrid, SES). System uses abstract interface."
+    },
+    {
+      "id": "US-040",
+      "title": "Create proposal and boleto email sending UI",
+      "description": "As a sales manager, I want to send proposals and boletos to clients by email.",
+      "acceptanceCriteria": [
+        "Send by Email button on proposal detail page",
+        "Send by Email button on boleto detail/list",
+        "Confirmation dialog showing: recipient email, subject preview",
+        "Sends proposal PDF and/or boleto PDF as attachments",
+        "Email send logged in client interaction history",
+        "Proposal status updated to SENT after email",
+        "Boleto status updated to SENT after email",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 40,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-041",
+      "title": "Create commercial pipeline Kanban board",
+      "description": "As a sales manager, I want to visualize all proposals in a Kanban board to track the sales funnel.",
+      "acceptanceCriteria": [
+        "Kanban page at /comercial/pipeline",
+        "Columns: Rascunho → Enviada → Aceita → Boleto Gerado → Pago",
+        "Each card shows: client name, total value, date",
+        "Drag-and-drop to move proposals between columns (updates status)",
+        "Filters: client, date range, value range",
+        "Column totals and overall conversion rate displayed",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 41,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-042",
+      "title": "Create fiscal database schema",
+      "description": "As a developer, I need the fiscal and accounting tables for invoices, taxes, and chart of accounts.",
+      "acceptanceCriteria": [
+        "Invoice (NFS-e) model: id, proposalId, boletoId, clientId, serviceDescription, value, issRate, status (PENDING/ISSUED/CANCELLED), nfNumber, companyId, createdAt",
+        "TaxEntry model: id, companyId, type (ISS/PIS/COFINS/IRPJ/CSLL), period, value, dueDate, status (PENDING/PAID)",
+        "ChartOfAccounts model: id, code, name, parentId (self-relation), level, type (ASSET/LIABILITY/EQUITY/REVENUE/EXPENSE), companyId",
+        "Migration generated and applied successfully",
+        "Typecheck passes"
+      ],
+      "priority": 42,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-043",
+      "title": "Create chart of accounts management page",
+      "description": "As an accountant, I want to manage a hierarchical chart of accounts for proper categorization.",
+      "acceptanceCriteria": [
+        "Chart of accounts page at /fiscal/plano-de-contas",
+        "Hierarchical tree view showing groups and subgroups",
+        "CRUD: create, edit, delete account entries",
+        "Default chart of accounts auto-created when a new company is added (seeded data)",
+        "Per-company customization (each company has its own chart)",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 43,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-044",
+      "title": "Create NFS-e emission service",
+      "description": "As a developer, I need an abstracted NFS-e emission service for fiscal invoice generation.",
+      "acceptanceCriteria": [
+        "Abstract interface: emitNFSe(companyData, clientData, serviceDescription, value, issRate)",
+        "Mock adapter for development (generates fake NF number)",
+        "Server action: emitInvoiceForBoleto(boletoId) that creates NFS-e linked to paid boleto",
+        "Auto-send NFS-e PDF to client via email service",
+        "Typecheck passes"
+      ],
+      "priority": 44,
+      "passes": true,
+      "notes": "NFS-e provider TBD (eNotas, Focus NFe). System uses abstract interface."
+    },
+    {
+      "id": "US-045",
+      "title": "Create NFS-e emission and listing UI",
+      "description": "As a fiscal manager, I want to emit invoices linked to paid boletos and see all invoices.",
+      "acceptanceCriteria": [
+        "Invoice listing page at /fiscal/notas-fiscais with table: NF number, client, value, status, date",
+        "Emit NFS-e button on paid boletos/proposals",
+        "Form with required fields: service description, ISS rate (pre-filled from company config)",
+        "Status badges: pending, issued, cancelled",
+        "Filters: status, client, date range",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 45,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-046",
+      "title": "Create tax dashboard with calculations and alerts",
+      "description": "As a fiscal manager, I want to see taxes owed per company and receive due date alerts.",
+      "acceptanceCriteria": [
+        "Tax dashboard at /fiscal/impostos",
+        "Tax overview per company: ISS, PIS, COFINS, IRPJ, CSLL with calculated values",
+        "Auto-calculation based on issued invoices and company's tax regime",
+        "Alert badges for taxes with upcoming due dates (within 7 days)",
+        "Consolidated group view for admin",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 46,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-047",
+      "title": "Implement client sharing between companies",
+      "description": "As an administrator, I want to configure which companies share their client base to avoid duplicates.",
+      "acceptanceCriteria": [
+        "Configuration page at /configuracoes/compartilhamento",
+        "Per-company setting: own clients only OR shared with selected companies",
+        "SharedClientGroup model or junction linking companies that share clients",
+        "When sharing is enabled, client search shows shared clients across linked companies",
+        "Interaction history remains company-scoped (company A proposals separate from company B)",
+        "Migration for sharing configuration",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 47,
+      "passes": true,
+      "notes": ""
+    }
+  ]
+}
