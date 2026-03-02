@@ -986,7 +986,21 @@ export async function sendEmailReply(
     });
   }
 
-  // TODO: US-077 will enqueue email-outbound job via BullMQ for actual SMTP send
+  // Enqueue SMTP send job
+  try {
+    const { emailOutboundQueue } = await import("@/lib/queue");
+    await emailOutboundQueue.add("send-email", {
+      messageId: message.id,
+      ticketId,
+      companyId,
+      to,
+      subject,
+      content: content.trim(),
+      attachmentIds: attachmentIds ?? [],
+    });
+  } catch (err) {
+    console.error("Failed to enqueue email-outbound job:", err);
+  }
 
   await logAuditEvent({
     userId: session.userId,
