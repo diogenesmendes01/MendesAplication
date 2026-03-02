@@ -81,3 +81,14 @@
   - ProposalStatus transitions map is in `comercial/propostas/actions.ts` line ~91
   - PostgreSQL needs to be started with `sudo service postgresql start` before db push
 ---
+
+## 2026-03-02 - US-052
+- Created AdditionalContact model: id (cuid), clientId, name, role?, email?, whatsapp?, createdAt
+- Added relation Client.additionalContacts (1:N, onDelete Cascade)
+- Added sample clients (ABC Tecnologia, XYZ Serviços) and 3 additional contacts to seed
+- Used createMany for bulk contact creation with idempotent check
+- Files changed: `erp/prisma/schema.prisma`, `erp/prisma/seed.ts`
+- **Learnings for future iterations:**
+  - Seed used `findMany` + check length for idempotent createMany (since createMany doesn't support upsert)
+  - Client unique constraint is `cpfCnpj_companyId` — use this for upsert in seeds
+---
