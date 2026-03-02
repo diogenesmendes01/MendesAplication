@@ -171,3 +171,17 @@
 - Browser verification not available (no dev-browser MCP tool)
 - Files changed: `erp/src/app/(app)/comercial/clientes/[id]/additional-contacts.tsx`, `.../[id]/page.tsx`
 ---
+
+## 2026-03-02 - US-062
+- Created `erp/src/lib/file-upload.ts` with uploadFile, getFileUrl, deleteFile, getFilePath, getMimeType
+- Created POST /api/upload route: receives FormData, validates auth/file type/size, saves to uploads/{companyId}/{year-month}/
+- Created GET /api/files/[...path] route: serves files with auth check and path traversal prevention
+- 10MB limit, supports PDF/PNG/JPG/JPEG/GIF/DOC/DOCX/XLS/XLSX/CSV/TXT
+- Files sanitized with timestamp suffix for uniqueness
+- Files changed: `erp/src/lib/file-upload.ts`, `erp/src/app/api/upload/route.ts`, `erp/src/app/api/files/[...path]/route.ts`
+- **Learnings for future iterations:**
+  - Next.js App Router catch-all routes use `[...path]` directory pattern
+  - In Next.js 14.2, route handler params are `Promise<{path: string[]}>` — must await
+  - File serving uses `new NextResponse(buffer)` directly for binary responses
+  - Path traversal prevention: check for `..` in storage paths
+---
