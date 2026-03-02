@@ -498,3 +498,22 @@
   - Shadcn Dialog needs import from `@/components/ui/dialog`: Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter
   - Search with minimum 2 chars avoids empty broad queries
 ---
+
+## 2026-03-02 - US-082
+- Created `requestRefund(ticketId, companyId, amount, justification, paymentProofId, boletoId?)` server action
+- Creates Refund with status AWAITING_APPROVAL, calculates slaDeadline from SlaConfig REFUND approval stage
+- Business hours support: reads encoded business hours from SlaConfig (same encoding as US-065/066)
+- Falls back to default 240 minutes (4 hours) if no SLA config found for company
+- Creates RefundAttachment (PAYMENT_PROOF type) by copying file info from existing Attachment record
+- Adds "Reembolso" tag to ticket (idempotent — skips if already present)
+- Registers timeline event as internal note with refund amount and justification
+- Full transaction: Refund creation + attachment + tag + timeline event are atomic
+- Validates: amount > 0, justification required, paymentProofId exists, boletoId exists (if provided)
+- Audit log with full refund details
+- Files changed: `erp/src/app/(app)/sac/tickets/actions.ts`
+- **Learnings for future iterations:**
+  - Business hours encoded in SlaConfig: deadlineMinutes = startHour*100+endHour, alertBeforeMinutes = workDays bitmask (bit per day 0=Sun..6=Sat)
+  - RefundAttachment uses separate file fields (fileName, fileSize, etc.) — copy from Attachment record, not just reference it
+  - Prisma `tags: { push: value }` works inside transactions too
+  - Dynamic import `await import("@/lib/sla")` avoids top-level import issues with server actions
+---
