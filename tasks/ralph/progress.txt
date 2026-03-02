@@ -232,3 +232,17 @@
 - Shows default values when no config exists for company
 - Files changed: `erp/src/app/(app)/configuracoes/sla/page.tsx`
 ---
+
+## 2026-03-02 - US-067
+- Created `erp/src/lib/sla.ts` with 4 exported functions + BusinessHours interface + SlaStatusValue type
+- `calculateSlaDeadline(startTime, minutes, businessHours?)` — adds minutes to startTime, skipping non-business hours when BusinessHours is provided and enabled
+- `isSlaBreached(deadline)` — returns true if current time is past deadline
+- `getSlaStatus(deadline, alertBeforeMinutes)` — returns "ok", "at_risk", or "breached" based on proximity to deadline
+- `getSlaProgress(createdAt, deadline)` — returns 0–100 percentage of elapsed time within the SLA window
+- Business hours logic: `isWorkingTime()` checks day + hour range, `nextWorkingStart()` advances to next valid working period
+- Files changed: `erp/src/lib/sla.ts`
+- **Learnings for future iterations:**
+  - BusinessHours interface is also defined in `configuracoes/sla/actions.ts` — the lib version is standalone (no server imports) for use in both client and server code
+  - SLA progress is clamped to 0–100 using Math.min/Math.max for safe UI rendering
+  - Business hours calculation iterates day-by-day through the working window — works for multi-day SLAs
+---
