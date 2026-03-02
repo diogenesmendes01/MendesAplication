@@ -92,3 +92,9 @@
   - Seed used `findMany` + check length for idempotent createMany (since createMany doesn't support upsert)
   - Client unique constraint is `cpfCnpj_companyId` — use this for upsert in seeds
 ---
+
+## 2026-03-02 - US-053
+- Created Channel model with all fields: id, companyId, type (ChannelType), name, config (Json), isActive, lastSyncUid, lastSyncUidSent, lastSyncAt, createdAt, updatedAt
+- Added Company.channels relation (1:N, onDelete Cascade)
+- Files changed: `erp/prisma/schema.prisma`
+---
