@@ -406,3 +406,16 @@
   - Worker imports prisma directly — no "use server" needed since workers run in Node process, not Next.js server actions
   - Dynamic import `await import("@/lib/queue")` avoids loading Redis connection at module scope in Next.js server actions
 ---
+
+## 2026-03-02 - US-078
+- Created `erp/src/lib/evolution-api.ts` with sendTextMessage, sendMediaMessage, getInstanceStatus
+- Updated sendWhatsAppMessage to enqueue whatsapp-outbound job via BullMQ
+- Created `erp/src/lib/workers/whatsapp-outbound.ts`: fetches active WHATSAPP channel, decrypts config, sends text via Evolution API, sends attachments as media, updates externalId
+- Updated workers/index.ts to use real processWhatsAppOutbound processor
+- Files changed: `erp/src/lib/evolution-api.ts` (new), `erp/src/lib/workers/whatsapp-outbound.ts` (new), `erp/src/lib/workers/index.ts`, `erp/src/app/(app)/sac/tickets/actions.ts`
+- **Learnings for future iterations:**
+  - Evolution API endpoints: /message/sendText/{instance}, /message/sendMedia/{instance}, /instance/connectionState/{instance}
+  - Evolution API auth via `apikey` header (not Authorization Bearer)
+  - WhatsApp attachments sent as separate media messages after the text message
+  - Media URL must be accessible from Evolution API container — uses NEXT_PUBLIC_APP_URL base
+---
