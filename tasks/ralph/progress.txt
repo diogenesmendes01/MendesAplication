@@ -210,3 +210,15 @@
 - Company-scoped via useCompany context
 - Files changed: `erp/src/app/(app)/configuracoes/canais/page.tsx`
 ---
+
+## 2026-03-02 - US-065
+- Created SLA config server actions: getSlaConfigs, saveSlaConfigs, getBusinessHours, saveBusinessHours
+- getSlaConfigs returns defaults (with null IDs) if no company config exists
+- saveSlaConfigs uses transaction: delete all + createMany for atomic batch update
+- Business hours stored as special SlaConfig entry with stage="business_hours", encoded in existing fields
+- All mutations require admin access and include audit logging
+- Files changed: `erp/src/app/(app)/configuracoes/sla/actions.ts`
+- **Learnings for future iterations:**
+  - Business hours encoded: deadlineMinutes = startHour*100+endHour, alertBeforeMinutes = workDays bitmask
+  - Default SLA values defined as constants for reuse across actions and seed
+---
