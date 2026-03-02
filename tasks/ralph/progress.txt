@@ -351,3 +351,14 @@
   - Chat bubble layout uses `justify-start`/`justify-end` with `max-w-[75%]` for natural chat appearance
   - Green send button uses `className="bg-green-600 hover:bg-green-700"` to match WhatsApp branding
 ---
+
+## 2026-03-02 - US-074
+- createInternalNote server action already fully implemented in US-071 (ticket-timeline work)
+- Verified: creates TicketMessage with isInternal=true, direction=OUTBOUND, origin=SYSTEM
+- Verified: requireCompanyAccess, attachment support via updateMany, audit log
+- Typecheck passes — no changes needed
+- Files changed: none (already complete)
+- **Learnings for future iterations:**
+  - US-071 timeline implementation preemptively built the createInternalNote action — check existing code before implementing
+  - Always verify acceptance criteria against existing codebase before writing new code
+---

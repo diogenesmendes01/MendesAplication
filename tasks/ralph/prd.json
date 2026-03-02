@@ -420,8 +420,8 @@
         "Typecheck passes"
       ],
       "priority": 27,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Already implemented as part of US-071 timeline work"
     },
     {
       "id": "US-075",
