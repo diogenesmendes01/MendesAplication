@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   Plus,
@@ -11,6 +12,7 @@ import {
   Pencil,
   AlertTriangle,
   Clock,
+  Headphones,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -111,6 +113,7 @@ function rowHighlight(row: PayableRow): string {
 
 export default function ContasPagarPage() {
   const { selectedCompanyId } = useCompany();
+  const router = useRouter();
 
   const [payables, setPayables] =
     useState<PaginatedResult<PayableRow> | null>(null);
@@ -489,6 +492,7 @@ export default function ContasPagarPage() {
               <TableHead className="text-right">Valor</TableHead>
               <TableHead>Vencimento</TableHead>
               <TableHead>Categoria</TableHead>
+              <TableHead>Origem</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Ações</TableHead>
             </TableRow>
@@ -496,13 +500,13 @@ export default function ContasPagarPage() {
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center">
+                <TableCell colSpan={7} className="h-24 text-center">
                   Carregando...
                 </TableCell>
               </TableRow>
             ) : !payables?.data.length ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center">
+                <TableCell colSpan={7} className="h-24 text-center">
                   Nenhuma conta a pagar encontrada.
                 </TableCell>
               </TableRow>
@@ -521,6 +525,27 @@ export default function ContasPagarPage() {
                   <TableCell>
                     {row.category?.name ?? (
                       <span className="text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {row.origin === "REFUND" ? (
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-800 hover:bg-blue-200 transition-colors"
+                        onClick={() => {
+                          if (row.ticketId) {
+                            router.push(`/sac/tickets/${row.ticketId}`);
+                          }
+                        }}
+                        title={row.ticketId ? "Ver ticket de origem" : "Origem SAC"}
+                      >
+                        <Headphones className="h-3 w-3" />
+                        SAC
+                      </button>
+                    ) : (
+                      <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-semibold text-gray-600">
+                        Manual
+                      </span>
                     )}
                   </TableCell>
                   <TableCell>

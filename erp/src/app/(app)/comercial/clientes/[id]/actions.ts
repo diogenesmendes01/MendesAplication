@@ -19,7 +19,7 @@ export interface ClientDetail {
   createdAt: string;
 }
 
-export type TimelineItemType = "ticket" | "boleto" | "email";
+export type TimelineItemType = "ticket" | "boleto" | "email" | "whatsapp";
 
 export interface TimelineItem {
   id: string;
@@ -28,6 +28,9 @@ export interface TimelineItem {
   summary: string;
   status: string;
   href: string | null;
+  contactName: string | null;
+  contactRole: string | null;
+  hasRefund: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -90,6 +93,8 @@ export async function getClientTimeline(
         status: true,
         priority: true,
         createdAt: true,
+        contact: { select: { name: true, role: true } },
+        refunds: { select: { id: true }, take: 1 },
       },
     });
 
@@ -101,6 +106,9 @@ export async function getClientTimeline(
         summary: t.subject,
         status: t.status,
         href: `/sac/tickets/${t.id}`,
+        contactName: t.contact?.name ?? null,
+        contactRole: t.contact?.role ?? null,
+        hasRefund: t.refunds.length > 0,
       });
     }
   }
@@ -133,6 +141,9 @@ export async function getClientTimeline(
         summary: `${r.description} — ${currFmt.format(Number(r.value))}`,
         status: r.status,
         href: `/financeiro/receber`,
+        contactName: null,
+        contactRole: null,
+        hasRefund: false,
       });
     }
   }
@@ -151,19 +162,62 @@ export async function getClientTimeline(
         createdAt: true,
         ticketId: true,
         sender: { select: { name: true } },
+        contact: { select: { name: true, role: true } },
       },
     });
 
     for (const m of emailMessages) {
       const preview =
         m.content.length > 80 ? m.content.slice(0, 80) + "…" : m.content;
+      const senderName = m.contact?.name ?? m.sender?.name ?? "Desconhecido";
       items.push({
         id: m.id,
         type: "email",
         date: m.createdAt.toISOString(),
-        summary: `Email de ${m.sender?.name ?? "Desconhecido"}: ${preview}`,
+        summary: `Email de ${senderName}: ${preview}`,
         status: "SENT",
         href: `/sac/tickets/${m.ticketId}`,
+        contactName: m.contact?.name ?? null,
+        contactRole: m.contact?.role ?? null,
+        hasRefund: false,
+      });
+    }
+  }
+
+  // --- WhatsApp messages ---
+  if (!filterType || filterType === "whatsapp") {
+    const whatsappMessages = await prisma.ticketMessage.findMany({
+      where: {
+        channel: "WHATSAPP",
+        ticket: { clientId, companyId },
+      },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        content: true,
+        direction: true,
+        createdAt: true,
+        ticketId: true,
+        sender: { select: { name: true } },
+        contact: { select: { name: true, role: true } },
+      },
+    });
+
+    for (const m of whatsappMessages) {
+      const preview =
+        m.content.length > 80 ? m.content.slice(0, 80) + "…" : m.content;
+      const senderName = m.contact?.name ?? m.sender?.name ?? "Desconhecido";
+      const dirLabel = m.direction === "INBOUND" ? "recebida" : "enviada";
+      items.push({
+        id: m.id,
+        type: "whatsapp",
+        date: m.createdAt.toISOString(),
+        summary: `WhatsApp ${dirLabel} — ${senderName}: ${preview}`,
+        status: m.direction === "INBOUND" ? "RECEIVED" : "SENT",
+        href: `/sac/tickets/${m.ticketId}`,
+        contactName: m.contact?.name ?? null,
+        contactRole: m.contact?.role ?? null,
+        hasRefund: false,
       });
     }
   }

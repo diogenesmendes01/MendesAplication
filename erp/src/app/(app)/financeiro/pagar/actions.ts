@@ -63,6 +63,9 @@ export interface PayableRow {
     id: string;
     name: string;
   } | null;
+  origin: string;
+  refundId: string | null;
+  ticketId: string | null;
 }
 
 export interface CategoryOption {
@@ -174,6 +177,9 @@ export async function listPayables(
         category: {
           select: { id: true, name: true },
         },
+        refund: {
+          select: { ticketId: true },
+        },
       },
     }),
     prisma.accountPayable.count({ where }),
@@ -190,6 +196,9 @@ export async function listPayables(
     paidAt: r.paidAt?.toISOString() ?? null,
     createdAt: r.createdAt.toISOString(),
     category: r.category,
+    origin: r.origin,
+    refundId: r.refundId,
+    ticketId: r.refund?.ticketId ?? null,
   }));
 
   return {

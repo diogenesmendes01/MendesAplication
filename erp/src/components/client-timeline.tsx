@@ -7,7 +7,9 @@ import {
   Headphones,
   CreditCard,
   Mail,
+  MessageCircle,
   Filter,
+  DollarSign,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -45,6 +47,8 @@ function typeLabel(t: TimelineItemType): string {
       return "Boleto";
     case "email":
       return "Email";
+    case "whatsapp":
+      return "WhatsApp";
     default:
       return t;
   }
@@ -58,6 +62,8 @@ function typeIcon(t: TimelineItemType) {
       return <CreditCard className="h-4 w-4" />;
     case "email":
       return <Mail className="h-4 w-4" />;
+    case "whatsapp":
+      return <MessageCircle className="h-4 w-4" />;
     default:
       return null;
   }
@@ -71,6 +77,8 @@ function typeBgColor(t: TimelineItemType): string {
       return "bg-emerald-100 text-emerald-700";
     case "email":
       return "bg-purple-100 text-purple-700";
+    case "whatsapp":
+      return "bg-green-100 text-green-700";
     default:
       return "bg-gray-100 text-gray-700";
   }
@@ -89,6 +97,7 @@ function statusBadgeVariant(
       return "destructive";
     case "OPEN":
     case "PENDING":
+    case "RECEIVED":
       return "secondary";
     default:
       return "outline";
@@ -115,6 +124,8 @@ function statusLabel(s: string): string {
       return "Vencido";
     case "SENT":
       return "Enviado";
+    case "RECEIVED":
+      return "Recebido";
     default:
       return s;
   }
@@ -172,6 +183,7 @@ export function ClientTimeline({ clientId, companyId }: ClientTimelineProps) {
               <SelectItem value="ticket">Tickets</SelectItem>
               <SelectItem value="boleto">Boletos</SelectItem>
               <SelectItem value="email">Emails</SelectItem>
+              <SelectItem value="whatsapp">WhatsApp</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -208,7 +220,20 @@ export function ClientTimeline({ clientId, companyId }: ClientTimelineProps) {
                     <Badge variant={statusBadgeVariant(item.status)}>
                       {statusLabel(item.status)}
                     </Badge>
+                    {item.hasRefund && (
+                      <Badge variant="destructive" className="gap-1">
+                        <DollarSign className="h-3 w-3" />
+                        Reembolso
+                      </Badge>
+                    )}
                   </div>
+
+                  {item.contactName && (
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {item.contactName}
+                      {item.contactRole && ` — ${item.contactRole}`}
+                    </p>
+                  )}
 
                   <p className="mt-1 text-sm leading-snug break-words">
                     {item.summary}
