@@ -7,10 +7,15 @@ import {
   ArrowLeft,
   User,
   Calendar,
-  Tag,
   Building2,
   FileText,
   CreditCard,
+  Mail,
+  MessageSquare,
+  Globe,
+  X,
+  Plus,
+  UserCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,13 +26,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import { useCompany } from "@/contexts/company-context";
 import {
   getTicketById,
   updateTicketStatus,
   reassignTicket,
   listUsersForAssign,
+  addTag,
+  removeTag,
   type TicketDetail,
 } from "../actions";
 import type { TicketStatus } from "@prisma/client";
@@ -133,6 +142,8 @@ export default function TicketDetailPage() {
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [updatingAssignee, setUpdatingAssignee] = useState(false);
   const [users, setUsers] = useState<{ id: string; name: string }[]>([]);
+  const [tags, setTags] = useState<string[]>([]);
+  const [newTag, setNewTag] = useState("");
 
   // ---------------------------------------------------
   // Load ticket
@@ -144,6 +155,7 @@ export default function TicketDetailPage() {
     try {
       const data = await getTicketById(ticketId, selectedCompanyId);
       setTicket(data);
+      setTags(data.tags);
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : "Erro ao carregar ticket"
@@ -216,6 +228,33 @@ export default function TicketDetailPage() {
       );
     } finally {
       setUpdatingAssignee(false);
+    }
+  }
+
+  // ---------------------------------------------------
+  // Tags
+  // ---------------------------------------------------
+
+  async function handleAddTag() {
+    if (!selectedCompanyId || !ticket || !newTag.trim()) return;
+    try {
+      const updatedTags = await addTag(ticket.id, selectedCompanyId, newTag.trim());
+      setTags(updatedTags);
+      setNewTag("");
+      toast.success("Tag adicionada");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao adicionar tag");
+    }
+  }
+
+  async function handleRemoveTag(tag: string) {
+    if (!selectedCompanyId || !ticket) return;
+    try {
+      const updatedTags = await removeTag(ticket.id, selectedCompanyId, tag);
+      setTags(updatedTags);
+      toast.success("Tag removida");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao remover tag");
     }
   }
 
@@ -361,13 +400,28 @@ export default function TicketDetailPage() {
                     Cliente
                   </p>
                   <p className="text-sm font-medium">{ticket.client.name}</p>
-                  {ticket.client.email && (
-                    <p className="text-xs text-muted-foreground">
-                      {ticket.client.email}
-                    </p>
-                  )}
+                  <p className="text-xs text-muted-foreground">
+                    {ticket.client.cpfCnpj}
+                  </p>
                 </div>
               </div>
+
+              {ticket.contact && (
+                <div className="flex items-start gap-3">
+                  <UserCircle className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground">
+                      Contato
+                    </p>
+                    <p className="text-sm font-medium">{ticket.contact.name}</p>
+                    {ticket.contact.role && (
+                      <p className="text-xs text-muted-foreground">
+                        {ticket.contact.role}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
 
               <div className="flex items-start gap-3">
                 <Building2 className="mt-0.5 h-4 w-4 text-muted-foreground" />
@@ -379,19 +433,25 @@ export default function TicketDetailPage() {
                 </div>
               </div>
 
-              <div className="flex items-start gap-3">
-                <Tag className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                <div>
-                  <p className="text-xs font-medium text-muted-foreground">
-                    Prioridade
-                  </p>
-                  <span
-                    className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${priorityColor(ticket.priority)}`}
-                  >
-                    {priorityLabel(ticket.priority)}
-                  </span>
+              {ticket.channelType && (
+                <div className="flex items-start gap-3">
+                  {ticket.channelType === "EMAIL" ? (
+                    <Mail className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                  ) : ticket.channelType === "WHATSAPP" ? (
+                    <MessageSquare className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <Globe className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                  )}
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground">
+                      Canal de Origem
+                    </p>
+                    <p className="text-sm">
+                      {ticket.channelType === "EMAIL" ? "Email" : "WhatsApp"}
+                    </p>
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="flex items-start gap-3">
                 <Calendar className="mt-0.5 h-4 w-4 text-muted-foreground" />
@@ -474,6 +534,59 @@ export default function TicketDetailPage() {
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Tags */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Tags</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex flex-wrap gap-1.5">
+                {tags.length === 0 && (
+                  <p className="text-xs text-muted-foreground">Nenhuma tag</p>
+                )}
+                {tags.map((tag) => (
+                  <Badge
+                    key={tag}
+                    variant="secondary"
+                    className="gap-1 pr-1"
+                  >
+                    {tag}
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveTag(tag)}
+                      className="ml-0.5 rounded-full p-0.5 hover:bg-muted"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Nova tag..."
+                  value={newTag}
+                  onChange={(e) => setNewTag(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleAddTag();
+                    }
+                  }}
+                  className="h-8 text-sm"
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleAddTag}
+                  disabled={!newTag.trim()}
+                  className="h-8 px-2"
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
               </div>
             </CardContent>
           </Card>

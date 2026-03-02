@@ -359,9 +359,12 @@ export interface TicketDetail {
   boletoId: string | null;
   createdAt: string;
   updatedAt: string;
-  client: { id: string; name: string; email: string | null };
+  tags: string[];
+  client: { id: string; name: string; email: string | null; cpfCnpj: string };
   assignee: { id: string; name: string } | null;
   company: { id: string; nomeFantasia: string };
+  contact: { id: string; name: string; role: string | null } | null;
+  channelType: ChannelType | null;
 }
 
 export async function getTicketById(
@@ -373,9 +376,11 @@ export async function getTicketById(
   const ticket = await prisma.ticket.findFirst({
     where: { id: ticketId, companyId },
     include: {
-      client: { select: { id: true, name: true, email: true } },
+      client: { select: { id: true, name: true, email: true, cpfCnpj: true } },
       assignee: { select: { id: true, name: true } },
       company: { select: { id: true, nomeFantasia: true } },
+      contact: { select: { id: true, name: true, role: true } },
+      channel: { select: { type: true } },
     },
   });
 
@@ -393,9 +398,12 @@ export async function getTicketById(
     boletoId: ticket.boletoId,
     createdAt: ticket.createdAt.toISOString(),
     updatedAt: ticket.updatedAt.toISOString(),
+    tags: ticket.tags,
     client: ticket.client,
     assignee: ticket.assignee,
     company: ticket.company,
+    contact: ticket.contact,
+    channelType: ticket.channel?.type ?? null,
   };
 }
 
@@ -1173,4 +1181,85 @@ export async function sendWhatsAppMessage(
   });
 
   return { id: message.id, createdAt: message.createdAt.toISOString() };
+}
+
+// ---------------------------------------------------------------------------
+// Tags
+// ---------------------------------------------------------------------------
+
+export async function addTag(
+  ticketId: string,
+  companyId: string,
+  tag: string
+): Promise<string[]> {
+  const session = await requireCompanyAccess(companyId);
+
+  if (!tag?.trim()) {
+    throw new Error("Tag é obrigatória");
+  }
+
+  const ticket = await prisma.ticket.findFirst({
+    where: { id: ticketId, companyId },
+    select: { id: true, tags: true },
+  });
+  if (!ticket) {
+    throw new Error("Ticket não encontrado");
+  }
+
+  const normalizedTag = tag.trim();
+  if (ticket.tags.includes(normalizedTag)) {
+    return ticket.tags;
+  }
+
+  const updated = await prisma.ticket.update({
+    where: { id: ticketId },
+    data: { tags: { push: normalizedTag } },
+    select: { tags: true },
+  });
+
+  await logAuditEvent({
+    userId: session.userId,
+    action: "UPDATE",
+    entity: "Ticket",
+    entityId: ticketId,
+    dataAfter: { tagAdded: normalizedTag } as unknown as Prisma.InputJsonValue,
+    companyId,
+  });
+
+  return updated.tags;
+}
+
+export async function removeTag(
+  ticketId: string,
+  companyId: string,
+  tag: string
+): Promise<string[]> {
+  const session = await requireCompanyAccess(companyId);
+
+  const ticket = await prisma.ticket.findFirst({
+    where: { id: ticketId, companyId },
+    select: { id: true, tags: true },
+  });
+  if (!ticket) {
+    throw new Error("Ticket não encontrado");
+  }
+
+  const newTags = ticket.tags.filter((t) => t !== tag);
+
+  const updated = await prisma.ticket.update({
+    where: { id: ticketId },
+    data: { tags: newTags },
+    select: { tags: true },
+  });
+
+  await logAuditEvent({
+    userId: session.userId,
+    action: "UPDATE",
+    entity: "Ticket",
+    entityId: ticketId,
+    dataAfter: { tagRemoved: tag } as unknown as Prisma.InputJsonValue,
+    companyId,
+  });
+
+  return updated.tags;
 }
