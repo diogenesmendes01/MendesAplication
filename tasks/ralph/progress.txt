@@ -145,3 +145,11 @@
   - Adding unique constraints to existing tables may require `--accept-data-loss` flag with `prisma db push`
   - Named relations needed when model has multiple references to same target (e.g., AdditionalContact referenced by both Ticket and TicketMessage)
 ---
+
+## 2026-03-02 - US-059
+- Added origin (PayableOrigin), refundId (unique) to AccountPayable with Refund relation
+- Added type (InvoiceType), cancelledAt, cancellationReason, refundId (unique), originalInvoiceId to Invoice
+- Added self-relation "CreditNote" on Invoice for credit notes
+- Added accountPayable and creditNote back-relations to Refund (completing US-056 deferred work)
+- Files changed: `erp/prisma/schema.prisma`
+---
