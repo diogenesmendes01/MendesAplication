@@ -390,3 +390,19 @@
   - SLA progress bar uses time-remaining to calculate percentage — color thresholds at 70% and 90%
   - Financial summary loaded after ticket loads (separate call) to not block page rendering
 ---
+
+## 2026-03-02 - US-077
+- Updated sendEmailReply to enqueue email-outbound job via BullMQ with messageId, companyId, to, subject, content, attachmentIds
+- Created `erp/src/lib/encryption.ts` shared module: extracted encrypt/decrypt/encryptConfig/decryptConfig from canais/actions.ts
+- Updated canais/actions.ts to import from shared encryption lib
+- Installed nodemailer + @types/nodemailer
+- Created `erp/src/lib/workers/email-outbound.ts`: fetches active EMAIL channel for company, decrypts SMTP config, sends via nodemailer, updates externalId with SMTP Message-ID
+- Updated workers/index.ts to use real processEmailOutbound processor
+- Failure in SMTP send throws error for BullMQ retry; failure in enqueue is caught and logged without blocking message creation
+- Files changed: `erp/src/lib/encryption.ts` (new), `erp/src/lib/workers/email-outbound.ts` (new), `erp/src/lib/workers/index.ts`, `erp/src/app/(app)/configuracoes/canais/actions.ts`, `erp/src/app/(app)/sac/tickets/actions.ts`, `erp/package.json`
+- **Learnings for future iterations:**
+  - Encryption utils extracted to `erp/src/lib/encryption.ts` — import encrypt/decrypt/encryptConfig/decryptConfig from there
+  - nodemailer createTransport expects `secure: true` for port 465, otherwise uses STARTTLS
+  - Worker imports prisma directly — no "use server" needed since workers run in Node process, not Next.js server actions
+  - Dynamic import `await import("@/lib/queue")` avoids loading Redis connection at module scope in Next.js server actions
+---
