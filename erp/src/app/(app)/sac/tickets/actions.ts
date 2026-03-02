@@ -1275,6 +1275,236 @@ export async function getClientFinancialSummary(
 }
 
 // ---------------------------------------------------------------------------
+// Contact Linking (US-081)
+// ---------------------------------------------------------------------------
+
+export interface ClientForLink {
+  id: string;
+  name: string;
+  cpfCnpj: string;
+  email: string | null;
+  telefone: string | null;
+}
+
+/** Search clients for linking (excludes unknown placeholder) */
+export async function searchClientsForLink(
+  companyId: string,
+  search: string
+): Promise<ClientForLink[]> {
+  await requireCompanyAccess(companyId);
+
+  if (!search?.trim() || search.trim().length < 2) {
+    return [];
+  }
+
+  const sharedIds = await getSharedCompanyIds(companyId);
+
+  return prisma.client.findMany({
+    where: {
+      companyId: { in: sharedIds },
+      cpfCnpj: { not: "00000000000" },
+      OR: [
+        { name: { contains: search.trim(), mode: "insensitive" } },
+        { cpfCnpj: { contains: search.trim(), mode: "insensitive" } },
+      ],
+    },
+    select: {
+      id: true,
+      name: true,
+      cpfCnpj: true,
+      email: true,
+      telefone: true,
+    },
+    orderBy: { name: "asc" },
+    take: 10,
+  });
+}
+
+/** Extract sender info from ticket description for unknown contacts */
+function extractSenderInfo(description: string): {
+  email: string | null;
+  phone: string | null;
+} {
+  // WhatsApp: "Mensagem recebida via WhatsApp de {name}. Número: {phone}"
+  const phoneMatch = description.match(/Número:\s*(\+?[\d]+)/);
+  // Email: "Email recebido de {email}. Remetente não identificado."
+  const emailMatch = description.match(/Email recebido de\s+([\w.+-]+@[\w.-]+)/);
+
+  return {
+    email: emailMatch?.[1] ?? null,
+    phone: phoneMatch?.[1] ?? null,
+  };
+}
+
+/** Link ticket to existing client, optionally creating an AdditionalContact */
+export async function linkContactToClient(
+  ticketId: string,
+  companyId: string,
+  clientId: string
+) {
+  const session = await requireCompanyAccess(companyId);
+
+  const ticket = await prisma.ticket.findFirst({
+    where: { id: ticketId, companyId },
+    select: { id: true, tags: true, clientId: true, description: true },
+  });
+  if (!ticket) {
+    throw new Error("Ticket não encontrado");
+  }
+
+  // Verify the current client is the unknown placeholder
+  const currentClient = await prisma.client.findFirst({
+    where: { id: ticket.clientId },
+    select: { cpfCnpj: true },
+  });
+  if (currentClient?.cpfCnpj !== "00000000000") {
+    throw new Error("Este ticket já está vinculado a um cliente identificado");
+  }
+
+  // Validate target client
+  const targetClient = await prisma.client.findFirst({
+    where: { id: clientId, companyId },
+    select: { id: true, name: true },
+  });
+  if (!targetClient) {
+    throw new Error("Cliente não encontrado nesta empresa");
+  }
+
+  // Extract sender info and create AdditionalContact if applicable
+  const senderInfo = extractSenderInfo(ticket.description);
+  if (senderInfo.email || senderInfo.phone) {
+    await prisma.additionalContact.create({
+      data: {
+        clientId,
+        name: "Contato via " + (senderInfo.email ? "Email" : "WhatsApp"),
+        email: senderInfo.email,
+        whatsapp: senderInfo.phone,
+      },
+    });
+  }
+
+  // Update ticket: change client and remove "Pendente Vinculação" tag
+  const newTags = ticket.tags.filter((t) => t !== "Pendente Vinculação");
+  await prisma.ticket.update({
+    where: { id: ticketId },
+    data: { clientId, tags: newTags },
+  });
+
+  // Also update any other tickets from the same unknown client to this new client
+  // if they have the same sender info (batch linking)
+  await logAuditEvent({
+    userId: session.userId,
+    action: "UPDATE",
+    entity: "Ticket",
+    entityId: ticketId,
+    dataAfter: {
+      action: "LINK_CONTACT",
+      clientId,
+      clientName: targetClient.name,
+    } as unknown as Prisma.InputJsonValue,
+    companyId,
+  });
+
+  return { clientId, clientName: targetClient.name };
+}
+
+/** Create a new client and link to ticket */
+export async function createClientAndLink(
+  ticketId: string,
+  companyId: string,
+  clientData: {
+    name: string;
+    cpfCnpj: string;
+    type: "PF" | "PJ";
+    email?: string;
+    telefone?: string;
+    razaoSocial?: string;
+    endereco?: string;
+  }
+) {
+  const session = await requireCompanyAccess(companyId);
+
+  const ticket = await prisma.ticket.findFirst({
+    where: { id: ticketId, companyId },
+    select: { id: true, tags: true, clientId: true, description: true },
+  });
+  if (!ticket) {
+    throw new Error("Ticket não encontrado");
+  }
+
+  // Verify the current client is the unknown placeholder
+  const currentClient = await prisma.client.findFirst({
+    where: { id: ticket.clientId },
+    select: { cpfCnpj: true },
+  });
+  if (currentClient?.cpfCnpj !== "00000000000") {
+    throw new Error("Este ticket já está vinculado a um cliente identificado");
+  }
+
+  if (!clientData.name?.trim()) {
+    throw new Error("Nome é obrigatório");
+  }
+  if (!clientData.cpfCnpj?.trim()) {
+    throw new Error("CPF/CNPJ é obrigatório");
+  }
+
+  // Check uniqueness
+  const existing = await prisma.client.findFirst({
+    where: { cpfCnpj: clientData.cpfCnpj.trim(), companyId },
+  });
+  if (existing) {
+    throw new Error(
+      `Já existe um cliente com este ${clientData.type === "PF" ? "CPF" : "CNPJ"} nesta empresa`
+    );
+  }
+
+  // Create client
+  const newClient = await prisma.client.create({
+    data: {
+      name: clientData.name.trim(),
+      razaoSocial: clientData.razaoSocial?.trim() || null,
+      cpfCnpj: clientData.cpfCnpj.trim(),
+      email: clientData.email?.trim() || null,
+      telefone: clientData.telefone?.trim() || null,
+      endereco: clientData.endereco?.trim() || null,
+      type: clientData.type,
+      companyId,
+    },
+  });
+
+  await logAuditEvent({
+    userId: session.userId,
+    action: "CREATE",
+    entity: "Client",
+    entityId: newClient.id,
+    dataAfter: newClient as unknown as Prisma.InputJsonValue,
+    companyId,
+  });
+
+  // Update ticket: change client and remove "Pendente Vinculação" tag
+  const newTags = ticket.tags.filter((t) => t !== "Pendente Vinculação");
+  await prisma.ticket.update({
+    where: { id: ticketId },
+    data: { clientId: newClient.id, tags: newTags },
+  });
+
+  await logAuditEvent({
+    userId: session.userId,
+    action: "UPDATE",
+    entity: "Ticket",
+    entityId: ticketId,
+    dataAfter: {
+      action: "LINK_CONTACT",
+      clientId: newClient.id,
+      clientName: newClient.name,
+    } as unknown as Prisma.InputJsonValue,
+    companyId,
+  });
+
+  return { clientId: newClient.id, clientName: newClient.name };
+}
+
+// ---------------------------------------------------------------------------
 // Tags
 // ---------------------------------------------------------------------------
 

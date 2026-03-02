@@ -19,6 +19,11 @@ import {
   Clock,
   DollarSign,
   ExternalLink,
+  AlertTriangle,
+  Link,
+  UserPlus,
+  Search,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,6 +34,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -41,8 +53,12 @@ import {
   addTag,
   removeTag,
   getClientFinancialSummary,
+  searchClientsForLink,
+  linkContactToClient,
+  createClientAndLink,
   type TicketDetail,
   type ClientFinancialSummary,
+  type ClientForLink,
 } from "../actions";
 import type { TicketStatus } from "@prisma/client";
 import TicketTimeline from "./ticket-timeline";
@@ -207,6 +223,23 @@ export default function TicketDetailPage() {
   const [newTag, setNewTag] = useState("");
   const [financial, setFinancial] = useState<ClientFinancialSummary | null>(null);
 
+  // Contact linking state (US-081)
+  const [linkDialogOpen, setLinkDialogOpen] = useState(false);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [linkSearch, setLinkSearch] = useState("");
+  const [linkResults, setLinkResults] = useState<ClientForLink[]>([]);
+  const [linkSearching, setLinkSearching] = useState(false);
+  const [linking, setLinking] = useState(false);
+  const [newClientForm, setNewClientForm] = useState({
+    name: "",
+    cpfCnpj: "",
+    type: "PJ" as "PF" | "PJ",
+    email: "",
+    telefone: "",
+    razaoSocial: "",
+    endereco: "",
+  });
+
   // ---------------------------------------------------
   // Load ticket
   // ---------------------------------------------------
@@ -324,6 +357,70 @@ export default function TicketDetailPage() {
   }
 
   // ---------------------------------------------------
+  // Contact linking (US-081)
+  // ---------------------------------------------------
+
+  const isUnknownClient = ticket?.client.cpfCnpj === "00000000000";
+
+  async function handleLinkSearch(query: string) {
+    setLinkSearch(query);
+    if (!selectedCompanyId || query.trim().length < 2) {
+      setLinkResults([]);
+      return;
+    }
+    setLinkSearching(true);
+    try {
+      const results = await searchClientsForLink(selectedCompanyId, query);
+      setLinkResults(results);
+    } catch {
+      setLinkResults([]);
+    } finally {
+      setLinkSearching(false);
+    }
+  }
+
+  async function handleLinkToClient(clientId: string) {
+    if (!selectedCompanyId || !ticket) return;
+    setLinking(true);
+    try {
+      const result = await linkContactToClient(ticket.id, selectedCompanyId, clientId);
+      toast.success(`Ticket vinculado ao cliente ${result.clientName}`);
+      setLinkDialogOpen(false);
+      setLinkSearch("");
+      setLinkResults([]);
+      loadTicket();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao vincular cliente");
+    } finally {
+      setLinking(false);
+    }
+  }
+
+  async function handleCreateAndLink() {
+    if (!selectedCompanyId || !ticket) return;
+    setLinking(true);
+    try {
+      const result = await createClientAndLink(ticket.id, selectedCompanyId, {
+        name: newClientForm.name,
+        cpfCnpj: newClientForm.cpfCnpj,
+        type: newClientForm.type,
+        email: newClientForm.email || undefined,
+        telefone: newClientForm.telefone || undefined,
+        razaoSocial: newClientForm.razaoSocial || undefined,
+        endereco: newClientForm.endereco || undefined,
+      });
+      toast.success(`Cliente ${result.clientName} criado e vinculado`);
+      setCreateDialogOpen(false);
+      setNewClientForm({ name: "", cpfCnpj: "", type: "PJ", email: "", telefone: "", razaoSocial: "", endereco: "" });
+      loadTicket();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao criar cliente");
+    } finally {
+      setLinking(false);
+    }
+  }
+
+  // ---------------------------------------------------
   // No company selected
   // ---------------------------------------------------
 
@@ -403,6 +500,55 @@ export default function TicketDetailPage() {
           </span>
         </div>
       </div>
+
+      {/* Unknown contact banner (US-081) */}
+      {isUnknownClient && (
+        <div className="flex items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4">
+          <AlertTriangle className="h-5 w-5 flex-shrink-0 text-amber-600" />
+          <div className="flex-1">
+            <p className="text-sm font-medium text-amber-800">
+              Contato não identificado
+            </p>
+            <p className="text-xs text-amber-700">
+              {ticket.description.includes("Número:")
+                ? `Número: ${ticket.description.match(/Número:\s*(\+?[\d]+)/)?.[1] ?? "desconhecido"}`
+                : ticket.description.includes("Email recebido de")
+                  ? `Email: ${ticket.description.match(/Email recebido de\s+([\w.+-]+@[\w.-]+)/)?.[1] ?? "desconhecido"}`
+                  : "Remetente não identificado"}
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-amber-400 text-amber-800 hover:bg-amber-100"
+              onClick={() => setLinkDialogOpen(true)}
+            >
+              <Link className="mr-1.5 h-3.5 w-3.5" />
+              Vincular
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-amber-400 text-amber-800 hover:bg-amber-100"
+              onClick={() => {
+                // Pre-fill email/phone from ticket description
+                const phoneMatch = ticket.description.match(/Número:\s*(\+?[\d]+)/);
+                const emailMatch = ticket.description.match(/Email recebido de\s+([\w.+-]+@[\w.-]+)/);
+                setNewClientForm((prev) => ({
+                  ...prev,
+                  email: emailMatch?.[1] ?? "",
+                  telefone: phoneMatch?.[1] ?? "",
+                }));
+                setCreateDialogOpen(true);
+              }}
+            >
+              <UserPlus className="mr-1.5 h-3.5 w-3.5" />
+              Criar cliente
+            </Button>
+          </div>
+        </div>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Main content */}
@@ -749,6 +895,156 @@ export default function TicketDetailPage() {
           )}
         </div>
       </div>
+
+      {/* Link to existing client dialog (US-081) */}
+      <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Vincular a Cliente Existente</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por nome ou CNPJ/CPF..."
+                value={linkSearch}
+                onChange={(e) => handleLinkSearch(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            {linkSearching && (
+              <div className="flex items-center justify-center py-4 text-sm text-muted-foreground">
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Buscando...
+              </div>
+            )}
+            {!linkSearching && linkSearch.length >= 2 && linkResults.length === 0 && (
+              <p className="py-4 text-center text-sm text-muted-foreground">
+                Nenhum cliente encontrado
+              </p>
+            )}
+            {linkResults.length > 0 && (
+              <div className="max-h-64 overflow-y-auto space-y-1">
+                {linkResults.map((client) => (
+                  <button
+                    key={client.id}
+                    type="button"
+                    disabled={linking}
+                    onClick={() => handleLinkToClient(client.id)}
+                    className="w-full rounded-md border p-3 text-left hover:bg-muted transition-colors"
+                  >
+                    <p className="text-sm font-medium">{client.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {client.cpfCnpj}
+                      {client.email && ` · ${client.email}`}
+                      {client.telefone && ` · ${client.telefone}`}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create new client dialog (US-081) */}
+      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Criar Novo Cliente e Vincular</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="col-span-2">
+                <Label htmlFor="new-client-name">Nome *</Label>
+                <Input
+                  id="new-client-name"
+                  value={newClientForm.name}
+                  onChange={(e) => setNewClientForm((f) => ({ ...f, name: e.target.value }))}
+                  placeholder="Nome do cliente"
+                />
+              </div>
+              <div>
+                <Label htmlFor="new-client-type">Tipo *</Label>
+                <Select
+                  value={newClientForm.type}
+                  onValueChange={(v) => setNewClientForm((f) => ({ ...f, type: v as "PF" | "PJ" }))}
+                >
+                  <SelectTrigger id="new-client-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="PJ">Pessoa Jurídica</SelectItem>
+                    <SelectItem value="PF">Pessoa Física</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="new-client-cpfcnpj">
+                  {newClientForm.type === "PF" ? "CPF" : "CNPJ"} *
+                </Label>
+                <Input
+                  id="new-client-cpfcnpj"
+                  value={newClientForm.cpfCnpj}
+                  onChange={(e) => setNewClientForm((f) => ({ ...f, cpfCnpj: e.target.value }))}
+                  placeholder={newClientForm.type === "PF" ? "000.000.000-00" : "00.000.000/0000-00"}
+                />
+              </div>
+              <div>
+                <Label htmlFor="new-client-email">Email</Label>
+                <Input
+                  id="new-client-email"
+                  type="email"
+                  value={newClientForm.email}
+                  onChange={(e) => setNewClientForm((f) => ({ ...f, email: e.target.value }))}
+                />
+              </div>
+              <div>
+                <Label htmlFor="new-client-telefone">Telefone</Label>
+                <Input
+                  id="new-client-telefone"
+                  value={newClientForm.telefone}
+                  onChange={(e) => setNewClientForm((f) => ({ ...f, telefone: e.target.value }))}
+                />
+              </div>
+              <div className="col-span-2">
+                <Label htmlFor="new-client-razao">Razão Social</Label>
+                <Input
+                  id="new-client-razao"
+                  value={newClientForm.razaoSocial}
+                  onChange={(e) => setNewClientForm((f) => ({ ...f, razaoSocial: e.target.value }))}
+                />
+              </div>
+              <div className="col-span-2">
+                <Label htmlFor="new-client-endereco">Endereço</Label>
+                <Input
+                  id="new-client-endereco"
+                  value={newClientForm.endereco}
+                  onChange={(e) => setNewClientForm((f) => ({ ...f, endereco: e.target.value }))}
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleCreateAndLink}
+              disabled={linking || !newClientForm.name.trim() || !newClientForm.cpfCnpj.trim()}
+            >
+              {linking ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Criando...
+                </>
+              ) : (
+                "Criar e Vincular"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
