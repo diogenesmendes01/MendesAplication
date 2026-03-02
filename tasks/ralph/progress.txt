@@ -446,4 +446,37 @@
   - Channel identification: decrypt config of all active WHATSAPP channels and match instanceName — no direct column for instance lookup
   - Skip group messages (@g.us) and status broadcast (status@broadcast)
   - Deduplication uses `findFirst` instead of unique constraint because the @@unique([externalId, channel]) allows null externalId
+- imapflow: use `getMailboxLock(path, { readOnly: true })` then `client.fetch(range, query, { uid: true })` for UID-based fetches
+- imapflow: `client.list()` returns mailboxes with `specialUse` field (e.g., "\\Sent") for finding Sent folder
+- imapflow: `client.download(uid, part, { uid: true })` returns `{ content: Readable }` for attachment parts
+- BullMQ repeatable jobs: use `queue.upsertJobScheduler(name, { every: ms }, { name })` to schedule repeating jobs
+---
+
+## 2026-03-02 - US-080
+- Installed imapflow ^1.2.10
+- Created `erp/src/lib/workers/email-inbound.ts` with full IMAP polling pipeline:
+  - Fetches all active EMAIL channels, connects IMAP, polls Inbox and Sent folders
+  - UID-based sync: fetches messages with UID > lastSyncUid for Inbox, > lastSyncUidSent for Sent
+  - Sender identification: searches Client.email and AdditionalContact.email (case-insensitive)
+  - Client found + open ticket with matching subject → adds message to existing ticket
+  - Client found + no matching ticket → creates new ticket on EMAIL channel
+  - Unknown sender → creates ticket with "Pendente Vinculação" tag using per-company placeholder client
+  - Sent folder messages → direction=OUTBOUND, origin=EXTERNAL
+  - Message-ID header used as externalId for deduplication
+  - Subject normalization: strips Re:/Fwd:/Enc: prefixes for ticket matching
+  - In-Reply-To header checked for thread grouping as fallback
+  - Attachments: extracts from bodyStructure, downloads via client.download(), saves to uploads/
+  - Updates lastSyncUid/lastSyncUidSent/lastSyncAt on Channel after successful sync
+- Updated workers/index.ts to use real processEmailInbound processor
+- Set up BullMQ repeatable job (every 2 minutes) via `emailInboundQueue.upsertJobScheduler`
+- Sent folder detection: uses special-use flag "\Sent" first, then fallback to common folder names
+- Files changed: `erp/package.json`, `erp/package-lock.json`, `erp/src/lib/workers/email-inbound.ts` (new), `erp/src/lib/workers/index.ts`
+- **Learnings for future iterations:**
+  - imapflow `ImapFlow` constructor: { host, port, secure, auth: { user, pass }, logger: false }
+  - `getMailboxLock()` returns a lock with `release()` — MUST be released in finally block
+  - `client.fetch(uidRange, { uid: true, envelope: true, bodyStructure: true, source: true }, { uid: true })` returns async iterable
+  - Sent folder discovery: check `specialUse === "\\Sent"` from `client.list()`, fallback to common names
+  - BullMQ repeatable (v5): `queue.upsertJobScheduler(schedulerId, { every: ms }, { name })` — replaces old `add({ repeat })` pattern
+  - Email text extraction from raw source: split on `\r\n\r\n`, strip HTML tags, decode quoted-printable
+  - Attachment parts identified by `disposition === "attachment"` or `"inline"` with filename in bodyStructure
 ---
