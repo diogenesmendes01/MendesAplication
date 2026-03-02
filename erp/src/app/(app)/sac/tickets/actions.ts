@@ -1832,6 +1832,243 @@ export async function rejectRefund(
 }
 
 // ---------------------------------------------------------------------------
+// Refund Execution
+// ---------------------------------------------------------------------------
+
+export async function executeRefund(
+  refundId: string,
+  companyId: string,
+  data: {
+    paymentMethod: "PIX" | "TED";
+    bankName?: string;
+    bankAgency?: string;
+    bankAccount?: string;
+    pixKey?: string;
+    invoiceAction: "CANCEL_INVOICE" | "CREDIT_NOTE" | "NONE";
+    invoiceCancelReason?: string;
+    refundProofId?: string;
+  }
+) {
+  const session = await requireCompanyAccess(companyId);
+
+  // Only ADMIN and MANAGER can execute refunds
+  if (session.role !== "ADMIN" && session.role !== "MANAGER") {
+    throw new Error(
+      "Acesso negado. Apenas administradores e gestores podem executar reembolsos."
+    );
+  }
+
+  // Validate payment method fields
+  if (data.paymentMethod === "TED") {
+    if (!data.bankName?.trim() || !data.bankAgency?.trim() || !data.bankAccount?.trim()) {
+      throw new Error("Dados bancários (banco, agência e conta) são obrigatórios para TED");
+    }
+  } else if (data.paymentMethod === "PIX") {
+    if (!data.pixKey?.trim()) {
+      throw new Error("Chave PIX é obrigatória para pagamento via PIX");
+    }
+  }
+
+  if (data.invoiceAction === "CANCEL_INVOICE" && !data.invoiceCancelReason?.trim()) {
+    throw new Error("Motivo do cancelamento da NFS-e é obrigatório");
+  }
+
+  // Fetch refund with ticket and client info
+  const refund = await prisma.refund.findFirst({
+    where: { id: refundId, companyId },
+    select: {
+      id: true,
+      ticketId: true,
+      status: true,
+      amount: true,
+      ticket: {
+        select: {
+          id: true,
+          clientId: true,
+          subject: true,
+          proposalId: true,
+          boletoId: true,
+          client: { select: { id: true, name: true } },
+        },
+      },
+    },
+  });
+  if (!refund) {
+    throw new Error("Reembolso não encontrado");
+  }
+  if (refund.status !== "APPROVED") {
+    throw new Error("Este reembolso não está aprovado para execução");
+  }
+
+  const now = new Date();
+
+  await prisma.$transaction(async (tx) => {
+    // 1. Update Refund to COMPLETED
+    await tx.refund.update({
+      where: { id: refundId },
+      data: {
+        status: "COMPLETED",
+        paymentMethod: data.paymentMethod,
+        bankName: data.bankName?.trim() || null,
+        bankAgency: data.bankAgency?.trim() || null,
+        bankAccount: data.bankAccount?.trim() || null,
+        pixKey: data.pixKey?.trim() || null,
+        invoiceAction: data.invoiceAction,
+        invoiceCancelReason: data.invoiceCancelReason?.trim() || null,
+        executedById: session.userId,
+        executedAt: now,
+        completedAt: now,
+      },
+    });
+
+    // 2. Create AccountPayable origin=REFUND, status=PAID
+    await tx.accountPayable.create({
+      data: {
+        supplier: refund.ticket.client.name,
+        description: `Reembolso ref Ticket #${refund.ticket.subject}`,
+        value: refund.amount,
+        dueDate: now,
+        status: "PAID",
+        paidAt: now,
+        origin: "REFUND",
+        refundId: refund.id,
+        companyId,
+      },
+    });
+
+    // 3. Handle invoice action
+    if (data.invoiceAction === "CANCEL_INVOICE") {
+      // Find invoices related to the ticket's proposal or boleto
+      const whereClause: Prisma.InvoiceWhereInput = {
+        companyId,
+        status: { not: "CANCELLED" },
+        type: "STANDARD",
+        OR: [
+          ...(refund.ticket.proposalId
+            ? [{ proposalId: refund.ticket.proposalId }]
+            : []),
+          ...(refund.ticket.boletoId
+            ? [{ boletoId: refund.ticket.boletoId }]
+            : []),
+        ],
+      };
+
+      // Only search if there's a proposal or boleto linked
+      if (refund.ticket.proposalId || refund.ticket.boletoId) {
+        await tx.invoice.updateMany({
+          where: whereClause,
+          data: {
+            status: "CANCELLED",
+            cancelledAt: now,
+            cancellationReason: data.invoiceCancelReason!.trim(),
+          },
+        });
+      }
+    } else if (data.invoiceAction === "CREDIT_NOTE") {
+      // Find original invoice to reference
+      let originalInvoiceId: string | null = null;
+      if (refund.ticket.proposalId || refund.ticket.boletoId) {
+        const originalInvoice = await tx.invoice.findFirst({
+          where: {
+            companyId,
+            type: "STANDARD",
+            status: { not: "CANCELLED" },
+            OR: [
+              ...(refund.ticket.proposalId
+                ? [{ proposalId: refund.ticket.proposalId }]
+                : []),
+              ...(refund.ticket.boletoId
+                ? [{ boletoId: refund.ticket.boletoId }]
+                : []),
+            ],
+          },
+          select: { id: true },
+          orderBy: { createdAt: "desc" },
+        });
+        originalInvoiceId = originalInvoice?.id ?? null;
+      }
+
+      await tx.invoice.create({
+        data: {
+          clientId: refund.ticket.clientId,
+          serviceDescription: `Nota de crédito - Reembolso ref Ticket #${refund.ticket.subject}`,
+          value: refund.amount,
+          issRate: 0,
+          status: "ISSUED",
+          type: "CREDIT_NOTE",
+          refundId: refund.id,
+          originalInvoiceId,
+          companyId,
+        },
+      });
+    }
+
+    // 4. Cancel pending AccountReceivable for the client if any
+    await tx.accountReceivable.updateMany({
+      where: {
+        clientId: refund.ticket.clientId,
+        companyId,
+        status: "PENDING",
+      },
+      data: {
+        status: "PAID",
+        paidAt: now,
+      },
+    });
+
+    // 5. Attach refund proof if provided
+    if (data.refundProofId) {
+      const proofFile = await tx.attachment.findUnique({
+        where: { id: data.refundProofId },
+        select: { fileName: true, fileSize: true, mimeType: true, storagePath: true },
+      });
+      if (proofFile) {
+        await tx.refundAttachment.create({
+          data: {
+            refundId: refund.id,
+            type: "REFUND_PROOF",
+            fileName: proofFile.fileName,
+            fileSize: proofFile.fileSize,
+            mimeType: proofFile.mimeType,
+            storagePath: proofFile.storagePath,
+            uploadedById: session.userId,
+          },
+        });
+      }
+    }
+
+    // 6. Timeline event
+    const methodLabel = data.paymentMethod === "PIX" ? "PIX" : "TED";
+    await tx.ticketMessage.create({
+      data: {
+        ticketId: refund.ticketId,
+        senderId: session.userId,
+        content: `Reembolso de R$ ${Number(refund.amount).toFixed(2)} executado via ${methodLabel}. Status: Concluído.`,
+        direction: "OUTBOUND",
+        origin: "SYSTEM",
+        isInternal: true,
+      },
+    });
+  });
+
+  await logAuditEvent({
+    userId: session.userId,
+    action: "UPDATE",
+    entity: "Refund",
+    entityId: refundId,
+    dataAfter: {
+      status: "COMPLETED",
+      paymentMethod: data.paymentMethod,
+      invoiceAction: data.invoiceAction,
+      executedById: session.userId,
+    } as unknown as Prisma.InputJsonValue,
+    companyId,
+  });
+
+  return { success: true };
+}
+
+// ---------------------------------------------------------------------------
 // Tags
 // ---------------------------------------------------------------------------
 
