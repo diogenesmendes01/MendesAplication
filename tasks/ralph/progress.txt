@@ -648,3 +648,25 @@
   - Shadcn/UI Checkbox: `onCheckedChange` gives `boolean | "indeterminate"`, compare with `=== true`
   - `listTimelineEvents` must be imported from actions.ts to fetch events on-demand for PDF export
 ---
+
+## 2026-03-02 - US-090
+- What was implemented:
+  - Added "Origem" column to Contas a Pagar table showing "Manual" (gray badge) or "SAC" (blue clickable badge with headphones icon) that navigates to the originating ticket
+  - Updated `listPayables` server action to include `origin`, `refundId`, and `ticketId` (via refund relation) in PayableRow
+  - Added WhatsApp tab to client timeline filter dropdown
+  - Updated `getClientTimeline` to query WhatsApp messages (channel=WHATSAPP) with direction, contact info
+  - Added contact info display (name + role) on timeline items
+  - Added "Reembolso" destructive badge on tickets that have refunds
+  - Updated TimelineItemType to include "whatsapp"
+  - Added TimelineItem fields: contactName, contactRole, hasRefund
+- Files changed:
+  - `erp/src/app/(app)/financeiro/pagar/actions.ts` — PayableRow type + listPayables query with refund include
+  - `erp/src/app/(app)/financeiro/pagar/page.tsx` — Origem column, SAC badge, useRouter for navigation
+  - `erp/src/app/(app)/comercial/clientes/[id]/actions.ts` — WhatsApp section, contact/refund fields in timeline
+  - `erp/src/components/client-timeline.tsx` — WhatsApp filter, green icon, contact display, Reembolso badge
+- **Learnings for future iterations:**
+  - AccountPayable has `origin` (PayableOrigin: MANUAL/REFUND) and `refundId` fields; use `include: { refund: { select: { ticketId: true } } }` to get the source ticket
+  - Client timeline uses aggregation from multiple Prisma models sorted by date — add new item types by adding a new query section and updating TimelineItemType union
+  - TicketMessage has `channel` (ChannelType: EMAIL/WHATSAPP) and `contact` relation for identifying the external sender
+  - Ticket.refunds relation can be checked with `take: 1` for a simple "has refund" boolean
+---
