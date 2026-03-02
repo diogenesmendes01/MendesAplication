@@ -133,8 +133,8 @@
         "Typecheck passes"
       ],
       "priority": 9,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "accountPayable and creditNote back-relations will be added in US-059"
     },
     {
       "id": "US-057",

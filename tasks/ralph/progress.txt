@@ -117,3 +117,12 @@
 - Created `erp/uploads/` directory with `.gitkeep`; added gitignore rules for uploads content
 - Files changed: `erp/prisma/schema.prisma`, `.gitignore`, `erp/uploads/.gitkeep`
 ---
+
+## 2026-03-02 - US-056
+- Created Refund model with all fields: id, ticketId, companyId, requestedById, approvedById, executedById, amount, paymentMethod, bank details, pixKey, status, rejectionReason, timestamps, SLA fields, invoice action
+- Created RefundAttachment model with type (RefundAttachmentType), file info, uploadedById
+- Added named relations on User: refundsRequested/Approved/Executed
+- Added refunds relation to Ticket and Company
+- Note: accountPayable and creditNote back-relations to be added in US-059
+- Files changed: `erp/prisma/schema.prisma`
+---
