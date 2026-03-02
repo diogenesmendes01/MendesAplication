@@ -237,6 +237,7 @@ enum ProposalStatus {
   ACCEPTED
   REJECTED
   EXPIRED
+  CANCELLED
 }
 
 enum BoletoStatus {
@@ -277,6 +278,60 @@ enum AccountType {
   EQUITY
   REVENUE
   EXPENSE
+}
+
+enum ChannelType {
+  EMAIL
+  WHATSAPP
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageOrigin {
+  SYSTEM
+  EXTERNAL
+}
+
+enum SlaType {
+  TICKET
+  REFUND
+}
+
+enum RefundStatus {
+  AWAITING_APPROVAL
+  APPROVED
+  REJECTED
+  PROCESSING
+  COMPLETED
+}
+
+enum RefundPaymentMethod {
+  PIX
+  TED
+}
+
+enum RefundAttachmentType {
+  PAYMENT_PROOF
+  REFUND_PROOF
+}
+
+enum RefundInvoiceAction {
+  CANCEL_INVOICE
+  CREDIT_NOTE
+  NONE
+}
+
+enum PayableOrigin {
+  MANUAL
+  REFUND
+}
+
+enum InvoiceType {
+  STANDARD
+  CREDIT_NOTE
 }
 
 model BankTransaction {

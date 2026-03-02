@@ -89,11 +89,12 @@ export interface ClientOption {
 // ---------------------------------------------------------------------------
 
 const VALID_STATUS_TRANSITIONS: Record<ProposalStatus, ProposalStatus[]> = {
-  DRAFT: ["SENT"],
-  SENT: ["ACCEPTED", "REJECTED", "EXPIRED"],
+  DRAFT: ["SENT", "CANCELLED"],
+  SENT: ["ACCEPTED", "REJECTED", "EXPIRED", "CANCELLED"],
   ACCEPTED: [],
   REJECTED: [],
   EXPIRED: [],
+  CANCELLED: [],
 };
 
 // ---------------------------------------------------------------------------
