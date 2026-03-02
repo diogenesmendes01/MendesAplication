@@ -1665,6 +1665,173 @@ export async function requestRefund(
 }
 
 // ---------------------------------------------------------------------------
+// Refund Approval / Rejection
+// ---------------------------------------------------------------------------
+
+export async function approveRefund(refundId: string, companyId: string) {
+  const session = await requireCompanyAccess(companyId);
+
+  // Only ADMIN and MANAGER can approve refunds
+  if (session.role !== "ADMIN" && session.role !== "MANAGER") {
+    throw new Error("Acesso negado. Apenas administradores e gestores podem aprovar reembolsos.");
+  }
+
+  // Fetch refund and validate
+  const refund = await prisma.refund.findFirst({
+    where: { id: refundId, companyId },
+    select: { id: true, ticketId: true, status: true, amount: true },
+  });
+  if (!refund) {
+    throw new Error("Reembolso não encontrado");
+  }
+  if (refund.status !== "AWAITING_APPROVAL") {
+    throw new Error("Este reembolso não está aguardando aprovação");
+  }
+
+  // Calculate new SLA deadline for execution stage
+  let slaDeadline: Date | null = null;
+  const slaConfig = await prisma.slaConfig.findFirst({
+    where: { companyId, type: "REFUND", stage: "execution" },
+    select: { deadlineMinutes: true },
+  });
+
+  // Get business hours config
+  const bhConfig = await prisma.slaConfig.findFirst({
+    where: { companyId, type: "TICKET", priority: null, stage: "business_hours" },
+    select: { deadlineMinutes: true, alertBeforeMinutes: true },
+  });
+
+  let businessHours: import("@/lib/sla").BusinessHours | undefined;
+  if (bhConfig) {
+    const startHour = Math.floor(bhConfig.deadlineMinutes / 100);
+    const endHour = bhConfig.deadlineMinutes % 100;
+    const workDaysBitmask = bhConfig.alertBeforeMinutes;
+    const workDays: number[] = [];
+    for (let d = 0; d < 7; d++) {
+      if (workDaysBitmask & (1 << d)) workDays.push(d);
+    }
+    businessHours = { enabled: true, startHour, endHour, workDays };
+  }
+
+  const { calculateSlaDeadline } = await import("@/lib/sla");
+  if (slaConfig) {
+    slaDeadline = calculateSlaDeadline(new Date(), slaConfig.deadlineMinutes, businessHours);
+  } else {
+    // Default: 24 hours (1440 minutes) for execution
+    slaDeadline = calculateSlaDeadline(new Date(), 1440, businessHours);
+  }
+
+  // Update refund and create timeline event in transaction
+  await prisma.$transaction(async (tx) => {
+    await tx.refund.update({
+      where: { id: refundId },
+      data: {
+        status: "APPROVED",
+        approvedById: session.userId,
+        approvedAt: new Date(),
+        slaDeadline,
+        slaBreached: false,
+      },
+    });
+
+    // Timeline event
+    await tx.ticketMessage.create({
+      data: {
+        ticketId: refund.ticketId,
+        senderId: session.userId,
+        content: `Reembolso de R$ ${Number(refund.amount).toFixed(2)} aprovado.`,
+        direction: "OUTBOUND",
+        origin: "SYSTEM",
+        isInternal: true,
+      },
+    });
+  });
+
+  await logAuditEvent({
+    userId: session.userId,
+    action: "UPDATE",
+    entity: "Refund",
+    entityId: refundId,
+    dataAfter: {
+      status: "APPROVED",
+      approvedById: session.userId,
+      slaDeadline: slaDeadline?.toISOString() ?? null,
+    } as unknown as Prisma.InputJsonValue,
+    companyId,
+  });
+
+  return { success: true };
+}
+
+export async function rejectRefund(
+  refundId: string,
+  companyId: string,
+  reason: string
+) {
+  const session = await requireCompanyAccess(companyId);
+
+  // Only ADMIN and MANAGER can reject refunds
+  if (session.role !== "ADMIN" && session.role !== "MANAGER") {
+    throw new Error("Acesso negado. Apenas administradores e gestores podem rejeitar reembolsos.");
+  }
+
+  if (!reason?.trim()) {
+    throw new Error("Motivo da rejeição é obrigatório");
+  }
+
+  // Fetch refund and validate
+  const refund = await prisma.refund.findFirst({
+    where: { id: refundId, companyId },
+    select: { id: true, ticketId: true, status: true, amount: true },
+  });
+  if (!refund) {
+    throw new Error("Reembolso não encontrado");
+  }
+  if (refund.status !== "AWAITING_APPROVAL") {
+    throw new Error("Este reembolso não está aguardando aprovação");
+  }
+
+  // Update refund and create timeline event in transaction
+  await prisma.$transaction(async (tx) => {
+    await tx.refund.update({
+      where: { id: refundId },
+      data: {
+        status: "REJECTED",
+        rejectionReason: reason.trim(),
+        approvedById: session.userId,
+        approvedAt: new Date(),
+      },
+    });
+
+    // Timeline event
+    await tx.ticketMessage.create({
+      data: {
+        ticketId: refund.ticketId,
+        senderId: session.userId,
+        content: `Reembolso de R$ ${Number(refund.amount).toFixed(2)} rejeitado. Motivo: ${reason.trim()}`,
+        direction: "OUTBOUND",
+        origin: "SYSTEM",
+        isInternal: true,
+      },
+    });
+  });
+
+  await logAuditEvent({
+    userId: session.userId,
+    action: "UPDATE",
+    entity: "Refund",
+    entityId: refundId,
+    dataAfter: {
+      status: "REJECTED",
+      rejectionReason: reason.trim(),
+    } as unknown as Prisma.InputJsonValue,
+    companyId,
+  });
+
+  return { success: true };
+}
+
+// ---------------------------------------------------------------------------
 // Tags
 // ---------------------------------------------------------------------------
 
