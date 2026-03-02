@@ -421,7 +421,8 @@ model Ticket {
   company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
   proposal Proposal? @relation("TicketProposal", fields: [proposalId], references: [id], onDelete: SetNull)
   boleto   Boleto?   @relation("TicketBoleto", fields: [boletoId], references: [id], onDelete: SetNull)
-  messages TicketMessage[]
+  messages    TicketMessage[]
+  attachments Attachment[]    @relation("TicketAttachments")
 
   @@map("tickets")
 }
@@ -434,10 +435,27 @@ model TicketMessage {
   sentViaEmail Boolean  @default(false)
   createdAt    DateTime @default(now())
 
-  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
-  sender User   @relation("TicketMessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  ticket      Ticket       @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  sender      User         @relation("TicketMessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  attachments Attachment[] @relation("TicketMessageAttachments")
 
   @@map("ticket_messages")
+}
+
+model Attachment {
+  id              String         @id @default(cuid())
+  ticketMessageId String?
+  ticketId        String?
+  fileName        String
+  fileSize        Int
+  mimeType        String
+  storagePath     String
+  createdAt       DateTime       @default(now())
+
+  ticketMessage TicketMessage? @relation("TicketMessageAttachments", fields: [ticketMessageId], references: [id], onDelete: Cascade)
+  ticket        Ticket?        @relation("TicketAttachments", fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@map("attachments")
 }
 
 model Proposal {
