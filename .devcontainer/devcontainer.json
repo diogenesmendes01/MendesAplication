@@ -6,7 +6,8 @@
   "features": {
     "ghcr.io/anthropics/devcontainer-features/claude-code:1.0": {},
     "ghcr.io/devcontainers/features/python:1": {},
-    "ghcr.io/devcontainers/features/git:1": {}
+    "ghcr.io/devcontainers/features/git:1": {},
+    "ghcr.io/itsmechlark/features/redis-server:1": {}
   },
   "remoteUser": "vscode",
   "postCreateCommand": "claude --version"
