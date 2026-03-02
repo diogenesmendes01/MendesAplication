@@ -222,3 +222,13 @@
   - Business hours encoded: deadlineMinutes = startHour*100+endHour, alertBeforeMinutes = workDays bitmask
   - Default SLA values defined as constants for reuse across actions and seed
 ---
+
+## 2026-03-02 - US-066
+- Created /configuracoes/sla page with editable SLA tables and business hours
+- Ticket SLA table: rows per priority (Alta/Média/Baixa) x stage (1ª Resposta/Resolução)
+- Refund SLA table: rows per stage (Aprovação/Execução/Total)
+- Business hours section with enable toggle, start/end hour, day-of-week checkboxes
+- Single Save button persists SLA configs and business hours atomically
+- Shows default values when no config exists for company
+- Files changed: `erp/src/app/(app)/configuracoes/sla/page.tsx`
+---
