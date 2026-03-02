@@ -1505,6 +1505,166 @@ export async function createClientAndLink(
 }
 
 // ---------------------------------------------------------------------------
+// Refund Request (US-082)
+// ---------------------------------------------------------------------------
+
+export async function requestRefund(
+  ticketId: string,
+  companyId: string,
+  amount: number,
+  justification: string,
+  paymentProofId: string,
+  boletoId?: string
+) {
+  const session = await requireCompanyAccess(companyId);
+
+  if (!amount || amount <= 0) {
+    throw new Error("Valor do reembolso deve ser maior que zero");
+  }
+  if (!justification?.trim()) {
+    throw new Error("Justificativa é obrigatória");
+  }
+  if (!paymentProofId) {
+    throw new Error("Comprovante de pagamento é obrigatório");
+  }
+
+  // Validate ticket exists and belongs to company
+  const ticket = await prisma.ticket.findFirst({
+    where: { id: ticketId, companyId },
+    select: { id: true, tags: true },
+  });
+  if (!ticket) {
+    throw new Error("Ticket não encontrado");
+  }
+
+  // Validate payment proof attachment exists
+  const proofAttachment = await prisma.attachment.findUnique({
+    where: { id: paymentProofId },
+    select: { fileName: true, fileSize: true, mimeType: true, storagePath: true },
+  });
+  if (!proofAttachment) {
+    throw new Error("Comprovante de pagamento não encontrado");
+  }
+
+  // Validate boleto if provided
+  if (boletoId) {
+    const boleto = await prisma.boleto.findFirst({
+      where: { id: boletoId, companyId },
+      select: { id: true },
+    });
+    if (!boleto) {
+      throw new Error("Boleto não encontrado");
+    }
+  }
+
+  // Get SLA config for REFUND approval stage
+  let slaDeadline: Date | null = null;
+  const slaConfig = await prisma.slaConfig.findFirst({
+    where: { companyId, type: "REFUND", stage: "approval" },
+    select: { deadlineMinutes: true },
+  });
+
+  if (slaConfig) {
+    // Optionally get business hours for SLA calculation
+    const bhConfig = await prisma.slaConfig.findFirst({
+      where: { companyId, type: "TICKET", priority: null, stage: "business_hours" },
+      select: { deadlineMinutes: true, alertBeforeMinutes: true },
+    });
+
+    let businessHours: import("@/lib/sla").BusinessHours | undefined;
+    if (bhConfig) {
+      const startHour = Math.floor(bhConfig.deadlineMinutes / 100);
+      const endHour = bhConfig.deadlineMinutes % 100;
+      const workDaysBitmask = bhConfig.alertBeforeMinutes;
+      const workDays: number[] = [];
+      for (let d = 0; d < 7; d++) {
+        if (workDaysBitmask & (1 << d)) workDays.push(d);
+      }
+      businessHours = { enabled: true, startHour, endHour, workDays };
+    }
+
+    const { calculateSlaDeadline } = await import("@/lib/sla");
+    slaDeadline = calculateSlaDeadline(new Date(), slaConfig.deadlineMinutes, businessHours);
+  } else {
+    // Default: 4 hours (240 minutes) for approval
+    const { calculateSlaDeadline } = await import("@/lib/sla");
+    slaDeadline = calculateSlaDeadline(new Date(), 240);
+  }
+
+  // Create refund with payment proof in a transaction
+  const refund = await prisma.$transaction(async (tx) => {
+    const newRefund = await tx.refund.create({
+      data: {
+        ticketId,
+        companyId,
+        requestedById: session.userId,
+        amount,
+        status: "AWAITING_APPROVAL",
+        slaDeadline,
+      },
+    });
+
+    // Create RefundAttachment for payment proof
+    await tx.refundAttachment.create({
+      data: {
+        refundId: newRefund.id,
+        type: "PAYMENT_PROOF",
+        fileName: proofAttachment.fileName,
+        fileSize: proofAttachment.fileSize,
+        mimeType: proofAttachment.mimeType,
+        storagePath: proofAttachment.storagePath,
+        uploadedById: session.userId,
+      },
+    });
+
+    // Add "Reembolso" tag to ticket if not already present
+    if (!ticket.tags.includes("Reembolso")) {
+      await tx.ticket.update({
+        where: { id: ticketId },
+        data: { tags: { push: "Reembolso" } },
+      });
+    }
+
+    // Register timeline event (internal note about refund request)
+    await tx.ticketMessage.create({
+      data: {
+        ticketId,
+        senderId: session.userId,
+        content: `Solicitação de reembolso no valor de R$ ${amount.toFixed(2)}. Justificativa: ${justification.trim()}`,
+        direction: "OUTBOUND",
+        origin: "SYSTEM",
+        isInternal: true,
+      },
+    });
+
+    return newRefund;
+  });
+
+  await logAuditEvent({
+    userId: session.userId,
+    action: "CREATE",
+    entity: "Refund",
+    entityId: refund.id,
+    dataAfter: {
+      ticketId,
+      amount,
+      justification: justification.trim(),
+      paymentProofId,
+      boletoId: boletoId ?? null,
+      slaDeadline: slaDeadline?.toISOString() ?? null,
+    } as unknown as Prisma.InputJsonValue,
+    companyId,
+  });
+
+  return {
+    id: refund.id,
+    status: refund.status,
+    amount: Number(refund.amount),
+    slaDeadline: refund.slaDeadline?.toISOString() ?? null,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Tags
 // ---------------------------------------------------------------------------
 
