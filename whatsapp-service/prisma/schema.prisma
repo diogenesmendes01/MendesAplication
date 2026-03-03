@@ -1,0 +1,693 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  MANAGER
+}
+
+enum Status {
+  ACTIVE
+  INACTIVE
+}
+
+enum ClientType {
+  PF
+  PJ
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum FinancialCategoryType {
+  INCOME
+  EXPENSE
+}
+
+enum Recurrence {
+  NONE
+  WEEKLY
+  MONTHLY
+  YEARLY
+}
+
+model SharedClientGroup {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+
+  companies Company[]
+
+  @@map("shared_client_groups")
+}
+
+model Company {
+  id                    String   @id @default(cuid())
+  razaoSocial           String
+  nomeFantasia          String
+  cnpj                  String   @unique
+  inscricaoEstadual     String?
+  endereco              String?
+  telefone              String?
+  email                 String?
+  segmento              String?
+  logoUrl               String?
+  status                Status   @default(ACTIVE)
+  sharedClientGroupId   String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  sharedClientGroup  SharedClientGroup? @relation(fields: [sharedClientGroupId], references: [id], onDelete: SetNull)
+  userCompanies      UserCompany[]
+  auditLogs          AuditLog[]
+  clients            Client[]
+  financialCategories FinancialCategory[]
+  accountsReceivable AccountReceivable[]
+  accountsPayable    AccountPayable[]
+  bankTransactions   BankTransaction[]
+  tickets            Ticket[]
+  proposals          Proposal[]
+  boletos            Boleto[]
+  invoices           Invoice[]
+  taxEntries         TaxEntry[]
+  chartOfAccounts    ChartOfAccounts[]
+  channels           Channel[]
+  slaConfigs         SlaConfig[]
+  refunds            Refund[]
+  baileysAuthStates  BaileysAuthState[]
+  lidMappings        LidMapping[]
+
+  @@map("companies")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         UserRole @default(MANAGER)
+  status       Status   @default(ACTIVE)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  userCompanies       UserCompany[]
+  auditLogs           AuditLog[]
+  passwordResetTokens PasswordResetToken[]
+  assignedTickets     Ticket[]        @relation("TicketAssignee")
+  ticketMessages      TicketMessage[] @relation("TicketMessageSender")
+  refundsRequested    Refund[]        @relation("RefundRequestedBy")
+  refundsApproved     Refund[]        @relation("RefundApprovedBy")
+  refundsExecuted     Refund[]        @relation("RefundExecutedBy")
+  refundAttachments   RefundAttachment[]
+
+  @@map("users")
+}
+
+model UserCompany {
+  userId    String
+  companyId String
+  modules   String[]
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@id([userId, companyId])
+  @@map("user_companies")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  token     String    @unique
+  userId    String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("password_reset_tokens")
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String
+  action     String
+  entity     String
+  entityId   String
+  dataBefore Json?
+  dataAfter  Json?
+  ipAddress  String?
+  companyId  String?
+  createdAt  DateTime @default(now())
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+
+  @@map("audit_logs")
+}
+
+model Client {
+  id           String     @id @default(cuid())
+  name         String
+  razaoSocial  String?
+  cpfCnpj      String
+  email        String?
+  telefone     String?
+  endereco     String?
+  type         ClientType @default(PF)
+  companyId    String
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  company            Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  accountsReceivable AccountReceivable[]
+  tickets            Ticket[]
+  proposals          Proposal[]
+  invoices           Invoice[]
+  additionalContacts AdditionalContact[]
+
+  @@unique([cpfCnpj, companyId])
+  @@map("clients")
+}
+
+model AdditionalContact {
+  id        String   @id @default(cuid())
+  clientId  String
+  name      String
+  role      String?
+  email     String?
+  whatsapp  String?
+  createdAt DateTime @default(now())
+
+  client         Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  tickets        Ticket[]
+  ticketMessages TicketMessage[] @relation("TicketMessageContact")
+
+  @@map("additional_contacts")
+}
+
+model Channel {
+  id              String       @id @default(cuid())
+  companyId       String
+  type            ChannelType
+  name            String
+  config          Json
+  isActive        Boolean      @default(true)
+  lastSyncUid     Int?
+  lastSyncUidSent Int?
+  lastSyncAt      DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  company Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  tickets Ticket[]
+
+  @@map("channels")
+}
+
+model SlaConfig {
+  id                 String          @id @default(cuid())
+  companyId          String
+  type               SlaType
+  priority           TicketPriority?
+  stage              String
+  deadlineMinutes    Int
+  alertBeforeMinutes Int             @default(30)
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, type, priority, stage])
+  @@map("sla_configs")
+}
+
+model FinancialCategory {
+  id        String                @id @default(cuid())
+  name      String
+  type      FinancialCategoryType
+  companyId String
+
+  company         Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  accountsPayable AccountPayable[]
+
+  @@map("financial_categories")
+}
+
+model AccountReceivable {
+  id          String        @id @default(cuid())
+  clientId    String
+  description String
+  value       Decimal       @db.Decimal(12, 2)
+  dueDate     DateTime
+  status      PaymentStatus @default(PENDING)
+  paidAt      DateTime?
+  companyId   String
+  createdAt   DateTime      @default(now())
+
+  client  Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@map("accounts_receivable")
+}
+
+model AccountPayable {
+  id          String        @id @default(cuid())
+  supplier    String
+  description String
+  value       Decimal       @db.Decimal(12, 2)
+  dueDate     DateTime
+  status      PaymentStatus @default(PENDING)
+  categoryId  String?
+  recurrence  Recurrence    @default(NONE)
+  paidAt      DateTime?
+  companyId   String
+  origin      PayableOrigin @default(MANUAL)
+  refundId    String?       @unique
+  createdAt   DateTime      @default(now())
+
+  category FinancialCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  company  Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  refund   Refund?            @relation(fields: [refundId], references: [id], onDelete: SetNull)
+
+  @@map("accounts_payable")
+}
+
+enum TicketPriority {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  WAITING_CLIENT
+  RESOLVED
+  CLOSED
+}
+
+enum ProposalStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  REJECTED
+  EXPIRED
+  CANCELLED
+}
+
+enum BoletoStatus {
+  GENERATED
+  SENT
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum BankTransactionStatus {
+  PENDING
+  RECONCILED
+}
+
+enum InvoiceStatus {
+  PENDING
+  ISSUED
+  CANCELLED
+}
+
+enum TaxType {
+  ISS
+  PIS
+  COFINS
+  IRPJ
+  CSLL
+}
+
+enum TaxStatus {
+  PENDING
+  PAID
+}
+
+enum AccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  REVENUE
+  EXPENSE
+}
+
+enum ChannelType {
+  EMAIL
+  WHATSAPP
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageOrigin {
+  SYSTEM
+  EXTERNAL
+}
+
+enum SlaType {
+  TICKET
+  REFUND
+}
+
+enum RefundStatus {
+  AWAITING_APPROVAL
+  APPROVED
+  REJECTED
+  PROCESSING
+  COMPLETED
+}
+
+enum RefundPaymentMethod {
+  PIX
+  TED
+}
+
+enum RefundAttachmentType {
+  PAYMENT_PROOF
+  REFUND_PROOF
+}
+
+enum RefundInvoiceAction {
+  CANCEL_INVOICE
+  CREDIT_NOTE
+  NONE
+}
+
+enum PayableOrigin {
+  MANUAL
+  REFUND
+}
+
+enum InvoiceType {
+  STANDARD
+  CREDIT_NOTE
+}
+
+model BankTransaction {
+  id              String                @id @default(cuid())
+  date            DateTime
+  description     String
+  value           Decimal               @db.Decimal(12, 2)
+  status          BankTransactionStatus @default(PENDING)
+  matchedType     String?
+  matchedEntityId String?
+  companyId       String
+  createdAt       DateTime              @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@map("bank_transactions")
+}
+
+model Ticket {
+  id             String         @id @default(cuid())
+  clientId       String
+  subject        String
+  description    String
+  priority       TicketPriority @default(MEDIUM)
+  status         TicketStatus   @default(OPEN)
+  assigneeId     String?
+  proposalId     String?
+  boletoId       String?
+  companyId      String
+  channelId      String?
+  contactId      String?
+  slaFirstReply  DateTime?
+  slaResolution  DateTime?
+  slaBreached    Boolean        @default(false)
+  slaAtRisk      Boolean        @default(false)
+  tags           String[]       @default([])
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  client      Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  assignee    User?               @relation("TicketAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  company     Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  proposal    Proposal?           @relation("TicketProposal", fields: [proposalId], references: [id], onDelete: SetNull)
+  boleto      Boleto?             @relation("TicketBoleto", fields: [boletoId], references: [id], onDelete: SetNull)
+  channel     Channel?            @relation(fields: [channelId], references: [id], onDelete: SetNull)
+  contact     AdditionalContact?  @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  messages    TicketMessage[]
+  attachments Attachment[]        @relation("TicketAttachments")
+  refunds     Refund[]
+
+  @@map("tickets")
+}
+
+model TicketMessage {
+  id           String            @id @default(cuid())
+  ticketId     String
+  senderId     String?
+  content      String
+  sentViaEmail Boolean           @default(false)
+  channel      ChannelType?
+  direction    MessageDirection  @default(OUTBOUND)
+  origin       MessageOrigin     @default(SYSTEM)
+  externalId   String?
+  contactId    String?
+  isInternal   Boolean           @default(false)
+  createdAt    DateTime          @default(now())
+
+  ticket      Ticket              @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  sender      User?               @relation("TicketMessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  contact     AdditionalContact?  @relation("TicketMessageContact", fields: [contactId], references: [id], onDelete: SetNull)
+  attachments Attachment[]        @relation("TicketMessageAttachments")
+
+  @@unique([externalId, channel])
+  @@map("ticket_messages")
+}
+
+model Attachment {
+  id              String         @id @default(cuid())
+  ticketMessageId String?
+  ticketId        String?
+  fileName        String
+  fileSize        Int
+  mimeType        String
+  storagePath     String
+  createdAt       DateTime       @default(now())
+
+  ticketMessage TicketMessage? @relation("TicketMessageAttachments", fields: [ticketMessageId], references: [id], onDelete: Cascade)
+  ticket        Ticket?        @relation("TicketAttachments", fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@map("attachments")
+}
+
+model Refund {
+  id                 String              @id @default(cuid())
+  ticketId           String
+  companyId          String
+  requestedById      String
+  approvedById       String?
+  executedById       String?
+  amount             Decimal             @db.Decimal(12, 2)
+  paymentMethod      RefundPaymentMethod?
+  bankName           String?
+  bankAgency         String?
+  bankAccount        String?
+  pixKey             String?
+  justification      String?
+  boletoId           String?
+  status             RefundStatus        @default(AWAITING_APPROVAL)
+  rejectionReason    String?
+  requestedAt        DateTime            @default(now())
+  approvedAt         DateTime?
+  executedAt         DateTime?
+  completedAt        DateTime?
+  slaDeadline        DateTime?
+  slaBreached        Boolean             @default(false)
+  slaAtRisk          Boolean             @default(false)
+  invoiceAction      RefundInvoiceAction?
+  invoiceCancelReason String?
+
+  ticket       Ticket             @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  company      Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  requestedBy  User               @relation("RefundRequestedBy", fields: [requestedById], references: [id])
+  approvedBy   User?              @relation("RefundApprovedBy", fields: [approvedById], references: [id])
+  executedBy     User?              @relation("RefundExecutedBy", fields: [executedById], references: [id])
+  attachments    RefundAttachment[]
+  accountPayable AccountPayable?
+  creditNote     Invoice?
+
+  @@map("refunds")
+}
+
+model RefundAttachment {
+  id           String               @id @default(cuid())
+  refundId     String
+  type         RefundAttachmentType
+  fileName     String
+  fileSize     Int
+  mimeType     String
+  storagePath  String
+  uploadedById String
+  createdAt    DateTime             @default(now())
+
+  refund     Refund @relation(fields: [refundId], references: [id], onDelete: Cascade)
+  uploadedBy User   @relation(fields: [uploadedById], references: [id])
+
+  @@map("refund_attachments")
+}
+
+model Proposal {
+  id                String         @id @default(cuid())
+  clientId          String
+  status            ProposalStatus @default(DRAFT)
+  paymentConditions String?
+  validity          DateTime?
+  observations      String?
+  totalValue        Decimal        @db.Decimal(12, 2) @default(0)
+  companyId         String
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  client   Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  company  Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  items    ProposalItem[]
+  boletos  Boleto[]
+  tickets  Ticket[] @relation("TicketProposal")
+  invoices Invoice[]
+
+  @@map("proposals")
+}
+
+model ProposalItem {
+  id          String  @id @default(cuid())
+  proposalId  String
+  description String
+  quantity    Decimal @db.Decimal(10, 2)
+  unitPrice   Decimal @db.Decimal(12, 2)
+
+  proposal Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  @@map("proposal_items")
+}
+
+model Boleto {
+  id                String       @id @default(cuid())
+  proposalId        String
+  bankReference     String?
+  value             Decimal      @db.Decimal(12, 2)
+  dueDate           DateTime
+  installmentNumber Int
+  status            BoletoStatus @default(GENERATED)
+  companyId         String
+  createdAt         DateTime     @default(now())
+
+  proposal Proposal  @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  tickets  Ticket[]  @relation("TicketBoleto")
+  invoices Invoice[]
+
+  @@map("boletos")
+}
+
+model Invoice {
+  id                  String        @id @default(cuid())
+  proposalId          String?
+  boletoId            String?
+  clientId            String
+  serviceDescription  String
+  value               Decimal       @db.Decimal(12, 2)
+  issRate             Decimal       @db.Decimal(5, 2) @default(0)
+  status              InvoiceStatus @default(PENDING)
+  nfNumber            String?
+  companyId           String
+  type                InvoiceType   @default(STANDARD)
+  cancelledAt         DateTime?
+  cancellationReason  String?
+  refundId            String?       @unique
+  originalInvoiceId   String?
+  createdAt           DateTime      @default(now())
+
+  proposal        Proposal? @relation(fields: [proposalId], references: [id], onDelete: SetNull)
+  boleto          Boleto?   @relation(fields: [boletoId], references: [id], onDelete: SetNull)
+  client          Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  company         Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  refund          Refund?   @relation(fields: [refundId], references: [id], onDelete: SetNull)
+  originalInvoice Invoice?  @relation("CreditNote", fields: [originalInvoiceId], references: [id], onDelete: SetNull)
+  creditNotes     Invoice[] @relation("CreditNote")
+
+  @@map("invoices")
+}
+
+model TaxEntry {
+  id        String    @id @default(cuid())
+  companyId String
+  type      TaxType
+  period    String
+  value     Decimal   @db.Decimal(12, 2)
+  dueDate   DateTime
+  status    TaxStatus @default(PENDING)
+  createdAt DateTime  @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@map("tax_entries")
+}
+
+model ChartOfAccounts {
+  id        String      @id @default(cuid())
+  code      String
+  name      String
+  parentId  String?
+  level     Int         @default(1)
+  type      AccountType
+  companyId String
+  createdAt DateTime    @default(now())
+
+  parent   ChartOfAccounts?  @relation("ChartOfAccountsHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children ChartOfAccounts[] @relation("ChartOfAccountsHierarchy")
+  company  Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([code, companyId])
+  @@map("chart_of_accounts")
+}
+
+model BaileysAuthState {
+  id        String   @id @default(cuid())
+  companyId String
+  keyType   String
+  keyId     String
+  keyData   Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, keyType, keyId])
+  @@index([companyId])
+  @@map("baileys_auth_state")
+}
+
+model LidMapping {
+  id          String   @id @default(cuid())
+  companyId   String
+  lid         String
+  phoneNumber String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, lid])
+  @@index([companyId])
+  @@map("lid_mappings")
+}

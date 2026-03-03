@@ -29,6 +29,7 @@
 
 - Baileys v7 requires Node.js 20+ — devcontainer has Node 18 by default, need `sudo npx -y n 20` to upgrade
 - WhatsApp Service uses ESM (`"type": "module"` in package.json) and `moduleResolution: "bundler"` in tsconfig
+- When schema.prisma changes in ERP, must copy to whatsapp-service/prisma/ and run `npx prisma generate` there too
 
 ## Progress Log
 
@@ -57,4 +58,16 @@
 - **Learnings for future iterations:**
   - Adding new models with Company relations follows the same pattern: add model at end of schema, add relation field in Company model
   - prisma db push auto-runs generate, so no separate generate step needed
+---
+
+## 2026-03-03 - US-003
+- Copied schema.prisma from erp/prisma/ to whatsapp-service/prisma/
+- Ran npx prisma generate successfully in whatsapp-service directory
+- Created whatsapp-service/src/lib/prisma.ts with singleton PrismaClient pattern (identical to ERP pattern)
+- Typecheck passes in both whatsapp-service and erp
+- Files created: whatsapp-service/prisma/schema.prisma, whatsapp-service/src/lib/prisma.ts
+- **Learnings for future iterations:**
+  - When schema.prisma changes in ERP, must also copy to whatsapp-service/prisma/ and re-run prisma generate there
+  - Both services share the same PostgreSQL database via DATABASE_URL
+  - whatsapp-service prisma generate creates its own node_modules/@prisma/client
 ---

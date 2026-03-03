@@ -50,7 +50,7 @@
         "Typecheck passes"
       ],
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "notes": "Padrao singleton igual ao ERP em erp/src/lib/prisma.ts. Ambos servicos compartilham o mesmo PostgreSQL"
     },
     {
