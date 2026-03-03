@@ -277,3 +277,22 @@
   - Parameter names use English (message, query, content, reason) even though descriptions are in Portuguese — this matches the OpenAI function calling convention
   - "use server" directive ensures these definitions can be safely imported in server actions
 ---
+
+## 2026-03-03 - US-013
+- Created erp/src/lib/ai/embeddings.ts with 4 exported functions + SearchResult interface
+- generateEmbedding(text): calls OpenAI-compatible embedding API using AI_EMBEDDING_PROVIDER, AI_EMBEDDING_KEY, AI_EMBEDDING_MODEL env vars; supports openai and deepseek providers via raw fetch
+- chunkText(text, maxTokens?): splits text into chunks of ~RAG_CHUNK_SIZE tokens (default 500); uses ~4 chars/token heuristic; splits on paragraph boundaries first, then sentence boundaries for large paragraphs
+- cosineSimilarity(a, b): dot product / (normA * normB), validates vector lengths match
+- searchDocuments(query, companyId): generates query embedding, fetches all DocumentChunks for company (status=READY) via Prisma with document info, calculates cosine similarity in-memory, returns top RAG_MAX_RESULTS (default 5) above RAG_SIMILARITY_THRESHOLD (default 0.7)
+- SearchResult interface: chunkId, documentId, documentName, content, similarity, chunkIndex
+- Env vars: AI_EMBEDDING_PROVIDER, AI_EMBEDDING_KEY, AI_EMBEDDING_MODEL, RAG_CHUNK_SIZE, RAG_MAX_RESULTS, RAG_SIMILARITY_THRESHOLD
+- Files created: erp/src/lib/ai/embeddings.ts
+- Typecheck and lint pass
+- **Learnings for future iterations:**
+  - Prisma export is named `{ prisma }` not default — use `import { prisma } from "@/lib/prisma"`
+  - Embedding API uses OpenAI-compatible format (same for OpenAI and DeepSeek) — POST /v1/embeddings with Bearer auth
+  - Text chunking heuristic: ~4 chars per token works reasonably well for English/Portuguese text
+  - In-memory cosine similarity is fine for MVP (few thousand chunks per company) — for production scale, migrate to pgvector
+  - searchDocuments filters by document.status === "READY" to skip documents still being processed
+  - Float[] in Prisma maps directly to number[] in TypeScript — no conversion needed
+---

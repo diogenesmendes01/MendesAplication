@@ -243,7 +243,7 @@
         "Typecheck passes"
       ],
       "priority": 13,
-      "passes": false,
+      "passes": true,
       "notes": "REF: /tmp/jarespondiv2/apps/api/src/services/rag.service.ts (98 linhas) — tem generateEmbedding (OpenAI text-embedding-3-small) e searchSimilarDocs (Supabase RPC match_documents com pgvector). DIFERENCA: JaRespondi usa pgvector no Supabase, nos usamos cosine similarity em memoria (sem pgvector). Entao searchDocuments deve: 1) buscar todos DocumentChunks da empresa via Prisma, 2) gerar embedding da query, 3) calcular cosineSimilarity em loop, 4) retornar top N acima do threshold. Funciona bem para MVP com poucos milhares de chunks"
     },
     {
