@@ -3,11 +3,24 @@ import makeWASocket, {
   DisconnectReason,
   fetchLatestBaileysVersion,
   makeCacheableSignalKeyStore,
+  downloadMediaMessage,
+  getContentType,
+  type WAMessage,
+  type AnyMessageContent,
 } from "@whiskeysockets/baileys";
 import { Boom } from "@hapi/boom";
 import QRCode from "qrcode";
+import fs from "fs/promises";
+import path from "path";
 import { prisma } from "../lib/prisma.js";
 import { useDatabaseAuthState } from "./useDatabaseAuthState.js";
+
+const WEBHOOK_URL =
+  process.env.WHATSAPP_WEBHOOK_URL || "http://localhost:3000/api/webhooks/whatsapp";
+const WEBHOOK_SECRET = process.env.WHATSAPP_WEBHOOK_SECRET || "";
+const SERVICE_PORT = process.env.WHATSAPP_SERVICE_PORT || "3001";
+const SERVICE_BASE_URL =
+  process.env.WHATSAPP_SERVICE_BASE_URL || `http://localhost:${SERVICE_PORT}`;
 
 // ============================================
 // Types
@@ -284,6 +297,82 @@ class BaileysProvider {
   }
 
   // ============================================
+  // Send Text Message
+  // ============================================
+
+  async sendMessage(
+    companyId: string,
+    to: string,
+    content: string
+  ): Promise<string> {
+    const session = this.sessions.get(companyId);
+    if (!session) {
+      throw new Error(`Session not found for ${companyId}`);
+    }
+    if (!session.isConnected || !session.socket) {
+      throw new Error(`Session ${companyId} is not connected`);
+    }
+
+    const jid = this.normalizeJid(to);
+    const result = await session.socket.sendMessage(jid, { text: content });
+    return result.key.id;
+  }
+
+  // ============================================
+  // Send Media Message
+  // ============================================
+
+  async sendMediaMessage(
+    companyId: string,
+    to: string,
+    mediaUrl: string,
+    caption?: string,
+    mediaType: "image" | "video" | "audio" | "document" = "image"
+  ): Promise<string> {
+    const session = this.sessions.get(companyId);
+    if (!session) {
+      throw new Error(`Session not found for ${companyId}`);
+    }
+    if (!session.isConnected || !session.socket) {
+      throw new Error(`Session ${companyId} is not connected`);
+    }
+
+    const jid = this.normalizeJid(to);
+    let messageContent: AnyMessageContent;
+
+    switch (mediaType) {
+      case "image":
+        messageContent = caption
+          ? { image: { url: mediaUrl }, caption }
+          : { image: { url: mediaUrl } };
+        break;
+      case "video":
+        messageContent = caption
+          ? { video: { url: mediaUrl }, caption }
+          : { video: { url: mediaUrl } };
+        break;
+      case "audio":
+        messageContent = { audio: { url: mediaUrl } };
+        break;
+      case "document":
+        messageContent = caption
+          ? {
+              document: { url: mediaUrl },
+              mimetype: "application/octet-stream",
+              caption,
+            }
+          : {
+              document: { url: mediaUrl },
+              mimetype: "application/octet-stream",
+            };
+        break;
+    }
+
+    const result = await session.socket.sendMessage(jid, messageContent);
+    return result.key.id;
+  }
+
+  // ============================================
   // PRIVATE: Create Socket
   // ============================================
 
@@ -323,6 +412,9 @@ class BaileysProvider {
 
       // Setup connection update handler
       this.setupConnectionHandler(socket, companyId, saveCreds);
+
+      // Setup message handler (incoming messages, media download, webhook dispatch)
+      this.setupMessageHandler(socket, companyId);
 
       // Update session with real socket
       const session = this.sessions.get(companyId);
@@ -543,6 +635,422 @@ class BaileysProvider {
         }
       }
     );
+  }
+
+  // ============================================
+  // PRIVATE: Setup Message Handler
+  // ============================================
+
+  private setupMessageHandler(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    socket: any,
+    companyId: string
+  ): void {
+    // Handle incoming messages
+    socket.ev.on(
+      "messages.upsert",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      async (m: any) => {
+        const { messages, type } = m;
+        // Only process real-time notifications, not history sync
+        if (type !== "notify") return;
+
+        for (const msg of messages as WAMessage[]) {
+          try {
+            await this.handleMessage(msg, companyId);
+          } catch (err) {
+            console.error(
+              `[BaileysProvider] Error handling message for ${companyId}:`,
+              err
+            );
+          }
+        }
+      }
+    );
+
+    // Handle LID mapping updates (WhatsApp v7+)
+    socket.ev.on(
+      "messaging-history.set",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      async (data: any) => {
+        // Process LID mappings from history if available
+        if (data.lidMappings?.length) {
+          for (const mapping of data.lidMappings) {
+            try {
+              const lid = mapping.lid || mapping.lidJid;
+              const phone = mapping.phoneNumber || mapping.regularJid;
+              if (lid && phone) {
+                await this.saveLidMapping(companyId, lid, phone);
+              }
+            } catch (err) {
+              console.error(
+                `[BaileysProvider] Error saving LID mapping:`,
+                err
+              );
+            }
+          }
+        }
+      }
+    );
+  }
+
+  // ============================================
+  // PRIVATE: Handle Individual Message
+  // ============================================
+
+  private async handleMessage(
+    msg: WAMessage,
+    companyId: string
+  ): Promise<void> {
+    // Skip messages without content
+    if (!msg.message) return;
+
+    // Skip fromMe messages (outgoing)
+    if (msg.key.fromMe) return;
+
+    // Skip status broadcast messages
+    if (msg.key.remoteJid === "status@broadcast") return;
+
+    // Skip protocol messages
+    const contentType = getContentType(msg.message);
+    if (
+      contentType === "protocolMessage" ||
+      contentType === "senderKeyDistributionMessage"
+    ) {
+      return;
+    }
+
+    const remoteJid = msg.key.remoteJid || "";
+
+    // Skip group messages
+    if (remoteJid.endsWith("@g.us")) return;
+
+    // Resolve LID to phone number if needed
+    const resolvedJid = await this.resolveLid(companyId, remoteJid);
+
+    // Determine message type and extract content
+    let messageType = "conversation";
+    let textContent: string | undefined;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let mediaLocalUrl: string | undefined;
+    let mediaMimetype: string | undefined;
+    let mediaFileName: string | undefined;
+
+    const message = msg.message;
+
+    if (message.conversation) {
+      messageType = "conversation";
+      textContent = message.conversation;
+    } else if (message.extendedTextMessage) {
+      messageType = "extendedTextMessage";
+      textContent = message.extendedTextMessage.text || undefined;
+    } else if (message.imageMessage) {
+      messageType = "imageMessage";
+      textContent = message.imageMessage.caption || undefined;
+      mediaMimetype = message.imageMessage.mimetype || "image/jpeg";
+      mediaFileName = `image_${msg.key.id || Date.now()}.jpg`;
+      mediaLocalUrl = await this.downloadAndSaveMedia(
+        msg,
+        companyId,
+        mediaFileName
+      );
+    } else if (message.videoMessage) {
+      messageType = "videoMessage";
+      textContent = message.videoMessage.caption || undefined;
+      mediaMimetype = message.videoMessage.mimetype || "video/mp4";
+      mediaFileName = `video_${msg.key.id || Date.now()}.mp4`;
+      mediaLocalUrl = await this.downloadAndSaveMedia(
+        msg,
+        companyId,
+        mediaFileName
+      );
+    } else if (message.audioMessage) {
+      messageType = "audioMessage";
+      mediaMimetype = message.audioMessage.mimetype || "audio/ogg";
+      mediaFileName = `audio_${msg.key.id || Date.now()}.ogg`;
+      mediaLocalUrl = await this.downloadAndSaveMedia(
+        msg,
+        companyId,
+        mediaFileName
+      );
+    } else if (message.documentMessage) {
+      messageType = "documentMessage";
+      textContent =
+        message.documentMessage.caption ||
+        message.documentMessage.title ||
+        undefined;
+      mediaMimetype =
+        message.documentMessage.mimetype || "application/octet-stream";
+      mediaFileName =
+        message.documentMessage.fileName ||
+        message.documentMessage.title ||
+        `document_${msg.key.id || Date.now()}`;
+      mediaLocalUrl = await this.downloadAndSaveMedia(
+        msg,
+        companyId,
+        mediaFileName
+      );
+    } else {
+      // Unknown message type, skip
+      return;
+    }
+
+    // Build webhook payload compatible with EvolutionWebhookPayload
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const webhookPayload: Record<string, any> = {
+      event: "messages.upsert",
+      instance: companyId,
+      data: {
+        key: {
+          remoteJid: resolvedJid,
+          fromMe: false,
+          id: msg.key.id || "",
+        },
+        pushName: msg.pushName || "",
+        message: this.buildMessageField(message, messageType),
+        messageType,
+        messageTimestamp:
+          typeof msg.messageTimestamp === "number"
+            ? msg.messageTimestamp
+            : Number(msg.messageTimestamp || 0),
+        ...(mediaLocalUrl && {
+          media: {
+            url: mediaLocalUrl,
+            mimetype: mediaMimetype,
+            fileName: mediaFileName,
+          },
+        }),
+      },
+    };
+
+    await this.dispatchWebhook(webhookPayload);
+
+    console.log(
+      `[BaileysProvider] Incoming message for ${companyId}: type=${messageType}, from=${resolvedJid}`
+    );
+  }
+
+  // ============================================
+  // PRIVATE: Build Message Field for Webhook
+  // ============================================
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private buildMessageField(message: any, messageType: string): any {
+    // Build a simplified message object matching EvolutionWebhookPayload format
+    switch (messageType) {
+      case "conversation":
+        return { conversation: message.conversation };
+      case "extendedTextMessage":
+        return {
+          extendedTextMessage: { text: message.extendedTextMessage?.text },
+        };
+      case "imageMessage":
+        return {
+          imageMessage: {
+            mimetype: message.imageMessage?.mimetype,
+            caption: message.imageMessage?.caption,
+            fileLength: String(message.imageMessage?.fileLength || "0"),
+            fileName: message.imageMessage?.fileName,
+          },
+        };
+      case "videoMessage":
+        return {
+          videoMessage: {
+            mimetype: message.videoMessage?.mimetype,
+            caption: message.videoMessage?.caption,
+            fileLength: String(message.videoMessage?.fileLength || "0"),
+            fileName: message.videoMessage?.fileName,
+          },
+        };
+      case "audioMessage":
+        return {
+          audioMessage: {
+            mimetype: message.audioMessage?.mimetype,
+            fileLength: String(message.audioMessage?.fileLength || "0"),
+          },
+        };
+      case "documentMessage":
+        return {
+          documentMessage: {
+            mimetype: message.documentMessage?.mimetype,
+            caption: message.documentMessage?.caption,
+            fileLength: String(message.documentMessage?.fileLength || "0"),
+            fileName: message.documentMessage?.fileName,
+            title: message.documentMessage?.title,
+          },
+        };
+      default:
+        return {};
+    }
+  }
+
+  // ============================================
+  // PRIVATE: Download and Save Media
+  // ============================================
+
+  private async downloadAndSaveMedia(
+    msg: WAMessage,
+    companyId: string,
+    fileName: string
+  ): Promise<string | undefined> {
+    try {
+      const buffer = await downloadMediaMessage(
+        msg,
+        "buffer",
+        {},
+        {
+          logger: undefined as never,
+          reuploadRequest: async () => {
+            throw new Error("Reupload not implemented");
+          },
+        }
+      );
+
+      if (!buffer || (buffer as Buffer).length === 0) {
+        console.warn(
+          `[BaileysProvider] Empty media buffer for ${companyId}`
+        );
+        return undefined;
+      }
+
+      // Save to uploads/{companyId}/
+      const uploadsDir = path.join(process.cwd(), "uploads", companyId);
+      await fs.mkdir(uploadsDir, { recursive: true });
+
+      const safeName = fileName
+        .replace(/[^a-zA-Z0-9_.-]/g, "_")
+        .substring(0, 100);
+      const fullName = `${Date.now()}_${safeName}`;
+      const fullPath = path.join(uploadsDir, fullName);
+
+      await fs.writeFile(fullPath, buffer as Buffer);
+
+      // Return URL accessible via Express static serving
+      const publicUrl = `${SERVICE_BASE_URL}/uploads/${companyId}/${fullName}`;
+
+      console.log(
+        `[BaileysProvider] Media saved for ${companyId}: ${fullPath}`
+      );
+      return publicUrl;
+    } catch (err) {
+      console.error(
+        `[BaileysProvider] Error downloading media for ${companyId}:`,
+        err
+      );
+      return undefined;
+    }
+  }
+
+  // ============================================
+  // PRIVATE: Dispatch Webhook to ERP
+  // ============================================
+
+  private async dispatchWebhook(
+    payload: Record<string, unknown>
+  ): Promise<void> {
+    if (!WEBHOOK_URL) {
+      console.warn("[BaileysProvider] No WEBHOOK_URL configured, skipping webhook");
+      return;
+    }
+
+    try {
+      const response = await fetch(WEBHOOK_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: WEBHOOK_SECRET,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        console.error(
+          `[BaileysProvider] Webhook dispatch failed: ${response.status} ${response.statusText}`
+        );
+      }
+    } catch (err) {
+      console.error("[BaileysProvider] Webhook dispatch error:", err);
+    }
+  }
+
+  // ============================================
+  // PRIVATE: Normalize JID
+  // ============================================
+
+  private normalizeJid(to: string): string {
+    // If already a JID, return as-is
+    if (to.includes("@")) return to;
+
+    // Strip non-digits
+    const digits = to.replace(/\D/g, "");
+
+    return `${digits}@s.whatsapp.net`;
+  }
+
+  // ============================================
+  // PRIVATE: Resolve LID to Phone Number
+  // ============================================
+
+  private async resolveLid(
+    companyId: string,
+    jid: string
+  ): Promise<string> {
+    // LIDs contain ":" in the user part (e.g., "123:456@lid" or similar format)
+    if (!jid.includes(":") && !jid.includes("@lid")) {
+      return jid;
+    }
+
+    // Extract the LID portion
+    const lid = jid.replace(/@.*$/, "");
+
+    try {
+      const mapping = await prisma.lidMapping.findFirst({
+        where: { companyId, lid },
+      });
+
+      if (mapping) {
+        console.log(
+          `[BaileysProvider] Resolved LID ${lid} -> ${mapping.phoneNumber}`
+        );
+        return `${mapping.phoneNumber}@s.whatsapp.net`;
+      }
+    } catch (err) {
+      console.error(`[BaileysProvider] Error resolving LID ${lid}:`, err);
+    }
+
+    // If no mapping found, return original JID
+    console.warn(
+      `[BaileysProvider] No LID mapping found for ${lid} (company ${companyId})`
+    );
+    return jid;
+  }
+
+  // ============================================
+  // PRIVATE: Save LID Mapping
+  // ============================================
+
+  private async saveLidMapping(
+    companyId: string,
+    lid: string,
+    phoneNumber: string
+  ): Promise<void> {
+    const cleanLid = lid.replace(/@.*$/, "");
+    const cleanPhone = phoneNumber.replace(/@.*$/, "");
+
+    try {
+      await prisma.lidMapping.upsert({
+        where: {
+          companyId_lid: { companyId, lid: cleanLid },
+        },
+        update: { phoneNumber: cleanPhone },
+        create: { companyId, lid: cleanLid, phoneNumber: cleanPhone },
+      });
+    } catch (err) {
+      console.error(
+        `[BaileysProvider] Error saving LID mapping ${cleanLid} -> ${cleanPhone}:`,
+        err
+      );
+    }
   }
 
   // ============================================
