@@ -1,7 +1,6 @@
 import { Job } from "bullmq";
 import { prisma } from "@/lib/prisma";
-import { decryptConfig } from "@/lib/encryption";
-import { sendTextMessage, sendMediaMessage } from "@/lib/evolution-api";
+import { sendTextMessage, sendMediaMessage } from "@/lib/whatsapp-api";
 
 export interface WhatsAppOutboundJobData {
   messageId: string;
@@ -25,17 +24,9 @@ export async function processWhatsAppOutbound(job: Job<WhatsAppOutboundJobData>)
     return;
   }
 
-  const config = decryptConfig(channel.config as Record<string, unknown>);
-  const instanceName = config.instanceName as string;
-
-  if (!instanceName) {
-    console.error(`[whatsapp-outbound] No instanceName in channel config ${channel.id}`);
-    return;
-  }
-
   try {
     // Send text message
-    const externalId = await sendTextMessage(instanceName, to, content);
+    const externalId = await sendTextMessage(companyId, to, content);
 
     // Send attachments as separate media messages
     if (attachmentIds.length > 0) {
@@ -46,7 +37,7 @@ export async function processWhatsAppOutbound(job: Job<WhatsAppOutboundJobData>)
       const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
       for (const att of attachments) {
         const mediaUrl = `${baseUrl}/api/files/${att.storagePath}`;
-        await sendMediaMessage(instanceName, to, mediaUrl, att.fileName);
+        await sendMediaMessage(companyId, to, mediaUrl, att.fileName);
       }
     }
 

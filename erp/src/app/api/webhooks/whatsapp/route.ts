@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
 
-const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || "";
+const WHATSAPP_WEBHOOK_SECRET = process.env.WHATSAPP_WEBHOOK_SECRET || "";
 
 export async function POST(request: Request) {
-  // Validate API key from header or query param
+  // Validate webhook secret from header or query param
   const apiKey =
     request.headers.get("apikey") ??
     new URL(request.url).searchParams.get("apikey");
 
-  if (!EVOLUTION_API_KEY || apiKey !== EVOLUTION_API_KEY) {
+  if (!WHATSAPP_WEBHOOK_SECRET || apiKey !== WHATSAPP_WEBHOOK_SECRET) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

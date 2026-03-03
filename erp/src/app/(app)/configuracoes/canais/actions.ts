@@ -229,35 +229,36 @@ export async function testChannelConnection(
   }
 
   if (channel.type === "WHATSAPP") {
-    // Test Evolution API connection
+    // Test WhatsApp Service connection
     try {
-      const apiUrl = config.apiUrl as string || process.env.EVOLUTION_API_URL;
-      const apiKey = config.apiKey as string || process.env.EVOLUTION_API_KEY;
+      const serviceUrl = process.env.WHATSAPP_SERVICE_URL || "http://localhost:3001";
+      const serviceApiKey = process.env.WHATSAPP_SERVICE_API_KEY;
       const instanceName = config.instanceName as string;
 
       if (!instanceName) {
         return { success: false, message: "Nome da instância não configurado" };
       }
 
-      if (!apiUrl || !apiKey) {
-        return { success: false, message: "Evolution API URL/Key não configurada" };
+      if (!serviceUrl || !serviceApiKey) {
+        return { success: false, message: "WhatsApp Service URL/Key não configurada" };
       }
 
       // Test by calling the instance status endpoint
-      const response = await fetch(`${apiUrl}/instance/connectionState/${instanceName}`, {
-        headers: { apikey: apiKey },
+      const response = await fetch(`${serviceUrl}/instance/${instanceName}/status`, {
+        headers: { apikey: serviceApiKey },
       });
 
       if (response.ok) {
         const data = await response.json();
-        return { success: true, message: `Instância ${instanceName}: ${data.state || "conectada"}` };
+        const state = data.isConnected ? "conectada" : data.isConnecting ? "conectando" : "desconectada";
+        return { success: true, message: `Instância ${instanceName}: ${state}` };
       }
 
-      return { success: false, message: `Evolution API retornou status ${response.status}` };
+      return { success: false, message: `WhatsApp Service retornou status ${response.status}` };
     } catch (err) {
       return {
         success: false,
-        message: err instanceof Error ? err.message : "Erro ao testar Evolution API",
+        message: err instanceof Error ? err.message : "Erro ao testar WhatsApp Service",
       };
     }
   }
