@@ -44,6 +44,9 @@
 - DisconnectReason codes: loggedOut=401, timedOut=408, connectionClosed=428, restartRequired=515
 - Baileys makeWASocket requires `version` from fetchLatestBaileysVersion() and `makeCacheableSignalKeyStore` wrapper
 - Use `socket.end(undefined)` for graceful disconnect, NOT `socket.logout()` (logout removes the account)
+- AI Agent uses native tool calling (chatCompletion + ALL_TOOLS), not JSON response parsing — executeTool dispatches by tool name string
+- ToolContext requires contactPhone (digits only) for RESPOND tool — load from ticket.contact.whatsapp or ticket.client.telefone
+- AI modules: provider.ts (LLM abstraction), tools.ts (definitions), embeddings.ts (RAG), tool-executor.ts (execution), agent.ts (loop)
 
 ## Progress Log
 
@@ -295,4 +298,41 @@
   - In-memory cosine similarity is fine for MVP (few thousand chunks per company) — for production scale, migrate to pgvector
   - searchDocuments filters by document.status === "READY" to skip documents still being processed
   - Float[] in Prisma maps directly to number[] in TypeScript — no conversion needed
+---
+
+## 2026-03-03 - US-014
+- Created erp/src/lib/ai/tool-executor.ts with executeTool dispatcher and 6 tool handlers
+- Created erp/src/lib/ai/agent.ts with runAgent agentic loop function
+- tool-executor.ts exports ToolContext interface and executeTool(toolName, args, context) function
+- Tool handlers implemented:
+  - SEARCH_DOCUMENTS: calls searchDocuments() from embeddings.ts, returns formatted chunks with relevance %
+  - GET_CLIENT_INFO: fetches Client with pending/overdue AccountReceivable and previous tickets via Prisma
+  - GET_HISTORY: fetches recent TicketMessages (excluding internal), formatted as [sender]: content
+  - RESPOND: sends message via sendTextMessage (whatsapp-api.ts) + creates TicketMessage with isAiGenerated=true
+  - ESCALATE: sets ticket.aiEnabled=false + status=OPEN, creates internal note with escalation reason
+  - CREATE_NOTE: creates TicketMessage with isInternal=true + isAiGenerated=true
+- agent.ts exports AgentResult interface and runAgent(ticketId, companyId, incomingMessage) function
+- Agent loop:
+  1. Loads AiConfig (persona, maxIterations) for the company
+  2. Loads ticket with client/contact info to get phone number
+  3. Loads last 10 messages for history context
+  4. Builds system prompt with persona + client name + history
+  5. Calls chatCompletion with ALL_TOOLS in a loop
+  6. Executes tool_calls, adds results to messages, repeats
+  7. Stops on RESPOND/ESCALATE tool or maxIterations
+  8. Direct text response (no tool calls) treated as RESPOND
+  9. Global timeout via AI_TIMEOUT env
+- Uses native LLM tool calling (not JSON response parsing like JaRespondi reference)
+- Error handling: errors during iteration are added as user messages for LLM to try different approach
+- Typecheck and lint pass
+- Files created: erp/src/lib/ai/tool-executor.ts, erp/src/lib/ai/agent.ts
+- **Learnings for future iterations:**
+  - Agent uses native tool calling via chatCompletion + ALL_TOOLS — more reliable than JSON response parsing
+  - ToolContext needs contactPhone (digits only) for WhatsApp replies — derived from ticket.contact.whatsapp or ticket.client.telefone
+  - RESPOND tool sends directly via sendTextMessage (not through BullMQ queue) for immediate AI responses
+  - ESCALATE sets ticket status to OPEN so it appears in human attention queue
+  - When LLM returns text without tool calls, treat it as a direct RESPOND action
+  - Error in iteration: add error text as user message to give LLM context to try differently
+  - Prisma Decimal fields need Number() conversion for arithmetic (AccountReceivable.value)
+  - "use server" directive is fine for modules called from workers — only affects client-side boundary
 ---

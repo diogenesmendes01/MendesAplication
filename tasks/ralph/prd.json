@@ -264,7 +264,7 @@
         "Typecheck passes"
       ],
       "priority": 14,
-      "passes": false,
+      "passes": true,
       "notes": "REF: /tmp/jarespondiv2/apps/api/src/services/agent/core.ts (319 linhas) — agent loop com max iterations, timeout, tool execution. REF: /tmp/jarespondiv2/apps/api/src/services/agent/tools.ts (402 linhas) — executeTool dispatcher. REF: /tmp/jarespondiv2/apps/api/src/services/agent/prompts.ts (209 linhas) — system prompt construction, formatHistoryForPrompt, parseAgentResponse. REF: /tmp/jarespondiv2/apps/api/src/services/agent/types.ts (148 linhas) — AgentContext, AgentResult, Persona. ADAPTAR: trocar Supabase queries por Prisma, mapear tools para modelos do SAC (Client, Ticket, TicketMessage, AccountReceivable), usar chatCompletion() da US-011 em vez de chamar OpenAI direto"
     },
     {

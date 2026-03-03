@@ -1,0 +1,262 @@
+"use server";
+
+import { prisma } from "@/lib/prisma";
+import { chatCompletion } from "./provider";
+import type { AiMessage } from "./provider";
+import { ALL_TOOLS } from "./tools";
+import { executeTool } from "./tool-executor";
+import type { ToolContext } from "./tool-executor";
+
+// ─── Result type ─────────────────────────────────────────────────────────────
+
+export interface AgentResult {
+  responded: boolean;
+  escalated: boolean;
+  iterations: number;
+  error?: string;
+}
+
+// ─── Main agent function ─────────────────────────────────────────────────────
+
+export async function runAgent(
+  ticketId: string,
+  companyId: string,
+  incomingMessage: string
+): Promise<AgentResult> {
+  const startTime = Date.now();
+  const timeout = parseInt(process.env.AI_TIMEOUT || "30000", 10);
+
+  // Load AI config for the company
+  const aiConfig = await prisma.aiConfig.findUnique({
+    where: { companyId },
+  });
+
+  if (!aiConfig || !aiConfig.enabled) {
+    return { responded: false, escalated: false, iterations: 0, error: "AI not enabled" };
+  }
+
+  const maxIterations = aiConfig.maxIterations || 5;
+
+  // Load ticket with client and contact info
+  const ticket = await prisma.ticket.findUnique({
+    where: { id: ticketId },
+    include: {
+      client: { select: { id: true, name: true, telefone: true } },
+      contact: { select: { id: true, name: true, whatsapp: true } },
+    },
+  });
+
+  if (!ticket) {
+    return { responded: false, escalated: false, iterations: 0, error: "Ticket not found" };
+  }
+
+  // Determine contact phone for WhatsApp replies
+  const contactPhone = ticket.contact?.whatsapp || ticket.client.telefone;
+  if (!contactPhone) {
+    return {
+      responded: false,
+      escalated: false,
+      iterations: 0,
+      error: "No phone number available for reply",
+    };
+  }
+
+  // Build tool context
+  const toolContext: ToolContext = {
+    ticketId,
+    companyId,
+    clientId: ticket.clientId,
+    contactPhone: contactPhone.replace(/\D/g, ""),
+  };
+
+  // Load recent message history for prompt context
+  const recentMessages = await prisma.ticketMessage.findMany({
+    where: { ticketId, isInternal: false },
+    orderBy: { createdAt: "desc" },
+    take: 10,
+    select: { direction: true, content: true, isAiGenerated: true },
+  });
+
+  const historyContext = recentMessages
+    .reverse()
+    .map((m) => {
+      const sender =
+        m.direction === "INBOUND"
+          ? "Cliente"
+          : m.isAiGenerated
+            ? "AI"
+            : "Atendente";
+      return `[${sender}]: ${m.content.substring(0, 200)}`;
+    })
+    .join("\n");
+
+  // Build system prompt
+  const clientName = ticket.contact?.name || ticket.client.name;
+  const systemPrompt = buildSystemPrompt(
+    aiConfig.persona,
+    clientName,
+    historyContext
+  );
+
+  // Initialize conversation messages
+  const messages: AiMessage[] = [
+    { role: "system", content: systemPrompt },
+    { role: "user", content: incomingMessage },
+  ];
+
+  // ─── Agent loop ────────────────────────────────────────────────────────────
+
+  for (let iteration = 0; iteration < maxIterations; iteration++) {
+    // Check global timeout
+    if (Date.now() - startTime > timeout) {
+      console.warn(
+        `[ai-agent] Timeout after ${iteration} iterations for ticket ${ticketId}`
+      );
+      return {
+        responded: false,
+        escalated: false,
+        iterations: iteration,
+        error: "timeout",
+      };
+    }
+
+    try {
+      const response = await chatCompletion(messages, ALL_TOOLS);
+
+      // ── LLM returned tool calls ──────────────────────────────────────────
+      if (response.tool_calls && response.tool_calls.length > 0) {
+        // Add assistant message with tool calls to conversation
+        messages.push({
+          role: "assistant",
+          content: response.content || null,
+          tool_calls: response.tool_calls,
+        });
+
+        let shouldStop = false;
+        let responded = false;
+        let escalated = false;
+
+        for (const toolCall of response.tool_calls) {
+          const toolName = toolCall.function.name;
+          let args: Record<string, unknown> = {};
+          try {
+            args = JSON.parse(toolCall.function.arguments);
+          } catch {
+            args = {};
+          }
+
+          console.log(
+            `[ai-agent] Executing tool ${toolName} for ticket ${ticketId} (iteration ${iteration + 1})`
+          );
+
+          const result = await executeTool(toolName, args, toolContext);
+
+          // Add tool result to conversation
+          messages.push({
+            role: "tool",
+            content: result,
+            tool_call_id: toolCall.id,
+          });
+
+          // Check if this was a terminal action
+          if (toolName === "RESPOND") {
+            responded = true;
+            shouldStop = true;
+          } else if (toolName === "ESCALATE") {
+            escalated = true;
+            shouldStop = true;
+          }
+        }
+
+        if (shouldStop) {
+          return { responded, escalated, iterations: iteration + 1 };
+        }
+
+        // Continue loop — LLM used non-terminal tools, will decide next step
+
+      // ── LLM returned text only (no tool calls) ──────────────────────────
+      } else if (response.content) {
+        // Treat direct text response as a RESPOND action
+        console.log(
+          `[ai-agent] Direct text response for ticket ${ticketId} (iteration ${iteration + 1})`
+        );
+
+        await executeTool("RESPOND", { message: response.content }, toolContext);
+        return { responded: true, escalated: false, iterations: iteration + 1 };
+
+      // ── Empty response ───────────────────────────────────────────────────
+      } else {
+        console.warn(
+          `[ai-agent] Empty response from LLM for ticket ${ticketId} (iteration ${iteration + 1})`
+        );
+        return {
+          responded: false,
+          escalated: false,
+          iterations: iteration + 1,
+          error: "empty LLM response",
+        };
+      }
+    } catch (error) {
+      console.error(
+        `[ai-agent] Error in iteration ${iteration + 1} for ticket ${ticketId}:`,
+        error
+      );
+
+      // Add error context so LLM can try a different approach
+      messages.push({
+        role: "user",
+        content: `Erro interno: ${error instanceof Error ? error.message : String(error)}. Tente uma abordagem diferente.`,
+      });
+    }
+  }
+
+  // Max iterations reached without terminal action
+  console.warn(
+    `[ai-agent] Max iterations (${maxIterations}) reached for ticket ${ticketId}`
+  );
+  return {
+    responded: false,
+    escalated: false,
+    iterations: maxIterations,
+    error: "max iterations reached",
+  };
+}
+
+// ─── System prompt builder ───────────────────────────────────────────────────
+
+function buildSystemPrompt(
+  persona: string,
+  clientName: string,
+  historyContext: string
+): string {
+  let prompt = `# Assistente de Atendimento - MendesERP
+
+${persona}
+
+## SUAS FERRAMENTAS DISPONÍVEIS:
+- SEARCH_DOCUMENTS(query): Busca informações na base de conhecimento da empresa
+- GET_CLIENT_INFO(): Retorna dados do cliente vinculado ao ticket (financeiro, tickets anteriores)
+- GET_HISTORY(limit?): Retorna histórico de mensagens da conversa
+- RESPOND(message): Envia resposta ao cliente via WhatsApp
+- ESCALATE(reason): Escala para atendente humano
+- CREATE_NOTE(content): Cria nota interna no ticket
+
+## REGRAS:
+1. SEMPRE consulte a base de conhecimento antes de responder sobre valores, datas, produtos ou serviços
+2. NUNCA invente informações — se não souber, busque na base de conhecimento ou pergunte ao cliente
+3. Use RESPOND para enviar a resposta final ao cliente
+4. Use ESCALATE se o cliente pedir um humano ou se o problema for muito complexo
+5. Seja conciso mas completo nas respostas
+6. Responda SEMPRE em português brasileiro
+7. Se não conseguir resolver em 3 tentativas de busca, escale para humano
+8. Pode usar várias ferramentas em sequência antes de responder
+
+## CONTEXTO ATUAL:
+- Cliente: ${clientName}`;
+
+  if (historyContext) {
+    prompt += `\n\n## HISTÓRICO RECENTE:\n${historyContext}`;
+  }
+
+  return prompt;
+}
