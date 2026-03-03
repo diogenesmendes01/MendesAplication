@@ -40,6 +40,7 @@
 - getContentType from Baileys returns message type key; messages.upsert type="notify" for real-time messages
 - WhatsApp Service Express routes: /health (no auth), /instance/* and /message/* (require apikey header)
 - Express v5 async handlers: don't return res.json(), use void return type for proper typing
+- ERP calls WhatsApp Service via `src/lib/whatsapp-api.ts` (sendTextMessage, sendMediaMessage, getInstanceStatus) — uses companyId, not instanceName
 - DisconnectReason codes: loggedOut=401, timedOut=408, connectionClosed=428, restartRequired=515
 - Baileys makeWASocket requires `version` from fetchLatestBaileysVersion() and `makeCacheableSignalKeyStore` wrapper
 - Use `socket.end(undefined)` for graceful disconnect, NOT `socket.logout()` (logout removes the account)
@@ -178,4 +179,23 @@
   - API key auth uses `apikey` header (lowercase) to match what the ERP sends in webhook calls
   - Health endpoint must be registered BEFORE auth middleware so it doesn't require authentication
   - Express static middleware for uploads must also be before auth middleware for public media access
+---
+
+## 2026-03-03 - US-008
+- Created erp/src/lib/whatsapp-api.ts with sendTextMessage, sendMediaMessage, getInstanceStatus calling WhatsApp Service HTTP endpoints
+- Updated erp/src/lib/workers/whatsapp-outbound.ts: replaced import from evolution-api to whatsapp-api, removed instanceName lookup from channel config, now uses companyId directly
+- Updated erp/src/app/api/webhooks/whatsapp/route.ts: replaced EVOLUTION_API_KEY validation with WHATSAPP_WEBHOOK_SECRET
+- Updated erp/src/app/(app)/configuracoes/canais/actions.ts: replaced Evolution API test connection with WhatsApp Service status endpoint
+- Removed erp/src/lib/evolution-api.ts (old Evolution API client)
+- whatsapp-inbound.ts was NOT changed (as required by acceptance criteria)
+- Typecheck and lint pass in both erp and whatsapp-service
+- Files created: erp/src/lib/whatsapp-api.ts
+- Files changed: erp/src/lib/workers/whatsapp-outbound.ts, erp/src/app/api/webhooks/whatsapp/route.ts, erp/src/app/(app)/configuracoes/canais/actions.ts
+- Files deleted: erp/src/lib/evolution-api.ts
+- **Learnings for future iterations:**
+  - WhatsApp Service uses companyId as the identifier (not instanceName) — outbound worker now passes companyId directly instead of looking up instanceName from channel config
+  - Webhook validation changed from EVOLUTION_API_KEY to WHATSAPP_WEBHOOK_SECRET, but the header name is still `apikey`
+  - whatsapp-inbound.ts matches channels by config.instanceName === payload.instance — since WhatsApp Service sends companyId as instance, the channel config's instanceName should be set to companyId
+  - canais/actions.ts test connection also needed updating — it's the channel configuration page with a "test connection" feature
+  - sendMediaMessage defaults to mediaType: "document" (same as old evolution-api behavior)
 ---

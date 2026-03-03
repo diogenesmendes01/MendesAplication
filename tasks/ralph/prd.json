@@ -152,7 +152,7 @@
         "Typecheck passes"
       ],
       "priority": 8,
-      "passes": false,
+      "passes": true,
       "notes": "REF: erp/src/lib/evolution-api.ts — ver interface atual (sendTextMessage, sendMediaMessage, getInstanceStatus) para manter mesma assinatura. REF: erp/src/lib/workers/whatsapp-outbound.ts — ver como as funcoes sao chamadas. REF: erp/src/app/api/webhooks/whatsapp/route.ts — ver validacao atual de EVOLUTION_API_KEY para trocar por WHATSAPP_WEBHOOK_SECRET. O whatsapp-inbound.ts NAO deve ser alterado"
     },
     {
