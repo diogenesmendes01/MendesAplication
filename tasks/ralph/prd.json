@@ -303,7 +303,7 @@
         "Typecheck passes"
       ],
       "priority": 16,
-      "passes": false,
+      "passes": true,
       "notes": "Sem referencia direta no JaRespondi (la o RAG usa documentos ja processados). Seguir padrao dos workers existentes no ERP (whatsapp-inbound.ts, email-inbound.ts). Usar chunkText() e generateEmbedding() criados na US-013"
     },
     {

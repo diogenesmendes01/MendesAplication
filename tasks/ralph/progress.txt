@@ -49,6 +49,8 @@
 - AI modules: provider.ts (LLM abstraction), tools.ts (definitions), embeddings.ts (RAG), tool-executor.ts (execution), agent.ts (loop)
 - ChannelType enum only has EMAIL and WHATSAPP — internal system notes should omit the channel field (it's optional on TicketMessage)
 - AI agent enqueue in whatsapp-inbound.ts only for INBOUND direction + non-empty content
+- pdf-parse v2 uses class API: `new PDFParse({ data: Uint8Array })` then `.getText()` returns `{ text, pages }` — NOT the v1 function `pdf(buffer)`
+- Document processing worker follows pattern: validate document → extract text → chunk → embed → save chunks → update status READY/ERROR
 
 ## Progress Log
 
@@ -356,4 +358,24 @@
   - Escalation keyword check should happen BEFORE calling LLM to save API costs — this is the whole point of keywords
   - AI agent enqueue only for INBOUND + non-empty content — media-only messages or outbound echoes don't need AI processing
   - Worker follows pattern: check company config → check ticket config → check keywords → run agent
+---
+
+## 2026-03-03 - US-016
+- Created erp/src/lib/workers/document-processor.ts as BullMQ worker for document processing jobs
+- Job data: { documentId, companyId, filePath }
+- Text extraction: TXT via fs.readFile (utf-8), PDF via pdf-parse v2 (PDFParse class → getText())
+- Processing pipeline: extract text → chunkText() → generateEmbedding() per chunk → save DocumentChunk records → update Document status
+- Status updates: PROCESSING → READY on success, PROCESSING → ERROR on failure (with error logged and re-thrown)
+- Validates document exists and belongs to specified company before processing
+- Registered documentProcessingWorker in workers/index.ts using createWorker pattern
+- Installed pdf-parse v2.4.5 in erp/package.json (built-in TypeScript types, no @types needed)
+- Files created: erp/src/lib/workers/document-processor.ts
+- Files changed: erp/src/lib/workers/index.ts, erp/package.json, erp/package-lock.json
+- Typecheck and lint pass
+- **Learnings for future iterations:**
+  - pdf-parse v2 has a class-based API: `new PDFParse({ data: new Uint8Array(buffer) })` then `.getText()` returns `TextResult { text, pages }`
+  - pdf-parse v2 includes its own TypeScript types — do NOT install @types/pdf-parse (that's for v1 and is incompatible)
+  - Buffer must be converted to Uint8Array for pdf-parse v2's `data` parameter
+  - Document processing is async via BullMQ — the upload API route creates the Document record with PROCESSING status, then enqueues the job
+  - Worker re-throws errors after setting ERROR status so BullMQ can track failed jobs and retry if configured
 ---

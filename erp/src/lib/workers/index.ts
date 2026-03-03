@@ -6,6 +6,7 @@ import { processWhatsAppInbound } from './whatsapp-inbound'
 import { processWhatsAppOutbound } from './whatsapp-outbound'
 import { processSlaCheck } from './sla-check'
 import { processAiAgent } from './ai-agent'
+import { processDocumentProcessing } from './document-processor'
 
 console.log('Starting workers...')
 
@@ -43,6 +44,8 @@ const slaCheckWorker = createWorker(QUEUE_NAMES.SLA_CHECK, processSlaCheck)
 
 const aiAgentWorker = createWorker(QUEUE_NAMES.AI_AGENT, processAiAgent)
 
+const documentProcessingWorker = createWorker(QUEUE_NAMES.DOCUMENT_PROCESSING, processDocumentProcessing)
+
 const workers = [
   emailInboundWorker,
   emailOutboundWorker,
@@ -50,6 +53,7 @@ const workers = [
   whatsappOutboundWorker,
   slaCheckWorker,
   aiAgentWorker,
+  documentProcessingWorker,
 ]
 
 async function shutdown() {
