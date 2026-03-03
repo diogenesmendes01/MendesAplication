@@ -82,6 +82,7 @@ import {
   type CancellationInfo,
   type CancellationType,
   listTimelineEvents,
+  getAiConfigEnabled,
 } from "../actions";
 import type { TicketStatus } from "@prisma/client";
 import { generateTicketPdf } from "@/lib/ticket-pdf";
@@ -246,6 +247,7 @@ export default function TicketDetailPage() {
   const [tags, setTags] = useState<string[]>([]);
   const [newTag, setNewTag] = useState("");
   const [financial, setFinancial] = useState<ClientFinancialSummary | null>(null);
+  const [aiConfigEnabled, setAiConfigEnabled] = useState(false);
 
   // Contact linking state (US-081)
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
@@ -335,6 +337,9 @@ export default function TicketDetailPage() {
         .catch(() => {});
       getCancellationInfo(ticketId, selectedCompanyId)
         .then(setCancellation)
+        .catch(() => {});
+      getAiConfigEnabled(selectedCompanyId)
+        .then(setAiConfigEnabled)
         .catch(() => {});
     } catch (err) {
       toast.error(
@@ -878,6 +883,8 @@ export default function TicketDetailPage() {
             ticketId={ticketId}
             companyId={selectedCompanyId}
             ticketSubject={ticket.subject}
+            aiEnabled={ticket.aiEnabled}
+            aiConfigEnabled={aiConfigEnabled}
           />
         </div>
 

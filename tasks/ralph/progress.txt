@@ -51,6 +51,8 @@
 - AI agent enqueue in whatsapp-inbound.ts only for INBOUND direction + non-empty content
 - pdf-parse v2 uses class API: `new PDFParse({ data: Uint8Array })` then `.getText()` returns `{ text, pages }` — NOT the v1 function `pdf(buffer)`
 - Document processing worker follows pattern: validate document → extract text → chunk → embed → save chunks → update status READY/ERROR
+- Switch component from shadcn/ui: `npx shadcn@latest add switch --yes` — renders as toggle switch, use with `checked` and `onCheckedChange` props
+- AI-related badges use purple color scheme: `border-purple-300 text-purple-700` for outline variant
 
 ## Progress Log
 
@@ -400,4 +402,25 @@
   - Drag-and-drop upload: use onDragOver (preventDefault + set state), onDragLeave (clear state), onDrop (preventDefault + process files)
   - Document deletion cascades to DocumentChunks via Prisma schema (onDelete: Cascade) — no need to manually delete chunks
   - BookOpen icon from lucide-react used for Knowledge Base (FileText already used for Fiscal)
+---
+
+## 2026-03-03 - US-018
+- Added `toggleTicketAi(ticketId, companyId, enabled)` server action in sac/tickets/actions.ts — updates Ticket.aiEnabled + audit log
+- Added `getAiConfigEnabled(companyId)` server action — checks if company has AI enabled via AiConfig.enabled
+- Added `isAiGenerated` field to TimelineEvent interface and included in listTimelineEvents event mapping (messages, refunds, status changes)
+- Added `aiEnabled` field to TicketDetail interface and getTicketById return value
+- Added Switch toggle (AI on/off) in TicketTimeline CardHeader — only shown when `aiConfigEnabled` is true (company has AI enabled)
+- Toggle uses Bot icon + "IA" label + Switch component from shadcn/ui
+- Added AI Badge (purple outline, Bot icon + "IA") to messages with `isAiGenerated=true` in both TimelineItem (Todos tab) and WhatsAppBubble (WhatsApp tab)
+- Updated ticket detail page to load AI config status and pass `aiEnabled` + `aiConfigEnabled` props to TicketTimeline
+- Installed shadcn/ui Switch component (src/components/ui/switch.tsx)
+- Typecheck and lint pass
+- Files created: erp/src/components/ui/switch.tsx
+- Files changed: erp/src/app/(app)/sac/tickets/actions.ts, erp/src/app/(app)/sac/tickets/[id]/ticket-timeline.tsx, erp/src/app/(app)/sac/tickets/[id]/page.tsx
+- **Learnings for future iterations:**
+  - Switch component installed via `npx shadcn@latest add switch --yes` — follows same pattern as other shadcn components
+  - AI badge uses purple color scheme (border-purple-300 text-purple-700) to distinguish from channel badges (green/blue)
+  - TicketTimeline is a client component — AI toggle state managed locally with optimistic updates, calls server action toggleTicketAi
+  - aiConfigEnabled check in page.tsx loads asynchronously alongside other data — fetches AiConfig.enabled for the company
+  - TimelineEvent.isAiGenerated comes from TicketMessage.isAiGenerated field added in US-010
 ---

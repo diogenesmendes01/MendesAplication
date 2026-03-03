@@ -402,6 +402,7 @@ export interface TicketDetail {
   company: { id: string; nomeFantasia: string };
   contact: { id: string; name: string; role: string | null } | null;
   channelType: ChannelType | null;
+  aiEnabled: boolean;
 }
 
 export async function getTicketById(
@@ -444,6 +445,7 @@ export async function getTicketById(
     company: ticket.company,
     contact: ticket.contact,
     channelType: ticket.channel?.type ?? null,
+    aiEnabled: ticket.aiEnabled,
   };
 }
 
@@ -493,6 +495,48 @@ export async function updateTicketStatus(
   });
 
   return { status: updated.status };
+}
+
+export async function toggleTicketAi(
+  ticketId: string,
+  companyId: string,
+  enabled: boolean
+) {
+  const session = await requireCompanyAccess(companyId);
+
+  const ticket = await prisma.ticket.findFirst({
+    where: { id: ticketId, companyId },
+  });
+
+  if (!ticket) {
+    throw new Error("Ticket não encontrado");
+  }
+
+  await prisma.ticket.update({
+    where: { id: ticketId },
+    data: { aiEnabled: enabled },
+  });
+
+  await logAuditEvent({
+    userId: session.userId,
+    action: "UPDATE",
+    entity: "Ticket",
+    entityId: ticketId,
+    dataBefore: { aiEnabled: ticket.aiEnabled } as unknown as Prisma.InputJsonValue,
+    dataAfter: { aiEnabled: enabled } as unknown as Prisma.InputJsonValue,
+    companyId,
+  });
+}
+
+export async function getAiConfigEnabled(companyId: string): Promise<boolean> {
+  await requireCompanyAccess(companyId);
+
+  const config = await prisma.aiConfig.findUnique({
+    where: { companyId },
+    select: { enabled: true },
+  });
+
+  return config?.enabled ?? false;
 }
 
 export async function reassignTicket(
@@ -697,6 +741,7 @@ export interface TimelineEvent {
   origin: MessageOrigin | null;
   isInternal: boolean;
   sentViaEmail: boolean;
+  isAiGenerated: boolean;
   sender: { id: string; name: string } | null;
   contactName: string | null;
   contactRole: string | null;
@@ -772,6 +817,7 @@ export async function listTimelineEvents(
       origin: m.origin,
       isInternal: m.isInternal,
       sentViaEmail: m.sentViaEmail,
+      isAiGenerated: m.isAiGenerated,
       sender: m.sender,
       contactName: m.contact?.name ?? null,
       contactRole: m.contact?.role ?? null,
@@ -800,6 +846,7 @@ export async function listTimelineEvents(
       origin: null,
       isInternal: false,
       sentViaEmail: false,
+      isAiGenerated: false,
       sender: null,
       contactName: null,
       contactRole: null,
@@ -827,6 +874,7 @@ export async function listTimelineEvents(
       origin: null,
       isInternal: false,
       sentViaEmail: false,
+      isAiGenerated: false,
       sender: null,
       contactName: null,
       contactRole: null,

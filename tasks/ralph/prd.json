@@ -340,7 +340,7 @@
         "Verify in browser using dev-browser skill"
       ],
       "priority": 18,
-      "passes": false,
+      "passes": true,
       "notes": "REF: erp/src/app/(app)/sac/tickets/[id]/ticket-timeline.tsx — componente de timeline onde adicionar o toggle e badge. REF: erp/src/app/(app)/sac/tickets/actions.ts — server actions existentes do SAC. Usar componente Switch do shadcn/ui e Badge variant=outline"
     },
     {

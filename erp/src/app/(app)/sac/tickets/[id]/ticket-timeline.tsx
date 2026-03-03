@@ -13,6 +13,7 @@ import {
   Send,
   Upload,
   Smile,
+  Bot,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,6 +34,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { Switch } from "@/components/ui/switch";
 import {
   listTimelineEvents,
   createInternalNote,
@@ -41,6 +43,7 @@ import {
   sendEmailReply,
   getWhatsAppRecipients,
   sendWhatsAppMessage,
+  toggleTicketAi,
   type TimelineEvent,
   type EmailRecipient,
   type WhatsAppRecipient,
@@ -218,6 +221,12 @@ function TimelineItem({ event }: { event: TimelineEvent }) {
           {event.type === "message" && event.direction === "INBOUND" && (
             <Badge variant="outline" className="text-xs px-1.5 py-0 border-green-300 text-green-700">
               Recebido
+            </Badge>
+          )}
+          {event.isAiGenerated && (
+            <Badge variant="outline" className="text-xs px-1.5 py-0 border-purple-300 text-purple-700">
+              <Bot className="mr-1 h-3 w-3" />
+              IA
             </Badge>
           )}
         </div>
@@ -404,6 +413,12 @@ function WhatsAppBubble({ event }: { event: TimelineEvent }) {
               {origin}
             </span>
           )}
+          {event.isAiGenerated && (
+            <Badge variant="outline" className="text-[10px] px-1 py-0 border-purple-300 text-purple-700">
+              <Bot className="mr-0.5 h-2.5 w-2.5" />
+              IA
+            </Badge>
+          )}
         </div>
 
         {/* Content */}
@@ -488,15 +503,21 @@ interface TicketTimelineProps {
   ticketId: string;
   companyId: string;
   ticketSubject: string;
+  aiEnabled: boolean;
+  aiConfigEnabled: boolean;
 }
 
 export default function TicketTimeline({
   ticketId,
   companyId,
   ticketSubject,
+  aiEnabled: initialAiEnabled,
+  aiConfigEnabled,
 }: TicketTimelineProps) {
   const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [aiEnabled, setAiEnabled] = useState(initialAiEnabled);
+  const [togglingAi, setTogglingAi] = useState(false);
   const [noteContent, setNoteContent] = useState("");
   const [submittingNote, setSubmittingNote] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -805,13 +826,44 @@ export default function TicketTimeline({
   }
 
   // ---------------------------------------------------
+  // Toggle AI
+  // ---------------------------------------------------
+
+  async function handleToggleAi(checked: boolean) {
+    setTogglingAi(true);
+    try {
+      await toggleTicketAi(ticketId, companyId, checked);
+      setAiEnabled(checked);
+      toast.success(checked ? "IA ativada para este ticket" : "IA desativada para este ticket");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao alterar IA");
+    } finally {
+      setTogglingAi(false);
+    }
+  }
+
+  // ---------------------------------------------------
   // Render
   // ---------------------------------------------------
 
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0">
         <CardTitle className="text-lg">Timeline</CardTitle>
+        {aiConfigEnabled && (
+          <div className="flex items-center gap-2">
+            <Bot className="h-4 w-4 text-muted-foreground" />
+            <Label htmlFor="ai-toggle" className="text-sm text-muted-foreground cursor-pointer">
+              IA
+            </Label>
+            <Switch
+              id="ai-toggle"
+              checked={aiEnabled}
+              onCheckedChange={handleToggleAi}
+              disabled={togglingAi}
+            />
+          </div>
+        )}
       </CardHeader>
       <CardContent>
         <Tabs defaultValue="todos">
