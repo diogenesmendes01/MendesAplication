@@ -1,3 +1,254 @@
-import 'dotenv/config'
+import "dotenv/config";
+import express from "express";
+import cors from "cors";
+import path from "path";
+import { prisma } from "./lib/prisma.js";
+import { baileysProvider } from "./providers/baileys.provider.js";
 
-console.log('WhatsApp Service starting...')
+const app = express();
+const PORT = parseInt(process.env.WHATSAPP_SERVICE_PORT || "3001", 10);
+const API_KEY = process.env.WHATSAPP_SERVICE_API_KEY || "";
+
+// ============================================
+// Middleware
+// ============================================
+
+app.use(cors());
+app.use(express.json());
+
+// Serve uploaded media files
+app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+
+// ============================================
+// Health check (no auth)
+// ============================================
+
+app.get("/health", (_req, res) => {
+  res.status(200).json({ status: "ok" });
+});
+
+// ============================================
+// API Key Auth Middleware
+// ============================================
+
+function apiKeyAuth(
+  req: express.Request,
+  res: express.Response,
+  next: express.NextFunction
+): void {
+  const key = req.headers["apikey"] as string | undefined;
+  if (!API_KEY || key !== API_KEY) {
+    res.status(401).json({ error: "Unauthorized: invalid or missing apikey" });
+    return;
+  }
+  next();
+}
+
+// Apply auth to all routes below
+app.use(apiKeyAuth);
+
+// ============================================
+// Instance Routes
+// ============================================
+
+// POST /instance/connect — Initiate QR code connection
+app.post("/instance/connect", async (req, res) => {
+  try {
+    const { companyId } = req.body;
+    if (!companyId) {
+      res.status(400).json({ error: "companyId is required" });
+      return;
+    }
+
+    await baileysProvider.initiateQrCode(companyId);
+
+    // Try to get the QR code immediately (wait up to 10s)
+    const qrCode = await baileysProvider.getQrCode(companyId);
+    const status = baileysProvider.getConnectionStatus(companyId);
+
+    res.json({
+      status: status.isConnected
+        ? "connected"
+        : status.isConnecting
+          ? "connecting"
+          : "disconnected",
+      qrCode: qrCode || undefined,
+    });
+  } catch (err) {
+    console.error("[API] Error in POST /instance/connect:", err);
+    res.status(500).json({
+      error: err instanceof Error ? err.message : "Internal server error",
+    });
+  }
+});
+
+// POST /instance/connect-pairing — Initiate pairing code connection
+app.post("/instance/connect-pairing", async (req, res) => {
+  try {
+    const { companyId, phoneNumber } = req.body;
+    if (!companyId || !phoneNumber) {
+      res
+        .status(400)
+        .json({ error: "companyId and phoneNumber are required" });
+      return;
+    }
+
+    await baileysProvider.initiatePairingCode(companyId, phoneNumber);
+
+    // Wait for pairing code
+    const pairingCode = await baileysProvider.getPairingCode(companyId);
+
+    res.json({
+      pairingCode: pairingCode || undefined,
+    });
+  } catch (err) {
+    console.error("[API] Error in POST /instance/connect-pairing:", err);
+    res.status(500).json({
+      error: err instanceof Error ? err.message : "Internal server error",
+    });
+  }
+});
+
+// GET /instance/:companyId/qr — Get QR code
+app.get("/instance/:companyId/qr", async (req, res) => {
+  try {
+    const { companyId } = req.params;
+    const qrCode = await baileysProvider.getQrCode(companyId);
+
+    if (!qrCode) {
+      res.status(404).json({ error: "QR code not available" });
+      return;
+    }
+
+    res.json({ qrCode });
+  } catch (err) {
+    console.error("[API] Error in GET /instance/:companyId/qr:", err);
+    res.status(500).json({
+      error: err instanceof Error ? err.message : "Internal server error",
+    });
+  }
+});
+
+// GET /instance/:companyId/pairing-code — Get pairing code
+app.get("/instance/:companyId/pairing-code", async (req, res) => {
+  try {
+    const { companyId } = req.params;
+    const pairingCode = await baileysProvider.getPairingCode(companyId);
+
+    if (!pairingCode) {
+      res.status(404).json({ error: "Pairing code not available" });
+      return;
+    }
+
+    res.json({ pairingCode });
+  } catch (err) {
+    console.error(
+      "[API] Error in GET /instance/:companyId/pairing-code:",
+      err
+    );
+    res.status(500).json({
+      error: err instanceof Error ? err.message : "Internal server error",
+    });
+  }
+});
+
+// GET /instance/:companyId/status — Get connection status
+app.get("/instance/:companyId/status", (req, res) => {
+  const { companyId } = req.params;
+  const status = baileysProvider.getConnectionStatus(companyId);
+  res.json(status);
+});
+
+// POST /instance/:companyId/disconnect — Disconnect session
+app.post("/instance/:companyId/disconnect", async (req, res) => {
+  try {
+    const { companyId } = req.params;
+    await baileysProvider.disconnect(companyId);
+    res.json({ status: "disconnected" });
+  } catch (err) {
+    console.error(
+      "[API] Error in POST /instance/:companyId/disconnect:",
+      err
+    );
+    res.status(500).json({
+      error: err instanceof Error ? err.message : "Internal server error",
+    });
+  }
+});
+
+// ============================================
+// Message Routes
+// ============================================
+
+// POST /message/send-text — Send text message
+app.post("/message/send-text", async (req, res) => {
+  try {
+    const { companyId, to, content } = req.body;
+    if (!companyId || !to || !content) {
+      res
+        .status(400)
+        .json({ error: "companyId, to, and content are required" });
+      return;
+    }
+
+    const messageId = await baileysProvider.sendMessage(companyId, to, content);
+    res.json({ messageId });
+  } catch (err) {
+    console.error("[API] Error in POST /message/send-text:", err);
+    res.status(500).json({
+      error: err instanceof Error ? err.message : "Internal server error",
+    });
+  }
+});
+
+// POST /message/send-media — Send media message
+app.post("/message/send-media", async (req, res) => {
+  try {
+    const { companyId, to, mediaUrl, caption, mediaType } = req.body;
+    if (!companyId || !to || !mediaUrl) {
+      res
+        .status(400)
+        .json({ error: "companyId, to, and mediaUrl are required" });
+      return;
+    }
+
+    const messageId = await baileysProvider.sendMediaMessage(
+      companyId,
+      to,
+      mediaUrl,
+      caption,
+      mediaType || "image"
+    );
+    res.json({ messageId });
+  } catch (err) {
+    console.error("[API] Error in POST /message/send-media:", err);
+    res.status(500).json({
+      error: err instanceof Error ? err.message : "Internal server error",
+    });
+  }
+});
+
+// ============================================
+// Start Server
+// ============================================
+
+const server = app.listen(PORT, () => {
+  console.log(`WhatsApp Service running on port ${PORT}`);
+});
+
+// ============================================
+// Graceful Shutdown
+// ============================================
+
+async function shutdown(signal: string): Promise<void> {
+  console.log(`\n[${signal}] Shutting down WhatsApp Service...`);
+  server.close(() => {
+    console.log("HTTP server closed");
+  });
+  await prisma.$disconnect();
+  console.log("Prisma disconnected");
+  process.exit(0);
+}
+
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));
