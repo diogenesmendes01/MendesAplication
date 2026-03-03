@@ -27,5 +27,19 @@
 - WhatsApp Service and ERP share same PostgreSQL database
 - WhatsApp Service communicates with ERP via HTTP webhooks (localhost)
 
+- Baileys v7 requires Node.js 20+ — devcontainer has Node 18 by default, need `sudo npx -y n 20` to upgrade
+- WhatsApp Service uses ESM (`"type": "module"` in package.json) and `moduleResolution: "bundler"` in tsconfig
+
 ## Progress Log
-(empty — no iterations run yet)
+
+## 2026-03-03 - US-001
+- Scaffolded whatsapp-service/ directory with package.json, tsconfig.json, .env.example, .gitignore, src/index.ts
+- Dependencies: @whiskeysockets/baileys v7, express v5, @prisma/client, @hapi/boom, qrcode, cors, dotenv
+- DevDeps: @types/express, @types/cors, @types/qrcode, prisma, tsx, typescript
+- npm install runs successfully, typecheck passes
+- Files created: whatsapp-service/package.json, tsconfig.json, .env.example, .gitignore, src/index.ts
+- **Learnings for future iterations:**
+  - Baileys v7 requires Node 20+ — install via `sudo npx -y n 20 && hash -r` if on Node 18
+  - WhatsApp Service is ESM (type: module) with bundler moduleResolution
+  - Reference code from JaRespondi is at /workspaces/app/temp/jarespondiv2/
+---
