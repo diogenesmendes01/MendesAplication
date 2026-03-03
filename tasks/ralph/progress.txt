@@ -47,6 +47,8 @@
 - AI Agent uses native tool calling (chatCompletion + ALL_TOOLS), not JSON response parsing — executeTool dispatches by tool name string
 - ToolContext requires contactPhone (digits only) for RESPOND tool — load from ticket.contact.whatsapp or ticket.client.telefone
 - AI modules: provider.ts (LLM abstraction), tools.ts (definitions), embeddings.ts (RAG), tool-executor.ts (execution), agent.ts (loop)
+- ChannelType enum only has EMAIL and WHATSAPP — internal system notes should omit the channel field (it's optional on TicketMessage)
+- AI agent enqueue in whatsapp-inbound.ts only for INBOUND direction + non-empty content
 
 ## Progress Log
 
@@ -335,4 +337,23 @@
   - Error in iteration: add error text as user message to give LLM context to try differently
   - Prisma Decimal fields need Number() conversion for arithmetic (AccountReceivable.value)
   - "use server" directive is fine for modules called from workers — only affects client-side boundary
+---
+
+## 2026-03-03 - US-015
+- Added ai-agent and document-processing queues to erp/src/lib/queue.ts (QUEUE_NAMES + Queue instances)
+- Created erp/src/lib/workers/ai-agent.ts with processAiAgent worker
+- Worker checks: 1) AiConfig.enabled for company, 2) Ticket.aiEnabled for ticket, 3) escalation keywords before LLM call
+- Escalation keyword detection: case-insensitive match against AiConfig.escalationKeywords — if match found, disables AI on ticket, sets status OPEN, creates internal note, returns without calling LLM
+- If all checks pass, calls runAgent(ticketId, companyId, messageContent) from ai/agent.ts
+- Registered aiAgentWorker in workers/index.ts using createWorker pattern
+- Added hook in whatsapp-inbound.ts: after creating INBOUND message with text content, enqueues ai-agent job with { ticketId, companyId, messageContent }
+- Only enqueues for INBOUND direction AND when content is non-empty (no point running AI on empty/media-only messages)
+- Files created: erp/src/lib/workers/ai-agent.ts
+- Files changed: erp/src/lib/queue.ts, erp/src/lib/workers/index.ts, erp/src/lib/workers/whatsapp-inbound.ts
+- Typecheck and lint pass
+- **Learnings for future iterations:**
+  - ChannelType enum only has EMAIL and WHATSAPP — internal system notes should omit the channel field (it's optional)
+  - Escalation keyword check should happen BEFORE calling LLM to save API costs — this is the whole point of keywords
+  - AI agent enqueue only for INBOUND + non-empty content — media-only messages or outbound echoes don't need AI processing
+  - Worker follows pattern: check company config → check ticket config → check keywords → run agent
 ---

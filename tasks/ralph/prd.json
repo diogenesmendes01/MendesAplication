@@ -283,7 +283,7 @@
         "Typecheck passes"
       ],
       "priority": 15,
-      "passes": false,
+      "passes": true,
       "notes": "REF: /tmp/jarespondiv2/apps/api/src/queues/ — estrutura de filas BullMQ do JaRespondi. REF: erp/src/lib/queue.ts — filas existentes no ERP (email-inbound, email-outbound, whatsapp-inbound, whatsapp-outbound, sla-check). REF: erp/src/lib/workers/index.ts — como registrar workers. REF: erp/src/lib/workers/whatsapp-inbound.ts — onde adicionar o hook para enfileirar ai-agent apos criar mensagem INBOUND"
     },
     {
