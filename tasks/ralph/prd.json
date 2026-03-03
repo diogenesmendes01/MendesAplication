@@ -69,7 +69,7 @@
         "Typecheck passes"
       ],
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "notes": "ADAPTAR DE: /tmp/jarespondiv2/apps/api/src/providers/useDatabaseAuthState.ts (346 linhas). Trocar todas as chamadas Supabase (.from().select/.upsert/.delete) por equivalentes Prisma (prisma.baileysAuthState.findFirst/upsert/delete). Trocar whatsapp_number_id por companyId. MANTER: logica de BufferJSON.replacer/reviver, cache em memoria, initAuthCreds, tipos de chave"
     },
     {
@@ -92,7 +92,7 @@
         "Typecheck passes"
       ],
       "priority": 5,
-      "passes": false,
+      "passes": true,
       "notes": "ADAPTAR DE: /tmp/jarespondiv2/apps/api/src/providers/baileys.provider.ts (1946 linhas). Esta story cobre SOMENTE a parte de conexao: initializeSession, connectToWhatsApp, handleConnectionUpdate, reconnect, disconnect, getStatus, QR/pairing. NAO incluir envio/recebimento de mensagens (isso e US-006). Trocar accountId por companyId. Trocar Supabase por Prisma. Manter: Map de sessions, cooldown 15s, exponential backoff, tratamento de DisconnectReason"
     },
     {

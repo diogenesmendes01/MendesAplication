@@ -30,6 +30,12 @@
 - Baileys v7 requires Node.js 20+ — devcontainer has Node 18 by default, need `sudo npx -y n 20` to upgrade
 - WhatsApp Service uses ESM (`"type": "module"` in package.json) and `moduleResolution: "bundler"` in tsconfig
 - When schema.prisma changes in ERP, must copy to whatsapp-service/prisma/ and run `npx prisma generate` there too
+- Prisma JSON fields need `as Prisma.InputJsonValue` cast (import `Prisma` from `@prisma/client`)
+- Baileys keys.get must use `<T extends keyof SignalDataTypeMap>` generic signature for type compatibility
+- BaileysProvider is a singleton exported as `baileysProvider` — use it from routes/controllers
+- DisconnectReason codes: loggedOut=401, timedOut=408, connectionClosed=428, restartRequired=515
+- Baileys makeWASocket requires `version` from fetchLatestBaileysVersion() and `makeCacheableSignalKeyStore` wrapper
+- Use `socket.end(undefined)` for graceful disconnect, NOT `socket.logout()` (logout removes the account)
 
 ## Progress Log
 
@@ -70,4 +76,54 @@
   - When schema.prisma changes in ERP, must also copy to whatsapp-service/prisma/ and re-run prisma generate there
   - Both services share the same PostgreSQL database via DATABASE_URL
   - whatsapp-service prisma generate creates its own node_modules/@prisma/client
+---
+
+## 2026-03-03 - US-004
+- Implemented whatsapp-service/src/providers/useDatabaseAuthState.ts
+- Adapted from JaRespondi reference: replaced all Supabase calls with Prisma equivalents
+- Key changes from reference: whatsapp_number_id → companyId, supabase.from() → prisma.baileysAuthState/lidMapping
+- Features: in-memory cache (Map), BufferJSON serialization/deserialization, all key types supported
+- Key types: creds, pre-key, session, sender-key, sender-key-memory, app-state-sync-key, app-state-sync-version, tctoken, device-list, lid-mapping
+- LID mappings stored in dedicated LidMapping table via Prisma upsert
+- saveCreds() persists credentials via upsert with BufferJSON.replacer
+- readKey, writeKey, removeKey with cache invalidation
+- Typecheck passes in both whatsapp-service and erp
+- Files created: whatsapp-service/src/providers/useDatabaseAuthState.ts
+- **Learnings for future iterations:**
+  - Prisma JSON fields need `as Prisma.InputJsonValue` cast (not `Record<string, unknown>`)
+  - Baileys SignalDataTypeMap generic typing: use `<T extends keyof SignalDataTypeMap>` for keys.get signature
+  - The `set` callback from Baileys uses a complex nested type — use `any` for the data param to avoid type gymnastics
+  - keyType is derived from keyId prefix (e.g., "session-" → "session") for the compound unique constraint
+  - Use `deleteMany` instead of `delete` when not using the unique constraint directly
+  - Use `findFirst` instead of `findUnique` when querying by partial fields of a compound unique
+---
+
+## 2026-03-03 - US-005
+- Implemented whatsapp-service/src/providers/baileys.provider.ts with BaileysProvider class
+- Connection management: initiateQrCode, initiatePairingCode, getQrCode, getPairingCode, disconnect, getConnectionStatus
+- Session tracking via Map<string, BaileysSession> with isConnected/isConnecting/lastError
+- Cooldown: 15-second throttle between init attempts per company (bypassable)
+- Exponential backoff: 5s -> 60s max for reconnection when previously connected
+- DisconnectReason handling:
+  - 401/loggedOut/device_removed: NEVER reconnect, clear auth state
+  - 515/restartRequired: immediate reconnect via setImmediate with same credentials
+  - 408/timedOut (never connected): no reconnect, QR expired message
+  - Was connected + other: exponential backoff reconnect
+  - Never connected + other: no reconnect
+- QR code generation via `qrcode` lib (toDataURL -> base64)
+- Pairing code: requestPairingCode -> formatted as XXXX-XXXX
+- Pairing uses Browsers.macOS('Chrome'), QR uses Browsers.ubuntu('Chrome')
+- Socket config: connectTimeoutMs 30s, defaultQueryTimeoutMs 15s, keepAliveIntervalMs 25s
+- getSession() method exposed for US-006 message sending
+- Singleton export: baileysProvider
+- Files created: whatsapp-service/src/providers/baileys.provider.ts
+- **Learnings for future iterations:**
+  - DisconnectReason enum: loggedOut=401, timedOut=408, connectionClosed=428, connectionReplaced=440, restartRequired=515
+  - Baileys makeWASocket requires `version` from fetchLatestBaileysVersion()
+  - makeCacheableSignalKeyStore wraps state.keys for better performance
+  - Pairing code method requires Browsers.macOS (not ubuntu) per Baileys docs
+  - `socket.end(undefined)` is the graceful disconnect method
+  - QR mode: connection.update with `qr` field provides the raw QR string to encode
+  - Pairing mode: must wait ~2s after socket creation before calling requestPairingCode
+  - The `getMessage` callback is required by Baileys for message retries/edits
 ---
