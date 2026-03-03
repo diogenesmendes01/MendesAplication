@@ -1,24 +1,20 @@
 version: "3.8"
 
 services:
-  evolution-api:
-    image: atendai/evolution-api:latest
-    container_name: evolution-api
+  whatsapp-service:
+    build: ./whatsapp-service
+    container_name: whatsapp-service
     ports:
-      - "8080:8080"
+      - "3001:3001"
     environment:
-      - AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY:-your-evolution-api-key}
-      - DATABASE_PROVIDER=postgresql
-      - DATABASE_CONNECTION_URI=postgresql://postgres:postgres@host.docker.internal:5432/evolution?schema=public
-      - DATABASE_CONNECTION_CLIENT_NAME=evolution_api
-      - CACHE_REDIS_ENABLED=true
-      - CACHE_REDIS_URI=redis://host.docker.internal:6379
-      - CACHE_REDIS_PREFIX_KEY=evolution
+      - DATABASE_URL=postgresql://postgres:postgres@host.docker.internal:5432/mendeserp?schema=public
+      - WHATSAPP_SERVICE_PORT=3001
+      - WHATSAPP_SERVICE_API_KEY=${WHATSAPP_SERVICE_API_KEY:-your-api-key-here}
+      - WHATSAPP_WEBHOOK_URL=http://host.docker.internal:3000/api/webhooks/whatsapp
+      - WHATSAPP_WEBHOOK_SECRET=${WHATSAPP_WEBHOOK_SECRET:-your-webhook-secret-here}
     volumes:
-      - evolution_instances:/evolution/instances
-      - evolution_store:/evolution/store
+      - whatsapp_uploads:/app/uploads
     restart: unless-stopped
 
 volumes:
-  evolution_instances:
-  evolution_store:
+  whatsapp_uploads:
