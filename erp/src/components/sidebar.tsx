@@ -16,6 +16,7 @@ import {
   Radio,
   Clock,
   BookOpen,
+  Bot,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -43,6 +44,7 @@ const navItems: NavItem[] = [
       { label: "Canais", href: "/configuracoes/canais", icon: Radio },
       { label: "SLA", href: "/configuracoes/sla", icon: Clock },
       { label: "Knowledge Base", href: "/configuracoes/knowledge-base", icon: BookOpen },
+      { label: "Agente IA", href: "/configuracoes/ai", icon: Bot },
     ],
   },
 ];
