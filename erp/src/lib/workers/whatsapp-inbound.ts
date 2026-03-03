@@ -1,5 +1,6 @@
 import { Job } from "bullmq";
 import { prisma } from "@/lib/prisma";
+import { aiAgentQueue } from "@/lib/queue";
 import { decryptConfig } from "@/lib/encryption";
 import path from "path";
 import fs from "fs/promises";
@@ -465,6 +466,18 @@ export async function processWhatsAppInbound(job: Job<EvolutionWebhookPayload>) 
   console.log(
     `[whatsapp-inbound] Message ${message.id} added to ticket ${ticketId} (${direction}/${origin}, phone: ${phone})`
   );
+
+  // Enqueue AI agent job for inbound messages with text content
+  if (direction === "INBOUND" && content) {
+    await aiAgentQueue.add("process-message", {
+      ticketId,
+      companyId,
+      messageContent: content,
+    });
+    console.log(
+      `[whatsapp-inbound] Enqueued ai-agent job for ticket ${ticketId}`
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------

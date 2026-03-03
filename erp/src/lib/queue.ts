@@ -22,6 +22,8 @@ export const QUEUE_NAMES = {
   WHATSAPP_INBOUND: 'whatsapp-inbound',
   WHATSAPP_OUTBOUND: 'whatsapp-outbound',
   SLA_CHECK: 'sla-check',
+  AI_AGENT: 'ai-agent',
+  DOCUMENT_PROCESSING: 'document-processing',
 } as const
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES]
@@ -31,3 +33,5 @@ export const emailOutboundQueue = new Queue(QUEUE_NAMES.EMAIL_OUTBOUND, { connec
 export const whatsappInboundQueue = new Queue(QUEUE_NAMES.WHATSAPP_INBOUND, { connection })
 export const whatsappOutboundQueue = new Queue(QUEUE_NAMES.WHATSAPP_OUTBOUND, { connection })
 export const slaCheckQueue = new Queue(QUEUE_NAMES.SLA_CHECK, { connection })
+export const aiAgentQueue = new Queue(QUEUE_NAMES.AI_AGENT, { connection })
+export const documentProcessingQueue = new Queue(QUEUE_NAMES.DOCUMENT_PROCESSING, { connection })

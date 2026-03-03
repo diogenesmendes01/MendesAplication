@@ -5,6 +5,7 @@ import { processEmailOutbound } from './email-outbound'
 import { processWhatsAppInbound } from './whatsapp-inbound'
 import { processWhatsAppOutbound } from './whatsapp-outbound'
 import { processSlaCheck } from './sla-check'
+import { processAiAgent } from './ai-agent'
 
 console.log('Starting workers...')
 
@@ -40,12 +41,15 @@ const whatsappOutboundWorker = createWorker(QUEUE_NAMES.WHATSAPP_OUTBOUND, proce
 
 const slaCheckWorker = createWorker(QUEUE_NAMES.SLA_CHECK, processSlaCheck)
 
+const aiAgentWorker = createWorker(QUEUE_NAMES.AI_AGENT, processAiAgent)
+
 const workers = [
   emailInboundWorker,
   emailOutboundWorker,
   whatsappInboundWorker,
   whatsappOutboundWorker,
   slaCheckWorker,
+  aiAgentWorker,
 ]
 
 async function shutdown() {
