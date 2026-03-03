@@ -226,7 +226,7 @@
         "Typecheck passes"
       ],
       "priority": 12,
-      "passes": false,
+      "passes": true,
       "notes": "REF: /tmp/jarespondiv2/apps/api/src/services/agent/tools.ts (402 linhas) — tem 11 tools (buscar_documentos, consultar_crm, consultar_historico, criar_tarefa, criar_agendamento, criar_nota, mover_pipeline, adicionar_tag, atualizar_contato, escalar_humano, responder). SIMPLIFICAR para 6 tools no MendesERP: SEARCH_DOCUMENTS, GET_CLIENT_INFO, GET_HISTORY, RESPOND, ESCALATE, CREATE_NOTE. Nao precisamos de CRM/pipeline/tags/agendamento pois o SAC ja tem isso separado"
     },
     {

@@ -261,3 +261,19 @@
   - OpenAI and DeepSeek use identical API format — only base URL differs
   - "use server" directive allows this to be called from server actions without exposing API keys to client
 ---
+
+## 2026-03-03 - US-012
+- Created erp/src/lib/ai/tools.ts with 6 AI tool definitions in AiToolDefinition format
+- Tools defined: SEARCH_DOCUMENTS, GET_CLIENT_INFO, GET_HISTORY, RESPOND, ESCALATE, CREATE_NOTE
+- Each tool has name, description (in Portuguese), and JSON Schema parameters
+- Exported individually and as ALL_TOOLS array
+- GET_CLIENT_INFO has no parameters (uses ticket context), GET_HISTORY has optional limit param
+- RESPOND requires message param, ESCALATE requires reason param, CREATE_NOTE requires content param
+- SEARCH_DOCUMENTS requires query param
+- Typecheck and lint pass
+- Files created: erp/src/lib/ai/tools.ts
+- **Learnings for future iterations:**
+  - Tool definitions are pure data (AiToolDefinition from provider.ts) — no execution logic here, that goes in tool-executor.ts (US-014)
+  - Parameter names use English (message, query, content, reason) even though descriptions are in Portuguese — this matches the OpenAI function calling convention
+  - "use server" directive ensures these definitions can be safely imported in server actions
+---
