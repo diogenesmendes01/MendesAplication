@@ -207,7 +207,7 @@
         "Typecheck passes"
       ],
       "priority": 11,
-      "passes": false,
+      "passes": true,
       "notes": "REF: /tmp/jarespondiv2/apps/api/src/config/openai.ts (11 linhas), /tmp/jarespondiv2/apps/api/src/config/deepseek.ts (36 linhas), /tmp/jarespondiv2/apps/api/src/config/anthropic.ts (11 linhas). No JaRespondi cada provider e separado — aqui unificar em uma unica funcao chatCompletion() que roteia. DeepSeek e OpenAI usam mesmo formato (OpenAI SDK com baseURL diferente). Anthropic precisa conversao de formato (system message vira param, tool_calls viram tool_use content blocks)"
     },
     {

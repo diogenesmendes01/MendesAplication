@@ -237,3 +237,27 @@
   - aiEnabled defaults to true on Ticket (AI is on by default for new tickets), company-level AiConfig.enabled controls whether AI is active globally
   - isAiGenerated on TicketMessage distinguishes AI-generated messages from human messages in the timeline
 ---
+
+## 2026-03-03 - US-011
+- Created erp/src/lib/ai/provider.ts with unified LLM provider abstraction
+- Interfaces: AiMessage, AiToolCall, AiToolDefinition, AiResponse, ChatCompletionOptions
+- chatCompletion() routes to OpenAI/DeepSeek or Anthropic based on AI_PROVIDER env
+- OpenAI/DeepSeek: same Chat Completions API format, different base URLs (api.openai.com vs api.deepseek.com)
+- Anthropic: full format conversion — system messages → system param, tool_calls → tool_use blocks, tool results → tool_result blocks
+- Anthropic: mergeConsecutiveUserMessages() handles role alternation requirement (tool results become user messages)
+- Tool calling support across all providers (OpenAI function format ↔ Anthropic tool_use/tool_result blocks)
+- AbortController-based timeout via AI_TIMEOUT env (default 30000ms)
+- Uses raw fetch (no SDK dependencies) for minimal footprint
+- Default models: gpt-4o (OpenAI), deepseek-chat (DeepSeek), claude-sonnet-4-20250514 (Anthropic)
+- Env vars: AI_PROVIDER, AI_API_KEY, AI_MODEL, AI_TIMEOUT
+- Files created: erp/src/lib/ai/provider.ts
+- Typecheck and lint pass
+- **Learnings for future iterations:**
+  - Raw fetch approach avoids adding openai/@anthropic-ai/sdk dependencies — keeps erp/package.json lean
+  - Anthropic requires alternating user/assistant roles — tool results (role=tool) must be wrapped as user messages with tool_result content blocks
+  - Anthropic uses `input_schema` for tool definitions (not `parameters` like OpenAI)
+  - Anthropic requires `max_tokens` to be explicitly set (defaults to 4096)
+  - Anthropic auth uses `x-api-key` header (not Authorization Bearer)
+  - OpenAI and DeepSeek use identical API format — only base URL differs
+  - "use server" directive allows this to be called from server actions without exposing API keys to client
+---
