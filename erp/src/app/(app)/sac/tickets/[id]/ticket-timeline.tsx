@@ -12,6 +12,7 @@ import {
   Download,
   Send,
   Upload,
+  Smile,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,6 +28,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   listTimelineEvents,
   createInternalNote,
@@ -434,6 +440,43 @@ function WhatsAppBubble({ event }: { event: TimelineEvent }) {
         </div>
       </div>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Emoji Picker (simple inline)
+// ---------------------------------------------------------------------------
+
+const COMMON_EMOJIS = [
+  "\u{1F600}", "\u{1F601}", "\u{1F602}", "\u{1F603}", "\u{1F604}", "\u{1F605}", "\u{1F609}", "\u{1F60A}",
+  "\u{1F60D}", "\u{1F618}", "\u{1F60E}", "\u{1F914}", "\u{1F44D}", "\u{1F44E}", "\u{1F44B}", "\u{1F64F}",
+  "\u{1F389}", "\u{1F525}", "\u{2705}", "\u{274C}", "\u{26A0}\u{FE0F}", "\u{2764}\u{FE0F}", "\u{1F4E7}", "\u{1F4DE}",
+  "\u{1F4CB}", "\u{1F4B0}", "\u{23F0}", "\u{1F504}", "\u{1F4AC}", "\u{270F}\u{FE0F}", "\u{1F50D}", "\u{1F6A8}",
+];
+
+function EmojiPicker({ onSelect }: { onSelect: (emoji: string) => void }) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button variant="outline" size="sm" type="button">
+          <Smile className="h-4 w-4" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-64 p-2" align="start">
+        <div className="grid grid-cols-8 gap-1">
+          {COMMON_EMOJIS.map((emoji) => (
+            <button
+              key={emoji}
+              type="button"
+              className="flex h-8 w-8 items-center justify-center rounded hover:bg-accent text-lg"
+              onClick={() => onSelect(emoji)}
+            >
+              {emoji}
+            </button>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -1035,7 +1078,7 @@ export default function TicketTimeline({
               )}
 
               <div className="flex items-center justify-between flex-wrap gap-3">
-                <div>
+                <div className="flex items-center gap-2">
                   <input
                     ref={waFileInputRef}
                     type="file"
@@ -1052,6 +1095,7 @@ export default function TicketTimeline({
                     <Paperclip className="mr-2 h-4 w-4" />
                     {waUploading ? "Enviando..." : "Anexar"}
                   </Button>
+                  <EmojiPicker onSelect={(emoji) => setWaContent((prev) => prev + emoji)} />
                 </div>
                 <Button
                   onClick={handleSendWhatsApp}

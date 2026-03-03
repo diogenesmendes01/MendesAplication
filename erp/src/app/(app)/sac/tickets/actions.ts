@@ -1690,6 +1690,8 @@ export async function requestRefund(
         companyId,
         requestedById: session.userId,
         amount,
+        justification: justification.trim(),
+        boletoId: boletoId ?? null,
         status: "AWAITING_APPROVAL",
         slaDeadline,
       },
@@ -2102,8 +2104,7 @@ export async function executeRefund(
         status: "PENDING",
       },
       data: {
-        status: "PAID",
-        paidAt: now,
+        status: "CANCELLED",
       },
     });
 
@@ -2417,7 +2418,6 @@ export async function approveCancellation(
   const typeMatch = requestNote?.content.match(/Tipo:\s*(proposal|boletos|both)/);
   const type = (typeMatch?.[1] as CancellationType) ?? "both";
 
-  const now = new Date();
   const cancelledItems: string[] = [];
 
   await prisma.$transaction(async (tx) => {
@@ -2464,8 +2464,7 @@ export async function approveCancellation(
           status: "PENDING",
         },
         data: {
-          status: "PAID",
-          paidAt: now,
+          status: "CANCELLED",
         },
       });
       cancelledItems.push("Contas a Receber pendentes");

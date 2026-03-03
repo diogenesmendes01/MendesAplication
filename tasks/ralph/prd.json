@@ -1,680 +1,384 @@
 {
   "project": "MendesERP",
-  "branchName": "ralph/sac-omnichannel",
-  "description": "SAC Omnichannel — Integracao bidirecional Email (IMAP/SMTP) + WhatsApp (Evolution API), reembolso, SLA, PDF export, dashboard",
+  "branchName": "ralph/whatsapp-baileys-ai-agent",
+  "description": "WhatsApp Baileys + AI Agent — Substituir Evolution API por microservico Baileys proprio, adicionar AI Agent com RAG ao SAC",
   "userStories": [
     {
-      "id": "US-048",
-      "title": "Instalar e configurar Redis no devcontainer",
-      "description": "Como desenvolvedor, preciso do Redis instalado no ambiente de desenvolvimento para que o BullMQ funcione como sistema de filas.",
+      "id": "US-001",
+      "title": "Scaffold do projeto WhatsApp Service",
+      "description": "Como desenvolvedor, preciso criar a estrutura base do microservico WhatsApp para comecar a implementar a logica de conexao Baileys.",
       "acceptanceCriteria": [
-        "Redis adicionado ao devcontainer.json como feature ou servico Docker",
-        "Redis rodando na porta padrao 6379",
-        "Variavel REDIS_URL=redis://localhost:6379 adicionada ao .env.example",
-        "Teste de conexao redis-cli ping retorna PONG",
+        "Criar diretorio whatsapp-service/ na raiz do projeto",
+        "Criar whatsapp-service/package.json com dependencias: @whiskeysockets/baileys v7, express v5, @prisma/client, @hapi/boom, qrcode, cors, dotenv; devDeps: @types/express, @types/cors, @types/qrcode, prisma, tsx, typescript",
+        "Scripts: dev (tsx watch src/index.ts), build (tsc), start (node dist/index.js)",
+        "Criar whatsapp-service/tsconfig.json com target ES2022, strict mode, outDir dist, rootDir src",
+        "Criar whatsapp-service/.env.example com variaveis DATABASE_URL, WHATSAPP_SERVICE_PORT, WHATSAPP_WEBHOOK_URL, WHATSAPP_WEBHOOK_SECRET, WHATSAPP_SERVICE_API_KEY",
+        "npm install executa sem erros no diretorio whatsapp-service",
         "Typecheck passes"
       ],
       "priority": 1,
-      "passes": true,
-      "notes": ""
+      "passes": false,
+      "notes": "REF: /tmp/jarespondiv2/apps/api/package.json para lista de dependencias Baileys. REF: /tmp/jarespondiv2/apps/api/tsconfig.json para config TypeScript"
     },
     {
-      "id": "US-049",
-      "title": "Configurar BullMQ e estrutura de filas",
-      "description": "Como desenvolvedor, preciso da infraestrutura BullMQ configurada com filas nomeadas para processar mensagens de forma assincrona.",
+      "id": "US-002",
+      "title": "Modelos Prisma para autenticacao Baileys",
+      "description": "Como desenvolvedor, preciso armazenar sessoes Baileys no banco de dados para que as conexoes WhatsApp persistam entre restarts.",
       "acceptanceCriteria": [
-        "Pacotes bullmq e ioredis instalados via npm",
-        "Arquivo erp/src/lib/queue.ts com conexao Redis (usa REDIS_URL do env) e exportacao de 5 filas: email-inbound, email-outbound, whatsapp-inbound, whatsapp-outbound, sla-check",
-        "Arquivo erp/src/lib/workers/base.ts com classe base de worker que loga jobs recebidos",
-        "Script npm workers em package.json: npx tsx src/lib/workers/index.ts",
+        "Adicionar modelo BaileysAuthState ao schema.prisma: id (cuid), companyId, keyType (String), keyId (String), keyData (Json), createdAt, updatedAt",
+        "Adicionar modelo LidMapping ao schema.prisma: id (cuid), companyId, lid (String), phoneNumber (String), createdAt, updatedAt",
+        "Constraint unique [companyId, keyType, keyId] em BaileysAuthState",
+        "Constraint unique [companyId, lid] em LidMapping",
+        "Index [companyId] em ambos os modelos",
+        "Relations com Company (onDelete Cascade), adicionar baileysAuthStates e lidMappings no model Company",
+        "@@map baileys_auth_state e lid_mappings",
+        "prisma db push executa sem erros",
         "Typecheck passes"
       ],
       "priority": 2,
-      "passes": true,
-      "notes": ""
+      "passes": false,
+      "notes": "REF: /tmp/jarespondiv2/apps/api/src/providers/useDatabaseAuthState.ts — ver tabelas baileys_auth_state e lid_mappings usadas pelo Supabase para entender a estrutura. No JaRespondi o campo se chama whatsapp_number_id, aqui usar companyId"
     },
     {
-      "id": "US-050",
-      "title": "Configurar Evolution API via Docker Compose",
-      "description": "Como desenvolvedor, preciso da Evolution API rodando localmente via Docker para desenvolver a integracao WhatsApp.",
+      "id": "US-003",
+      "title": "Compartilhar Prisma client com WhatsApp Service",
+      "description": "Como desenvolvedor, preciso que o WhatsApp Service acesse o mesmo banco do ERP para compartilhar dados de sessao e empresas.",
       "acceptanceCriteria": [
-        "Arquivo docker-compose.yml na raiz do projeto com servico evolution-api (imagem atydoc/evolution-api:latest)",
-        "Evolution API acessivel em http://localhost:8080",
-        "Variaveis EVOLUTION_API_URL e EVOLUTION_API_KEY adicionadas ao .env.example com comentarios explicativos",
+        "Copiar schema.prisma do erp/prisma/ para whatsapp-service/prisma/",
+        "npx prisma generate executa sem erros no whatsapp-service",
+        "Criar whatsapp-service/src/lib/prisma.ts exportando instancia singleton do PrismaClient",
         "Typecheck passes"
       ],
       "priority": 3,
-      "passes": true,
-      "notes": ""
+      "passes": false,
+      "notes": "Padrao singleton igual ao ERP em erp/src/lib/prisma.ts. Ambos servicos compartilham o mesmo PostgreSQL"
     },
     {
-      "id": "US-051",
-      "title": "Adicionar enums novos ao schema Prisma",
-      "description": "Como desenvolvedor, preciso dos novos enums no schema para que as tabelas possam referencia-los.",
+      "id": "US-004",
+      "title": "Implementar useDatabaseAuthState com Prisma",
+      "description": "Como desenvolvedor, preciso de um gerenciador de estado de autenticacao Baileys que use Prisma/PostgreSQL para persistir sessoes.",
       "acceptanceCriteria": [
-        "Enums adicionados ao schema.prisma: ChannelType (EMAIL, WHATSAPP), MessageDirection (INBOUND, OUTBOUND), MessageOrigin (SYSTEM, EXTERNAL), SlaType (TICKET, REFUND), RefundStatus (AWAITING_APPROVAL, APPROVED, REJECTED, PROCESSING, COMPLETED), RefundPaymentMethod (PIX, TED), RefundAttachmentType (PAYMENT_PROOF, REFUND_PROOF), RefundInvoiceAction (CANCEL_INVOICE, CREDIT_NOTE, NONE), PayableOrigin (MANUAL, REFUND), InvoiceType (STANDARD, CREDIT_NOTE)",
-        "Status CANCELLED adicionado ao enum InvoiceStatus ou ProposalStatus se existir",
-        "Migration gerada e aplicada com sucesso via npx prisma db push",
+        "Criar whatsapp-service/src/providers/useDatabaseAuthState.ts",
+        "Carregar ou inicializar credenciais (initAuthCreds do Baileys)",
+        "Cache em memoria (Map) para reduzir queries ao banco",
+        "Suporte a todos os tipos de chave: creds, pre-key, session, sender-key, sender-key-memory, app-state-sync-key, app-state-sync-version",
+        "LID mappings armazenados em tabela dedicada LidMapping com upsert",
+        "Serializacao/deserializacao com BufferJSON.replacer/reviver",
+        "saveCreds() persiste credenciais no banco via upsert",
+        "readKey, writeKey, removeKey com cache invalidation",
         "Typecheck passes"
       ],
       "priority": 4,
-      "passes": true,
-      "notes": ""
+      "passes": false,
+      "notes": "ADAPTAR DE: /tmp/jarespondiv2/apps/api/src/providers/useDatabaseAuthState.ts (346 linhas). Trocar todas as chamadas Supabase (.from().select/.upsert/.delete) por equivalentes Prisma (prisma.baileysAuthState.findFirst/upsert/delete). Trocar whatsapp_number_id por companyId. MANTER: logica de BufferJSON.replacer/reviver, cache em memoria, initAuthCreds, tipos de chave"
     },
     {
-      "id": "US-052",
-      "title": "Criar tabela AdditionalContact",
-      "description": "Como atendente, preciso registrar multiplos contatos por cliente para identificar quem esta nos contactando.",
+      "id": "US-005",
+      "title": "BaileysProvider - Gerenciamento de conexao",
+      "description": "Como desenvolvedor, preciso da classe BaileysProvider com gerenciamento de conexao WhatsApp incluindo QR Code, Pairing Code e reconexao automatica.",
       "acceptanceCriteria": [
-        "Model AdditionalContact no schema.prisma com campos: id (cuid), clientId, name, role (opcional), email (opcional), whatsapp (opcional), createdAt",
-        "Relacao Client.additionalContacts (1:N, onDelete Cascade)",
-        "Migration gerada e aplicada com sucesso",
-        "Seed atualizado com 2-3 contatos adicionais de exemplo para clientes existentes",
+        "Criar whatsapp-service/src/providers/baileys.provider.ts com classe BaileysProvider",
+        "Metodo initiateQrCode(companyId) inicia conexao e gera QR code usando makeWASocket do Baileys",
+        "Metodo initiatePairingCode(companyId, phoneNumber) conexao via codigo de pareamento",
+        "Metodo getQrCode(companyId) retorna QR code como string base64 (usando lib qrcode)",
+        "Metodo getPairingCode(companyId) retorna codigo de pareamento",
+        "Metodo disconnect(companyId) desconecta sessao e limpa estado",
+        "Metodo getConnectionStatus(companyId) retorna { isConnected, isConnecting, lastError }",
+        "Cooldown de 15s entre tentativas de conexao (evitar spam de QR)",
+        "Reconexao com exponential backoff (5s -> 60s max)",
+        "Disconnect 401 (device_removed): nao reconectar automaticamente, limpar auth state",
+        "Disconnect restartRequired: recriar socket com mesmas credenciais",
+        "Usar useDatabaseAuthState para persistencia de sessao",
         "Typecheck passes"
       ],
       "priority": 5,
-      "passes": true,
-      "notes": ""
+      "passes": false,
+      "notes": "ADAPTAR DE: /tmp/jarespondiv2/apps/api/src/providers/baileys.provider.ts (1946 linhas). Esta story cobre SOMENTE a parte de conexao: initializeSession, connectToWhatsApp, handleConnectionUpdate, reconnect, disconnect, getStatus, QR/pairing. NAO incluir envio/recebimento de mensagens (isso e US-006). Trocar accountId por companyId. Trocar Supabase por Prisma. Manter: Map de sessions, cooldown 15s, exponential backoff, tratamento de DisconnectReason"
     },
     {
-      "id": "US-053",
-      "title": "Criar tabela Channel",
-      "description": "Como admin, preciso cadastrar canais de comunicacao (email IMAP/SMTP e WhatsApp) por empresa.",
+      "id": "US-006",
+      "title": "BaileysProvider - Envio e recebimento de mensagens",
+      "description": "Como desenvolvedor, preciso adicionar ao BaileysProvider capacidade de enviar e receber mensagens, download de midia e dispatch de webhooks.",
       "acceptanceCriteria": [
-        "Model Channel no schema.prisma com campos: id (cuid), companyId, type (ChannelType), name, config (Json), isActive (default true), lastSyncUid (Int opcional), lastSyncUidSent (Int opcional), lastSyncAt (DateTime opcional), createdAt, updatedAt",
-        "Relacao Company.channels (1:N, onDelete Cascade)",
-        "Migration gerada e aplicada com sucesso",
+        "Metodo sendMessage(companyId, to, content) envia texto via socket.sendMessage, retorna messageId",
+        "Metodo sendMediaMessage(companyId, to, mediaUrl, caption, mediaType) envia midia (image/video/audio/document)",
+        "Event handler messages.upsert processa mensagens recebidas (ignora fromMe, status broadcasts, protocol messages)",
+        "Download de midia recebida: downloadMediaMessage do Baileys, salva em uploads/{companyId}/",
+        "Webhook POST para ERP em WHATSAPP_WEBHOOK_URL com payload compativel com EvolutionWebhookPayload existente no ERP",
+        "Webhook payload: { event: messages.upsert, data: { key, message, messageType, pushName, remoteJid, instanceId } }",
+        "Validacao: webhook inclui WHATSAPP_WEBHOOK_SECRET no header",
+        "LID resolution: mapear LIDs para numeros de telefone reais usando tabela LidMapping",
         "Typecheck passes"
       ],
       "priority": 6,
-      "passes": true,
-      "notes": ""
+      "passes": false,
+      "notes": "ADAPTAR DE: /tmp/jarespondiv2/apps/api/src/providers/baileys.provider.ts (parte de mensagens: sendMessage, handleIncomingMessage, downloadMedia, processMessage) + /tmp/jarespondiv2/apps/api/src/providers/baileys-webhook-adapter.ts (289 linhas, formato do webhook). IMPORTANTE: O payload do webhook DEVE ser compativel com EvolutionWebhookPayload ja usado em erp/src/app/api/webhooks/whatsapp/route.ts para que o whatsapp-inbound.ts funcione sem alteracoes. Ver erp/src/lib/workers/whatsapp-inbound.ts para entender o formato esperado"
     },
     {
-      "id": "US-054",
-      "title": "Criar tabela SlaConfig",
-      "description": "Como admin, preciso de tabela para armazenar regras de SLA por prioridade e por empresa.",
+      "id": "US-007",
+      "title": "Rotas Express e servidor do WhatsApp Service",
+      "description": "Como desenvolvedor, preciso de endpoints HTTP para que o ERP possa controlar conexoes e enviar mensagens via WhatsApp Service.",
       "acceptanceCriteria": [
-        "Model SlaConfig no schema.prisma com campos: id (cuid), companyId, type (SlaType), priority (TicketPriority opcional), stage (String), deadlineMinutes (Int), alertBeforeMinutes (Int default 30), createdAt, updatedAt",
-        "Unique constraint [companyId, type, priority, stage]",
-        "Relacao Company.slaConfigs (1:N, onDelete Cascade)",
-        "Migration gerada e aplicada com sucesso",
-        "Seed com valores padrao para cada empresa: tickets Alta (30min/4h/15min), Media (2h/24h/30min), Baixa (8h/48h/1h); reembolso Aprovacao (4h/1h), Execucao (24h/4h), Total (48h/8h)",
+        "Criar whatsapp-service/src/index.ts com servidor Express na porta WHATSAPP_SERVICE_PORT (default 3001)",
+        "Middleware de autenticacao por API key (header apikey valida contra WHATSAPP_SERVICE_API_KEY)",
+        "POST /instance/connect recebe { companyId } e inicia conexao QR code, retorna { status, qrCode? }",
+        "POST /instance/connect-pairing recebe { companyId, phoneNumber } e inicia conexao pairing code, retorna { pairingCode }",
+        "GET /instance/:companyId/qr retorna { qrCode } em base64",
+        "GET /instance/:companyId/pairing-code retorna { pairingCode }",
+        "GET /instance/:companyId/status retorna { isConnected, isConnecting, lastError }",
+        "POST /instance/:companyId/disconnect desconecta sessao",
+        "POST /message/send-text recebe { companyId, to, content } e envia mensagem",
+        "POST /message/send-media recebe { companyId, to, mediaUrl, caption, mediaType } e envia midia",
+        "GET /health retorna 200 sem autenticacao",
+        "Servir arquivos estaticos de uploads/ em /uploads/",
+        "Graceful shutdown com prisma.$disconnect() no SIGTERM/SIGINT",
         "Typecheck passes"
       ],
       "priority": 7,
-      "passes": true,
-      "notes": ""
+      "passes": false,
+      "notes": "REF: /tmp/jarespondiv2/apps/api/src/routes/ e /tmp/jarespondiv2/apps/api/src/controllers/ para estrutura de rotas. REF: /tmp/jarespondiv2/apps/api/src/middleware/ para auth middleware. Simplificar: JaRespondi tem muitas rotas (CRM, contacts, etc) — aqui so precisamos das rotas de instance e message"
     },
     {
-      "id": "US-055",
-      "title": "Criar tabela Attachment",
-      "description": "Como atendente, preciso enviar e receber anexos em mensagens e tickets.",
+      "id": "US-008",
+      "title": "Adaptar ERP para usar WhatsApp Service",
+      "description": "Como desenvolvedor, preciso trocar as chamadas da Evolution API para o novo WhatsApp Service, mantendo o mesmo comportamento do SAC.",
       "acceptanceCriteria": [
-        "Model Attachment no schema.prisma com campos: id (cuid), ticketMessageId (opcional), ticketId (opcional), fileName, fileSize (Int), mimeType, storagePath, createdAt",
-        "Relacoes: TicketMessage.attachments e Ticket.attachments (1:N, onDelete Cascade)",
-        "Diretorio erp/uploads/ criado e adicionado ao .gitignore",
-        "Migration gerada e aplicada com sucesso",
+        "Criar erp/src/lib/whatsapp-api.ts com funcoes sendTextMessage(companyId, to, content), sendMediaMessage(companyId, to, mediaUrl, caption, mediaType), getInstanceStatus(companyId) que chamam o WhatsApp Service via HTTP",
+        "Usar WHATSAPP_SERVICE_URL e WHATSAPP_SERVICE_API_KEY do env para autenticar",
+        "Atualizar imports em erp/src/lib/workers/whatsapp-outbound.ts de evolution-api para whatsapp-api",
+        "Atualizar webhook route POST /api/webhooks/whatsapp para validar WHATSAPP_WEBHOOK_SECRET ao inves de EVOLUTION_API_KEY",
+        "Payload do webhook compativel com whatsapp-inbound.ts existente (sem alteracoes no inbound worker)",
+        "Remover erp/src/lib/evolution-api.ts (arquivo antigo)",
         "Typecheck passes"
       ],
       "priority": 8,
-      "passes": true,
-      "notes": ""
+      "passes": false,
+      "notes": "REF: erp/src/lib/evolution-api.ts — ver interface atual (sendTextMessage, sendMediaMessage, getInstanceStatus) para manter mesma assinatura. REF: erp/src/lib/workers/whatsapp-outbound.ts — ver como as funcoes sao chamadas. REF: erp/src/app/api/webhooks/whatsapp/route.ts — ver validacao atual de EVOLUTION_API_KEY para trocar por WHATSAPP_WEBHOOK_SECRET. O whatsapp-inbound.ts NAO deve ser alterado"
     },
     {
-      "id": "US-056",
-      "title": "Criar tabelas Refund e RefundAttachment",
-      "description": "Como atendente, preciso solicitar reembolsos vinculados a tickets com registro formal do processo.",
+      "id": "US-009",
+      "title": "Docker Compose para WhatsApp Service",
+      "description": "Como DevOps, preciso que o WhatsApp Service rode em container Docker junto ao restante da stack.",
       "acceptanceCriteria": [
-        "Model Refund com todos os campos conforme design: id, ticketId, companyId, requestedById, approvedById, executedById, amount (Decimal), paymentMethod, bankName, bankAgency, bankAccount, pixKey, status (default AWAITING_APPROVAL), rejectionReason, requestedAt, approvedAt, executedAt, completedAt, slaDeadline, slaBreached, invoiceAction, invoiceCancelReason",
-        "Relacoes Refund: ticket (Cascade), company (Cascade), requestedBy/approvedBy/executedBy (User), attachments[], accountPayable, creditNote",
-        "Model RefundAttachment com campos: id, refundId, type (RefundAttachmentType), fileName, fileSize, mimeType, storagePath, uploadedById, createdAt",
-        "Migration gerada e aplicada com sucesso",
+        "Criar whatsapp-service/Dockerfile (Node 20 slim, npm install, npx prisma generate, tsc build, CMD node dist/index.js)",
+        "Adicionar servico whatsapp-service no docker-compose.yml: build ./whatsapp-service, porta 3001:3001, variaveis DATABASE_URL/WHATSAPP_WEBHOOK_URL/WHATSAPP_WEBHOOK_SECRET/WHATSAPP_SERVICE_API_KEY",
+        "Volume persistente para uploads/ do whatsapp-service",
+        "Remover servico evolution-api do docker-compose.yml",
+        "docker-compose build whatsapp-service executa sem erros",
         "Typecheck passes"
       ],
       "priority": 9,
-      "passes": true,
-      "notes": "accountPayable and creditNote back-relations will be added in US-059"
+      "passes": false,
+      "notes": "REF: /tmp/jarespondiv2/apps/api/Dockerfile para estrutura do Dockerfile. REF: docker-compose.yml atual — ver servico evolution-api existente para remover e substituir pelo whatsapp-service"
     },
     {
-      "id": "US-057",
-      "title": "Adicionar campos novos ao Ticket",
-      "description": "Como desenvolvedor, preciso expandir o Ticket para suportar canais, SLA, tags e reembolsos.",
+      "id": "US-010",
+      "title": "Modelos Prisma para AI Agent e Knowledge Base",
+      "description": "Como desenvolvedor, preciso das tabelas de banco para configuracao do AI, documentos da knowledge base e chunks com embeddings.",
       "acceptanceCriteria": [
-        "Campos adicionados ao Ticket: channelId (opcional), contactId (opcional ref AdditionalContact), slaFirstReply (DateTime opcional), slaResolution (DateTime opcional), slaBreached (Boolean default false), tags (String[] default [])",
-        "Relacoes: channel (Channel), contact (AdditionalContact), attachments (Attachment[]), refunds (Refund[])",
-        "Migration gerada e aplicada com sucesso",
-        "Seed continua funcionando sem erros",
+        "Adicionar modelo AiConfig: id (cuid), companyId (unique), enabled (Boolean default false), persona (String @db.Text), welcomeMessage (String? @db.Text), escalationKeywords (String[]), maxIterations (Int default 5), createdAt, updatedAt",
+        "Adicionar enum DocumentStatus: PROCESSING, READY, ERROR",
+        "Adicionar modelo Document: id (cuid), companyId, name, mimeType, fileSize (Int), status (DocumentStatus default PROCESSING), createdAt, updatedAt",
+        "Adicionar modelo DocumentChunk: id (cuid), documentId, content (String @db.Text), embedding (Float[]), chunkIndex (Int), createdAt",
+        "Adicionar campo aiEnabled (Boolean default true) ao modelo Ticket",
+        "Adicionar campo isAiGenerated (Boolean default false) ao modelo TicketMessage",
+        "Relations: AiConfig->Company, Document->Company (Cascade), DocumentChunk->Document (Cascade)",
+        "Adicionar aiConfig, documents ao model Company",
+        "@@map para ai_config, documents, document_chunks",
+        "prisma db push executa sem erros",
+        "Copiar schema atualizado para whatsapp-service/prisma/ e rodar prisma generate la",
         "Typecheck passes"
       ],
       "priority": 10,
-      "passes": true,
-      "notes": ""
+      "passes": false,
+      "notes": "REF: /tmp/jarespondiv2/apps/api/src/services/agent/types.ts (148 linhas) — ver AgentContext e campos de AI config. REF: docs/plans/2026-03-03-whatsapp-baileys-ai-agent-design.md secao Modelos de dados para schema Prisma completo. IMPORTANTE: embedding usa Float[] nativo do Prisma (sem pgvector) — busca por cosine similarity em memoria no MVP"
     },
     {
-      "id": "US-058",
-      "title": "Adicionar campos novos ao TicketMessage",
-      "description": "Como desenvolvedor, preciso expandir o TicketMessage para canais, direcao, origem, deduplicacao e notas internas.",
+      "id": "US-011",
+      "title": "Abstracao de provedor LLM",
+      "description": "Como desenvolvedor, preciso de uma abstracao para chamar diferentes provedores de LLM (OpenAI, DeepSeek, Anthropic) sem alterar o codigo do agente.",
       "acceptanceCriteria": [
-        "Campos adicionados: channel (ChannelType opcional), direction (MessageDirection), origin (MessageOrigin default SYSTEM), externalId (String opcional), contactId (String opcional), isInternal (Boolean default false)",
-        "Relacoes: attachments (Attachment[]), contact (AdditionalContact opcional)",
-        "Unique constraint @@unique([externalId, channel])",
-        "Migration gerada e aplicada com sucesso",
-        "Seed continua funcionando sem erros",
+        "Criar erp/src/lib/ai/provider.ts com interfaces AiMessage ({role, content, tool_calls?, tool_call_id?}), AiToolDefinition ({name, description, parameters}), AiResponse ({content?, tool_calls?})",
+        "Funcao chatCompletion(messages, tools?, options?) que roteia para o provedor configurado via AI_PROVIDER env",
+        "Suporte a OpenAI/DeepSeek via Chat Completions API (formato compativel, mesma URL base diferente)",
+        "Suporte a Anthropic via Messages API (conversao de formato: role system -> system param, tool_calls -> tool_use blocks)",
+        "Suporte a tool calling em todos os provedores (mapear formato OpenAI <-> Anthropic)",
+        "Timeout configuravel via AI_TIMEOUT env (default 30000ms)",
         "Typecheck passes"
       ],
       "priority": 11,
-      "passes": true,
-      "notes": ""
+      "passes": false,
+      "notes": "REF: /tmp/jarespondiv2/apps/api/src/config/openai.ts (11 linhas), /tmp/jarespondiv2/apps/api/src/config/deepseek.ts (36 linhas), /tmp/jarespondiv2/apps/api/src/config/anthropic.ts (11 linhas). No JaRespondi cada provider e separado — aqui unificar em uma unica funcao chatCompletion() que roteia. DeepSeek e OpenAI usam mesmo formato (OpenAI SDK com baseURL diferente). Anthropic precisa conversao de formato (system message vira param, tool_calls viram tool_use content blocks)"
     },
     {
-      "id": "US-059",
-      "title": "Adicionar campos novos ao AccountPayable e Invoice",
-      "description": "Como desenvolvedor, preciso expandir AccountPayable e Invoice para integracao com reembolsos.",
+      "id": "US-012",
+      "title": "Definicoes de ferramentas do AI Agent",
+      "description": "Como desenvolvedor, preciso das definicoes das ferramentas que o AI Agent pode usar para buscar informacoes e interagir com o sistema.",
       "acceptanceCriteria": [
-        "AccountPayable: campos origin (PayableOrigin default MANUAL), refundId (opcional), relacao com Refund",
-        "Invoice: campos type (InvoiceType default STANDARD), cancelledAt, cancellationReason, refundId, originalInvoiceId, relacoes refund e self-relation CreditNote",
-        "Migration gerada e aplicada com sucesso",
-        "Seed continua funcionando sem erros",
+        "Criar erp/src/lib/ai/tools.ts com definicoes das ferramentas no formato AiToolDefinition",
+        "SEARCH_DOCUMENTS: busca na knowledge base por query (parametro: query string)",
+        "GET_CLIENT_INFO: dados do cliente vinculado ao ticket (parametro: nenhum, usa contexto)",
+        "GET_HISTORY: historico recente da conversa (parametro: limit number opcional)",
+        "RESPOND: envia resposta ao cliente via WhatsApp (parametro: message string)",
+        "ESCALATE: escala para atendente humano (parametro: reason string)",
+        "CREATE_NOTE: cria nota interna no ticket (parametro: content string)",
+        "Exportar array ALL_TOOLS com todas as definicoes",
         "Typecheck passes"
       ],
       "priority": 12,
-      "passes": true,
-      "notes": ""
+      "passes": false,
+      "notes": "REF: /tmp/jarespondiv2/apps/api/src/services/agent/tools.ts (402 linhas) — tem 11 tools (buscar_documentos, consultar_crm, consultar_historico, criar_tarefa, criar_agendamento, criar_nota, mover_pipeline, adicionar_tag, atualizar_contato, escalar_humano, responder). SIMPLIFICAR para 6 tools no MendesERP: SEARCH_DOCUMENTS, GET_CLIENT_INFO, GET_HISTORY, RESPOND, ESCALATE, CREATE_NOTE. Nao precisamos de CRM/pipeline/tags/agendamento pois o SAC ja tem isso separado"
     },
     {
-      "id": "US-060",
-      "title": "CRUD de contatos adicionais - server actions",
-      "description": "Como desenvolvedor, preciso das server actions para gerenciar contatos adicionais do cliente.",
+      "id": "US-013",
+      "title": "Embeddings e busca vetorial para RAG",
+      "description": "Como desenvolvedor, preciso gerar embeddings de documentos e fazer busca por similaridade para que o AI Agent encontre informacoes relevantes.",
       "acceptanceCriteria": [
-        "Server action createAdditionalContact(clientId, companyId, name, role?, email?, whatsapp?) valida pelo menos email ou whatsapp, requireCompanyAccess, cria registro, audit log",
-        "Server action updateAdditionalContact(contactId, companyId, data) mesmas validacoes, audit log",
-        "Server action deleteAdditionalContact(contactId, companyId) valida acesso, deleta, audit log",
-        "Server action listAdditionalContacts(clientId, companyId) retorna lista ordenada por name",
+        "Criar erp/src/lib/ai/embeddings.ts",
+        "Funcao generateEmbedding(text) chama API de embeddings configurada via AI_EMBEDDING_PROVIDER/AI_EMBEDDING_KEY/AI_EMBEDDING_MODEL env",
+        "Funcao chunkText(text, maxTokens?) divide texto em chunks de ~500 tokens (configuravel via RAG_CHUNK_SIZE)",
+        "Funcao cosineSimilarity(a, b) calcula similaridade entre dois vetores Float[]",
+        "Funcao searchDocuments(query, companyId) gera embedding da query, busca DocumentChunks da empresa, calcula similaridade, retorna top N acima do threshold",
+        "N configuravel via RAG_MAX_RESULTS (default 5), threshold via RAG_SIMILARITY_THRESHOLD (default 0.7)",
         "Typecheck passes"
       ],
       "priority": 13,
-      "passes": true,
-      "notes": ""
+      "passes": false,
+      "notes": "REF: /tmp/jarespondiv2/apps/api/src/services/rag.service.ts (98 linhas) — tem generateEmbedding (OpenAI text-embedding-3-small) e searchSimilarDocs (Supabase RPC match_documents com pgvector). DIFERENCA: JaRespondi usa pgvector no Supabase, nos usamos cosine similarity em memoria (sem pgvector). Entao searchDocuments deve: 1) buscar todos DocumentChunks da empresa via Prisma, 2) gerar embedding da query, 3) calcular cosineSimilarity em loop, 4) retornar top N acima do threshold. Funciona bem para MVP com poucos milhares de chunks"
     },
     {
-      "id": "US-061",
-      "title": "UI de contatos adicionais na pagina do cliente",
-      "description": "Como atendente, quero gerenciar contatos adicionais de um cliente na pagina de detalhe.",
+      "id": "US-014",
+      "title": "AI Agent loop e executor de ferramentas",
+      "description": "Como desenvolvedor, preciso do loop agentico e executor de ferramentas para que o AI processe mensagens e decida como responder.",
       "acceptanceCriteria": [
-        "Secao Contatos Adicionais na pagina /comercial/clientes/[id]",
-        "Lista mostra nome, cargo, email, whatsapp de cada contato",
-        "Botao + Adicionar contato abre dialog: nome (obrigatorio), cargo (opcional), email (opcional), whatsapp (opcional)",
-        "Botoes editar e remover por contato (remover com confirmacao)",
-        "Toast de sucesso/erro",
-        "Typecheck passes",
-        "Verify in browser using dev-browser skill"
+        "Criar erp/src/lib/ai/tool-executor.ts com funcao executeTool(toolName, args, context) que executa cada ferramenta",
+        "SEARCH_DOCUMENTS: chama searchDocuments() e retorna chunks relevantes formatados",
+        "GET_CLIENT_INFO: busca Client com dados financeiros (receivables pendentes/vencidos) e tickets anteriores",
+        "GET_HISTORY: busca ultimas N mensagens do ticket",
+        "RESPOND: envia mensagem via WhatsApp (sendWhatsAppMessage) e cria TicketMessage com isAiGenerated=true",
+        "ESCALATE: desabilita AI no ticket (aiEnabled=false), atualiza status do ticket, retorna mensagem de escalacao",
+        "CREATE_NOTE: cria TicketMessage isInternal=true",
+        "Criar erp/src/lib/ai/agent.ts com funcao runAgent(ticketId, companyId, incomingMessage) que executa loop agentico",
+        "Loop: monta system prompt com persona + contexto, chama chatCompletion com tools, executa tool_calls, repete ate RESPOND/ESCALATE ou maxIterations",
+        "Timeout global via AI_TIMEOUT",
+        "Typecheck passes"
       ],
       "priority": 14,
-      "passes": true,
-      "notes": "Browser verification skipped - no browser tools available"
+      "passes": false,
+      "notes": "REF: /tmp/jarespondiv2/apps/api/src/services/agent/core.ts (319 linhas) — agent loop com max iterations, timeout, tool execution. REF: /tmp/jarespondiv2/apps/api/src/services/agent/tools.ts (402 linhas) — executeTool dispatcher. REF: /tmp/jarespondiv2/apps/api/src/services/agent/prompts.ts (209 linhas) — system prompt construction, formatHistoryForPrompt, parseAgentResponse. REF: /tmp/jarespondiv2/apps/api/src/services/agent/types.ts (148 linhas) — AgentContext, AgentResult, Persona. ADAPTAR: trocar Supabase queries por Prisma, mapear tools para modelos do SAC (Client, Ticket, TicketMessage, AccountReceivable), usar chatCompletion() da US-011 em vez de chamar OpenAI direto"
     },
     {
-      "id": "US-062",
-      "title": "Servico de upload e download de anexos",
-      "description": "Como desenvolvedor, preciso de API routes para upload e download de arquivos.",
+      "id": "US-015",
+      "title": "Worker BullMQ do AI Agent e integracao com inbound",
+      "description": "Como desenvolvedor, preciso do worker BullMQ que processa jobs do AI Agent e do hook no inbound para enfileirar mensagens.",
       "acceptanceCriteria": [
-        "API route POST /api/upload recebe FormData, salva em erp/uploads/{companyId}/{ano-mes}/, retorna { fileName, fileSize, mimeType, storagePath }",
-        "API route GET /api/files/[...path] serve arquivos com validacao de acesso",
-        "Limite 10MB. Tipos: PDF, PNG, JPG, JPEG, GIF, DOC, DOCX, XLS, XLSX, CSV, TXT",
-        "Helper erp/src/lib/file-upload.ts com uploadFile(), getFileUrl(), deleteFile()",
-        "Rejeita arquivos invalidos com mensagem clara",
+        "Adicionar fila ai-agent em erp/src/lib/queue.ts",
+        "Criar erp/src/lib/workers/ai-agent.ts como worker BullMQ que processa jobs { ticketId, companyId, messageContent }",
+        "Worker verifica se AI esta habilitado: AiConfig.enabled da empresa E Ticket.aiEnabled do ticket",
+        "Worker verifica escalation keywords antes de chamar LLM — se keyword encontrada, escala direto sem chamar LLM",
+        "Worker chama runAgent() se AI habilitado",
+        "Registrar worker em erp/src/lib/workers/index.ts",
+        "Adicionar fila document-processing em queue.ts (sera usada pela US-016)",
+        "Hook em erp/src/lib/workers/whatsapp-inbound.ts: apos criar mensagem INBOUND de WhatsApp, enfileirar job ai-agent com ticketId, companyId e conteudo da mensagem",
         "Typecheck passes"
       ],
       "priority": 15,
-      "passes": true,
-      "notes": ""
+      "passes": false,
+      "notes": "REF: /tmp/jarespondiv2/apps/api/src/queues/ — estrutura de filas BullMQ do JaRespondi. REF: erp/src/lib/queue.ts — filas existentes no ERP (email-inbound, email-outbound, whatsapp-inbound, whatsapp-outbound, sla-check). REF: erp/src/lib/workers/index.ts — como registrar workers. REF: erp/src/lib/workers/whatsapp-inbound.ts — onde adicionar o hook para enfileirar ai-agent apos criar mensagem INBOUND"
     },
     {
-      "id": "US-063",
-      "title": "Configuracao de canais - server actions",
-      "description": "Como desenvolvedor, preciso das server actions para CRUD de canais de comunicacao.",
+      "id": "US-016",
+      "title": "Worker de processamento de documentos",
+      "description": "Como administrador, quero que documentos enviados a knowledge base sejam processados automaticamente (extracao de texto, chunking, embedding).",
       "acceptanceCriteria": [
-        "Server action createChannel(companyId, type, name, config) valida admin, encripta senhas com crypto.createCipheriv e ENCRYPTION_KEY do env, audit log",
-        "Server action updateChannel(channelId, companyId, data) mesmas validacoes",
-        "Server action toggleChannel(channelId, companyId) ativa/desativa",
-        "Server action listChannels(companyId) retorna canais com config decriptado",
-        "Server action testChannelConnection(channelId, companyId) testa IMAP ou Evolution API, retorna { success, message }",
-        "Variavel ENCRYPTION_KEY adicionada ao .env.example",
+        "Instalar pdf-parse no erp/package.json",
+        "Criar erp/src/lib/workers/document-processor.ts como worker BullMQ que processa jobs { documentId, companyId, filePath }",
+        "Suporte a extracao de texto de TXT (fs.readFile direto) e PDF (via pdf-parse)",
+        "Dividir texto extraido em chunks usando chunkText() do embeddings.ts",
+        "Gerar embedding para cada chunk via generateEmbedding()",
+        "Salvar chunks com embeddings no banco (DocumentChunk) vinculados ao Document",
+        "Atualizar status do Document para READY ao concluir com sucesso",
+        "Atualizar status para ERROR em caso de falha (com log do erro)",
+        "Registrar worker em workers/index.ts",
         "Typecheck passes"
       ],
       "priority": 16,
-      "passes": true,
-      "notes": ""
+      "passes": false,
+      "notes": "Sem referencia direta no JaRespondi (la o RAG usa documentos ja processados). Seguir padrao dos workers existentes no ERP (whatsapp-inbound.ts, email-inbound.ts). Usar chunkText() e generateEmbedding() criados na US-013"
     },
     {
-      "id": "US-064",
-      "title": "Pagina de configuracao de canais - UI",
-      "description": "Como admin, quero cadastrar e gerenciar canais de email e WhatsApp na interface.",
+      "id": "US-017",
+      "title": "Knowledge Base - API routes e pagina UI",
+      "description": "Como administrador, quero uma interface para gerenciar documentos da knowledge base (upload, visualizar, deletar).",
       "acceptanceCriteria": [
-        "Nova pagina /configuracoes/canais com link no sidebar de configuracoes",
-        "Lista de canais em cards: nome, tipo (icone), endereco/numero, status, ultima sync",
-        "Botao + Novo Canal: dialog com tipo, nome, campos especificos (IMAP/SMTP para email, instanceName/apiUrl/apiKey para WhatsApp)",
-        "Botao Testar conexao mostra resultado",
-        "Botoes editar e desativar/ativar",
-        "Scoped por empresa",
+        "Criar erp/src/app/api/documents/route.ts com GET (listar documentos da empresa) e POST (upload de arquivo + enfileirar job document-processing)",
+        "POST valida tipos permitidos: PDF, TXT. Limite 10MB. Salva arquivo via upload existente",
+        "Criar erp/src/app/(app)/configuracoes/knowledge-base/page.tsx",
+        "Upload de arquivos com area de arrastar ou botao selecionar",
+        "Tabela de documentos: nome, status (badge colorido PROCESSING/READY/ERROR), tamanho formatado, data upload, botao deletar",
+        "Deletar documento remove chunks junto (cascade no Prisma)",
+        "Adicionar link Knowledge Base na sidebar em Configuracoes (icone FileText)",
+        "Scoped por empresa selecionada",
         "Typecheck passes",
         "Verify in browser using dev-browser skill"
       ],
       "priority": 17,
-      "passes": true,
-      "notes": "Browser verification skipped - no browser tools available"
+      "passes": false,
+      "notes": "Sem referencia direta no JaRespondi (la o upload e feito via dashboard web separado). Seguir padrao das paginas de configuracoes existentes no ERP: erp/src/app/(app)/configuracoes/canais/page.tsx e erp/src/app/(app)/configuracoes/sla/page.tsx. Usar API route de upload existente em erp/src/app/api/upload/route.ts como base"
     },
     {
-      "id": "US-065",
-      "title": "Configuracao de SLA - server actions",
-      "description": "Como desenvolvedor, preciso das server actions para gerenciar regras de SLA.",
+      "id": "US-018",
+      "title": "Toggle AI e badge na timeline do ticket",
+      "description": "Como atendente, quero ativar/desativar o AI Agent por ticket e ver quais mensagens foram geradas pelo AI.",
       "acceptanceCriteria": [
-        "Server action getSlaConfigs(companyId) retorna configs existentes ou valores padrao",
-        "Server action saveSlaConfigs(companyId, configs[]) upsert em batch, audit log",
-        "Server action getBusinessHours(companyId) e saveBusinessHours(companyId, data) para horario comercial",
-        "Typecheck passes"
+        "Server action toggleTicketAi(ticketId, companyId, enabled) em sac/tickets/actions.ts atualiza Ticket.aiEnabled, audit log",
+        "Switch toggle de AI no header da timeline do ticket (ao lado do titulo ou acoes)",
+        "Badge AI (variant outline, cor azul/roxo) em mensagens com isAiGenerated=true na timeline",
+        "Toggle revalida a pagina apos mudanca (revalidatePath)",
+        "Mostrar toggle somente se AiConfig.enabled da empresa for true",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
       ],
       "priority": 18,
-      "passes": true,
-      "notes": ""
+      "passes": false,
+      "notes": "REF: erp/src/app/(app)/sac/tickets/[id]/ticket-timeline.tsx — componente de timeline onde adicionar o toggle e badge. REF: erp/src/app/(app)/sac/tickets/actions.ts — server actions existentes do SAC. Usar componente Switch do shadcn/ui e Badge variant=outline"
     },
     {
-      "id": "US-066",
-      "title": "Pagina de configuracao de SLA - UI",
-      "description": "Como admin, quero configurar regras de SLA e horario comercial na interface.",
+      "id": "US-019",
+      "title": "Pagina de configuracao do AI Agent",
+      "description": "Como administrador, quero configurar o AI Agent (persona, mensagem de boas-vindas, palavras de escalacao) para personalizar o atendimento automatico.",
       "acceptanceCriteria": [
-        "Nova pagina /configuracoes/sla com link no sidebar",
-        "Tabela editavel SLA Tickets: Alta/Media/Baixa x 1a Resposta/Resolucao/Alerta",
-        "Tabela editavel SLA Reembolso: Aprovacao/Execucao/Total x Prazo/Alerta",
-        "Secao Horario Comercial: toggle, hora inicio/fim, checkboxes Seg-Dom",
-        "Botao Salvar persiste tudo",
-        "Mostra valores padrao se empresa nao tem config",
-        "Scoped por empresa",
+        "Criar erp/src/app/(app)/configuracoes/ai/page.tsx",
+        "Server actions getAiConfig(companyId) e updateAiConfig(companyId, data) com upsert (cria config se nao existir)",
+        "Toggle: AI habilitado/desabilitado (Switch)",
+        "Textarea: Persona (system prompt do LLM) com placeholder explicativo",
+        "Textarea: Mensagem de boas-vindas (opcional)",
+        "Input de tags: Palavras-chave de escalacao (adicionar/remover tags)",
+        "Input numerico: Max iteracoes (1-10, default 5)",
+        "Salvar com toast de sucesso/erro",
+        "Adicionar link Agente IA na sidebar em Configuracoes (icone Bot)",
+        "Scoped por empresa selecionada",
         "Typecheck passes",
         "Verify in browser using dev-browser skill"
       ],
       "priority": 19,
-      "passes": true,
-      "notes": "Browser verification skipped"
+      "passes": false,
+      "notes": "REF: /tmp/jarespondiv2/apps/api/src/services/agent/types.ts — ver Persona types e campos de config. Seguir padrao das paginas de config existentes: erp/src/app/(app)/configuracoes/sla/page.tsx (formulario com server actions e toast). REF: erp/src/components/sidebar.tsx — onde adicionar o link na secao Configuracoes"
     },
     {
-      "id": "US-067",
-      "title": "Helper de calculo de SLA",
-      "description": "Como desenvolvedor, preciso de funcoes utilitarias para calcular e verificar SLA.",
+      "id": "US-020",
+      "title": "Atualizar .env.example e dependencias finais",
+      "description": "Como desenvolvedor, preciso que todas as novas variaveis de ambiente e dependencias estejam documentadas.",
       "acceptanceCriteria": [
-        "Arquivo erp/src/lib/sla.ts exportando funcoes",
-        "calculateSlaDeadline(startTime, minutes, businessHours?) calcula deadline pulando horas fora do comercial",
-        "isSlaBreached(deadline) retorna true se passou",
-        "getSlaStatus(deadline, alertBeforeMinutes) retorna ok/at_risk/breached",
-        "getSlaProgress(createdAt, deadline) retorna percentual 0-100",
+        "Atualizar erp/.env.example com variaveis: WHATSAPP_SERVICE_URL, WHATSAPP_SERVICE_API_KEY, WHATSAPP_WEBHOOK_SECRET, AI_PROVIDER, AI_API_KEY, AI_MODEL, AI_MAX_ITERATIONS, AI_TIMEOUT, AI_EMBEDDING_PROVIDER, AI_EMBEDDING_KEY, AI_EMBEDDING_MODEL, RAG_CHUNK_SIZE, RAG_MAX_RESULTS, RAG_SIMILARITY_THRESHOLD",
+        "Remover variaveis EVOLUTION_API_URL e EVOLUTION_API_KEY do erp/.env.example",
+        "Garantir pdf-parse instalado em erp/package.json",
+        "Verificar que whatsapp-service/.env.example esta completo",
         "Typecheck passes"
       ],
       "priority": 20,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-068",
-      "title": "Dashboard KPIs do SAC - server action",
-      "description": "Como desenvolvedor, preciso da server action que retorna metricas do dashboard.",
-      "acceptanceCriteria": [
-        "Server action getTicketDashboard(companyId) retorna: openCount, inProgressCount, waitingClientCount, resolvedTodayCount, slaBreachedCount, slaAtRiskCount, pendingRefundsCount, avgResponseTimeMinutes",
-        "Tambem retorna ticketsByChannel [{channel, count}] e ticketsByPriority [{priority, count}]",
-        "Queries otimizadas com aggregations Prisma",
-        "Scoped por companyId",
-        "Typecheck passes"
-      ],
-      "priority": 21,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-069",
-      "title": "Dashboard KPIs do SAC - UI",
-      "description": "Como atendente, quero ver dashboard com metricas no topo da lista de tickets.",
-      "acceptanceCriteria": [
-        "8 cards KPI no topo de /sac/tickets: Abertos, Em Andamento, Aguardando, Resolvidos Hoje, SLA Estourado (vermelho), SLA Risco (amarelo), Reembolsos Pendentes, Tempo Medio",
-        "2 graficos barras horizontais: por Canal e por Prioridade",
-        "Dados via getTicketDashboard",
-        "Typecheck passes",
-        "Verify in browser using dev-browser skill"
-      ],
-      "priority": 22,
-      "passes": true,
-      "notes": "Browser verification skipped - no browser tools available"
-    },
-    {
-      "id": "US-070",
-      "title": "Abas e busca na lista de tickets",
-      "description": "Como atendente, quero navegar tickets por abas em vez de filtros.",
-      "acceptanceCriteria": [
-        "Remover filtros existentes da pagina /sac/tickets",
-        "4 abas: Todos, SLA Critico (badge), Reembolsos (badge), Meus Tickets",
-        "Campo busca por texto (cliente, assunto) em todas as abas",
-        "Novas colunas: Canal (icone), SLA (badge verde/amarelo/vermelho + tempo), Tags",
-        "listTickets atualizada para parametro tab e search",
-        "Typecheck passes",
-        "Verify in browser using dev-browser skill"
-      ],
-      "priority": 23,
-      "passes": true,
-      "notes": "Browser verification skipped - no browser tools available"
-    },
-    {
-      "id": "US-071",
-      "title": "Timeline com aba Todos no detalhe do ticket",
-      "description": "Como atendente, quero ver timeline unificada na aba Todos com notas internas e eventos.",
-      "acceptanceCriteria": [
-        "Aba Todos como default na timeline de /sac/tickets/[id]",
-        "Timeline cronologica: mensagens email (icone envelope), WhatsApp (icone chat), notas internas (fundo amarelo, icone cadeado), reembolso (icone moeda), status (icone engrenagem)",
-        "Cada mensagem: remetente+cargo, data/hora, canal, origem (via ERP/WhatsApp Web/Gmail)",
-        "Anexos inline com nome, tamanho, link download",
-        "Sem campo de resposta. Campo nota interna + botao Comentar, botao Anexar ao ticket",
-        "Typecheck passes",
-        "Verify in browser using dev-browser skill"
-      ],
-      "priority": 24,
-      "passes": true,
-      "notes": "Browser verification skipped - no browser tools available"
-    },
-    {
-      "id": "US-072",
-      "title": "Timeline - Aba Email",
-      "description": "Como atendente, quero ver e responder emails na aba Email com layout de thread.",
-      "acceptanceCriteria": [
-        "Aba Email mostra somente channel=EMAIL",
-        "Layout thread: De, Para, Assunto, data/hora, origem",
-        "Resposta: dropdown Para (emails cliente+contatos), Assunto Re:{assunto}, textarea, anexar, enviar",
-        "Notas internas NAO aparecem",
-        "Typecheck passes",
-        "Verify in browser using dev-browser skill"
-      ],
-      "priority": 25,
-      "passes": true,
-      "notes": "Browser verification skipped - no browser tools available"
-    },
-    {
-      "id": "US-073",
-      "title": "Timeline - Aba WhatsApp",
-      "description": "Como atendente, quero ver e responder WhatsApp na aba com layout de chat.",
-      "acceptanceCriteria": [
-        "Aba WhatsApp mostra somente channel=WHATSAPP",
-        "Layout chat: baloes esquerda (INBOUND), baloes direita (OUTBOUND)",
-        "Resposta: seletor numero destino, textarea, emoji, anexar, enviar",
-        "Notas internas NAO aparecem",
-        "Typecheck passes",
-        "Verify in browser using dev-browser skill"
-      ],
-      "priority": 26,
-      "passes": true,
-      "notes": "Browser verification skipped - no browser tools available"
-    },
-    {
-      "id": "US-074",
-      "title": "Notas internas - server action",
-      "description": "Como desenvolvedor, preciso da server action para criar notas internas.",
-      "acceptanceCriteria": [
-        "Server action createInternalNote(ticketId, companyId, content, attachmentIds?) cria TicketMessage isInternal=true direction=OUTBOUND origin=SYSTEM",
-        "requireCompanyAccess, suporta anexos, audit log",
-        "Typecheck passes"
-      ],
-      "priority": 27,
-      "passes": true,
-      "notes": "Already implemented as part of US-071 timeline work"
-    },
-    {
-      "id": "US-075",
-      "title": "Sidebar do ticket - informacoes, responsavel e tags",
-      "description": "Como atendente, quero ver informacoes completas e gerenciar tags na sidebar.",
-      "acceptanceCriteria": [
-        "Secao Informacoes: cliente+CNPJ, contato (nome, cargo), empresa, canal origem, datas",
-        "Secao Responsavel: dropdown atribuir (manter existente)",
-        "Secao Tags: badges + input adicionar + remover. Server actions addTag e removeTag",
-        "Typecheck passes",
-        "Verify in browser using dev-browser skill"
-      ],
-      "priority": 28,
-      "passes": true,
-      "notes": "Browser verification skipped - no browser tools available"
-    },
-    {
-      "id": "US-076",
-      "title": "Sidebar do ticket - SLA e situacao financeira",
-      "description": "Como atendente, quero ver SLA e situacao financeira na sidebar.",
-      "acceptanceCriteria": [
-        "Secao SLA: cards 1a Resposta e Resolucao com status, tempo, barra progresso (verde<70% amarelo70-90% vermelho>90%)",
-        "Secao Financeira: badge Adimplente/Atraso/Inadimplente, total pendente, total vencido, ultimo pgto, link financeiro",
-        "getClientFinancialSummary(clientId, companyId) retorna {status, pendingTotal, overdueTotal, lastPayment}",
-        "Typecheck passes",
-        "Verify in browser using dev-browser skill"
-      ],
-      "priority": 29,
-      "passes": true,
-      "notes": "Browser verification skipped - no browser tools available"
-    },
-    {
-      "id": "US-077",
-      "title": "Enviar resposta por email - server action e worker",
-      "description": "Como desenvolvedor, preciso da action e worker para enviar emails do ticket.",
-      "acceptanceCriteria": [
-        "sendEmailReply(ticketId, companyId, to, subject, content, attachmentIds?) cria TicketMessage channel=EMAIL direction=OUTBOUND origin=SYSTEM, enfileira email-outbound",
-        "Worker SMTP envia usando config do Channel, atualiza externalId com Message-ID",
-        "Falha no envio nao bloqueia criacao da mensagem",
-        "Audit log",
-        "Typecheck passes"
-      ],
-      "priority": 30,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-078",
-      "title": "Enviar mensagem WhatsApp - server action e worker",
-      "description": "Como desenvolvedor, preciso da action e worker para enviar WhatsApp do ticket.",
-      "acceptanceCriteria": [
-        "sendWhatsAppMessage(ticketId, companyId, to, content, attachmentIds?) cria TicketMessage channel=WHATSAPP direction=OUTBOUND origin=SYSTEM, enfileira whatsapp-outbound",
-        "Worker envia via Evolution API (sendText/sendMedia), atualiza externalId",
-        "Helper erp/src/lib/evolution-api.ts com sendTextMessage, sendMediaMessage, getInstanceStatus",
-        "Audit log",
-        "Typecheck passes"
-      ],
-      "priority": 31,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-079",
-      "title": "Webhook para receber mensagens WhatsApp",
-      "description": "Como sistema, preciso receber webhooks da Evolution API para criar tickets automaticamente.",
-      "acceptanceCriteria": [
-        "API route POST /api/webhooks/whatsapp recebe payload Evolution API, valida API key",
-        "Enfileira whatsapp-inbound. Worker identifica remetente em Client.telefone e AdditionalContact.whatsapp",
-        "Cliente encontrado + ticket aberto: adiciona mensagem. Cliente sem ticket: cria novo",
-        "Nao encontrado: cria ticket com tag Pendente Vinculacao",
-        "OUTBOUND do nosso numero: direction=OUTBOUND origin=EXTERNAL",
-        "Anexos salvos via upload. Deduplicacao por externalId",
-        "Typecheck passes"
-      ],
-      "priority": 32,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-080",
-      "title": "Worker IMAP para receber emails",
-      "description": "Como sistema, preciso monitorar emails via IMAP para criar tickets automaticamente.",
-      "acceptanceCriteria": [
-        "Pacote imapflow instalado. Worker email-inbound roda a cada 2-3 min",
-        "Para cada Channel EMAIL ativo: conecta IMAP, busca Inbox (UID > lastSyncUid) e Sent (UID > lastSyncUidSent)",
-        "Identifica remetente em Client.email e AdditionalContact.email",
-        "Cliente + ticket aberto mesmo subject: agrupa. Sem ticket: cria novo. Nao encontrado: tag Pendente Vinculacao",
-        "Sent: direction=OUTBOUND origin=EXTERNAL. externalId=Message-ID header",
-        "Anexos salvos. Atualiza lastSyncUid/lastSyncUidSent/lastSyncAt",
-        "Typecheck passes"
-      ],
-      "priority": 33,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-081",
-      "title": "Vinculacao de contato desconhecido a cliente",
-      "description": "Como atendente, quero vincular contato nao identificado a cliente existente ou criar novo.",
-      "acceptanceCriteria": [
-        "Banner no ticket com tag Pendente Vinculacao: email/telefone + botoes Vincular e Criar cliente",
-        "Vincular: dialog busca CNPJ/nome, cria AdditionalContact, atualiza clientId, remove tag",
-        "Criar: reusa dialog criacao cliente, vincula automaticamente",
-        "Server actions linkContactToClient e createClientAndLink. Audit log",
-        "Typecheck passes",
-        "Verify in browser using dev-browser skill"
-      ],
-      "priority": 34,
-      "passes": true,
-      "notes": "Browser verification skipped - no browser tools available"
-    },
-    {
-      "id": "US-082",
-      "title": "Solicitar reembolso - server action",
-      "description": "Como desenvolvedor, preciso da action para criar solicitacoes de reembolso.",
-      "acceptanceCriteria": [
-        "requestRefund(ticketId, companyId, amount, justification, paymentProofId, boletoId?) cria Refund AWAITING_APPROVAL",
-        "Calcula slaDeadline baseado em SlaConfig REFUND approval",
-        "Adiciona tag Reembolso ao ticket",
-        "Registra evento na timeline",
-        "Audit log",
-        "Typecheck passes"
-      ],
-      "priority": 35,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-083",
-      "title": "Aprovar/rejeitar reembolso - server actions",
-      "description": "Como desenvolvedor, preciso das actions para aprovar ou rejeitar reembolsos.",
-      "acceptanceCriteria": [
-        "approveRefund(refundId, companyId) valida ADMIN/MANAGER, status APPROVED, approvedAt, novo slaDeadline execution, evento timeline",
-        "rejectRefund(refundId, companyId, reason) valida role, status REJECTED, rejectionReason, evento timeline",
-        "Audit log em ambas",
-        "Typecheck passes"
-      ],
-      "priority": 36,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-084",
-      "title": "Executar reembolso com integracao financeira",
-      "description": "Como desenvolvedor, preciso da action que executa reembolso e cria registros no financeiro.",
-      "acceptanceCriteria": [
-        "executeRefund valida acesso, atualiza Refund COMPLETED com dados bancarios e metodo",
-        "Cria AccountPayable origin=REFUND supplier=cliente description=Reembolso ref Ticket status=PAID",
-        "CANCEL_INVOICE: Invoice status CANCELLED com cancelledAt e reason",
-        "CREDIT_NOTE: cria Invoice type=CREDIT_NOTE com originalInvoiceId",
-        "Cancela AccountReceivable pendente se houver",
-        "Evento timeline. Audit log",
-        "Typecheck passes"
-      ],
-      "priority": 37,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-085",
-      "title": "UI de reembolso na sidebar do ticket",
-      "description": "Como atendente, quero solicitar e executar reembolsos pela sidebar.",
-      "acceptanceCriteria": [
-        "Botao Solicitar Reembolso: dialog valor, boleto, comprovante (upload obrigatorio), justificativa",
-        "Card reembolso na sidebar: status, valor, SLA, solicitante",
-        "AWAITING_APPROVAL + ADMIN/MANAGER: botoes Aprovar/Rejeitar",
-        "APPROVED: botao Executar com dialog metodo PIX/TED, dados bancarios, acao NFS-e, comprovante",
-        "Typecheck passes",
-        "Verify in browser using dev-browser skill"
-      ],
-      "priority": 38,
-      "passes": true,
-      "notes": "Browser verification skipped - no browser tools available"
-    },
-    {
-      "id": "US-086",
-      "title": "Solicitar cancelamento de proposta/boleto",
-      "description": "Como atendente, quero solicitar cancelamento de propostas e boletos pelo ticket.",
-      "acceptanceCriteria": [
-        "Botao Solicitar Cancelamento: dialog opcoes (proposta/boletos/ambos), justificativa",
-        "Aprovacao por gestor/admin. Ao aprovar: Proposal CANCELLED, AccountReceivable CANCELLED",
-        "Evento na timeline como prova",
-        "Server actions requestCancellation e approveCancellation. Audit log",
-        "Typecheck passes",
-        "Verify in browser using dev-browser skill"
-      ],
-      "priority": 39,
-      "passes": true,
-      "notes": "Browser verification skipped - no browser tools available"
-    },
-    {
-      "id": "US-087",
-      "title": "Worker de verificacao de SLA",
-      "description": "Como sistema, preciso verificar SLA periodicamente e marcar breaches.",
-      "acceptanceCriteria": [
-        "Worker sla-check repeatable a cada 1 minuto via BullMQ",
-        "Busca tickets abertos com deadline definido e nao cumprido",
-        "Restante <= alertBeforeMinutes: marca em risco",
-        "Deadline passou: slaBreached = true",
-        "Mesma logica para Refund.slaDeadline",
-        "Log de breaches",
-        "Typecheck passes"
-      ],
-      "priority": 40,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-088",
-      "title": "Alertas visuais de SLA na interface",
-      "description": "Como atendente, quero ver alertas de SLA no menu, lista e ticket.",
-      "acceptanceCriteria": [
-        "Badge vermelho no sidebar SAC com contagem criticos",
-        "Banner topo lista: X estourados | Y em risco com link aba SLA Critico",
-        "getSlaAlertCounts(companyId) retorna { breached, atRisk }",
-        "Typecheck passes",
-        "Verify in browser using dev-browser skill"
-      ],
-      "priority": 41,
-      "passes": true,
-      "notes": "Browser verification skipped - no browser tools available"
-    },
-    {
-      "id": "US-089",
-      "title": "Exportar ticket como PDF",
-      "description": "Como atendente, quero exportar ticket completo como PDF de evidencia.",
-      "acceptanceCriteria": [
-        "Pacote PDF instalado (react-pdf/renderer ou jspdf)",
-        "Botao Exportar PDF na sidebar com checkboxes notas internas e preview anexos",
-        "PDF com: cabecalho empresa, informacoes ticket, SLA, vinculos, historico completo numerado com data/hora/canal/direcao/remetente/conteudo/anexos, reembolso se houver, lista anexos, rodape",
-        "Download automatico",
-        "Typecheck passes",
-        "Verify in browser using dev-browser skill"
-      ],
-      "priority": 42,
-      "passes": true,
-      "notes": "Browser verification skipped - no browser tools available"
-    },
-    {
-      "id": "US-090",
-      "title": "Badge SAC no financeiro e timeline do cliente",
-      "description": "Como financeiro, quero ver origem SAC em contas a pagar e WhatsApp na timeline do cliente.",
-      "acceptanceCriteria": [
-        "Contas a pagar: coluna Origem com Manual ou badge SAC clicavel para ticket",
-        "listPayables atualizada com origin e refundId",
-        "Timeline cliente: nova aba WhatsApp, cada item mostra contato (nome+cargo), badge Reembolso em tickets",
-        "getClientTimeline atualizada",
-        "Typecheck passes",
-        "Verify in browser using dev-browser skill"
-      ],
-      "priority": 43,
-      "passes": true,
-      "notes": "Browser verification skipped - no browser tools available"
+      "passes": false,
+      "notes": "REF: erp/.env.example atual — variaveis existentes. REF: whatsapp-service/.env.example criado na US-001. REF: /tmp/jarespondiv2/apps/api/.env.example — variaveis de AI/embedding usadas no JaRespondi para garantir que nao esquecemos nenhuma"
     }
   ]
 }

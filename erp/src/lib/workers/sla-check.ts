@@ -20,6 +20,7 @@ export async function processSlaCheck(job: Job): Promise<void> {
     },
     data: {
       slaBreached: true,
+      slaAtRisk: false,
     },
   });
 
@@ -38,6 +39,7 @@ export async function processSlaCheck(job: Job): Promise<void> {
     },
     data: {
       slaBreached: true,
+      slaAtRisk: false,
     },
   });
 
@@ -56,6 +58,7 @@ export async function processSlaCheck(job: Job): Promise<void> {
     },
     data: {
       slaBreached: true,
+      slaAtRisk: false,
     },
   });
 
@@ -65,13 +68,11 @@ export async function processSlaCheck(job: Job): Promise<void> {
     );
   }
 
-  // --- Log at-risk tickets (deadline within alertBeforeMinutes) ---
-  // Fetch SLA configs to know alert thresholds per company
+  // --- Tickets: mark at-risk where deadline is within alertBeforeMinutes ---
   const slaConfigs = await prisma.slaConfig.findMany({
     where: { type: "TICKET" },
     select: {
       companyId: true,
-      stage: true,
       alertBeforeMinutes: true,
     },
   });
@@ -86,7 +87,7 @@ export async function processSlaCheck(job: Job): Promise<void> {
   }
 
   // For tickets not yet breached, check if they are at risk
-  const atRiskTickets = await prisma.ticket.findMany({
+  const atRiskCandidates = await prisma.ticket.findMany({
     where: {
       status: { in: ["OPEN", "IN_PROGRESS", "WAITING_CLIENT"] },
       slaBreached: false,
@@ -100,11 +101,14 @@ export async function processSlaCheck(job: Job): Promise<void> {
       companyId: true,
       slaFirstReply: true,
       slaResolution: true,
+      slaAtRisk: true,
     },
   });
 
-  let atRiskCount = 0;
-  for (const ticket of atRiskTickets) {
+  const ticketsToMarkAtRisk: string[] = [];
+  const ticketsToUnmarkAtRisk: string[] = [];
+
+  for (const ticket of atRiskCandidates) {
     const alertMinutes = alertMinutesMap.get(ticket.companyId) ?? 30;
     const alertThreshold = new Date(now.getTime() + alertMinutes * 60_000);
 
@@ -117,19 +121,34 @@ export async function processSlaCheck(job: Job): Promise<void> {
       ticket.slaResolution <= alertThreshold &&
       ticket.slaResolution > now;
 
-    if (firstReplyAtRisk || resolutionAtRisk) {
-      atRiskCount++;
+    const isAtRisk = !!(firstReplyAtRisk || resolutionAtRisk);
+
+    if (isAtRisk && !ticket.slaAtRisk) {
+      ticketsToMarkAtRisk.push(ticket.id);
+    } else if (!isAtRisk && ticket.slaAtRisk) {
+      ticketsToUnmarkAtRisk.push(ticket.id);
     }
   }
 
-  if (atRiskCount > 0) {
+  if (ticketsToMarkAtRisk.length > 0) {
+    await prisma.ticket.updateMany({
+      where: { id: { in: ticketsToMarkAtRisk } },
+      data: { slaAtRisk: true },
+    });
     console.log(
-      `[sla-check] ${atRiskCount} ticket(s) at risk of SLA breach`
+      `[sla-check] Marked ${ticketsToMarkAtRisk.length} ticket(s) as at risk of SLA breach`
     );
   }
 
-  // Log at-risk refunds
-  const atRiskRefunds = await prisma.refund.findMany({
+  if (ticketsToUnmarkAtRisk.length > 0) {
+    await prisma.ticket.updateMany({
+      where: { id: { in: ticketsToUnmarkAtRisk } },
+      data: { slaAtRisk: false },
+    });
+  }
+
+  // --- Refunds: mark at-risk ---
+  const atRiskRefundCandidates = await prisma.refund.findMany({
     where: {
       status: { in: ["AWAITING_APPROVAL", "APPROVED", "PROCESSING"] },
       slaBreached: false,
@@ -139,32 +158,50 @@ export async function processSlaCheck(job: Job): Promise<void> {
       id: true,
       companyId: true,
       slaDeadline: true,
+      slaAtRisk: true,
     },
   });
 
-  let atRiskRefundCount = 0;
-  for (const refund of atRiskRefunds) {
+  const refundsToMarkAtRisk: string[] = [];
+  const refundsToUnmarkAtRisk: string[] = [];
+
+  for (const refund of atRiskRefundCandidates) {
     const alertMinutes = alertMinutesMap.get(refund.companyId) ?? 30;
     const alertThreshold = new Date(now.getTime() + alertMinutes * 60_000);
 
-    if (
-      refund.slaDeadline &&
+    const isAtRisk =
+      refund.slaDeadline !== null &&
       refund.slaDeadline <= alertThreshold &&
-      refund.slaDeadline > now
-    ) {
-      atRiskRefundCount++;
+      refund.slaDeadline > now;
+
+    if (isAtRisk && !refund.slaAtRisk) {
+      refundsToMarkAtRisk.push(refund.id);
+    } else if (!isAtRisk && refund.slaAtRisk) {
+      refundsToUnmarkAtRisk.push(refund.id);
     }
   }
 
-  if (atRiskRefundCount > 0) {
+  if (refundsToMarkAtRisk.length > 0) {
+    await prisma.refund.updateMany({
+      where: { id: { in: refundsToMarkAtRisk } },
+      data: { slaAtRisk: true },
+    });
     console.log(
-      `[sla-check] ${atRiskRefundCount} refund(s) at risk of SLA breach`
+      `[sla-check] Marked ${refundsToMarkAtRisk.length} refund(s) as at risk of SLA breach`
     );
+  }
+
+  if (refundsToUnmarkAtRisk.length > 0) {
+    await prisma.refund.updateMany({
+      where: { id: { in: refundsToUnmarkAtRisk } },
+      data: { slaAtRisk: false },
+    });
   }
 
   const totalBreaches =
     firstReplyBreached.count + resolutionBreached.count + refundBreached.count;
-  if (totalBreaches === 0 && atRiskCount === 0 && atRiskRefundCount === 0) {
+  const totalAtRisk = ticketsToMarkAtRisk.length + refundsToMarkAtRisk.length;
+  if (totalBreaches === 0 && totalAtRisk === 0) {
     console.log("[sla-check] All SLAs healthy");
   }
 }

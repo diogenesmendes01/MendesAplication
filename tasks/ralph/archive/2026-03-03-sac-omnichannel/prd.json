@@ -1,0 +1,680 @@
+{
+  "project": "MendesERP",
+  "branchName": "ralph/sac-omnichannel",
+  "description": "SAC Omnichannel — Integracao bidirecional Email (IMAP/SMTP) + WhatsApp (Evolution API), reembolso, SLA, PDF export, dashboard",
+  "userStories": [
+    {
+      "id": "US-048",
+      "title": "Instalar e configurar Redis no devcontainer",
+      "description": "Como desenvolvedor, preciso do Redis instalado no ambiente de desenvolvimento para que o BullMQ funcione como sistema de filas.",
+      "acceptanceCriteria": [
+        "Redis adicionado ao devcontainer.json como feature ou servico Docker",
+        "Redis rodando na porta padrao 6379",
+        "Variavel REDIS_URL=redis://localhost:6379 adicionada ao .env.example",
+        "Teste de conexao redis-cli ping retorna PONG",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-049",
+      "title": "Configurar BullMQ e estrutura de filas",
+      "description": "Como desenvolvedor, preciso da infraestrutura BullMQ configurada com filas nomeadas para processar mensagens de forma assincrona.",
+      "acceptanceCriteria": [
+        "Pacotes bullmq e ioredis instalados via npm",
+        "Arquivo erp/src/lib/queue.ts com conexao Redis (usa REDIS_URL do env) e exportacao de 5 filas: email-inbound, email-outbound, whatsapp-inbound, whatsapp-outbound, sla-check",
+        "Arquivo erp/src/lib/workers/base.ts com classe base de worker que loga jobs recebidos",
+        "Script npm workers em package.json: npx tsx src/lib/workers/index.ts",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-050",
+      "title": "Configurar Evolution API via Docker Compose",
+      "description": "Como desenvolvedor, preciso da Evolution API rodando localmente via Docker para desenvolver a integracao WhatsApp.",
+      "acceptanceCriteria": [
+        "Arquivo docker-compose.yml na raiz do projeto com servico evolution-api (imagem atydoc/evolution-api:latest)",
+        "Evolution API acessivel em http://localhost:8080",
+        "Variaveis EVOLUTION_API_URL e EVOLUTION_API_KEY adicionadas ao .env.example com comentarios explicativos",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-051",
+      "title": "Adicionar enums novos ao schema Prisma",
+      "description": "Como desenvolvedor, preciso dos novos enums no schema para que as tabelas possam referencia-los.",
+      "acceptanceCriteria": [
+        "Enums adicionados ao schema.prisma: ChannelType (EMAIL, WHATSAPP), MessageDirection (INBOUND, OUTBOUND), MessageOrigin (SYSTEM, EXTERNAL), SlaType (TICKET, REFUND), RefundStatus (AWAITING_APPROVAL, APPROVED, REJECTED, PROCESSING, COMPLETED), RefundPaymentMethod (PIX, TED), RefundAttachmentType (PAYMENT_PROOF, REFUND_PROOF), RefundInvoiceAction (CANCEL_INVOICE, CREDIT_NOTE, NONE), PayableOrigin (MANUAL, REFUND), InvoiceType (STANDARD, CREDIT_NOTE)",
+        "Status CANCELLED adicionado ao enum InvoiceStatus ou ProposalStatus se existir",
+        "Migration gerada e aplicada com sucesso via npx prisma db push",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-052",
+      "title": "Criar tabela AdditionalContact",
+      "description": "Como atendente, preciso registrar multiplos contatos por cliente para identificar quem esta nos contactando.",
+      "acceptanceCriteria": [
+        "Model AdditionalContact no schema.prisma com campos: id (cuid), clientId, name, role (opcional), email (opcional), whatsapp (opcional), createdAt",
+        "Relacao Client.additionalContacts (1:N, onDelete Cascade)",
+        "Migration gerada e aplicada com sucesso",
+        "Seed atualizado com 2-3 contatos adicionais de exemplo para clientes existentes",
+        "Typecheck passes"
+      ],
+      "priority": 5,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-053",
+      "title": "Criar tabela Channel",
+      "description": "Como admin, preciso cadastrar canais de comunicacao (email IMAP/SMTP e WhatsApp) por empresa.",
+      "acceptanceCriteria": [
+        "Model Channel no schema.prisma com campos: id (cuid), companyId, type (ChannelType), name, config (Json), isActive (default true), lastSyncUid (Int opcional), lastSyncUidSent (Int opcional), lastSyncAt (DateTime opcional), createdAt, updatedAt",
+        "Relacao Company.channels (1:N, onDelete Cascade)",
+        "Migration gerada e aplicada com sucesso",
+        "Typecheck passes"
+      ],
+      "priority": 6,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-054",
+      "title": "Criar tabela SlaConfig",
+      "description": "Como admin, preciso de tabela para armazenar regras de SLA por prioridade e por empresa.",
+      "acceptanceCriteria": [
+        "Model SlaConfig no schema.prisma com campos: id (cuid), companyId, type (SlaType), priority (TicketPriority opcional), stage (String), deadlineMinutes (Int), alertBeforeMinutes (Int default 30), createdAt, updatedAt",
+        "Unique constraint [companyId, type, priority, stage]",
+        "Relacao Company.slaConfigs (1:N, onDelete Cascade)",
+        "Migration gerada e aplicada com sucesso",
+        "Seed com valores padrao para cada empresa: tickets Alta (30min/4h/15min), Media (2h/24h/30min), Baixa (8h/48h/1h); reembolso Aprovacao (4h/1h), Execucao (24h/4h), Total (48h/8h)",
+        "Typecheck passes"
+      ],
+      "priority": 7,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-055",
+      "title": "Criar tabela Attachment",
+      "description": "Como atendente, preciso enviar e receber anexos em mensagens e tickets.",
+      "acceptanceCriteria": [
+        "Model Attachment no schema.prisma com campos: id (cuid), ticketMessageId (opcional), ticketId (opcional), fileName, fileSize (Int), mimeType, storagePath, createdAt",
+        "Relacoes: TicketMessage.attachments e Ticket.attachments (1:N, onDelete Cascade)",
+        "Diretorio erp/uploads/ criado e adicionado ao .gitignore",
+        "Migration gerada e aplicada com sucesso",
+        "Typecheck passes"
+      ],
+      "priority": 8,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-056",
+      "title": "Criar tabelas Refund e RefundAttachment",
+      "description": "Como atendente, preciso solicitar reembolsos vinculados a tickets com registro formal do processo.",
+      "acceptanceCriteria": [
+        "Model Refund com todos os campos conforme design: id, ticketId, companyId, requestedById, approvedById, executedById, amount (Decimal), paymentMethod, bankName, bankAgency, bankAccount, pixKey, status (default AWAITING_APPROVAL), rejectionReason, requestedAt, approvedAt, executedAt, completedAt, slaDeadline, slaBreached, invoiceAction, invoiceCancelReason",
+        "Relacoes Refund: ticket (Cascade), company (Cascade), requestedBy/approvedBy/executedBy (User), attachments[], accountPayable, creditNote",
+        "Model RefundAttachment com campos: id, refundId, type (RefundAttachmentType), fileName, fileSize, mimeType, storagePath, uploadedById, createdAt",
+        "Migration gerada e aplicada com sucesso",
+        "Typecheck passes"
+      ],
+      "priority": 9,
+      "passes": true,
+      "notes": "accountPayable and creditNote back-relations will be added in US-059"
+    },
+    {
+      "id": "US-057",
+      "title": "Adicionar campos novos ao Ticket",
+      "description": "Como desenvolvedor, preciso expandir o Ticket para suportar canais, SLA, tags e reembolsos.",
+      "acceptanceCriteria": [
+        "Campos adicionados ao Ticket: channelId (opcional), contactId (opcional ref AdditionalContact), slaFirstReply (DateTime opcional), slaResolution (DateTime opcional), slaBreached (Boolean default false), tags (String[] default [])",
+        "Relacoes: channel (Channel), contact (AdditionalContact), attachments (Attachment[]), refunds (Refund[])",
+        "Migration gerada e aplicada com sucesso",
+        "Seed continua funcionando sem erros",
+        "Typecheck passes"
+      ],
+      "priority": 10,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-058",
+      "title": "Adicionar campos novos ao TicketMessage",
+      "description": "Como desenvolvedor, preciso expandir o TicketMessage para canais, direcao, origem, deduplicacao e notas internas.",
+      "acceptanceCriteria": [
+        "Campos adicionados: channel (ChannelType opcional), direction (MessageDirection), origin (MessageOrigin default SYSTEM), externalId (String opcional), contactId (String opcional), isInternal (Boolean default false)",
+        "Relacoes: attachments (Attachment[]), contact (AdditionalContact opcional)",
+        "Unique constraint @@unique([externalId, channel])",
+        "Migration gerada e aplicada com sucesso",
+        "Seed continua funcionando sem erros",
+        "Typecheck passes"
+      ],
+      "priority": 11,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-059",
+      "title": "Adicionar campos novos ao AccountPayable e Invoice",
+      "description": "Como desenvolvedor, preciso expandir AccountPayable e Invoice para integracao com reembolsos.",
+      "acceptanceCriteria": [
+        "AccountPayable: campos origin (PayableOrigin default MANUAL), refundId (opcional), relacao com Refund",
+        "Invoice: campos type (InvoiceType default STANDARD), cancelledAt, cancellationReason, refundId, originalInvoiceId, relacoes refund e self-relation CreditNote",
+        "Migration gerada e aplicada com sucesso",
+        "Seed continua funcionando sem erros",
+        "Typecheck passes"
+      ],
+      "priority": 12,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-060",
+      "title": "CRUD de contatos adicionais - server actions",
+      "description": "Como desenvolvedor, preciso das server actions para gerenciar contatos adicionais do cliente.",
+      "acceptanceCriteria": [
+        "Server action createAdditionalContact(clientId, companyId, name, role?, email?, whatsapp?) valida pelo menos email ou whatsapp, requireCompanyAccess, cria registro, audit log",
+        "Server action updateAdditionalContact(contactId, companyId, data) mesmas validacoes, audit log",
+        "Server action deleteAdditionalContact(contactId, companyId) valida acesso, deleta, audit log",
+        "Server action listAdditionalContacts(clientId, companyId) retorna lista ordenada por name",
+        "Typecheck passes"
+      ],
+      "priority": 13,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-061",
+      "title": "UI de contatos adicionais na pagina do cliente",
+      "description": "Como atendente, quero gerenciar contatos adicionais de um cliente na pagina de detalhe.",
+      "acceptanceCriteria": [
+        "Secao Contatos Adicionais na pagina /comercial/clientes/[id]",
+        "Lista mostra nome, cargo, email, whatsapp de cada contato",
+        "Botao + Adicionar contato abre dialog: nome (obrigatorio), cargo (opcional), email (opcional), whatsapp (opcional)",
+        "Botoes editar e remover por contato (remover com confirmacao)",
+        "Toast de sucesso/erro",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 14,
+      "passes": true,
+      "notes": "Browser verification skipped - no browser tools available"
+    },
+    {
+      "id": "US-062",
+      "title": "Servico de upload e download de anexos",
+      "description": "Como desenvolvedor, preciso de API routes para upload e download de arquivos.",
+      "acceptanceCriteria": [
+        "API route POST /api/upload recebe FormData, salva em erp/uploads/{companyId}/{ano-mes}/, retorna { fileName, fileSize, mimeType, storagePath }",
+        "API route GET /api/files/[...path] serve arquivos com validacao de acesso",
+        "Limite 10MB. Tipos: PDF, PNG, JPG, JPEG, GIF, DOC, DOCX, XLS, XLSX, CSV, TXT",
+        "Helper erp/src/lib/file-upload.ts com uploadFile(), getFileUrl(), deleteFile()",
+        "Rejeita arquivos invalidos com mensagem clara",
+        "Typecheck passes"
+      ],
+      "priority": 15,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-063",
+      "title": "Configuracao de canais - server actions",
+      "description": "Como desenvolvedor, preciso das server actions para CRUD de canais de comunicacao.",
+      "acceptanceCriteria": [
+        "Server action createChannel(companyId, type, name, config) valida admin, encripta senhas com crypto.createCipheriv e ENCRYPTION_KEY do env, audit log",
+        "Server action updateChannel(channelId, companyId, data) mesmas validacoes",
+        "Server action toggleChannel(channelId, companyId) ativa/desativa",
+        "Server action listChannels(companyId) retorna canais com config decriptado",
+        "Server action testChannelConnection(channelId, companyId) testa IMAP ou Evolution API, retorna { success, message }",
+        "Variavel ENCRYPTION_KEY adicionada ao .env.example",
+        "Typecheck passes"
+      ],
+      "priority": 16,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-064",
+      "title": "Pagina de configuracao de canais - UI",
+      "description": "Como admin, quero cadastrar e gerenciar canais de email e WhatsApp na interface.",
+      "acceptanceCriteria": [
+        "Nova pagina /configuracoes/canais com link no sidebar de configuracoes",
+        "Lista de canais em cards: nome, tipo (icone), endereco/numero, status, ultima sync",
+        "Botao + Novo Canal: dialog com tipo, nome, campos especificos (IMAP/SMTP para email, instanceName/apiUrl/apiKey para WhatsApp)",
+        "Botao Testar conexao mostra resultado",
+        "Botoes editar e desativar/ativar",
+        "Scoped por empresa",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 17,
+      "passes": true,
+      "notes": "Browser verification skipped - no browser tools available"
+    },
+    {
+      "id": "US-065",
+      "title": "Configuracao de SLA - server actions",
+      "description": "Como desenvolvedor, preciso das server actions para gerenciar regras de SLA.",
+      "acceptanceCriteria": [
+        "Server action getSlaConfigs(companyId) retorna configs existentes ou valores padrao",
+        "Server action saveSlaConfigs(companyId, configs[]) upsert em batch, audit log",
+        "Server action getBusinessHours(companyId) e saveBusinessHours(companyId, data) para horario comercial",
+        "Typecheck passes"
+      ],
+      "priority": 18,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-066",
+      "title": "Pagina de configuracao de SLA - UI",
+      "description": "Como admin, quero configurar regras de SLA e horario comercial na interface.",
+      "acceptanceCriteria": [
+        "Nova pagina /configuracoes/sla com link no sidebar",
+        "Tabela editavel SLA Tickets: Alta/Media/Baixa x 1a Resposta/Resolucao/Alerta",
+        "Tabela editavel SLA Reembolso: Aprovacao/Execucao/Total x Prazo/Alerta",
+        "Secao Horario Comercial: toggle, hora inicio/fim, checkboxes Seg-Dom",
+        "Botao Salvar persiste tudo",
+        "Mostra valores padrao se empresa nao tem config",
+        "Scoped por empresa",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 19,
+      "passes": true,
+      "notes": "Browser verification skipped"
+    },
+    {
+      "id": "US-067",
+      "title": "Helper de calculo de SLA",
+      "description": "Como desenvolvedor, preciso de funcoes utilitarias para calcular e verificar SLA.",
+      "acceptanceCriteria": [
+        "Arquivo erp/src/lib/sla.ts exportando funcoes",
+        "calculateSlaDeadline(startTime, minutes, businessHours?) calcula deadline pulando horas fora do comercial",
+        "isSlaBreached(deadline) retorna true se passou",
+        "getSlaStatus(deadline, alertBeforeMinutes) retorna ok/at_risk/breached",
+        "getSlaProgress(createdAt, deadline) retorna percentual 0-100",
+        "Typecheck passes"
+      ],
+      "priority": 20,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-068",
+      "title": "Dashboard KPIs do SAC - server action",
+      "description": "Como desenvolvedor, preciso da server action que retorna metricas do dashboard.",
+      "acceptanceCriteria": [
+        "Server action getTicketDashboard(companyId) retorna: openCount, inProgressCount, waitingClientCount, resolvedTodayCount, slaBreachedCount, slaAtRiskCount, pendingRefundsCount, avgResponseTimeMinutes",
+        "Tambem retorna ticketsByChannel [{channel, count}] e ticketsByPriority [{priority, count}]",
+        "Queries otimizadas com aggregations Prisma",
+        "Scoped por companyId",
+        "Typecheck passes"
+      ],
+      "priority": 21,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-069",
+      "title": "Dashboard KPIs do SAC - UI",
+      "description": "Como atendente, quero ver dashboard com metricas no topo da lista de tickets.",
+      "acceptanceCriteria": [
+        "8 cards KPI no topo de /sac/tickets: Abertos, Em Andamento, Aguardando, Resolvidos Hoje, SLA Estourado (vermelho), SLA Risco (amarelo), Reembolsos Pendentes, Tempo Medio",
+        "2 graficos barras horizontais: por Canal e por Prioridade",
+        "Dados via getTicketDashboard",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 22,
+      "passes": true,
+      "notes": "Browser verification skipped - no browser tools available"
+    },
+    {
+      "id": "US-070",
+      "title": "Abas e busca na lista de tickets",
+      "description": "Como atendente, quero navegar tickets por abas em vez de filtros.",
+      "acceptanceCriteria": [
+        "Remover filtros existentes da pagina /sac/tickets",
+        "4 abas: Todos, SLA Critico (badge), Reembolsos (badge), Meus Tickets",
+        "Campo busca por texto (cliente, assunto) em todas as abas",
+        "Novas colunas: Canal (icone), SLA (badge verde/amarelo/vermelho + tempo), Tags",
+        "listTickets atualizada para parametro tab e search",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 23,
+      "passes": true,
+      "notes": "Browser verification skipped - no browser tools available"
+    },
+    {
+      "id": "US-071",
+      "title": "Timeline com aba Todos no detalhe do ticket",
+      "description": "Como atendente, quero ver timeline unificada na aba Todos com notas internas e eventos.",
+      "acceptanceCriteria": [
+        "Aba Todos como default na timeline de /sac/tickets/[id]",
+        "Timeline cronologica: mensagens email (icone envelope), WhatsApp (icone chat), notas internas (fundo amarelo, icone cadeado), reembolso (icone moeda), status (icone engrenagem)",
+        "Cada mensagem: remetente+cargo, data/hora, canal, origem (via ERP/WhatsApp Web/Gmail)",
+        "Anexos inline com nome, tamanho, link download",
+        "Sem campo de resposta. Campo nota interna + botao Comentar, botao Anexar ao ticket",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 24,
+      "passes": true,
+      "notes": "Browser verification skipped - no browser tools available"
+    },
+    {
+      "id": "US-072",
+      "title": "Timeline - Aba Email",
+      "description": "Como atendente, quero ver e responder emails na aba Email com layout de thread.",
+      "acceptanceCriteria": [
+        "Aba Email mostra somente channel=EMAIL",
+        "Layout thread: De, Para, Assunto, data/hora, origem",
+        "Resposta: dropdown Para (emails cliente+contatos), Assunto Re:{assunto}, textarea, anexar, enviar",
+        "Notas internas NAO aparecem",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 25,
+      "passes": true,
+      "notes": "Browser verification skipped - no browser tools available"
+    },
+    {
+      "id": "US-073",
+      "title": "Timeline - Aba WhatsApp",
+      "description": "Como atendente, quero ver e responder WhatsApp na aba com layout de chat.",
+      "acceptanceCriteria": [
+        "Aba WhatsApp mostra somente channel=WHATSAPP",
+        "Layout chat: baloes esquerda (INBOUND), baloes direita (OUTBOUND)",
+        "Resposta: seletor numero destino, textarea, emoji, anexar, enviar",
+        "Notas internas NAO aparecem",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 26,
+      "passes": true,
+      "notes": "Browser verification skipped - no browser tools available"
+    },
+    {
+      "id": "US-074",
+      "title": "Notas internas - server action",
+      "description": "Como desenvolvedor, preciso da server action para criar notas internas.",
+      "acceptanceCriteria": [
+        "Server action createInternalNote(ticketId, companyId, content, attachmentIds?) cria TicketMessage isInternal=true direction=OUTBOUND origin=SYSTEM",
+        "requireCompanyAccess, suporta anexos, audit log",
+        "Typecheck passes"
+      ],
+      "priority": 27,
+      "passes": true,
+      "notes": "Already implemented as part of US-071 timeline work"
+    },
+    {
+      "id": "US-075",
+      "title": "Sidebar do ticket - informacoes, responsavel e tags",
+      "description": "Como atendente, quero ver informacoes completas e gerenciar tags na sidebar.",
+      "acceptanceCriteria": [
+        "Secao Informacoes: cliente+CNPJ, contato (nome, cargo), empresa, canal origem, datas",
+        "Secao Responsavel: dropdown atribuir (manter existente)",
+        "Secao Tags: badges + input adicionar + remover. Server actions addTag e removeTag",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 28,
+      "passes": true,
+      "notes": "Browser verification skipped - no browser tools available"
+    },
+    {
+      "id": "US-076",
+      "title": "Sidebar do ticket - SLA e situacao financeira",
+      "description": "Como atendente, quero ver SLA e situacao financeira na sidebar.",
+      "acceptanceCriteria": [
+        "Secao SLA: cards 1a Resposta e Resolucao com status, tempo, barra progresso (verde<70% amarelo70-90% vermelho>90%)",
+        "Secao Financeira: badge Adimplente/Atraso/Inadimplente, total pendente, total vencido, ultimo pgto, link financeiro",
+        "getClientFinancialSummary(clientId, companyId) retorna {status, pendingTotal, overdueTotal, lastPayment}",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 29,
+      "passes": true,
+      "notes": "Browser verification skipped - no browser tools available"
+    },
+    {
+      "id": "US-077",
+      "title": "Enviar resposta por email - server action e worker",
+      "description": "Como desenvolvedor, preciso da action e worker para enviar emails do ticket.",
+      "acceptanceCriteria": [
+        "sendEmailReply(ticketId, companyId, to, subject, content, attachmentIds?) cria TicketMessage channel=EMAIL direction=OUTBOUND origin=SYSTEM, enfileira email-outbound",
+        "Worker SMTP envia usando config do Channel, atualiza externalId com Message-ID",
+        "Falha no envio nao bloqueia criacao da mensagem",
+        "Audit log",
+        "Typecheck passes"
+      ],
+      "priority": 30,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-078",
+      "title": "Enviar mensagem WhatsApp - server action e worker",
+      "description": "Como desenvolvedor, preciso da action e worker para enviar WhatsApp do ticket.",
+      "acceptanceCriteria": [
+        "sendWhatsAppMessage(ticketId, companyId, to, content, attachmentIds?) cria TicketMessage channel=WHATSAPP direction=OUTBOUND origin=SYSTEM, enfileira whatsapp-outbound",
+        "Worker envia via Evolution API (sendText/sendMedia), atualiza externalId",
+        "Helper erp/src/lib/evolution-api.ts com sendTextMessage, sendMediaMessage, getInstanceStatus",
+        "Audit log",
+        "Typecheck passes"
+      ],
+      "priority": 31,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-079",
+      "title": "Webhook para receber mensagens WhatsApp",
+      "description": "Como sistema, preciso receber webhooks da Evolution API para criar tickets automaticamente.",
+      "acceptanceCriteria": [
+        "API route POST /api/webhooks/whatsapp recebe payload Evolution API, valida API key",
+        "Enfileira whatsapp-inbound. Worker identifica remetente em Client.telefone e AdditionalContact.whatsapp",
+        "Cliente encontrado + ticket aberto: adiciona mensagem. Cliente sem ticket: cria novo",
+        "Nao encontrado: cria ticket com tag Pendente Vinculacao",
+        "OUTBOUND do nosso numero: direction=OUTBOUND origin=EXTERNAL",
+        "Anexos salvos via upload. Deduplicacao por externalId",
+        "Typecheck passes"
+      ],
+      "priority": 32,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-080",
+      "title": "Worker IMAP para receber emails",
+      "description": "Como sistema, preciso monitorar emails via IMAP para criar tickets automaticamente.",
+      "acceptanceCriteria": [
+        "Pacote imapflow instalado. Worker email-inbound roda a cada 2-3 min",
+        "Para cada Channel EMAIL ativo: conecta IMAP, busca Inbox (UID > lastSyncUid) e Sent (UID > lastSyncUidSent)",
+        "Identifica remetente em Client.email e AdditionalContact.email",
+        "Cliente + ticket aberto mesmo subject: agrupa. Sem ticket: cria novo. Nao encontrado: tag Pendente Vinculacao",
+        "Sent: direction=OUTBOUND origin=EXTERNAL. externalId=Message-ID header",
+        "Anexos salvos. Atualiza lastSyncUid/lastSyncUidSent/lastSyncAt",
+        "Typecheck passes"
+      ],
+      "priority": 33,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-081",
+      "title": "Vinculacao de contato desconhecido a cliente",
+      "description": "Como atendente, quero vincular contato nao identificado a cliente existente ou criar novo.",
+      "acceptanceCriteria": [
+        "Banner no ticket com tag Pendente Vinculacao: email/telefone + botoes Vincular e Criar cliente",
+        "Vincular: dialog busca CNPJ/nome, cria AdditionalContact, atualiza clientId, remove tag",
+        "Criar: reusa dialog criacao cliente, vincula automaticamente",
+        "Server actions linkContactToClient e createClientAndLink. Audit log",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 34,
+      "passes": true,
+      "notes": "Browser verification skipped - no browser tools available"
+    },
+    {
+      "id": "US-082",
+      "title": "Solicitar reembolso - server action",
+      "description": "Como desenvolvedor, preciso da action para criar solicitacoes de reembolso.",
+      "acceptanceCriteria": [
+        "requestRefund(ticketId, companyId, amount, justification, paymentProofId, boletoId?) cria Refund AWAITING_APPROVAL",
+        "Calcula slaDeadline baseado em SlaConfig REFUND approval",
+        "Adiciona tag Reembolso ao ticket",
+        "Registra evento na timeline",
+        "Audit log",
+        "Typecheck passes"
+      ],
+      "priority": 35,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-083",
+      "title": "Aprovar/rejeitar reembolso - server actions",
+      "description": "Como desenvolvedor, preciso das actions para aprovar ou rejeitar reembolsos.",
+      "acceptanceCriteria": [
+        "approveRefund(refundId, companyId) valida ADMIN/MANAGER, status APPROVED, approvedAt, novo slaDeadline execution, evento timeline",
+        "rejectRefund(refundId, companyId, reason) valida role, status REJECTED, rejectionReason, evento timeline",
+        "Audit log em ambas",
+        "Typecheck passes"
+      ],
+      "priority": 36,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-084",
+      "title": "Executar reembolso com integracao financeira",
+      "description": "Como desenvolvedor, preciso da action que executa reembolso e cria registros no financeiro.",
+      "acceptanceCriteria": [
+        "executeRefund valida acesso, atualiza Refund COMPLETED com dados bancarios e metodo",
+        "Cria AccountPayable origin=REFUND supplier=cliente description=Reembolso ref Ticket status=PAID",
+        "CANCEL_INVOICE: Invoice status CANCELLED com cancelledAt e reason",
+        "CREDIT_NOTE: cria Invoice type=CREDIT_NOTE com originalInvoiceId",
+        "Cancela AccountReceivable pendente se houver",
+        "Evento timeline. Audit log",
+        "Typecheck passes"
+      ],
+      "priority": 37,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-085",
+      "title": "UI de reembolso na sidebar do ticket",
+      "description": "Como atendente, quero solicitar e executar reembolsos pela sidebar.",
+      "acceptanceCriteria": [
+        "Botao Solicitar Reembolso: dialog valor, boleto, comprovante (upload obrigatorio), justificativa",
+        "Card reembolso na sidebar: status, valor, SLA, solicitante",
+        "AWAITING_APPROVAL + ADMIN/MANAGER: botoes Aprovar/Rejeitar",
+        "APPROVED: botao Executar com dialog metodo PIX/TED, dados bancarios, acao NFS-e, comprovante",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 38,
+      "passes": true,
+      "notes": "Browser verification skipped - no browser tools available"
+    },
+    {
+      "id": "US-086",
+      "title": "Solicitar cancelamento de proposta/boleto",
+      "description": "Como atendente, quero solicitar cancelamento de propostas e boletos pelo ticket.",
+      "acceptanceCriteria": [
+        "Botao Solicitar Cancelamento: dialog opcoes (proposta/boletos/ambos), justificativa",
+        "Aprovacao por gestor/admin. Ao aprovar: Proposal CANCELLED, AccountReceivable CANCELLED",
+        "Evento na timeline como prova",
+        "Server actions requestCancellation e approveCancellation. Audit log",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 39,
+      "passes": true,
+      "notes": "Browser verification skipped - no browser tools available"
+    },
+    {
+      "id": "US-087",
+      "title": "Worker de verificacao de SLA",
+      "description": "Como sistema, preciso verificar SLA periodicamente e marcar breaches.",
+      "acceptanceCriteria": [
+        "Worker sla-check repeatable a cada 1 minuto via BullMQ",
+        "Busca tickets abertos com deadline definido e nao cumprido",
+        "Restante <= alertBeforeMinutes: marca em risco",
+        "Deadline passou: slaBreached = true",
+        "Mesma logica para Refund.slaDeadline",
+        "Log de breaches",
+        "Typecheck passes"
+      ],
+      "priority": 40,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-088",
+      "title": "Alertas visuais de SLA na interface",
+      "description": "Como atendente, quero ver alertas de SLA no menu, lista e ticket.",
+      "acceptanceCriteria": [
+        "Badge vermelho no sidebar SAC com contagem criticos",
+        "Banner topo lista: X estourados | Y em risco com link aba SLA Critico",
+        "getSlaAlertCounts(companyId) retorna { breached, atRisk }",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 41,
+      "passes": true,
+      "notes": "Browser verification skipped - no browser tools available"
+    },
+    {
+      "id": "US-089",
+      "title": "Exportar ticket como PDF",
+      "description": "Como atendente, quero exportar ticket completo como PDF de evidencia.",
+      "acceptanceCriteria": [
+        "Pacote PDF instalado (react-pdf/renderer ou jspdf)",
+        "Botao Exportar PDF na sidebar com checkboxes notas internas e preview anexos",
+        "PDF com: cabecalho empresa, informacoes ticket, SLA, vinculos, historico completo numerado com data/hora/canal/direcao/remetente/conteudo/anexos, reembolso se houver, lista anexos, rodape",
+        "Download automatico",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 42,
+      "passes": true,
+      "notes": "Browser verification skipped - no browser tools available"
+    },
+    {
+      "id": "US-090",
+      "title": "Badge SAC no financeiro e timeline do cliente",
+      "description": "Como financeiro, quero ver origem SAC em contas a pagar e WhatsApp na timeline do cliente.",
+      "acceptanceCriteria": [
+        "Contas a pagar: coluna Origem com Manual ou badge SAC clicavel para ticket",
+        "listPayables atualizada com origin e refundId",
+        "Timeline cliente: nova aba WhatsApp, cada item mostra contato (nome+cargo), badge Reembolso em tickets",
+        "getClientTimeline atualizada",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 43,
+      "passes": true,
+      "notes": "Browser verification skipped - no browser tools available"
+    }
+  ]
+}

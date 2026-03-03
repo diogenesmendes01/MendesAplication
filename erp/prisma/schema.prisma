@@ -26,6 +26,7 @@ enum PaymentStatus {
   PENDING
   PAID
   OVERDUE
+  CANCELLED
 }
 
 enum FinancialCategoryType {
@@ -429,6 +430,7 @@ model Ticket {
   slaFirstReply  DateTime?
   slaResolution  DateTime?
   slaBreached    Boolean        @default(false)
+  slaAtRisk      Boolean        @default(false)
   tags           String[]       @default([])
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
@@ -499,6 +501,8 @@ model Refund {
   bankAgency         String?
   bankAccount        String?
   pixKey             String?
+  justification      String?
+  boletoId           String?
   status             RefundStatus        @default(AWAITING_APPROVAL)
   rejectionReason    String?
   requestedAt        DateTime            @default(now())
@@ -507,6 +511,7 @@ model Refund {
   completedAt        DateTime?
   slaDeadline        DateTime?
   slaBreached        Boolean             @default(false)
+  slaAtRisk          Boolean             @default(false)
   invoiceAction      RefundInvoiceAction?
   invoiceCancelReason String?
 
