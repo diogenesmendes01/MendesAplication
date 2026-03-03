@@ -190,7 +190,7 @@
         "Typecheck passes"
       ],
       "priority": 10,
-      "passes": false,
+      "passes": true,
       "notes": "REF: /tmp/jarespondiv2/apps/api/src/services/agent/types.ts (148 linhas) — ver AgentContext e campos de AI config. REF: docs/plans/2026-03-03-whatsapp-baileys-ai-agent-design.md secao Modelos de dados para schema Prisma completo. IMPORTANTE: embedding usa Float[] nativo do Prisma (sem pgvector) — busca por cosine similarity em memoria no MVP"
     },
     {

@@ -215,3 +215,25 @@
   - host.docker.internal is used for container-to-host communication (PostgreSQL, ERP webhook)
   - Uploads volume must be persistent to survive container restarts (media files)
 ---
+
+## 2026-03-03 - US-010
+- Added DocumentStatus enum: PROCESSING, READY, ERROR
+- Added AiConfig model: id (cuid), companyId (unique), enabled (Boolean default false), persona (String @db.Text), welcomeMessage (String? @db.Text), escalationKeywords (String[]), maxIterations (Int default 5), createdAt, updatedAt
+- Added Document model: id (cuid), companyId, name, mimeType, fileSize (Int), status (DocumentStatus default PROCESSING), createdAt, updatedAt
+- Added DocumentChunk model: id (cuid), documentId, content (String @db.Text), embedding (Float[]), chunkIndex (Int), createdAt
+- Added aiEnabled (Boolean default true) field to Ticket model
+- Added isAiGenerated (Boolean default false) field to TicketMessage model
+- Relations: AiConfig->Company (unique companyId), Document->Company (Cascade), DocumentChunk->Document (Cascade)
+- Added aiConfig (optional) and documents relation fields to Company model
+- @@map: ai_config, documents, document_chunks
+- prisma db push executed without errors
+- Copied updated schema to whatsapp-service/prisma/ and ran prisma generate successfully
+- Typecheck passes in both erp and whatsapp-service, lint passes
+- Files changed: erp/prisma/schema.prisma, whatsapp-service/prisma/schema.prisma
+- **Learnings for future iterations:**
+  - AiConfig uses companyId as @unique (one AI config per company) — one-to-one relation with Company
+  - embedding field uses Float[] (native Prisma array) — no pgvector extension needed for MVP
+  - DocumentChunk cascades on Document deletion — deleting a document automatically removes all chunks
+  - aiEnabled defaults to true on Ticket (AI is on by default for new tickets), company-level AiConfig.enabled controls whether AI is active globally
+  - isAiGenerated on TicketMessage distinguishes AI-generated messages from human messages in the timeline
+---
