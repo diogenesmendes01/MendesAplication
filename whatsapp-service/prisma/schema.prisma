@@ -86,6 +86,8 @@ model Company {
   refunds            Refund[]
   baileysAuthStates  BaileysAuthState[]
   lidMappings        LidMapping[]
+  aiConfig           AiConfig?
+  documents          Document[]
 
   @@map("companies")
 }
@@ -395,6 +397,12 @@ enum PayableOrigin {
   REFUND
 }
 
+enum DocumentStatus {
+  PROCESSING
+  READY
+  ERROR
+}
+
 enum InvoiceType {
   STANDARD
   CREDIT_NOTE
@@ -434,6 +442,7 @@ model Ticket {
   slaBreached    Boolean        @default(false)
   slaAtRisk      Boolean        @default(false)
   tags           String[]       @default([])
+  aiEnabled      Boolean        @default(true)
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 
@@ -462,8 +471,9 @@ model TicketMessage {
   origin       MessageOrigin     @default(SYSTEM)
   externalId   String?
   contactId    String?
-  isInternal   Boolean           @default(false)
-  createdAt    DateTime          @default(now())
+  isInternal      Boolean           @default(false)
+  isAiGenerated   Boolean           @default(false)
+  createdAt       DateTime          @default(now())
 
   ticket      Ticket              @relation(fields: [ticketId], references: [id], onDelete: Cascade)
   sender      User?               @relation("TicketMessageSender", fields: [senderId], references: [id], onDelete: Cascade)
@@ -690,4 +700,49 @@ model LidMapping {
   @@unique([companyId, lid])
   @@index([companyId])
   @@map("lid_mappings")
+}
+
+model AiConfig {
+  id                 String   @id @default(cuid())
+  companyId          String   @unique
+  enabled            Boolean  @default(false)
+  persona            String   @db.Text
+  welcomeMessage     String?  @db.Text
+  escalationKeywords String[]
+  maxIterations      Int      @default(5)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@map("ai_config")
+}
+
+model Document {
+  id        String         @id @default(cuid())
+  companyId String
+  name      String
+  mimeType  String
+  fileSize  Int
+  status    DocumentStatus @default(PROCESSING)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  company Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  chunks  DocumentChunk[]
+
+  @@map("documents")
+}
+
+model DocumentChunk {
+  id         String   @id @default(cuid())
+  documentId String
+  content    String   @db.Text
+  embedding  Float[]
+  chunkIndex Int
+  createdAt  DateTime @default(now())
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@map("document_chunks")
 }
