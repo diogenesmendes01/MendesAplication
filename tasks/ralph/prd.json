@@ -135,7 +135,7 @@
         "Typecheck passes"
       ],
       "priority": 7,
-      "passes": false,
+      "passes": true,
       "notes": "REF: /tmp/jarespondiv2/apps/api/src/routes/ e /tmp/jarespondiv2/apps/api/src/controllers/ para estrutura de rotas. REF: /tmp/jarespondiv2/apps/api/src/middleware/ para auth middleware. Simplificar: JaRespondi tem muitas rotas (CRM, contacts, etc) — aqui so precisamos das rotas de instance e message"
     },
     {

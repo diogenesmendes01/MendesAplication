@@ -38,6 +38,8 @@
 - ERP webhook route validates `apikey` header — WhatsApp Service sends WHATSAPP_WEBHOOK_SECRET in that header
 - Media files saved to uploads/{companyId}/ and served via Express static at /uploads/
 - getContentType from Baileys returns message type key; messages.upsert type="notify" for real-time messages
+- WhatsApp Service Express routes: /health (no auth), /instance/* and /message/* (require apikey header)
+- Express v5 async handlers: don't return res.json(), use void return type for proper typing
 - DisconnectReason codes: loggedOut=401, timedOut=408, connectionClosed=428, restartRequired=515
 - Baileys makeWASocket requires `version` from fetchLatestBaileysVersion() and `makeCacheableSignalKeyStore` wrapper
 - Use `socket.end(undefined)` for graceful disconnect, NOT `socket.logout()` (logout removes the account)
@@ -158,4 +160,22 @@
   - downloadMediaMessage requires { logger, reuploadRequest } config — use `undefined as never` for logger when no logger available
   - getContentType from Baileys returns the message type key (e.g., "conversation", "imageMessage", "protocolMessage")
   - Baileys messages.upsert has `type: "notify"` for real-time and `type: "append"` for history sync — only process "notify"
+---
+
+## 2026-03-03 - US-007
+- Implemented full Express server in whatsapp-service/src/index.ts with all required routes
+- Health check: GET /health (no auth, returns 200)
+- API key auth middleware: validates `apikey` header against WHATSAPP_SERVICE_API_KEY env
+- Instance routes: POST /instance/connect, POST /instance/connect-pairing, GET /instance/:companyId/qr, GET /instance/:companyId/pairing-code, GET /instance/:companyId/status, POST /instance/:companyId/disconnect
+- Message routes: POST /message/send-text, POST /message/send-media
+- Static file serving: uploads/ directory served at /uploads/ path
+- Graceful shutdown: SIGTERM/SIGINT handlers with prisma.$disconnect()
+- Server listens on WHATSAPP_SERVICE_PORT (default 3001)
+- Typecheck passes in both whatsapp-service and erp
+- Files changed: whatsapp-service/src/index.ts (complete rewrite from placeholder)
+- **Learnings for future iterations:**
+  - Express v5 route handlers should use explicit void return (not return res.json()) for proper typing
+  - API key auth uses `apikey` header (lowercase) to match what the ERP sends in webhook calls
+  - Health endpoint must be registered BEFORE auth middleware so it doesn't require authentication
+  - Express static middleware for uploads must also be before auth middleware for public media access
 ---
