@@ -323,7 +323,7 @@
         "Verify in browser using dev-browser skill"
       ],
       "priority": 17,
-      "passes": false,
+      "passes": true,
       "notes": "Sem referencia direta no JaRespondi (la o upload e feito via dashboard web separado). Seguir padrao das paginas de configuracoes existentes no ERP: erp/src/app/(app)/configuracoes/canais/page.tsx e erp/src/app/(app)/configuracoes/sla/page.tsx. Usar API route de upload existente em erp/src/app/api/upload/route.ts como base"
     },
     {

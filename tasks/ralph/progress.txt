@@ -379,3 +379,25 @@
   - Document processing is async via BullMQ — the upload API route creates the Document record with PROCESSING status, then enqueues the job
   - Worker re-throws errors after setting ERROR status so BullMQ can track failed jobs and retry if configured
 ---
+
+## 2026-03-03 - US-017
+- Created erp/src/app/api/documents/route.ts with GET (list documents by companyId), POST (upload file + create Document + enqueue processing job), and DELETE (delete document with cascading chunks)
+- POST validates: allowed types (PDF, TXT only), max 10MB, requires auth + companyId
+- Uses existing uploadFile() from file-upload.ts for disk storage, then creates Document record with PROCESSING status and enqueues to document-processing queue
+- DELETE validates document exists and belongs to company, then deletes via Prisma (chunks cascade automatically)
+- Created erp/src/app/(app)/configuracoes/knowledge-base/page.tsx with full UI
+- Upload area with drag-and-drop support + file select button
+- Documents table: name (with mime icon), status (colored Badge: green READY, secondary PROCESSING, destructive ERROR), file size, upload date, delete button
+- Delete with confirmation dialog (browser confirm)
+- Scoped by selectedCompanyId from useCompany() context
+- Added "Knowledge Base" link in sidebar under Configuracoes (BookOpen icon)
+- Files created: erp/src/app/api/documents/route.ts, erp/src/app/(app)/configuracoes/knowledge-base/page.tsx
+- Files changed: erp/src/components/sidebar.tsx
+- Typecheck and lint pass
+- **Learnings for future iterations:**
+  - Documents API uses fetch() from client page (not server actions) since FormData upload doesn't work with server actions
+  - Badge component supports variant="destructive" for red, variant="secondary" for neutral, and custom className for green
+  - Drag-and-drop upload: use onDragOver (preventDefault + set state), onDragLeave (clear state), onDrop (preventDefault + process files)
+  - Document deletion cascades to DocumentChunks via Prisma schema (onDelete: Cascade) — no need to manually delete chunks
+  - BookOpen icon from lucide-react used for Knowledge Base (FileText already used for Fiscal)
+---
