@@ -33,6 +33,11 @@
 - Prisma JSON fields need `as Prisma.InputJsonValue` cast (import `Prisma` from `@prisma/client`)
 - Baileys keys.get must use `<T extends keyof SignalDataTypeMap>` generic signature for type compatibility
 - BaileysProvider is a singleton exported as `baileysProvider` — use it from routes/controllers
+- BaileysProvider public API: initiateQrCode, initiatePairingCode, getQrCode, getPairingCode, disconnect, getConnectionStatus, sendMessage, sendMediaMessage
+- Webhook payload must match EvolutionWebhookPayload format (event, instance, data.key, data.message, data.media)
+- ERP webhook route validates `apikey` header — WhatsApp Service sends WHATSAPP_WEBHOOK_SECRET in that header
+- Media files saved to uploads/{companyId}/ and served via Express static at /uploads/
+- getContentType from Baileys returns message type key; messages.upsert type="notify" for real-time messages
 - DisconnectReason codes: loggedOut=401, timedOut=408, connectionClosed=428, restartRequired=515
 - Baileys makeWASocket requires `version` from fetchLatestBaileysVersion() and `makeCacheableSignalKeyStore` wrapper
 - Use `socket.end(undefined)` for graceful disconnect, NOT `socket.logout()` (logout removes the account)
@@ -126,4 +131,31 @@
   - QR mode: connection.update with `qr` field provides the raw QR string to encode
   - Pairing mode: must wait ~2s after socket creation before calling requestPairingCode
   - The `getMessage` callback is required by Baileys for message retries/edits
+---
+
+## 2026-03-03 - US-006
+- Added sendMessage(companyId, to, content) method: validates session, normalizes JID, calls socket.sendMessage with text content, returns messageId
+- Added sendMediaMessage(companyId, to, mediaUrl, caption, mediaType) method: supports image/video/audio/document types with appropriate AnyMessageContent objects
+- Added messages.upsert event handler in setupMessageHandler: only processes type="notify" (real-time), skips fromMe, status@broadcast, group messages, and protocol messages
+- Added handleMessage: detects message type (conversation, extendedTextMessage, imageMessage, videoMessage, audioMessage, documentMessage), extracts text content and media info
+- Added downloadAndSaveMedia: uses Baileys downloadMediaMessage to decrypt media, saves to uploads/{companyId}/ with timestamped filename, returns public URL for Express static serving
+- Added webhook dispatch (dispatchWebhook): POSTs to WHATSAPP_WEBHOOK_URL with `apikey` header containing WHATSAPP_WEBHOOK_SECRET
+- Webhook payload matches EvolutionWebhookPayload format: { event: "messages.upsert", instance: companyId, data: { key, pushName, message, messageType, messageTimestamp, media? } }
+- Media is served via `data.media.url` field (Evolution API v2 format), which the ERP inbound worker already supports
+- Added LID resolution (resolveLid): detects LID JIDs (containing ":" or "@lid"), queries LidMapping table, returns resolved phone@s.whatsapp.net
+- Added saveLidMapping: persists LID-to-phone mappings from messaging-history.set events
+- Added normalizeJid helper: strips non-digits, appends @s.whatsapp.net
+- Added buildMessageField: constructs simplified message object for webhook matching EvolutionWebhookPayload.data.message structure
+- New imports: downloadMediaMessage, getContentType, WAMessage, AnyMessageContent from Baileys; fs/promises, path from Node.js
+- Environment variables: WHATSAPP_WEBHOOK_URL, WHATSAPP_WEBHOOK_SECRET, WHATSAPP_SERVICE_BASE_URL
+- Files changed: whatsapp-service/src/providers/baileys.provider.ts (+508 lines)
+- Typecheck passes in both whatsapp-service and erp
+- **Learnings for future iterations:**
+  - Webhook payload MUST match EvolutionWebhookPayload interface in erp/src/lib/workers/whatsapp-inbound.ts (event, instance, data.key, data.message, data.media)
+  - ERP webhook route validates `apikey` header (not `x-api-secret` like JaRespondi reference)
+  - ERP inbound worker checks `data.media?.url` first (Evolution v2 format) before falling back to message-level media URLs
+  - Use `instance: companyId` in webhook payload — US-008 will update channel config to match on companyId
+  - downloadMediaMessage requires { logger, reuploadRequest } config — use `undefined as never` for logger when no logger available
+  - getContentType from Baileys returns the message type key (e.g., "conversation", "imageMessage", "protocolMessage")
+  - Baileys messages.upsert has `type: "notify"` for real-time and `type: "append"` for history sync — only process "notify"
 ---

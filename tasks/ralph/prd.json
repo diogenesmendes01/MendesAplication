@@ -111,7 +111,7 @@
         "Typecheck passes"
       ],
       "priority": 6,
-      "passes": false,
+      "passes": true,
       "notes": "ADAPTAR DE: /tmp/jarespondiv2/apps/api/src/providers/baileys.provider.ts (parte de mensagens: sendMessage, handleIncomingMessage, downloadMedia, processMessage) + /tmp/jarespondiv2/apps/api/src/providers/baileys-webhook-adapter.ts (289 linhas, formato do webhook). IMPORTANTE: O payload do webhook DEVE ser compativel com EvolutionWebhookPayload ja usado em erp/src/app/api/webhooks/whatsapp/route.ts para que o whatsapp-inbound.ts funcione sem alteracoes. Ver erp/src/lib/workers/whatsapp-inbound.ts para entender o formato esperado"
     },
     {
