@@ -199,3 +199,19 @@
   - canais/actions.ts test connection also needed updating — it's the channel configuration page with a "test connection" feature
   - sendMediaMessage defaults to mediaType: "document" (same as old evolution-api behavior)
 ---
+
+## 2026-03-03 - US-009
+- Created whatsapp-service/Dockerfile: Node 20 slim, installs OpenSSL for Prisma, npm install, prisma generate, tsc build, creates uploads dir, CMD node dist/index.js
+- Updated docker-compose.yml: removed evolution-api service and its volumes, added whatsapp-service service
+- whatsapp-service Docker config: build from ./whatsapp-service, port 3001:3001, DATABASE_URL pointing to host.docker.internal PostgreSQL, WHATSAPP_WEBHOOK_URL pointing to host ERP, env vars for API key and webhook secret
+- Persistent volume whatsapp_uploads mounted at /app/uploads for media files
+- YAML validated, typecheck passes in both whatsapp-service and erp, lint passes
+- Docker not available in devcontainer so build couldn't be verified at runtime
+- Files created: whatsapp-service/Dockerfile
+- Files changed: docker-compose.yml
+- **Learnings for future iterations:**
+  - Node 20-slim requires `apt-get install openssl` for Prisma to work (Prisma needs OpenSSL)
+  - Docker not available in this devcontainer — build verification must be done manually or in CI
+  - host.docker.internal is used for container-to-host communication (PostgreSQL, ERP webhook)
+  - Uploads volume must be persistent to survive container restarts (media files)
+---

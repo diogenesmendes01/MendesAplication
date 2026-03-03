@@ -168,7 +168,7 @@
         "Typecheck passes"
       ],
       "priority": 9,
-      "passes": false,
+      "passes": true,
       "notes": "REF: /tmp/jarespondiv2/apps/api/Dockerfile para estrutura do Dockerfile. REF: docker-compose.yml atual — ver servico evolution-api existente para remover e substituir pelo whatsapp-service"
     },
     {
