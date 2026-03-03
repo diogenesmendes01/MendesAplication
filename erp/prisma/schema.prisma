@@ -84,6 +84,8 @@ model Company {
   channels           Channel[]
   slaConfigs         SlaConfig[]
   refunds            Refund[]
+  baileysAuthStates  BaileysAuthState[]
+  lidMappings        LidMapping[]
 
   @@map("companies")
 }
@@ -657,4 +659,35 @@ model ChartOfAccounts {
 
   @@unique([code, companyId])
   @@map("chart_of_accounts")
+}
+
+model BaileysAuthState {
+  id        String   @id @default(cuid())
+  companyId String
+  keyType   String
+  keyId     String
+  keyData   Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, keyType, keyId])
+  @@index([companyId])
+  @@map("baileys_auth_state")
+}
+
+model LidMapping {
+  id          String   @id @default(cuid())
+  companyId   String
+  lid         String
+  phoneNumber String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, lid])
+  @@index([companyId])
+  @@map("lid_mappings")
 }

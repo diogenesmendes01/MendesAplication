@@ -36,7 +36,7 @@
         "Typecheck passes"
       ],
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "notes": "REF: /tmp/jarespondiv2/apps/api/src/providers/useDatabaseAuthState.ts — ver tabelas baileys_auth_state e lid_mappings usadas pelo Supabase para entender a estrutura. No JaRespondi o campo se chama whatsapp_number_id, aqui usar companyId"
     },
     {
