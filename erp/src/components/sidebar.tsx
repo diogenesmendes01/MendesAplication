@@ -15,6 +15,7 @@ import {
   ChevronDown,
   Radio,
   Clock,
+  BookOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -41,6 +42,7 @@ const navItems: NavItem[] = [
     children: [
       { label: "Canais", href: "/configuracoes/canais", icon: Radio },
       { label: "SLA", href: "/configuracoes/sla", icon: Clock },
+      { label: "Knowledge Base", href: "/configuracoes/knowledge-base", icon: BookOpen },
     ],
   },
 ];
