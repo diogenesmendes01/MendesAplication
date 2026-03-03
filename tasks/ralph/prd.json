@@ -362,7 +362,7 @@
         "Verify in browser using dev-browser skill"
       ],
       "priority": 19,
-      "passes": false,
+      "passes": true,
       "notes": "REF: /tmp/jarespondiv2/apps/api/src/services/agent/types.ts — ver Persona types e campos de config. Seguir padrao das paginas de config existentes: erp/src/app/(app)/configuracoes/sla/page.tsx (formulario com server actions e toast). REF: erp/src/components/sidebar.tsx — onde adicionar o link na secao Configuracoes"
     },
     {

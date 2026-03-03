@@ -424,3 +424,26 @@
   - aiConfigEnabled check in page.tsx loads asynchronously alongside other data — fetches AiConfig.enabled for the company
   - TimelineEvent.isAiGenerated comes from TicketMessage.isAiGenerated field added in US-010
 ---
+
+## 2026-03-03 - US-019
+- Created erp/src/app/(app)/configuracoes/ai/actions.ts with getAiConfig and updateAiConfig server actions
+- getAiConfig: loads AiConfig by companyId, returns defaults if not found (enabled=false, empty persona, maxIterations=5)
+- updateAiConfig: upserts AiConfig (creates if first time, updates if exists), logs audit event
+- Created erp/src/app/(app)/configuracoes/ai/page.tsx with full configuration UI
+- Switch toggle: AI enabled/disabled with label that changes based on state
+- Textarea: Persona (system prompt) with Portuguese placeholder explaining usage
+- Textarea: Welcome message (optional) with placeholder
+- Tag input: Escalation keywords — input with Enter key or "Adicionar" button, badges with X remove button, case-insensitive dedup
+- Numeric input: Max iterations (1-10, clamped), default 5
+- Save button with loading state and success/error toast
+- Scoped by selectedCompanyId from useCompany() context
+- Added "Agente IA" link in sidebar under Configuracoes with Bot icon from lucide-react
+- Typecheck and lint pass
+- Files created: erp/src/app/(app)/configuracoes/ai/actions.ts, erp/src/app/(app)/configuracoes/ai/page.tsx
+- Files changed: erp/src/components/sidebar.tsx
+- **Learnings for future iterations:**
+  - AiConfig uses companyId as @unique — can use prisma.aiConfig.upsert with where: { companyId } directly (no findFirst workaround needed)
+  - Config page pattern: useCallback loadData → useEffect → state → handleSave with toast — consistent across SLA, Canais, AI pages
+  - Tag input pattern: local state for input, Enter key handler, badge with X button for removal
+  - Bot icon from lucide-react is used for AI-related items in sidebar
+---
