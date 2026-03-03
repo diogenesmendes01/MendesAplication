@@ -377,7 +377,7 @@
         "Typecheck passes"
       ],
       "priority": 20,
-      "passes": false,
+      "passes": true,
       "notes": "REF: erp/.env.example atual — variaveis existentes. REF: whatsapp-service/.env.example criado na US-001. REF: /tmp/jarespondiv2/apps/api/.env.example — variaveis de AI/embedding usadas no JaRespondi para garantir que nao esquecemos nenhuma"
     }
   ]

@@ -447,3 +447,18 @@
   - Tag input pattern: local state for input, Enter key handler, badge with X button for removal
   - Bot icon from lucide-react is used for AI-related items in sidebar
 ---
+
+## 2026-03-03 - US-020
+- Updated erp/.env.example: removed EVOLUTION_API_URL and EVOLUTION_API_KEY, added WHATSAPP_SERVICE_URL, WHATSAPP_SERVICE_API_KEY, WHATSAPP_WEBHOOK_SECRET
+- Added AI Agent env vars to erp/.env.example: AI_PROVIDER, AI_API_KEY, AI_MODEL, AI_TIMEOUT
+- Added Embedding env vars: AI_EMBEDDING_PROVIDER, AI_EMBEDDING_KEY, AI_EMBEDDING_MODEL
+- Added RAG env vars: RAG_CHUNK_SIZE, RAG_MAX_RESULTS, RAG_SIMILARITY_THRESHOLD
+- Updated whatsapp-service/.env.example: added WHATSAPP_SERVICE_BASE_URL (used for media URL construction)
+- Verified pdf-parse ^2.4.5 already installed in erp/package.json (from US-016)
+- Typecheck and lint pass
+- Files changed: erp/.env.example, whatsapp-service/.env.example
+- **Learnings for future iterations:**
+  - WHATSAPP_SERVICE_BASE_URL is used in baileys.provider.ts to construct public media URLs for webhook payloads
+  - AI_MODEL and AI_EMBEDDING_MODEL default to empty string in .env.example — code has built-in defaults per provider
+  - All Evolution API references have been completely replaced — no EVOLUTION_* vars remain anywhere
+---
