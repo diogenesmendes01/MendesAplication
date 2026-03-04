@@ -198,11 +198,82 @@ async function saveBase64Media(
 }
 
 // ---------------------------------------------------------------------------
+// Media follow-up processor (handles "process-media" jobs)
+// ---------------------------------------------------------------------------
+
+interface MediaWebhookPayload {
+  event: "message.media";
+  instance: string;
+  externalId: string;
+  companyId: string;
+  data: {
+    externalId: string;
+    media: {
+      url: string;
+      mimetype: string;
+      fileName: string;
+    };
+  };
+}
+
+async function processMediaFollowUp(job: Job<MediaWebhookPayload>) {
+  const payload = job.data;
+  const companyId = payload.companyId || payload.instance;
+  const externalId = payload.data?.externalId || payload.externalId;
+  const media = payload.data?.media;
+
+  if (!externalId || !media?.url) {
+    console.warn("[whatsapp-inbound] process-media: missing externalId or media.url");
+    return;
+  }
+
+  // Find the existing message by externalId
+  const existingMessage = await prisma.ticketMessage.findFirst({
+    where: { externalId, channel: "WHATSAPP" },
+    select: { id: true, ticketId: true },
+  });
+
+  if (!existingMessage) {
+    console.warn(`[whatsapp-inbound] process-media: no message found for externalId ${externalId}`);
+    return;
+  }
+
+  // Download and save media
+  const saved = await downloadAndSaveMedia(media.url, companyId, media.fileName);
+  if (!saved) {
+    console.error(`[whatsapp-inbound] process-media: failed to download media for ${externalId}`);
+    return;
+  }
+
+  // Create attachment linked to the message
+  await prisma.attachment.create({
+    data: {
+      ticketId: existingMessage.ticketId,
+      ticketMessageId: existingMessage.id,
+      fileName: media.fileName,
+      fileSize: saved.fileSize,
+      mimeType: media.mimetype,
+      storagePath: saved.storagePath,
+    },
+  });
+
+  console.log(
+    `[whatsapp-inbound] Media attachment saved for message ${existingMessage.id} (${media.fileName})`
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main processor
 // ---------------------------------------------------------------------------
 
-export async function processWhatsAppInbound(job: Job<EvolutionWebhookPayload>) {
-  const payload = job.data;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function processWhatsAppInbound(job: Job<any>) {
+  // Route based on job name
+  if (job.name === "process-media") {
+    return processMediaFollowUp(job as Job<MediaWebhookPayload>);
+  }
+
+  const payload = job.data as EvolutionWebhookPayload;
   const instanceName = payload.instance;
   const data = payload.data;
 
