@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import { toast } from "sonner";
 import {
   ArrowLeft,
@@ -24,7 +25,6 @@ import {
   UserPlus,
   Search,
   Loader2,
-  Upload,
   Coins,
   CheckCircle,
   XCircle,
@@ -61,11 +61,8 @@ import {
   addTag,
   removeTag,
   getTicketRefunds,
-  requestRefund,
   approveRefund,
   rejectRefund,
-  executeRefund,
-  attachFileToTicket,
   searchClientsForLink,
   linkContactToClient,
   createClientAndLink,
@@ -73,16 +70,27 @@ import {
   type ClientFinancialSummary,
   type ClientForLink,
   type RefundSummary,
-  requestCancellation,
   approveCancellation,
   getCancellationInfo,
   type CancellationInfo,
-  type CancellationType,
   listTimelineEvents,
 } from "../actions";
 import type { TicketStatus } from "@prisma/client";
 import { generateTicketPdf } from "@/lib/ticket-pdf";
 import TicketTimeline from "./ticket-timeline";
+
+const RequestRefundDialog = dynamic(() =>
+  import("./refund-dialogs").then((m) => ({ default: m.RequestRefundDialog })),
+  { ssr: false }
+);
+const ExecuteRefundDialog = dynamic(() =>
+  import("./refund-dialogs").then((m) => ({ default: m.ExecuteRefundDialog })),
+  { ssr: false }
+);
+const CancellationDialog = dynamic(() =>
+  import("./cancellation-dialog").then((m) => ({ default: m.CancellationDialog })),
+  { ssr: false }
+);
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -266,14 +274,6 @@ export default function TicketDetailPage() {
   const [refunds, setRefunds] = useState<RefundSummary[]>([]);
   const [userRole, setUserRole] = useState<string>("");
   const [requestRefundOpen, setRequestRefundOpen] = useState(false);
-  const [refundForm, setRefundForm] = useState({
-    amount: "",
-    justification: "",
-    boletoId: "",
-  });
-  const [refundProofFile, setRefundProofFile] = useState<{ id: string; name: string } | null>(null);
-  const [uploadingProof, setUploadingProof] = useState(false);
-  const [submittingRefund, setSubmittingRefund] = useState(false);
 
   // Reject dialog
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
@@ -284,18 +284,6 @@ export default function TicketDetailPage() {
   // Execute dialog
   const [executeDialogOpen, setExecuteDialogOpen] = useState(false);
   const [executeRefundId, setExecuteRefundId] = useState<string>("");
-  const [executeForm, setExecuteForm] = useState({
-    paymentMethod: "PIX" as "PIX" | "TED",
-    bankName: "",
-    bankAgency: "",
-    bankAccount: "",
-    pixKey: "",
-    invoiceAction: "NONE" as "CANCEL_INVOICE" | "CREDIT_NOTE" | "NONE",
-    invoiceCancelReason: "",
-  });
-  const [executeProofFile, setExecuteProofFile] = useState<{ id: string; name: string } | null>(null);
-  const [uploadingExecuteProof, setUploadingExecuteProof] = useState(false);
-  const [submittingExecute, setSubmittingExecute] = useState(false);
 
   // Approve loading
   const [approvingRefundId, setApprovingRefundId] = useState<string | null>(null);
@@ -303,9 +291,6 @@ export default function TicketDetailPage() {
   // Cancellation state (US-086)
   const [cancellation, setCancellation] = useState<CancellationInfo | null>(null);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
-  const [cancelType, setCancelType] = useState<CancellationType>("both");
-  const [cancelJustification, setCancelJustification] = useState("");
-  const [submittingCancel, setSubmittingCancel] = useState(false);
   const [approvingCancel, setApprovingCancel] = useState(false);
 
   // Export PDF (US-089)
@@ -501,73 +486,6 @@ export default function TicketDetailPage() {
 
   const isAdminOrManager = userRole === "ADMIN" || userRole === "MANAGER";
 
-  async function handleUploadProof(
-    e: React.ChangeEvent<HTMLInputElement>,
-    target: "request" | "execute"
-  ) {
-    const file = e.target.files?.[0];
-    if (!file || !selectedCompanyId) return;
-    const setter = target === "request" ? setUploadingProof : setUploadingExecuteProof;
-    setter(true);
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("companyId", selectedCompanyId);
-      const res = await fetch("/api/upload", { method: "POST", body: formData });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Erro ao fazer upload");
-      }
-      const data = await res.json();
-
-      // Create Attachment record (requestRefund expects an existing Attachment id)
-      const attachment = await attachFileToTicket(ticketId, selectedCompanyId, {
-        fileName: data.fileName,
-        fileSize: data.fileSize,
-        mimeType: data.mimeType,
-        storagePath: data.storagePath,
-      });
-
-      if (target === "request") {
-        setRefundProofFile({ id: attachment.id, name: data.fileName });
-      } else {
-        setExecuteProofFile({ id: attachment.id, name: data.fileName });
-      }
-      toast.success("Arquivo enviado");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao fazer upload");
-    } finally {
-      setter(false);
-      e.target.value = "";
-    }
-  }
-
-  async function handleSubmitRefund() {
-    if (!selectedCompanyId || !ticket || !refundProofFile) return;
-    setSubmittingRefund(true);
-    try {
-      await requestRefund(
-        ticketId,
-        selectedCompanyId,
-        parseFloat(refundForm.amount),
-        refundForm.justification,
-        refundProofFile.id,
-        ticket.boletoId || undefined
-      );
-      toast.success("Reembolso solicitado com sucesso");
-      setRequestRefundOpen(false);
-      setRefundForm({ amount: "", justification: "", boletoId: "" });
-      setRefundProofFile(null);
-      // Reload refunds
-      getTicketRefunds(ticketId, selectedCompanyId).then(setRefunds).catch(() => {});
-      loadTicket();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao solicitar reembolso");
-    } finally {
-      setSubmittingRefund(false);
-    }
-  }
-
   async function handleApproveRefund(refundId: string) {
     if (!selectedCompanyId) return;
     setApprovingRefundId(refundId);
@@ -599,66 +517,12 @@ export default function TicketDetailPage() {
     }
   }
 
-  async function handleExecuteRefund() {
-    if (!selectedCompanyId || !executeRefundId) return;
-    setSubmittingExecute(true);
-    try {
-      await executeRefund(executeRefundId, selectedCompanyId, {
-        paymentMethod: executeForm.paymentMethod,
-        bankName: executeForm.bankName || undefined,
-        bankAgency: executeForm.bankAgency || undefined,
-        bankAccount: executeForm.bankAccount || undefined,
-        pixKey: executeForm.pixKey || undefined,
-        invoiceAction: executeForm.invoiceAction,
-        invoiceCancelReason: executeForm.invoiceCancelReason || undefined,
-        refundProofId: executeProofFile?.id,
-      });
-      toast.success("Reembolso executado com sucesso");
-      setExecuteDialogOpen(false);
-      setExecuteRefundId("");
-      setExecuteForm({
-        paymentMethod: "PIX",
-        bankName: "",
-        bankAgency: "",
-        bankAccount: "",
-        pixKey: "",
-        invoiceAction: "NONE",
-        invoiceCancelReason: "",
-      });
-      setExecuteProofFile(null);
-      getTicketRefunds(ticketId, selectedCompanyId).then(setRefunds).catch(() => {});
-      loadTicket();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao executar reembolso");
-    } finally {
-      setSubmittingExecute(false);
-    }
-  }
-
   // ---------------------------------------------------
   // Cancellation handlers (US-086)
   // ---------------------------------------------------
 
   const hasProposalOrBoleto = !!(ticket?.proposalId || ticket?.boletoId);
   const hasPendingCancellation = cancellation?.pending ?? false;
-
-  async function handleRequestCancellation() {
-    if (!selectedCompanyId || !ticket) return;
-    setSubmittingCancel(true);
-    try {
-      await requestCancellation(ticketId, selectedCompanyId, cancelType, cancelJustification);
-      toast.success("Solicitação de cancelamento enviada");
-      setCancelDialogOpen(false);
-      setCancelType("both");
-      setCancelJustification("");
-      getCancellationInfo(ticketId, selectedCompanyId).then(setCancellation).catch(() => {});
-      loadTicket();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao solicitar cancelamento");
-    } finally {
-      setSubmittingCancel(false);
-    }
-  }
 
   async function handleApproveCancellation() {
     if (!selectedCompanyId || !ticket) return;
@@ -1380,14 +1244,6 @@ export default function TicketDetailPage() {
                     variant="outline"
                     className="w-full border-red-200 text-red-700 hover:bg-red-50"
                     onClick={() => {
-                      // Set default type based on what's available
-                      if (ticket.proposalId && ticket.boletoId) {
-                        setCancelType("both");
-                      } else if (ticket.proposalId) {
-                        setCancelType("proposal");
-                      } else {
-                        setCancelType("boletos");
-                      }
                       setCancelDialogOpen(true);
                     }}
                   >
@@ -1616,114 +1472,17 @@ export default function TicketDetailPage() {
       </Dialog>
 
       {/* Request Refund Dialog (US-085) */}
-      <Dialog open={requestRefundOpen} onOpenChange={setRequestRefundOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Solicitar Reembolso</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="refund-amount">Valor (R$) *</Label>
-              <Input
-                id="refund-amount"
-                type="number"
-                step="0.01"
-                min="0.01"
-                value={refundForm.amount}
-                onChange={(e) => setRefundForm((f) => ({ ...f, amount: e.target.value }))}
-                placeholder="0,00"
-              />
-            </div>
-
-            {ticket?.boletoId && (
-              <div>
-                <Label htmlFor="refund-boleto">Boleto Vinculado</Label>
-                <Input
-                  id="refund-boleto"
-                  value={ticket.boletoId}
-                  disabled
-                  className="text-xs"
-                />
-                <input
-                  type="hidden"
-                  value={ticket.boletoId}
-                  onChange={() => setRefundForm((f) => ({ ...f, boletoId: ticket.boletoId ?? "" }))}
-                />
-              </div>
-            )}
-
-            <div>
-              <Label>Comprovante de Pagamento *</Label>
-              {refundProofFile ? (
-                <div className="flex items-center gap-2 mt-1 rounded border p-2 text-sm">
-                  <FileText className="h-4 w-4 text-muted-foreground" />
-                  <span className="flex-1 truncate">{refundProofFile.name}</span>
-                  <button
-                    type="button"
-                    onClick={() => setRefundProofFile(null)}
-                    className="rounded p-0.5 hover:bg-muted"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </div>
-              ) : (
-                <div className="mt-1">
-                  <label className="flex cursor-pointer items-center gap-2 rounded border border-dashed p-3 text-sm text-muted-foreground hover:bg-muted/50 transition-colors">
-                    {uploadingProof ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Upload className="h-4 w-4" />
-                    )}
-                    {uploadingProof ? "Enviando..." : "Clique para enviar comprovante"}
-                    <input
-                      type="file"
-                      className="hidden"
-                      accept=".pdf,.png,.jpg,.jpeg,.gif"
-                      disabled={uploadingProof}
-                      onChange={(e) => handleUploadProof(e, "request")}
-                    />
-                  </label>
-                </div>
-              )}
-            </div>
-
-            <div>
-              <Label htmlFor="refund-justification">Justificativa *</Label>
-              <Textarea
-                id="refund-justification"
-                value={refundForm.justification}
-                onChange={(e) => setRefundForm((f) => ({ ...f, justification: e.target.value }))}
-                placeholder="Descreva o motivo do reembolso..."
-                rows={3}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setRequestRefundOpen(false)}>
-              Cancelar
-            </Button>
-            <Button
-              onClick={handleSubmitRefund}
-              disabled={
-                submittingRefund ||
-                !refundForm.amount ||
-                parseFloat(refundForm.amount) <= 0 ||
-                !refundForm.justification.trim() ||
-                !refundProofFile
-              }
-            >
-              {submittingRefund ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Solicitando...
-                </>
-              ) : (
-                "Solicitar Reembolso"
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <RequestRefundDialog
+        open={requestRefundOpen}
+        onOpenChange={setRequestRefundOpen}
+        ticketId={ticketId}
+        companyId={selectedCompanyId!}
+        boletoId={ticket?.boletoId}
+        onSuccess={() => {
+          getTicketRefunds(ticketId, selectedCompanyId!).then(setRefunds).catch(() => {});
+          loadTicket();
+        }}
+      />
 
       {/* Reject Refund Dialog (US-085) */}
       <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
@@ -1766,232 +1525,31 @@ export default function TicketDetailPage() {
       </Dialog>
 
       {/* Execute Refund Dialog (US-085) */}
-      <Dialog open={executeDialogOpen} onOpenChange={setExecuteDialogOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Executar Reembolso</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label>Metodo de Pagamento *</Label>
-              <Select
-                value={executeForm.paymentMethod}
-                onValueChange={(v) =>
-                  setExecuteForm((f) => ({ ...f, paymentMethod: v as "PIX" | "TED" }))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="PIX">PIX</SelectItem>
-                  <SelectItem value="TED">TED</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {executeForm.paymentMethod === "PIX" && (
-              <div>
-                <Label htmlFor="exec-pix-key">Chave PIX *</Label>
-                <Input
-                  id="exec-pix-key"
-                  value={executeForm.pixKey}
-                  onChange={(e) => setExecuteForm((f) => ({ ...f, pixKey: e.target.value }))}
-                  placeholder="CPF, CNPJ, email, telefone ou chave aleatória"
-                />
-              </div>
-            )}
-
-            {executeForm.paymentMethod === "TED" && (
-              <div className="grid grid-cols-3 gap-3">
-                <div className="col-span-3">
-                  <Label htmlFor="exec-bank-name">Banco *</Label>
-                  <Input
-                    id="exec-bank-name"
-                    value={executeForm.bankName}
-                    onChange={(e) => setExecuteForm((f) => ({ ...f, bankName: e.target.value }))}
-                    placeholder="Nome do banco"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="exec-bank-agency">Agencia *</Label>
-                  <Input
-                    id="exec-bank-agency"
-                    value={executeForm.bankAgency}
-                    onChange={(e) => setExecuteForm((f) => ({ ...f, bankAgency: e.target.value }))}
-                    placeholder="0000"
-                  />
-                </div>
-                <div className="col-span-2">
-                  <Label htmlFor="exec-bank-account">Conta *</Label>
-                  <Input
-                    id="exec-bank-account"
-                    value={executeForm.bankAccount}
-                    onChange={(e) => setExecuteForm((f) => ({ ...f, bankAccount: e.target.value }))}
-                    placeholder="00000-0"
-                  />
-                </div>
-              </div>
-            )}
-
-            <div>
-              <Label>Acao NFS-e</Label>
-              <Select
-                value={executeForm.invoiceAction}
-                onValueChange={(v) =>
-                  setExecuteForm((f) => ({
-                    ...f,
-                    invoiceAction: v as "CANCEL_INVOICE" | "CREDIT_NOTE" | "NONE",
-                  }))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="NONE">Nenhuma</SelectItem>
-                  <SelectItem value="CANCEL_INVOICE">Cancelar NFS-e</SelectItem>
-                  <SelectItem value="CREDIT_NOTE">Emitir Nota de Credito</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {executeForm.invoiceAction === "CANCEL_INVOICE" && (
-              <div>
-                <Label htmlFor="exec-cancel-reason">Motivo do Cancelamento *</Label>
-                <Textarea
-                  id="exec-cancel-reason"
-                  value={executeForm.invoiceCancelReason}
-                  onChange={(e) => setExecuteForm((f) => ({ ...f, invoiceCancelReason: e.target.value }))}
-                  placeholder="Motivo do cancelamento da NFS-e..."
-                  rows={2}
-                />
-              </div>
-            )}
-
-            <div>
-              <Label>Comprovante de Reembolso</Label>
-              {executeProofFile ? (
-                <div className="flex items-center gap-2 mt-1 rounded border p-2 text-sm">
-                  <FileText className="h-4 w-4 text-muted-foreground" />
-                  <span className="flex-1 truncate">{executeProofFile.name}</span>
-                  <button
-                    type="button"
-                    onClick={() => setExecuteProofFile(null)}
-                    className="rounded p-0.5 hover:bg-muted"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </div>
-              ) : (
-                <div className="mt-1">
-                  <label className="flex cursor-pointer items-center gap-2 rounded border border-dashed p-3 text-sm text-muted-foreground hover:bg-muted/50 transition-colors">
-                    {uploadingExecuteProof ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Upload className="h-4 w-4" />
-                    )}
-                    {uploadingExecuteProof ? "Enviando..." : "Clique para enviar comprovante"}
-                    <input
-                      type="file"
-                      className="hidden"
-                      accept=".pdf,.png,.jpg,.jpeg,.gif"
-                      disabled={uploadingExecuteProof}
-                      onChange={(e) => handleUploadProof(e, "execute")}
-                    />
-                  </label>
-                </div>
-              )}
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setExecuteDialogOpen(false)}>
-              Cancelar
-            </Button>
-            <Button
-              onClick={handleExecuteRefund}
-              disabled={
-                submittingExecute ||
-                (executeForm.paymentMethod === "PIX" && !executeForm.pixKey.trim()) ||
-                (executeForm.paymentMethod === "TED" && (!executeForm.bankName.trim() || !executeForm.bankAgency.trim() || !executeForm.bankAccount.trim())) ||
-                (executeForm.invoiceAction === "CANCEL_INVOICE" && !executeForm.invoiceCancelReason.trim())
-              }
-            >
-              {submittingExecute ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Executando...
-                </>
-              ) : (
-                "Executar Reembolso"
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ExecuteRefundDialog
+        open={executeDialogOpen}
+        onOpenChange={setExecuteDialogOpen}
+        refundId={executeRefundId}
+        ticketId={ticketId}
+        companyId={selectedCompanyId!}
+        onSuccess={() => {
+          getTicketRefunds(ticketId, selectedCompanyId!).then(setRefunds).catch(() => {});
+          loadTicket();
+        }}
+      />
 
       {/* Request Cancellation Dialog (US-086) */}
-      <Dialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Solicitar Cancelamento</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label>O que deseja cancelar? *</Label>
-              <Select
-                value={cancelType}
-                onValueChange={(v) => setCancelType(v as CancellationType)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {ticket?.proposalId && ticket?.boletoId && (
-                    <SelectItem value="both">Proposta e Boletos</SelectItem>
-                  )}
-                  {ticket?.proposalId && (
-                    <SelectItem value="proposal">Apenas Proposta</SelectItem>
-                  )}
-                  {ticket?.boletoId && (
-                    <SelectItem value="boletos">Apenas Boletos</SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Label htmlFor="cancel-justification">Justificativa *</Label>
-              <Textarea
-                id="cancel-justification"
-                value={cancelJustification}
-                onChange={(e) => setCancelJustification(e.target.value)}
-                placeholder="Descreva o motivo do cancelamento..."
-                rows={3}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCancelDialogOpen(false)}>
-              Voltar
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleRequestCancellation}
-              disabled={submittingCancel || !cancelJustification.trim()}
-            >
-              {submittingCancel ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Solicitando...
-                </>
-              ) : (
-                "Solicitar Cancelamento"
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <CancellationDialog
+        open={cancelDialogOpen}
+        onOpenChange={setCancelDialogOpen}
+        ticketId={ticketId}
+        companyId={selectedCompanyId!}
+        proposalId={ticket?.proposalId}
+        boletoId={ticket?.boletoId}
+        onSuccess={() => {
+          getCancellationInfo(ticketId, selectedCompanyId!).then(setCancellation).catch(() => {});
+          loadTicket();
+        }}
+      />
     </div>
   );
 }
