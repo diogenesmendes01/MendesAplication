@@ -180,6 +180,7 @@ model Client {
   additionalContacts AdditionalContact[]
 
   @@unique([cpfCnpj, companyId])
+  @@index([companyId])
   @@map("clients")
 }
 
@@ -431,6 +432,7 @@ model BankTransaction {
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
+  @@index([companyId, status])
   @@map("bank_transactions")
 }
 
@@ -471,6 +473,9 @@ model Ticket {
   @@index([companyId, slaBreached])
   @@index([companyId, clientId])
   @@index([companyId, assigneeId])
+  @@index([companyId, status, updatedAt])
+  @@index([companyId, slaBreached, status])
+  @@index([companyId, status, priority])
   @@map("tickets")
 }
 
@@ -512,6 +517,7 @@ model Attachment {
   ticketMessage TicketMessage? @relation("TicketMessageAttachments", fields: [ticketMessageId], references: [id], onDelete: Cascade)
   ticket        Ticket?        @relation("TicketAttachments", fields: [ticketId], references: [id], onDelete: Cascade)
 
+  @@index([ticketId])
   @@map("attachments")
 }
 
@@ -592,6 +598,7 @@ model Proposal {
   tickets  Ticket[] @relation("TicketProposal")
   invoices Invoice[]
 
+  @@index([companyId, status])
   @@map("proposals")
 }
 
@@ -653,6 +660,7 @@ model Invoice {
   creditNotes     Invoice[] @relation("CreditNote")
   taxEntries      TaxEntry[]
 
+  @@index([companyId, status])
   @@map("invoices")
 }
 
