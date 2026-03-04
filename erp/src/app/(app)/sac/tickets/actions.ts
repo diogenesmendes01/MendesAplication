@@ -1047,13 +1047,20 @@ export async function getEmailRecipients(
 // Send Email Reply
 // ---------------------------------------------------------------------------
 
+export type AttachmentData = {
+  fileName: string;
+  fileSize: number;
+  mimeType: string;
+  storagePath: string;
+};
+
 export async function sendEmailReply(
   ticketId: string,
   companyId: string,
   to: string,
   subject: string,
   content: string,
-  attachmentIds?: string[]
+  attachments?: AttachmentData[]
 ) {
   const session = await requireCompanyAccess(companyId);
 
@@ -1072,27 +1079,42 @@ export async function sendEmailReply(
     throw new Error("Ticket não encontrado");
   }
 
-  const message = await prisma.ticketMessage.create({
-    data: {
-      ticketId,
-      senderId: session.userId,
-      content: content.trim(),
-      channel: "EMAIL",
-      direction: "OUTBOUND",
-      origin: "SYSTEM",
-      sentViaEmail: true,
-    },
-    include: {
-      sender: { select: { id: true, name: true } },
-    },
-  });
-
-  if (attachmentIds?.length) {
-    await prisma.attachment.updateMany({
-      where: { id: { in: attachmentIds } },
-      data: { ticketMessageId: message.id },
+  // Create message + attachments in a single transaction
+  const { message, attachmentIds } = await prisma.$transaction(async (tx) => {
+    const msg = await tx.ticketMessage.create({
+      data: {
+        ticketId,
+        senderId: session.userId,
+        content: content.trim(),
+        channel: "EMAIL",
+        direction: "OUTBOUND",
+        origin: "SYSTEM",
+        sentViaEmail: true,
+      },
+      include: {
+        sender: { select: { id: true, name: true } },
+      },
     });
-  }
+
+    const attIds: string[] = [];
+    if (attachments?.length) {
+      for (const a of attachments) {
+        const att = await tx.attachment.create({
+          data: {
+            ticketId,
+            ticketMessageId: msg.id,
+            fileName: a.fileName,
+            fileSize: a.fileSize,
+            mimeType: a.mimeType,
+            storagePath: a.storagePath,
+          },
+        });
+        attIds.push(att.id);
+      }
+    }
+
+    return { message: msg, attachmentIds: attIds };
+  });
 
   // Enqueue SMTP send job
   try {
@@ -1104,7 +1126,7 @@ export async function sendEmailReply(
       to,
       subject,
       content: content.trim(),
-      attachmentIds: attachmentIds ?? [],
+      attachmentIds,
     });
   } catch (err) {
     console.error("Failed to enqueue email-outbound job:", err);
@@ -1308,7 +1330,7 @@ export async function sendWhatsAppMessage(
   companyId: string,
   to: string,
   content: string,
-  attachmentIds?: string[]
+  attachments?: AttachmentData[]
 ) {
   const session = await requireCompanyAccess(companyId);
 
@@ -1327,26 +1349,41 @@ export async function sendWhatsAppMessage(
     throw new Error("Ticket não encontrado");
   }
 
-  const message = await prisma.ticketMessage.create({
-    data: {
-      ticketId,
-      senderId: session.userId,
-      content: content.trim(),
-      channel: "WHATSAPP",
-      direction: "OUTBOUND",
-      origin: "SYSTEM",
-    },
-    include: {
-      sender: { select: { id: true, name: true } },
-    },
-  });
-
-  if (attachmentIds?.length) {
-    await prisma.attachment.updateMany({
-      where: { id: { in: attachmentIds } },
-      data: { ticketMessageId: message.id },
+  // Create message + attachments in a single transaction
+  const { message, attachmentIds } = await prisma.$transaction(async (tx) => {
+    const msg = await tx.ticketMessage.create({
+      data: {
+        ticketId,
+        senderId: session.userId,
+        content: content.trim(),
+        channel: "WHATSAPP",
+        direction: "OUTBOUND",
+        origin: "SYSTEM",
+      },
+      include: {
+        sender: { select: { id: true, name: true } },
+      },
     });
-  }
+
+    const attIds: string[] = [];
+    if (attachments?.length) {
+      for (const a of attachments) {
+        const att = await tx.attachment.create({
+          data: {
+            ticketId,
+            ticketMessageId: msg.id,
+            fileName: a.fileName,
+            fileSize: a.fileSize,
+            mimeType: a.mimeType,
+            storagePath: a.storagePath,
+          },
+        });
+        attIds.push(att.id);
+      }
+    }
+
+    return { message: msg, attachmentIds: attIds };
+  });
 
   // Enqueue WhatsApp send job
   try {
@@ -1357,7 +1394,7 @@ export async function sendWhatsAppMessage(
       companyId,
       to,
       content: content.trim(),
-      attachmentIds: attachmentIds ?? [],
+      attachmentIds,
     });
   } catch (err) {
     console.error("Failed to enqueue whatsapp-outbound job:", err);

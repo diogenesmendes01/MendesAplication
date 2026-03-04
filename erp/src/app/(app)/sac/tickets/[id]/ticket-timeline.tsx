@@ -50,6 +50,7 @@ import {
   type TimelineEvent,
   type EmailRecipient,
   type WhatsAppRecipient,
+  type AttachmentData,
 } from "../actions";
 import { getWhatsAppStatus } from "../../../configuracoes/canais/actions";
 
@@ -538,7 +539,7 @@ export default function TicketTimeline({
   const [sendingEmail, setSendingEmail] = useState(false);
   const [emailUploading, setEmailUploading] = useState(false);
   const [emailAttachments, setEmailAttachments] = useState<
-    { id: string; fileName: string }[]
+    (AttachmentData & { fileName: string })[]
   >([]);
   const emailFileInputRef = useRef<HTMLInputElement>(null);
   const emailEndRef = useRef<HTMLDivElement>(null);
@@ -550,7 +551,7 @@ export default function TicketTimeline({
   const [sendingWa, setSendingWa] = useState(false);
   const [waUploading, setWaUploading] = useState(false);
   const [waAttachments, setWaAttachments] = useState<
-    { id: string; fileName: string }[]
+    (AttachmentData & { fileName: string })[]
   >([]);
   const waFileInputRef = useRef<HTMLInputElement>(null);
   const waEndRef = useRef<HTMLDivElement>(null);
@@ -772,14 +773,13 @@ export default function TicketTimeline({
     if (!emailContent.trim() || !emailTo) return;
     setSendingEmail(true);
     try {
-      const attachmentIds = emailAttachments.map((a) => a.id);
       await sendEmailReply(
         ticketId,
         companyId,
         emailTo,
         emailSubject,
         emailContent.trim(),
-        attachmentIds.length > 0 ? attachmentIds : undefined
+        emailAttachments.length > 0 ? emailAttachments : undefined
       );
       setEmailContent("");
       setEmailAttachments([]);
@@ -816,16 +816,14 @@ export default function TicketTimeline({
       }
 
       const uploaded = await res.json();
-      const att = await attachFileToTicket(ticketId, companyId, {
-        fileName: uploaded.fileName,
-        fileSize: uploaded.fileSize,
-        mimeType: uploaded.mimeType,
-        storagePath: uploaded.storagePath,
-      });
-
       setEmailAttachments((prev) => [
         ...prev,
-        { id: att.id, fileName: uploaded.fileName },
+        {
+          fileName: uploaded.fileName,
+          fileSize: uploaded.fileSize,
+          mimeType: uploaded.mimeType,
+          storagePath: uploaded.storagePath,
+        },
       ]);
       toast.success(`Anexo "${file.name}" adicionado`);
     } catch (err) {
@@ -848,13 +846,12 @@ export default function TicketTimeline({
     if (!waContent.trim() || !waTo) return;
     setSendingWa(true);
     try {
-      const attachmentIds = waAttachments.map((a) => a.id);
       await sendWhatsAppMessage(
         ticketId,
         companyId,
         waTo,
         waContent.trim(),
-        attachmentIds.length > 0 ? attachmentIds : undefined
+        waAttachments.length > 0 ? waAttachments : undefined
       );
       setWaContent("");
       setWaAttachments([]);
@@ -890,16 +887,14 @@ export default function TicketTimeline({
       }
 
       const uploaded = await res.json();
-      const att = await attachFileToTicket(ticketId, companyId, {
-        fileName: uploaded.fileName,
-        fileSize: uploaded.fileSize,
-        mimeType: uploaded.mimeType,
-        storagePath: uploaded.storagePath,
-      });
-
       setWaAttachments((prev) => [
         ...prev,
-        { id: att.id, fileName: uploaded.fileName },
+        {
+          fileName: uploaded.fileName,
+          fileSize: uploaded.fileSize,
+          mimeType: uploaded.mimeType,
+          storagePath: uploaded.storagePath,
+        },
       ]);
       toast.success(`Anexo "${file.name}" adicionado`);
     } catch (err) {
@@ -1106,7 +1101,7 @@ export default function TicketTimeline({
               {emailAttachments.length > 0 && (
                 <div className="flex flex-wrap gap-2">
                   {emailAttachments.map((att) => (
-                    <Badge key={att.id} variant="secondary" className="text-xs">
+                    <Badge key={att.storagePath} variant="secondary" className="text-xs">
                       <Paperclip className="mr-1 h-3 w-3" />
                       {att.fileName}
                       <button
@@ -1114,7 +1109,7 @@ export default function TicketTimeline({
                         className="ml-1 text-muted-foreground hover:text-foreground"
                         onClick={() =>
                           setEmailAttachments((prev) =>
-                            prev.filter((a) => a.id !== att.id)
+                            prev.filter((a) => a.storagePath !== att.storagePath)
                           )
                         }
                       >
@@ -1232,7 +1227,7 @@ export default function TicketTimeline({
               {waAttachments.length > 0 && (
                 <div className="flex flex-wrap gap-2">
                   {waAttachments.map((att) => (
-                    <Badge key={att.id} variant="secondary" className="text-xs">
+                    <Badge key={att.storagePath} variant="secondary" className="text-xs">
                       <Paperclip className="mr-1 h-3 w-3" />
                       {att.fileName}
                       <button
@@ -1240,7 +1235,7 @@ export default function TicketTimeline({
                         className="ml-1 text-muted-foreground hover:text-foreground"
                         onClick={() =>
                           setWaAttachments((prev) =>
-                            prev.filter((a) => a.id !== att.id)
+                            prev.filter((a) => a.storagePath !== att.storagePath)
                           )
                         }
                       >
