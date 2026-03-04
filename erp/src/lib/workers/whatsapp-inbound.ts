@@ -71,9 +71,6 @@ function extractPhoneDigits(jid: string): string {
   return jid.replace(/@.*$/, "").replace(/\D/g, "");
 }
 
-function normalizeDigits(phone: string): string {
-  return phone.replace(/\D/g, "");
-}
 
 function extractTextContent(message: EvolutionWebhookPayload["data"]["message"]): string {
   if (!message) return "";
