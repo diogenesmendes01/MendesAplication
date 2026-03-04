@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, type FormEvent } from "react";
+import { useState, useEffect, useCallback, Suspense, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { ArrowLeft, Plus, Trash2 } from "lucide-react";
@@ -85,6 +85,18 @@ function calculateTotal(items: ItemForm[]): number {
 // ---------------------------------------------------------------------------
 
 export default function NovaPropostaPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center py-12">
+        <p className="text-sm text-muted-foreground">Carregando...</p>
+      </div>
+    }>
+      <NovaPropostaContent />
+    </Suspense>
+  );
+}
+
+function NovaPropostaContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const editId = searchParams.get("edit");
