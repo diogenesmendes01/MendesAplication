@@ -39,6 +39,7 @@ import {
   listInvoices,
   listClientsForSelect,
   cancelInvoice,
+  emitPendingInvoice,
   type PaginatedResult,
   type InvoiceRow,
 } from "./actions";
@@ -199,6 +200,21 @@ export default function NotasFiscaisPage() {
       );
     } finally {
       setCancelling(false);
+    }
+  }
+
+  // ---------------------------------------------------
+  // Emit pending invoice
+  // ---------------------------------------------------
+
+  async function handleEmit(invoiceId: string) {
+    if (!selectedCompanyId) return;
+    try {
+      await emitPendingInvoice(invoiceId, selectedCompanyId);
+      toast.success("Nota fiscal emitida com sucesso");
+      loadInvoices();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao emitir nota");
     }
   }
 
@@ -377,7 +393,16 @@ export default function NotasFiscaisPage() {
                   <TableCell>
                     {dateFmt.format(new Date(row.createdAt))}
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="text-right space-x-1">
+                    {row.status === "PENDING" && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleEmit(row.id)}
+                      >
+                        Emitir
+                      </Button>
+                    )}
                     {row.status === "ISSUED" && (
                       <Button
                         variant="ghost"

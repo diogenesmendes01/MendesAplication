@@ -187,3 +187,28 @@ export async function cancelInvoice(invoiceId: string, companyId: string) {
 
   return { success: true };
 }
+
+/**
+ * Manually emit a PENDING invoice (retry after auto-emit failure).
+ */
+export async function emitPendingInvoice(invoiceId: string, companyId: string) {
+  await requireCompanyAccess(companyId);
+
+  const invoice = await prisma.invoice.findFirst({
+    where: { id: invoiceId, companyId, status: "PENDING" },
+  });
+
+  if (!invoice) {
+    throw new Error("Nota fiscal não encontrada ou não está pendente");
+  }
+
+  if (!invoice.boletoId) {
+    throw new Error("Nota fiscal não possui boleto vinculado");
+  }
+
+  // Delete the PENDING invoice so emitInvoiceForBoleto can create a new ISSUED one
+  await prisma.invoice.delete({ where: { id: invoiceId } });
+
+  const { emitInvoiceForBoleto } = await import("@/lib/nfse-actions");
+  return emitInvoiceForBoleto(invoice.boletoId, companyId);
+}
