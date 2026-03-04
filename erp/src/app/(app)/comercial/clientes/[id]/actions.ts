@@ -82,144 +82,146 @@ export async function getClientTimeline(
 
   const items: TimelineItem[] = [];
 
-  // --- Tickets ---
-  if (!filterType || filterType === "ticket") {
-    const tickets = await prisma.ticket.findMany({
-      where: { clientId, companyId },
-      orderBy: { createdAt: "desc" },
-      select: {
-        id: true,
-        subject: true,
-        status: true,
-        priority: true,
-        createdAt: true,
-        contact: { select: { name: true, role: true } },
-        refunds: { select: { id: true }, take: 1 },
-      },
-    });
+  // Run all queries in parallel
+  const [tickets, receivables, emailMessages, whatsappMessages] = await Promise.all([
+    (!filterType || filterType === "ticket")
+      ? prisma.ticket.findMany({
+          where: { clientId, companyId },
+          orderBy: { createdAt: "desc" },
+          select: {
+            id: true,
+            subject: true,
+            status: true,
+            priority: true,
+            createdAt: true,
+            contact: { select: { name: true, role: true } },
+            refunds: { select: { id: true }, take: 1 },
+          },
+        })
+      : Promise.resolve([]),
 
-    for (const t of tickets) {
-      items.push({
-        id: t.id,
-        type: "ticket",
-        date: t.createdAt.toISOString(),
-        summary: t.subject,
-        status: t.status,
-        href: `/sac/tickets/${t.id}`,
-        contactName: t.contact?.name ?? null,
-        contactRole: t.contact?.role ?? null,
-        hasRefund: t.refunds.length > 0,
-      });
-    }
+    (!filterType || filterType === "boleto")
+      ? prisma.accountReceivable.findMany({
+          where: { clientId, companyId },
+          orderBy: { createdAt: "desc" },
+          select: {
+            id: true,
+            description: true,
+            value: true,
+            dueDate: true,
+            status: true,
+            createdAt: true,
+          },
+        })
+      : Promise.resolve([]),
+
+    (!filterType || filterType === "email")
+      ? prisma.ticketMessage.findMany({
+          where: {
+            sentViaEmail: true,
+            ticket: { clientId, companyId },
+          },
+          orderBy: { createdAt: "desc" },
+          select: {
+            id: true,
+            content: true,
+            createdAt: true,
+            ticketId: true,
+            sender: { select: { name: true } },
+            contact: { select: { name: true, role: true } },
+          },
+        })
+      : Promise.resolve([]),
+
+    (!filterType || filterType === "whatsapp")
+      ? prisma.ticketMessage.findMany({
+          where: {
+            channel: "WHATSAPP",
+            ticket: { clientId, companyId },
+          },
+          orderBy: { createdAt: "desc" },
+          select: {
+            id: true,
+            content: true,
+            direction: true,
+            createdAt: true,
+            ticketId: true,
+            sender: { select: { name: true } },
+            contact: { select: { name: true, role: true } },
+          },
+        })
+      : Promise.resolve([]),
+  ]);
+
+  // Map tickets
+  for (const t of tickets) {
+    items.push({
+      id: t.id,
+      type: "ticket",
+      date: t.createdAt.toISOString(),
+      summary: t.subject,
+      status: t.status,
+      href: `/sac/tickets/${t.id}`,
+      contactName: t.contact?.name ?? null,
+      contactRole: t.contact?.role ?? null,
+      hasRefund: t.refunds.length > 0,
+    });
   }
 
-  // --- Boletos / Accounts Receivable ---
-  if (!filterType || filterType === "boleto") {
-    const receivables = await prisma.accountReceivable.findMany({
-      where: { clientId, companyId },
-      orderBy: { createdAt: "desc" },
-      select: {
-        id: true,
-        description: true,
-        value: true,
-        dueDate: true,
-        status: true,
-        createdAt: true,
-      },
+  // Map boletos
+  const currFmt = new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  });
+  for (const r of receivables) {
+    items.push({
+      id: r.id,
+      type: "boleto",
+      date: r.createdAt.toISOString(),
+      summary: `${r.description} — ${currFmt.format(Number(r.value))}`,
+      status: r.status,
+      href: `/financeiro/receber`,
+      contactName: null,
+      contactRole: null,
+      hasRefund: false,
     });
-
-    const currFmt = new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-    });
-
-    for (const r of receivables) {
-      items.push({
-        id: r.id,
-        type: "boleto",
-        date: r.createdAt.toISOString(),
-        summary: `${r.description} — ${currFmt.format(Number(r.value))}`,
-        status: r.status,
-        href: `/financeiro/receber`,
-        contactName: null,
-        contactRole: null,
-        hasRefund: false,
-      });
-    }
   }
 
-  // --- Emails (ticket messages sent via email) ---
-  if (!filterType || filterType === "email") {
-    const emailMessages = await prisma.ticketMessage.findMany({
-      where: {
-        sentViaEmail: true,
-        ticket: { clientId, companyId },
-      },
-      orderBy: { createdAt: "desc" },
-      select: {
-        id: true,
-        content: true,
-        createdAt: true,
-        ticketId: true,
-        sender: { select: { name: true } },
-        contact: { select: { name: true, role: true } },
-      },
+  // Map emails
+  for (const m of emailMessages) {
+    const preview =
+      m.content.length > 80 ? m.content.slice(0, 80) + "…" : m.content;
+    const senderName = m.contact?.name ?? m.sender?.name ?? "Desconhecido";
+    items.push({
+      id: m.id,
+      type: "email",
+      date: m.createdAt.toISOString(),
+      summary: `Email de ${senderName}: ${preview}`,
+      status: "SENT",
+      href: `/sac/tickets/${m.ticketId}`,
+      contactName: m.contact?.name ?? null,
+      contactRole: m.contact?.role ?? null,
+      hasRefund: false,
     });
-
-    for (const m of emailMessages) {
-      const preview =
-        m.content.length > 80 ? m.content.slice(0, 80) + "…" : m.content;
-      const senderName = m.contact?.name ?? m.sender?.name ?? "Desconhecido";
-      items.push({
-        id: m.id,
-        type: "email",
-        date: m.createdAt.toISOString(),
-        summary: `Email de ${senderName}: ${preview}`,
-        status: "SENT",
-        href: `/sac/tickets/${m.ticketId}`,
-        contactName: m.contact?.name ?? null,
-        contactRole: m.contact?.role ?? null,
-        hasRefund: false,
-      });
-    }
   }
 
-  // --- WhatsApp messages ---
-  if (!filterType || filterType === "whatsapp") {
-    const whatsappMessages = await prisma.ticketMessage.findMany({
-      where: {
-        channel: "WHATSAPP",
-        ticket: { clientId, companyId },
-      },
-      orderBy: { createdAt: "desc" },
-      select: {
-        id: true,
-        content: true,
-        direction: true,
-        createdAt: true,
-        ticketId: true,
-        sender: { select: { name: true } },
-        contact: { select: { name: true, role: true } },
-      },
+  // Map whatsapp
+  for (const m of whatsappMessages) {
+    const preview =
+      m.content.length > 80 ? m.content.slice(0, 80) + "…" : m.content;
+    const senderName = m.contact?.name ?? m.sender?.name ?? "Desconhecido";
+    const dirLabel = m.direction === "INBOUND" ? "recebida" : "enviada";
+    items.push({
+      id: m.id,
+      type: "whatsapp",
+      date: m.createdAt.toISOString(),
+      summary: `WhatsApp ${dirLabel} — ${senderName}: ${preview}`,
+      status: m.direction === "INBOUND" ? "RECEIVED" : "SENT",
+      href: `/sac/tickets/${m.ticketId}`,
+      contactName: m.contact?.name ?? null,
+      contactRole: m.contact?.role ?? null,
+      hasRefund: false,
     });
-
-    for (const m of whatsappMessages) {
-      const preview =
-        m.content.length > 80 ? m.content.slice(0, 80) + "…" : m.content;
-      const senderName = m.contact?.name ?? m.sender?.name ?? "Desconhecido";
-      const dirLabel = m.direction === "INBOUND" ? "recebida" : "enviada";
-      items.push({
-        id: m.id,
-        type: "whatsapp",
-        date: m.createdAt.toISOString(),
-        summary: `WhatsApp ${dirLabel} — ${senderName}: ${preview}`,
-        status: m.direction === "INBOUND" ? "RECEIVED" : "SENT",
-        href: `/sac/tickets/${m.ticketId}`,
-        contactName: m.contact?.name ?? null,
-        contactRole: m.contact?.role ?? null,
-        hasRefund: false,
-      });
-    }
   }
 
   // Sort all items by date descending (most recent first)

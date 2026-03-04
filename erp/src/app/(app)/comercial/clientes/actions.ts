@@ -113,6 +113,17 @@ export async function listClients(
       orderBy: { name: "asc" },
       skip,
       take: pageSize,
+      select: {
+        id: true,
+        name: true,
+        razaoSocial: true,
+        cpfCnpj: true,
+        email: true,
+        telefone: true,
+        endereco: true,
+        type: true,
+        createdAt: true,
+      },
     }),
     prisma.client.count({ where }),
   ]);

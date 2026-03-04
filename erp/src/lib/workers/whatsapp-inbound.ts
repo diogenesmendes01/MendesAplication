@@ -1,7 +1,6 @@
 import { Job } from "bullmq";
 import { prisma } from "@/lib/prisma";
 import { aiAgentQueue } from "@/lib/queue";
-import { decryptConfig } from "@/lib/encryption";
 import path from "path";
 import fs from "fs/promises";
 
@@ -58,6 +57,8 @@ interface EvolutionWebhookPayload {
       mimetype?: string;
       fileName?: string;
     };
+    unresolvedLid?: boolean;
+    originalJid?: string;
   };
 }
 
@@ -220,34 +221,32 @@ export async function processWhatsAppInbound(job: Job<EvolutionWebhookPayload>) 
 
   const externalId = data.key.id;
   const fromMe = data.key.fromMe;
-  const phone = extractPhoneDigits(data.key.remoteJid);
+  const rawPhone = extractPhoneDigits(data.key.remoteJid);
   const pushName = data.pushName ?? "";
   const content = extractTextContent(data.message);
+  const unresolvedLid = data.unresolvedLid === true;
+
+  // If LID was not resolved, the "phone" is actually a WhatsApp internal ID (14+ digits)
+  // Use it as identifier but mark it clearly
+  const phone = rawPhone;
 
   // Skip status broadcast messages
   if (data.key.remoteJid === "status@broadcast") {
     return;
   }
 
-  // Find Channel by instanceName (need to check all active WHATSAPP channels)
-  const channels = await prisma.channel.findMany({
-    where: { type: "WHATSAPP", isActive: true },
-    select: { id: true, companyId: true, config: true },
+  // Find Channel by companyId (WhatsApp Service sends companyId as instance)
+  const foundChannel = await prisma.channel.findFirst({
+    where: { companyId: instanceName, type: "WHATSAPP", isActive: true },
+    select: { id: true, companyId: true },
   });
 
-  let channel: { id: string; companyId: string } | null = null;
-  for (const ch of channels) {
-    const config = decryptConfig(ch.config as Record<string, unknown>);
-    if (config.instanceName === instanceName) {
-      channel = { id: ch.id, companyId: ch.companyId };
-      break;
-    }
-  }
-
-  if (!channel) {
-    console.warn(`[whatsapp-inbound] No channel found for instance: ${instanceName}`);
+  if (!foundChannel) {
+    console.warn(`[whatsapp-inbound] No channel found for companyId: ${instanceName}`);
     return;
   }
+
+  const channel = foundChannel;
 
   const companyId = channel.companyId;
 
@@ -270,75 +269,46 @@ export async function processWhatsAppInbound(job: Job<EvolutionWebhookPayload>) 
   let clientId: string | null = null;
   let contactId: string | null = null;
 
-  // 1. Search Client.telefone
-  const clients = await prisma.client.findMany({
-    where: { companyId },
-    select: { id: true, telefone: true },
-  });
+  // Extract suffix for flexible matching (last 11 digits covers BR mobile with area code)
+  const phoneSuffix = phone.length >= 11 ? phone.slice(-11) : phone;
 
-  for (const c of clients) {
-    if (c.telefone && normalizeDigits(c.telefone) === phone) {
-      clientId = c.id;
-      break;
-    }
-    // Try matching last 8+ digits for flexible phone format matching
-    if (c.telefone) {
-      const storedDigits = normalizeDigits(c.telefone);
-      if (
-        storedDigits.length >= 8 &&
-        phone.length >= 8 &&
-        (phone.endsWith(storedDigits.slice(-11)) ||
-          storedDigits.endsWith(phone.slice(-11)))
-      ) {
-        clientId = c.id;
-        break;
-      }
-    }
+  // 1. Search Client.telefone using DB-level filtering
+  const matchedClient = await prisma.$queryRaw<{ id: string }[]>`
+    SELECT id FROM "clients"
+    WHERE "companyId" = ${companyId}
+      AND REGEXP_REPLACE("telefone", '[^0-9]', '', 'g') LIKE ${'%' + phoneSuffix}
+    LIMIT 1
+  `;
+
+  if (matchedClient.length > 0) {
+    clientId = matchedClient[0].id;
   }
 
-  // 2. Search AdditionalContact.whatsapp
+  // 2. Search AdditionalContact.whatsapp if no client found
   if (!clientId) {
-    const contacts = await prisma.additionalContact.findMany({
-      where: { client: { companyId } },
-      select: { id: true, clientId: true, whatsapp: true },
-    });
+    const matchedContact = await prisma.$queryRaw<{ id: string; clientId: string }[]>`
+      SELECT ac.id, ac."clientId"
+      FROM "additional_contacts" ac
+      JOIN "clients" c ON c.id = ac."clientId"
+      WHERE c."companyId" = ${companyId}
+        AND REGEXP_REPLACE(ac."whatsapp", '[^0-9]', '', 'g') LIKE ${'%' + phoneSuffix}
+      LIMIT 1
+    `;
 
-    for (const c of contacts) {
-      if (c.whatsapp && normalizeDigits(c.whatsapp) === phone) {
-        clientId = c.clientId;
-        contactId = c.id;
-        break;
-      }
-      if (c.whatsapp) {
-        const storedDigits = normalizeDigits(c.whatsapp);
-        if (
-          storedDigits.length >= 8 &&
-          phone.length >= 8 &&
-          (phone.endsWith(storedDigits.slice(-11)) ||
-            storedDigits.endsWith(phone.slice(-11)))
-        ) {
-          clientId = c.clientId;
-          contactId = c.id;
-          break;
-        }
-      }
+    if (matchedContact.length > 0) {
+      clientId = matchedContact[0].clientId;
+      contactId = matchedContact[0].id;
     }
   } else {
     // Client found by primary phone, check if there's also an AdditionalContact match
-    const additionalContact = await prisma.additionalContact.findFirst({
-      where: { clientId },
-      select: { id: true, whatsapp: true },
-    });
-    // Use AdditionalContact if it has a whatsapp matching this phone
-    if (additionalContact?.whatsapp) {
-      const storedDigits = normalizeDigits(additionalContact.whatsapp);
-      if (
-        storedDigits === phone ||
-        phone.endsWith(storedDigits.slice(-11)) ||
-        storedDigits.endsWith(phone.slice(-11))
-      ) {
-        contactId = additionalContact.id;
-      }
+    const additionalContact = await prisma.$queryRaw<{ id: string }[]>`
+      SELECT id FROM "additional_contacts"
+      WHERE "clientId" = ${clientId}
+        AND REGEXP_REPLACE("whatsapp", '[^0-9]', '', 'g') LIKE ${'%' + phoneSuffix}
+      LIMIT 1
+    `;
+    if (additionalContact.length > 0) {
+      contactId = additionalContact[0].id;
     }
   }
 
@@ -388,30 +358,49 @@ export async function processWhatsAppInbound(job: Job<EvolutionWebhookPayload>) 
       );
     }
   } else {
-    // Unknown sender — create ticket with "Pendente Vinculação" tag
-    tags.push("Pendente Vinculação");
+    // Unknown sender — check if there's already an open ticket from this phone number
+    const unknownClientId = await getOrCreateUnknownClient(companyId);
 
-    const ticket = await prisma.ticket.create({
-      data: {
-        // We need a clientId but don't have one — use a placeholder approach:
-        // Create without client or find a way to handle
-        // Since Ticket.clientId is required, we need to handle this differently.
-        // Check if there's a "generic" client or create a system one for unlinked messages.
-        clientId: await getOrCreateUnknownClient(companyId),
+    // Search for existing open ticket with matching phone in description or subject
+    const existingUnknownTicket = await prisma.ticket.findFirst({
+      where: {
+        clientId: unknownClientId,
         companyId,
-        subject: content
-          ? content.substring(0, 100)
-          : `WhatsApp de ${pushName || phone}`,
-        description: `Mensagem recebida via WhatsApp de ${pushName || phone}. Número: ${phone}`,
-        priority: "MEDIUM",
         channelId: channel.id,
-        tags: ["Pendente Vinculação"],
+        status: { in: ["OPEN", "IN_PROGRESS", "WAITING_CLIENT"] },
+        description: { contains: phone },
       },
+      orderBy: { updatedAt: "desc" },
+      select: { id: true },
     });
-    ticketId = ticket.id;
-    console.log(
-      `[whatsapp-inbound] Created ticket ${ticketId} with tag "Pendente Vinculação" for ${phone}`
-    );
+
+    if (existingUnknownTicket) {
+      ticketId = existingUnknownTicket.id;
+    } else {
+      tags.push("Pendente Vinculação");
+      const phoneLabel = unresolvedLid
+        ? `${pushName || "Desconhecido"} (ID: ${phone})`
+        : (pushName || phone);
+      const ticket = await prisma.ticket.create({
+        data: {
+          clientId: unknownClientId,
+          companyId,
+          subject: content
+            ? content.substring(0, 100)
+            : `WhatsApp de ${phoneLabel}`,
+          description: `Mensagem recebida via WhatsApp de ${phoneLabel}. Número: ${phone}. WhatsApp JID: ${data.key.remoteJid}`,
+          priority: "MEDIUM",
+          channelId: channel.id,
+          tags: unresolvedLid
+            ? ["Pendente Vinculação", "LID Não Resolvido"]
+            : ["Pendente Vinculação"],
+        },
+      });
+      ticketId = ticket.id;
+      console.log(
+        `[whatsapp-inbound] Created ticket ${ticketId} with tag "Pendente Vinculação" for ${phone}`
+      );
+    }
   }
 
   // Save attachments if media message
