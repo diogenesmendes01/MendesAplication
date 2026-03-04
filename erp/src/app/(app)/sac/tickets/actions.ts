@@ -7,6 +7,8 @@ import { sendEmail } from "@/lib/email";
 import { getSlaStatus, type SlaStatusValue } from "@/lib/sla";
 import { Prisma, type TicketStatus, type TicketPriority, type ChannelType, type MessageDirection, type MessageOrigin, type RefundStatus } from "@prisma/client";
 import { getSharedCompanyIds } from "@/lib/shared-clients";
+import { createTaxEntriesForInvoice } from "@/lib/tax-entries";
+import { getCachedFiscalConfig } from "@/app/(app)/configuracoes/fiscal/actions";
 
 // In-memory SLA config cache — configs change rarely, fetched frequently
 const slaConfigCache = new Map<string, { data: { priority: string | null; stage: string; alertBeforeMinutes: number }[]; timestamp: number }>();
@@ -2174,6 +2176,21 @@ export async function executeRefund(
             cancellationReason: data.invoiceCancelReason!.trim(),
           },
         });
+
+        // Cancel TaxEntries linked to the cancelled invoices
+        const cancelledInvoices = await tx.invoice.findMany({
+          where: { ...whereClause, status: "CANCELLED" },
+          select: { id: true },
+        });
+        if (cancelledInvoices.length > 0) {
+          await tx.taxEntry.updateMany({
+            where: {
+              invoiceId: { in: cancelledInvoices.map((i) => i.id) },
+              status: { not: "CANCELLED" },
+            },
+            data: { status: "CANCELLED" },
+          });
+        }
       }
     } else if (data.invoiceAction === "CREDIT_NOTE") {
       // Find original invoice to reference
@@ -2199,7 +2216,7 @@ export async function executeRefund(
         originalInvoiceId = originalInvoice?.id ?? null;
       }
 
-      await tx.invoice.create({
+      const creditNote = await tx.invoice.create({
         data: {
           clientId: refund.ticket.clientId,
           serviceDescription: `Nota de crédito - Reembolso ref Ticket #${refund.ticket.subject}`,
@@ -2211,6 +2228,16 @@ export async function executeRefund(
           originalInvoiceId,
           companyId,
         },
+      });
+
+      // Create estorno TaxEntries for the credit note
+      const fiscalConfig = await getCachedFiscalConfig(companyId);
+      await createTaxEntriesForInvoice({
+        invoiceId: creditNote.id,
+        companyId,
+        value: Number(refund.amount),
+        fiscalConfig,
+        isEstorno: true,
       });
     }
 
