@@ -6,6 +6,8 @@ import { logAuditEvent } from "@/lib/audit";
 import { Prisma, type ProposalStatus, type BoletoStatus } from "@prisma/client";
 import { generateBoleto } from "@/lib/boleto";
 import { getSharedCompanyIds } from "@/lib/shared-clients";
+import { getCachedFiscalConfig } from "@/app/(app)/configuracoes/fiscal/actions";
+import { emitInvoiceForBoleto } from "@/lib/nfse-actions";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -672,6 +674,55 @@ export async function updateBoletoStatus(
     dataAfter: { status: newStatus },
     companyId,
   });
+
+  // Auto-emit NFS-e when boleto is paid
+  if (newStatus === "PAID") {
+    try {
+      const fiscalConfig = await getCachedFiscalConfig(companyId);
+      if (fiscalConfig.autoEmitNfse) {
+        await emitInvoiceForBoleto(boletoId, companyId);
+      }
+    } catch (err) {
+      // If auto-emit fails, create PENDING invoice for manual resolution
+      console.error("Auto-emit NFS-e failed:", err);
+      try {
+        const boletoData = await prisma.boleto.findFirst({
+          where: { id: boletoId, companyId },
+          include: {
+            proposal: {
+              include: {
+                client: { select: { id: true } },
+                items: { select: { description: true } },
+              },
+            },
+          },
+        });
+        if (boletoData) {
+          const existingInvoice = await prisma.invoice.findFirst({
+            where: { boletoId, companyId },
+          });
+          if (!existingInvoice) {
+            await prisma.invoice.create({
+              data: {
+                proposalId: boletoData.proposal.id,
+                boletoId,
+                clientId: boletoData.proposal.client.id,
+                serviceDescription: boletoData.proposal.items
+                  .map((i) => i.description)
+                  .join("; "),
+                value: boletoData.value,
+                issRate: 0,
+                status: "PENDING",
+                companyId,
+              },
+            });
+          }
+        }
+      } catch (fallbackErr) {
+        console.error("Failed to create PENDING invoice:", fallbackErr);
+      }
+    }
+  }
 
   return { success: true };
 }
