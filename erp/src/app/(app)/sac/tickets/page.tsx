@@ -45,12 +45,10 @@ import {
 } from "@/components/ui/select";
 import { useCompany } from "@/contexts/company-context";
 import {
-  listTickets,
   createTicket,
   listClientsForSelect,
   listUsersForAssign,
-  getTicketTabCounts,
-  getSlaAlertCounts,
+  getTicketListBootstrap,
   type PaginatedResult,
   type TicketRow,
   type TicketTab,
@@ -196,13 +194,16 @@ export default function TicketsPage() {
     if (!selectedCompanyId) return;
     setLoading(true);
     try {
-      const result = await listTickets({
-        companyId: selectedCompanyId,
-        page,
-        tab: activeTab,
-        search: search || undefined,
-      });
+      const { tickets: result, tabCounts: counts, slaAlerts: alerts } =
+        await getTicketListBootstrap({
+          companyId: selectedCompanyId,
+          page,
+          tab: activeTab,
+          search: search || undefined,
+        });
       setTickets(result);
+      setTabCounts(counts);
+      setSlaAlerts(alerts);
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : "Erro ao carregar tickets"
@@ -215,13 +216,6 @@ export default function TicketsPage() {
   useEffect(() => {
     loadTickets();
   }, [loadTickets]);
-
-  // Load tab counts and SLA alerts
-  useEffect(() => {
-    if (!selectedCompanyId) return;
-    getTicketTabCounts(selectedCompanyId).then(setTabCounts).catch(() => {});
-    getSlaAlertCounts(selectedCompanyId).then(setSlaAlerts).catch(() => {});
-  }, [selectedCompanyId]);
 
   // Load dropdown data
   useEffect(() => {

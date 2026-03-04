@@ -2307,6 +2307,30 @@ export async function executeRefund(
 }
 
 // ---------------------------------------------------------------------------
+// Aggregated Bootstrap — single roundtrip for ticket list page
+// ---------------------------------------------------------------------------
+
+export interface TicketListBootstrap {
+  tickets: PaginatedResult<TicketRow>;
+  tabCounts: Awaited<ReturnType<typeof getTicketTabCounts>>;
+  slaAlerts: Awaited<ReturnType<typeof getSlaAlertCounts>>;
+}
+
+export async function getTicketListBootstrap(
+  params: ListTicketsParams
+): Promise<TicketListBootstrap> {
+  await requireCompanyAccess(params.companyId);
+
+  const [tickets, tabCounts, slaAlerts] = await Promise.all([
+    listTickets(params),
+    getTicketTabCounts(params.companyId),
+    getSlaAlertCounts(params.companyId),
+  ]);
+
+  return { tickets, tabCounts, slaAlerts };
+}
+
+// ---------------------------------------------------------------------------
 // Tags
 // ---------------------------------------------------------------------------
 
