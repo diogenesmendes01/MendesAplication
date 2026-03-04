@@ -8,6 +8,23 @@ import { getSlaStatus, type SlaStatusValue } from "@/lib/sla";
 import { Prisma, type TicketStatus, type TicketPriority, type ChannelType, type MessageDirection, type MessageOrigin, type RefundStatus } from "@prisma/client";
 import { getSharedCompanyIds } from "@/lib/shared-clients";
 
+// In-memory SLA config cache — configs change rarely, fetched frequently
+const slaConfigCache = new Map<string, { data: { priority: string | null; stage: string; alertBeforeMinutes: number }[]; timestamp: number }>();
+const SLA_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+async function fetchSlaConfigs(companyId: string) {
+  const cached = slaConfigCache.get(companyId);
+  if (cached && Date.now() - cached.timestamp < SLA_CACHE_TTL) {
+    return cached.data;
+  }
+  const configs = await prisma.slaConfig.findMany({
+    where: { companyId, type: "TICKET" },
+    select: { priority: true, stage: true, alertBeforeMinutes: true },
+  });
+  slaConfigCache.set(companyId, { data: configs, timestamp: Date.now() });
+  return configs;
+}
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -137,11 +154,8 @@ export async function listTickets(
     where.assigneeId = params.assigneeId;
   }
 
-  // Fetch SLA alert configs for at-risk calculation
-  const slaConfigs = await prisma.slaConfig.findMany({
-    where: { companyId: params.companyId, type: "TICKET" },
-    select: { priority: true, stage: true, alertBeforeMinutes: true },
-  });
+  // Fetch SLA alert configs for at-risk calculation (cached)
+  const slaConfigs = await fetchSlaConfigs(params.companyId);
   const alertMinutesMap: Record<string, number> = {};
   for (const c of slaConfigs) {
     if (c.priority && c.stage) {
@@ -1195,8 +1209,11 @@ export async function getWhatsAppRecipients(
   }
 
   const recipients: WhatsAppRecipient[] = [];
+  const seenPhones = new Set<string>();
 
   if (ticket.client.telefone) {
+    const digits = ticket.client.telefone.replace(/\D/g, "");
+    seenPhones.add(digits);
     recipients.push({
       phone: ticket.client.telefone,
       name: ticket.client.name,
@@ -1206,10 +1223,63 @@ export async function getWhatsAppRecipients(
 
   for (const c of ticket.client.additionalContacts) {
     if (c.whatsapp) {
+      const digits = c.whatsapp.replace(/\D/g, "");
+      if (!seenPhones.has(digits)) {
+        seenPhones.add(digits);
+        recipients.push({
+          phone: c.whatsapp,
+          name: c.name,
+          role: c.role,
+        });
+      }
+    }
+  }
+
+  // If no recipients from contacts, extract phone from inbound WhatsApp messages
+  if (recipients.length === 0) {
+    const inboundMsg = await prisma.ticketMessage.findFirst({
+      where: {
+        ticketId,
+        channel: "WHATSAPP",
+        direction: "INBOUND",
+        externalId: { not: null },
+      },
+      orderBy: { createdAt: "desc" },
+      select: { externalId: true },
+    });
+
+    if (inboundMsg?.externalId && ticket.description) {
+      // Try to extract the WhatsApp JID (most reliable for replying)
+      const jidMatch = ticket.description.match(/WhatsApp JID:\s*(\S+)/);
+      const phoneMatch = ticket.description.match(/Número:\s*(\d+)/);
+
+      if (jidMatch) {
+        // Use the full JID — the WhatsApp Service can send to LIDs directly
+        const jid = jidMatch[1];
+        const digits = jid.replace(/@.*$/, "").replace(/\D/g, "");
+        recipients.push({
+          phone: digits,
+          name: ticket.description.match(/de\s+(.+?)\.\s*Número/)?.[1] || "Remetente WhatsApp",
+          role: null,
+        });
+      } else if (phoneMatch) {
+        recipients.push({
+          phone: phoneMatch[1],
+          name: "Remetente WhatsApp",
+          role: null,
+        });
+      }
+    }
+  }
+
+  // Last resort: extract phone from ticket description
+  if (recipients.length === 0 && ticket.description) {
+    const phoneMatch = ticket.description.match(/\b(\d{10,15})\b/);
+    if (phoneMatch) {
       recipients.push({
-        phone: c.whatsapp,
-        name: c.name,
-        role: c.role,
+        phone: phoneMatch[1],
+        name: "Remetente WhatsApp",
+        role: null,
       });
     }
   }

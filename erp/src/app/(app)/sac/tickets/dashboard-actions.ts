@@ -4,6 +4,23 @@ import { prisma } from "@/lib/prisma";
 import { requireCompanyAccess } from "@/lib/rbac";
 import { getSlaStatus } from "@/lib/sla";
 
+// In-memory SLA config cache — configs change rarely, fetched frequently
+const slaConfigCache = new Map<string, { data: { priority: string | null; stage: string; alertBeforeMinutes: number }[]; timestamp: number }>();
+const SLA_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+async function fetchSlaConfigs(companyId: string) {
+  const cached = slaConfigCache.get(companyId);
+  if (cached && Date.now() - cached.timestamp < SLA_CACHE_TTL) {
+    return cached.data;
+  }
+  const configs = await prisma.slaConfig.findMany({
+    where: { companyId, type: "TICKET" },
+    select: { priority: true, stage: true, alertBeforeMinutes: true },
+  });
+  slaConfigCache.set(companyId, { data: configs, timestamp: Date.now() });
+  return configs;
+}
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -35,6 +52,9 @@ export async function getTicketDashboard(
 
   const activeStatuses = ["OPEN", "IN_PROGRESS", "WAITING_CLIENT"] as const;
 
+  // SLA configs cached separately — rarely change
+  const slaConfigs = await fetchSlaConfigs(companyId);
+
   const [
     openCount,
     inProgressCount,
@@ -43,7 +63,6 @@ export async function getTicketDashboard(
     slaBreachedCount,
     pendingRefundsCount,
     ticketsWithSla,
-    slaConfigs,
     priorityGroups,
     channelGroupsRaw,
     avgResponseRaw,
@@ -90,11 +109,6 @@ export async function getTicketDashboard(
         slaFirstReply: true,
         slaResolution: true,
       },
-    }),
-    // SLA configs for alert thresholds
-    prisma.slaConfig.findMany({
-      where: { companyId, type: "TICKET" },
-      select: { priority: true, stage: true, alertBeforeMinutes: true },
     }),
     // Group by priority (active tickets)
     prisma.ticket.groupBy({
