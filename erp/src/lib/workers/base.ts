@@ -17,11 +17,24 @@ export function createWorker(
         throw error
       }
     },
-    { connection }
+    {
+      connection,
+      stalledInterval: 60_000,
+      maxStalledCount: 2,
+    }
   )
 
   worker.on('failed', (job, err) => {
-    console.error(`[${queueName}] Job ${job?.id} failed:`, err.message)
+    const attemptsMade = job?.attemptsMade ?? 0
+    const maxAttempts = job?.opts?.attempts ?? 1
+    console.error(
+      `[${queueName}] Job ${job?.id} failed (attempt ${attemptsMade}/${maxAttempts}):`,
+      err.message
+    )
+  })
+
+  worker.on('stalled', (jobId) => {
+    console.warn(`[${queueName}] Job ${jobId} stalled`)
   })
 
   worker.on('ready', () => {
