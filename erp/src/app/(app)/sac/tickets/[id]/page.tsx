@@ -326,21 +326,26 @@ export default function TicketDetailPage() {
     if (!selectedCompanyId || !ticketId) return;
     setLoading(true);
     try {
+      // Load ticket first (others depend on client.id)
       const data = await getTicketById(ticketId, selectedCompanyId);
       setTicket(data);
       setTags(data.tags);
-      getClientFinancialSummary(data.client.id, selectedCompanyId)
-        .then(setFinancial)
-        .catch(() => {});
-      getTicketRefunds(ticketId, selectedCompanyId)
-        .then(setRefunds)
-        .catch(() => {});
-      getCancellationInfo(ticketId, selectedCompanyId)
-        .then(setCancellation)
-        .catch(() => {});
-      getAiConfigEnabled(selectedCompanyId)
-        .then(setAiConfigEnabled)
-        .catch(() => {});
+
+      // Run all secondary queries in parallel
+      await Promise.all([
+        getClientFinancialSummary(data.client.id, selectedCompanyId)
+          .then(setFinancial)
+          .catch(() => {}),
+        getTicketRefunds(ticketId, selectedCompanyId)
+          .then(setRefunds)
+          .catch(() => {}),
+        getCancellationInfo(ticketId, selectedCompanyId)
+          .then(setCancellation)
+          .catch(() => {}),
+        getAiConfigEnabled(selectedCompanyId)
+          .then(setAiConfigEnabled)
+          .catch(() => {}),
+      ]);
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : "Erro ao carregar ticket"
@@ -357,8 +362,11 @@ export default function TicketDetailPage() {
   // Load users for reassignment and user role
   useEffect(() => {
     if (!selectedCompanyId) return;
-    listUsersForAssign(selectedCompanyId).then(setUsers).catch(() => {});
-    getUserRole(selectedCompanyId).then(setUserRole).catch(() => {});
+    // Run both in parallel
+    Promise.all([
+      listUsersForAssign(selectedCompanyId).then(setUsers).catch(() => {}),
+      getUserRole(selectedCompanyId).then(setUserRole).catch(() => {}),
+    ]);
   }, [selectedCompanyId]);
 
   // ---------------------------------------------------
