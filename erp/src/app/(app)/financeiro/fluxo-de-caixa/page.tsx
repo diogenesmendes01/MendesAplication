@@ -10,17 +10,17 @@ import {
   Building2,
 } from "lucide-react";
 import {
-  BarChart,
-  Bar,
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from "recharts";
+  LazyBarChart as BarChart,
+  LazyBar as Bar,
+  LazyLineChart as LineChart,
+  LazyLine as Line,
+  LazyXAxis as XAxis,
+  LazyYAxis as YAxis,
+  LazyCartesianGrid as CartesianGrid,
+  LazyTooltip as Tooltip,
+  LazyLegend as Legend,
+  LazyResponsiveContainer as ResponsiveContainer,
+} from "@/components/charts";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {

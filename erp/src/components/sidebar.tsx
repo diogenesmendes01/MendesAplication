@@ -64,9 +64,28 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       setSacBadge(0);
       return;
     }
-    getSlaAlertCounts(selectedCompanyId)
-      .then(({ breached, atRisk }) => setSacBadge(breached + atRisk))
-      .catch(() => setSacBadge(0));
+
+    let stale = false;
+
+    function fetchBadge() {
+      getSlaAlertCounts(selectedCompanyId!)
+        .then(({ breached, atRisk }) => {
+          if (!stale) setSacBadge(breached + atRisk);
+        })
+        .catch(() => {
+          if (!stale) setSacBadge(0);
+        });
+    }
+
+    fetchBadge();
+
+    // Refresh every 60 seconds instead of never
+    const interval = setInterval(fetchBadge, 60_000);
+
+    return () => {
+      stale = true;
+      clearInterval(interval);
+    };
   }, [selectedCompanyId]);
 
   return (

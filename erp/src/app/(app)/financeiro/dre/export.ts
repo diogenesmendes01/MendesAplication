@@ -1,7 +1,19 @@
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
-import * as XLSX from "xlsx";
 import type { DREData, DREConsolidatedReport } from "./actions";
+
+// Heavy libs loaded dynamically — only when user triggers export
+async function getJsPDF() {
+  const { default: jsPDF } = await import("jspdf");
+  return jsPDF;
+}
+
+async function getAutoTable() {
+  const { default: autoTable } = await import("jspdf-autotable");
+  return autoTable;
+}
+
+async function getXLSX() {
+  return await import("xlsx");
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -52,11 +64,13 @@ function getFileName(
 // PDF Export
 // ---------------------------------------------------------------------------
 
-export function exportDREtoPDF(
+export async function exportDREtoPDF(
   data: DREData,
   consolidated?: DREConsolidatedReport
 ) {
-  const doc = new jsPDF();
+  const JsPDF = await getJsPDF();
+  const autoTable = await getAutoTable();
+  const doc = new JsPDF();
   const title = data.companyName
     ? `DRE — ${data.companyName}`
     : "DRE — Consolidado (Grupo)";
@@ -166,10 +180,11 @@ export function exportDREtoPDF(
 // Excel Export
 // ---------------------------------------------------------------------------
 
-export function exportDREtoExcel(
+export async function exportDREtoExcel(
   data: DREData,
   consolidated?: DREConsolidatedReport
 ) {
+  const XLSX = await getXLSX();
   const wb = XLSX.utils.book_new();
 
   // DRE Sheet

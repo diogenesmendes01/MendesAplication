@@ -1,5 +1,11 @@
-import { jsPDF } from "jspdf";
+import type { jsPDF as JsPDFType } from "jspdf";
 import type { TicketDetail, TimelineEvent, RefundSummary } from "@/app/(app)/sac/tickets/actions";
+
+// Dynamically imported to avoid bundling in main chunk
+async function getJsPDF() {
+  const { jsPDF } = await import("jspdf");
+  return jsPDF;
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -98,14 +104,13 @@ const MARGIN_BOTTOM = 20;
 const CONTENT_WIDTH = PAGE_WIDTH - MARGIN_LEFT - MARGIN_RIGHT;
 
 class TicketPdfBuilder {
-  private doc: jsPDF;
+  private doc!: JsPDFType;
   private y: number;
   private pageNum: number;
   private companyName: string;
   private ticketId: string;
 
   constructor(companyName: string, ticketId: string) {
-    this.doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
     this.y = MARGIN_TOP;
     this.pageNum = 1;
     this.companyName = companyName;
@@ -189,7 +194,9 @@ class TicketPdfBuilder {
     }
   }
 
-  build(options: TicketPdfOptions): jsPDF {
+  async build(options: TicketPdfOptions): Promise<JsPDFType> {
+    const JsPDF = await getJsPDF();
+    this.doc = new JsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
     const { ticket, events, refunds, includeInternalNotes, includeAttachmentList } = options;
 
     // Filter events based on options
@@ -420,12 +427,12 @@ class TicketPdfBuilder {
 // Public API
 // ---------------------------------------------------------------------------
 
-export function generateTicketPdf(options: TicketPdfOptions): void {
+export async function generateTicketPdf(options: TicketPdfOptions): Promise<void> {
   const builder = new TicketPdfBuilder(
     options.ticket.company.nomeFantasia,
     options.ticket.id
   );
-  const doc = builder.build(options);
+  const doc = await builder.build(options);
 
   const fileName = `ticket-${options.ticket.id.substring(0, 8)}-${dateFmtShort.format(new Date()).replace(/\//g, "-")}.pdf`;
   doc.save(fileName);

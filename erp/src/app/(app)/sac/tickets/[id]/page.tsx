@@ -694,7 +694,7 @@ export default function TicketDetailPage() {
     setExporting(true);
     try {
       const events = await listTimelineEvents(ticketId, selectedCompanyId);
-      generateTicketPdf({
+      await generateTicketPdf({
         ticket,
         events,
         refunds,

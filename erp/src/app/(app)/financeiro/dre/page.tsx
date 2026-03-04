@@ -345,19 +345,19 @@ export default function DREPage() {
     ((viewMode === "company" && dreData !== null) ||
       (viewMode === "consolidated" && consolidatedReport !== null));
 
-  function handleExportPDF() {
+  async function handleExportPDF() {
     if (viewMode === "consolidated" && consolidatedReport) {
-      exportDREtoPDF(consolidatedReport.consolidated, consolidatedReport);
+      await exportDREtoPDF(consolidatedReport.consolidated, consolidatedReport);
     } else if (dreData) {
-      exportDREtoPDF(dreData);
+      await exportDREtoPDF(dreData);
     }
   }
 
-  function handleExportExcel() {
+  async function handleExportExcel() {
     if (viewMode === "consolidated" && consolidatedReport) {
-      exportDREtoExcel(consolidatedReport.consolidated, consolidatedReport);
+      await exportDREtoExcel(consolidatedReport.consolidated, consolidatedReport);
     } else if (dreData) {
-      exportDREtoExcel(dreData);
+      await exportDREtoExcel(dreData);
     }
   }
 

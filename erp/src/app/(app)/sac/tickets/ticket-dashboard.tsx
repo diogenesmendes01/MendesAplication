@@ -14,14 +14,14 @@ import {
   Timer,
 } from "lucide-react";
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  Cell,
-} from "recharts";
+  LazyBarChart as BarChart,
+  LazyBar as Bar,
+  LazyXAxis as XAxis,
+  LazyYAxis as YAxis,
+  LazyTooltip as Tooltip,
+  LazyResponsiveContainer as ResponsiveContainer,
+  LazyCell as Cell,
+} from "@/components/charts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getTicketDashboard, type TicketDashboard } from "./dashboard-actions";
 
