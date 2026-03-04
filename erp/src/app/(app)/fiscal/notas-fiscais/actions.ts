@@ -168,6 +168,12 @@ export async function cancelInvoice(invoiceId: string, companyId: string) {
     data: { status: "CANCELLED" },
   });
 
+  // Cancel associated TaxEntries
+  await prisma.taxEntry.updateMany({
+    where: { invoiceId, status: { not: "CANCELLED" } },
+    data: { status: "CANCELLED" },
+  });
+
   const { logAuditEvent } = await import("@/lib/audit");
   await logAuditEvent({
     userId: session.userId,
