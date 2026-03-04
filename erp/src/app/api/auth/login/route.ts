@@ -67,13 +67,14 @@ export async function POST(req: NextRequest) {
       req.headers.get("x-real-ip") ??
       null;
 
-    await logAuditEvent({
+    // Fire and forget — don't block login response
+    logAuditEvent({
       userId: user.id,
       action: "LOGIN",
       entity: "User",
       entityId: user.id,
       ipAddress,
-    });
+    }).catch(console.error);
 
     const response = NextResponse.json({
       user: {
