@@ -8,6 +8,10 @@ import { getSlaStatus } from "@/lib/sla";
 const slaConfigCache = new Map<string, { data: { priority: string | null; stage: string; alertBeforeMinutes: number }[]; timestamp: number }>();
 const SLA_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
+// In-memory dashboard cache — avoids re-running 10 parallel queries on every call
+const dashboardCache = new Map<string, { data: TicketDashboard; timestamp: number }>();
+const DASHBOARD_CACHE_TTL = 30 * 1000; // 30 seconds
+
 async function fetchSlaConfigs(companyId: string) {
   const cached = slaConfigCache.get(companyId);
   if (cached && Date.now() - cached.timestamp < SLA_CACHE_TTL) {
@@ -46,6 +50,11 @@ export async function getTicketDashboard(
   companyId: string
 ): Promise<TicketDashboard> {
   await requireCompanyAccess(companyId);
+
+  const cached = dashboardCache.get(companyId);
+  if (cached && Date.now() - cached.timestamp < DASHBOARD_CACHE_TTL) {
+    return cached.data;
+  }
 
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
@@ -186,7 +195,7 @@ export async function getTicketDashboard(
     ? Math.round(Number(avgResponseRaw[0].avg_minutes))
     : 0;
 
-  return {
+  const result: TicketDashboard = {
     openCount,
     inProgressCount,
     waitingClientCount,
@@ -198,4 +207,8 @@ export async function getTicketDashboard(
     ticketsByChannel,
     ticketsByPriority,
   };
+
+  dashboardCache.set(companyId, { data: result, timestamp: Date.now() });
+
+  return result;
 }
