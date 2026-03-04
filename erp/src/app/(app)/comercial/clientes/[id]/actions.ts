@@ -45,6 +45,17 @@ export async function getClientById(
 
   const client = await prisma.client.findFirst({
     where: { id: clientId, companyId },
+    select: {
+      id: true,
+      name: true,
+      razaoSocial: true,
+      cpfCnpj: true,
+      email: true,
+      telefone: true,
+      endereco: true,
+      type: true,
+      createdAt: true,
+    },
   });
 
   if (!client) {
