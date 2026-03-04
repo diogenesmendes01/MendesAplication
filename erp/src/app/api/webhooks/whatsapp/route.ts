@@ -20,16 +20,18 @@ export async function POST(request: Request) {
   }
 
   const data = payload as Record<string, unknown>;
+  const event = data.event as string;
 
-  // Only process messages.upsert events
-  if (data.event !== "messages.upsert") {
+  // Only process known event types
+  if (event !== "messages.upsert" && event !== "message.media") {
     return NextResponse.json({ ok: true });
   }
 
   // Enqueue for async processing
   try {
     const { whatsappInboundQueue } = await import("@/lib/queue");
-    await whatsappInboundQueue.add("process-inbound", data);
+    const jobName = event === "message.media" ? "process-media" : "process-inbound";
+    await whatsappInboundQueue.add(jobName, data);
   } catch (err) {
     console.error("[webhook/whatsapp] Failed to enqueue:", err);
     return NextResponse.json(

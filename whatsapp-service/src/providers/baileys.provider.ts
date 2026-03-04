@@ -776,8 +776,6 @@ class BaileysProvider {
     // Determine message type and extract content
     let messageType = "conversation";
     let textContent: string | undefined;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let mediaLocalUrl: string | undefined;
     let mediaMimetype: string | undefined;
     let mediaFileName: string | undefined;
 
@@ -794,30 +792,15 @@ class BaileysProvider {
       textContent = message.imageMessage.caption || undefined;
       mediaMimetype = message.imageMessage.mimetype || "image/jpeg";
       mediaFileName = `image_${msg.key.id || Date.now()}.jpg`;
-      mediaLocalUrl = await this.downloadAndSaveMedia(
-        msg,
-        companyId,
-        mediaFileName
-      );
     } else if (message.videoMessage) {
       messageType = "videoMessage";
       textContent = message.videoMessage.caption || undefined;
       mediaMimetype = message.videoMessage.mimetype || "video/mp4";
       mediaFileName = `video_${msg.key.id || Date.now()}.mp4`;
-      mediaLocalUrl = await this.downloadAndSaveMedia(
-        msg,
-        companyId,
-        mediaFileName
-      );
     } else if (message.audioMessage) {
       messageType = "audioMessage";
       mediaMimetype = message.audioMessage.mimetype || "audio/ogg";
       mediaFileName = `audio_${msg.key.id || Date.now()}.ogg`;
-      mediaLocalUrl = await this.downloadAndSaveMedia(
-        msg,
-        companyId,
-        mediaFileName
-      );
     } else if (message.documentMessage) {
       messageType = "documentMessage";
       textContent =
@@ -830,26 +813,27 @@ class BaileysProvider {
         message.documentMessage.fileName ||
         message.documentMessage.title ||
         `document_${msg.key.id || Date.now()}`;
-      mediaLocalUrl = await this.downloadAndSaveMedia(
-        msg,
-        companyId,
-        mediaFileName
-      );
     } else {
       // Unknown message type, skip
       return;
     }
 
+    const hasMedia = !!mediaFileName;
+    const externalId = msg.key.id || "";
+
     // Build webhook payload compatible with EvolutionWebhookPayload
+    // Dispatch text/event immediately WITHOUT waiting for media download
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const webhookPayload: Record<string, any> = {
       event: "messages.upsert",
       instance: companyId,
+      externalId,
+      companyId,
       data: {
         key: {
           remoteJid: resolvedJid,
           fromMe: false,
-          id: msg.key.id || "",
+          id: externalId,
         },
         pushName: msg.pushName || "",
         message: this.buildMessageField(message, messageType),
@@ -858,17 +842,16 @@ class BaileysProvider {
           typeof msg.messageTimestamp === "number"
             ? msg.messageTimestamp
             : Number(msg.messageTimestamp || 0),
-        ...(mediaLocalUrl && {
-          media: {
-            url: mediaLocalUrl,
-            mimetype: mediaMimetype,
-            fileName: mediaFileName,
-          },
-        }),
         // Flag if LID could not be resolved to real phone number
         ...(unresolvedLid && {
           unresolvedLid: true,
           originalJid: remoteJid,
+        }),
+        // Include media metadata (without URL) so ERP knows media is coming
+        ...(hasMedia && {
+          mediaPending: true,
+          mediaMimetype: mediaMimetype,
+          mediaFileName: mediaFileName,
         }),
       },
     };
@@ -878,6 +861,47 @@ class BaileysProvider {
     console.log(
       `[BaileysProvider] Incoming message for ${companyId}: type=${messageType}, from=${resolvedJid}${unresolvedLid ? " (UNRESOLVED LID)" : ""}`
     );
+
+    // Download media asynchronously — don't block message processing
+    if (hasMedia) {
+      this.downloadAndDispatchMedia(msg, companyId, externalId, mediaMimetype!, mediaFileName!)
+        .catch((err) => {
+          console.error(
+            `[BaileysProvider] Async media download failed for ${externalId}:`,
+            err
+          );
+        });
+    }
+  }
+
+  /**
+   * Download media from WhatsApp and dispatch a follow-up webhook with the local URL.
+   * Runs asynchronously after the initial message webhook.
+   */
+  private async downloadAndDispatchMedia(
+    msg: WAMessage,
+    companyId: string,
+    externalId: string,
+    mimetype: string,
+    fileName: string
+  ): Promise<void> {
+    const mediaLocalUrl = await this.downloadAndSaveMedia(msg, companyId, fileName);
+    if (!mediaLocalUrl) return;
+
+    await this.dispatchWebhook({
+      event: "message.media",
+      instance: companyId,
+      externalId,
+      companyId,
+      data: {
+        externalId,
+        media: {
+          url: mediaLocalUrl,
+          mimetype,
+          fileName,
+        },
+      },
+    });
   }
 
   // ============================================
