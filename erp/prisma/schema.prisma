@@ -260,6 +260,7 @@ model AccountReceivable {
   client  Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
+  @@index([companyId, status, dueDate])
   @@map("accounts_receivable")
 }
 
@@ -282,6 +283,7 @@ model AccountPayable {
   company  Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
   refund   Refund?            @relation(fields: [refundId], references: [id], onDelete: SetNull)
 
+  @@index([companyId, status, dueDate])
   @@map("accounts_payable")
 }
 
@@ -457,6 +459,10 @@ model Ticket {
   attachments Attachment[]        @relation("TicketAttachments")
   refunds     Refund[]
 
+  @@index([companyId, status])
+  @@index([companyId, slaBreached])
+  @@index([companyId, clientId])
+  @@index([companyId, assigneeId])
   @@map("tickets")
 }
 
@@ -480,6 +486,7 @@ model TicketMessage {
   contact     AdditionalContact?  @relation("TicketMessageContact", fields: [contactId], references: [id], onDelete: SetNull)
   attachments Attachment[]        @relation("TicketMessageAttachments")
 
+  @@index([ticketId, createdAt])
   @@unique([externalId, channel])
   @@map("ticket_messages")
 }
@@ -536,6 +543,8 @@ model Refund {
   accountPayable AccountPayable?
   creditNote     Invoice?
 
+  @@index([companyId, status])
+  @@index([ticketId])
   @@map("refunds")
 }
 
