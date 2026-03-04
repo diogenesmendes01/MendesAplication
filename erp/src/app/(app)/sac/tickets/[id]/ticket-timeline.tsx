@@ -558,6 +558,9 @@ export default function TicketTimeline({
   // WhatsApp connection status
   const [waConnected, setWaConnected] = useState<boolean | null>(null);
 
+  // Track latest event timestamp for incremental polling
+  const lastEventTimeRef = useRef<string | null>(null);
+
   // Active tab — controlled for lazy-loading recipients
   const [activeTab, setActiveTab] = useState("todos");
 
@@ -567,6 +570,14 @@ export default function TicketTimeline({
     try {
       const data = await listTimelineEvents(ticketId, companyId);
       setEvents(data);
+      // Record latest event timestamp for incremental polling
+      if (data.length > 0) {
+        const latest = data.reduce(
+          (max, e) => (e.createdAt > max ? e.createdAt : max),
+          data[0].createdAt
+        );
+        lastEventTimeRef.current = latest;
+      }
     } catch {
       // silent
     } finally {
@@ -578,6 +589,37 @@ export default function TicketTimeline({
     loadEvents();
   }, [loadEvents]);
 
+  // Incremental poll — only fetch events newer than the last known timestamp
+  const pollNewEvents = useCallback(async () => {
+    if (!ticketId || !companyId || !lastEventTimeRef.current) return;
+    try {
+      const newEvents = await listTimelineEvents(
+        ticketId,
+        companyId,
+        lastEventTimeRef.current
+      );
+      if (newEvents.length > 0) {
+        setEvents((prev) => {
+          const existingIds = new Set(prev.map((e) => e.id));
+          const unique = newEvents.filter((e) => !existingIds.has(e.id));
+          if (unique.length === 0) return prev;
+          const merged = [...prev, ...unique].sort(
+            (a, b) =>
+              new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+          );
+          return merged;
+        });
+        const latest = newEvents.reduce(
+          (max, e) => (e.createdAt > max ? e.createdAt : max),
+          newEvents[0].createdAt
+        );
+        lastEventTimeRef.current = latest;
+      }
+    } catch {
+      // silent
+    }
+  }, [ticketId, companyId]);
+
   // Auto-refresh timeline — only for WhatsApp tickets (real-time needed)
   // Email and web tickets use manual refresh
   useEffect(() => {
@@ -585,18 +627,11 @@ export default function TicketTimeline({
     if (channelType !== "WHATSAPP") return;
 
     const interval = setInterval(() => {
-      listTimelineEvents(ticketId, companyId)
-        .then((data) => {
-          setEvents((prev) => {
-            if (data.length !== prev.length) return data;
-            return prev;
-          });
-        })
-        .catch(() => {});
-    }, 10_000); // 10 seconds for WhatsApp instead of 5
+      pollNewEvents();
+    }, 10_000); // 10 seconds for WhatsApp
 
     return () => clearInterval(interval);
-  }, [ticketId, companyId, channelType]);
+  }, [ticketId, companyId, channelType, pollNewEvents]);
 
   useEffect(() => {
     timelineEndRef.current?.scrollIntoView({ behavior: "smooth" });

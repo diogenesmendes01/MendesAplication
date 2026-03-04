@@ -770,7 +770,8 @@ export interface TimelineEvent {
 
 export async function listTimelineEvents(
   ticketId: string,
-  companyId: string
+  companyId: string,
+  since?: string // ISO timestamp — only return events after this time
 ): Promise<TimelineEvent[]> {
   await requireCompanyAccess(companyId);
 
@@ -785,7 +786,7 @@ export async function listTimelineEvents(
 
   const [messages, refunds, statusChanges] = await Promise.all([
     prisma.ticketMessage.findMany({
-      where: { ticketId },
+      where: { ticketId, ...(since ? { createdAt: { gt: new Date(since) } } : {}) },
       orderBy: { createdAt: "asc" },
       include: {
         sender: { select: { id: true, name: true } },
@@ -802,7 +803,7 @@ export async function listTimelineEvents(
       },
     }),
     prisma.refund.findMany({
-      where: { ticketId },
+      where: { ticketId, ...(since ? { requestedAt: { gt: new Date(since) } } : {}) },
       include: {
         requestedBy: { select: { name: true } },
       },
@@ -812,6 +813,7 @@ export async function listTimelineEvents(
         entityId: ticketId,
         entity: "Ticket",
         action: "STATUS_CHANGE",
+        ...(since ? { createdAt: { gt: new Date(since) } } : {}),
       },
       include: {
         user: { select: { name: true } },
