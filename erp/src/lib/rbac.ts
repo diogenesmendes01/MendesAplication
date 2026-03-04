@@ -3,6 +3,11 @@
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/session";
 
+// Short-lived cache for company access checks — avoids redundant DB queries
+// when bootstrap actions call requireCompanyAccess for each sub-function.
+const accessCache = new Map<string, { result: boolean; timestamp: number }>();
+const ACCESS_CACHE_TTL = 30_000; // 30 seconds
+
 /**
  * Check if a user can access a specific company.
  * Admin users can access all companies.
@@ -16,6 +21,12 @@ export async function canAccessCompany(
   // Admin bypasses company-level checks
   if (role === "ADMIN") return true;
 
+  const cacheKey = `${userId}:${companyId}`;
+  const cached = accessCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < ACCESS_CACHE_TTL) {
+    return cached.result;
+  }
+
   // Manager: check UserCompany junction
   const assignment = await prisma.userCompany.findUnique({
     where: {
@@ -23,7 +34,9 @@ export async function canAccessCompany(
     },
   });
 
-  return assignment !== null;
+  const result = assignment !== null;
+  accessCache.set(cacheKey, { result, timestamp: Date.now() });
+  return result;
 }
 
 /**
