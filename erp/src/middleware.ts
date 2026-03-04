@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { jwtVerify } from "jose";
 
 const PUBLIC_PATHS = [
   "/login",
@@ -6,11 +7,16 @@ const PUBLIC_PATHS = [
   "/reset-password",
   "/api/auth/login",
   "/api/auth/refresh",
+  "/api/webhooks",
 ];
 
 const SESSION_MAX_AGE = 30 * 60; // 30 minutes in seconds
 
-export function middleware(req: NextRequest) {
+const JWT_SECRET = new TextEncoder().encode(
+  process.env.JWT_SECRET || "dev-secret-change-in-production"
+);
+
+export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   // Allow public paths, static files, and Next.js internals
@@ -24,23 +30,43 @@ export function middleware(req: NextRequest) {
 
   const accessToken = req.cookies.get("accessToken")?.value;
 
-  // Unauthenticated → redirect to /login
+  // No cookie → redirect to login
   if (!accessToken) {
     const loginUrl = new URL("/login", req.url);
     return NextResponse.redirect(loginUrl);
   }
 
-  // Sliding session: refresh the cookie maxAge on every authenticated request
-  const response = NextResponse.next();
-  response.cookies.set("accessToken", accessToken, {
-    httpOnly: false,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: SESSION_MAX_AGE,
-  });
+  // Validate JWT — if expired or invalid, clear cookie and redirect to login
+  let payload: { exp?: number };
+  try {
+    const result = await jwtVerify(accessToken, JWT_SECRET);
+    payload = result.payload as { exp?: number };
+  } catch {
+    const loginUrl = new URL("/login", req.url);
+    const response = NextResponse.redirect(loginUrl);
+    response.cookies.delete("accessToken");
+    response.cookies.delete("refreshToken");
+    return response;
+  }
 
-  return response;
+  // Sliding session: only refresh the cookie if token expires within 5 minutes
+  const now = Math.floor(Date.now() / 1000);
+  const exp = payload.exp;
+  const REFRESH_WINDOW = 5 * 60; // 5 minutes
+
+  if (exp && exp - now < REFRESH_WINDOW) {
+    const response = NextResponse.next();
+    response.cookies.set("accessToken", accessToken, {
+      httpOnly: false,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: SESSION_MAX_AGE,
+    });
+    return response;
+  }
+
+  return NextResponse.next();
 }
 
 export const config = {
