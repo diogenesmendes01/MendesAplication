@@ -10,6 +10,8 @@ import {
   type CompanyBranding,
 } from "@/lib/email-templates";
 import { Prisma } from "@prisma/client";
+import { getCachedFiscalConfig } from "@/app/(app)/configuracoes/fiscal/actions";
+import { createTaxEntriesForInvoice } from "@/lib/tax-entries";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -143,8 +145,9 @@ export async function emitInvoiceForBoleto(
     .map((item) => item.description)
     .join("; ");
 
-  // Default ISS rate (5%) — can be configured per company in the future
-  const issRate = 5;
+  // Use fiscal config rates (cached 5min)
+  const fiscalConfig = await getCachedFiscalConfig(companyId);
+  const issRate = fiscalConfig.issRate;
 
   // Call NFS-e provider
   const result = await emitNFSe({
@@ -194,6 +197,14 @@ export async function emitInvoiceForBoleto(
       status: "ISSUED",
     } as unknown as Prisma.InputJsonValue,
     companyId,
+  });
+
+  // Create TaxEntry records for each applicable tax
+  await createTaxEntriesForInvoice({
+    invoiceId: invoice.id,
+    companyId,
+    value,
+    fiscalConfig,
   });
 
   // Auto-send NFS-e PDF to client via email
