@@ -1,10 +1,15 @@
 import { prisma } from "@/lib/prisma";
-import { Prisma } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 import type { FiscalConfigData } from "@/app/(app)/configuracoes/fiscal/actions";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
+
+type PrismaTransactionClient = Omit<
+  PrismaClient,
+  "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends"
+>;
 
 interface TaxEntryInput {
   invoiceId: string;
@@ -13,6 +18,8 @@ interface TaxEntryInput {
   fiscalConfig: FiscalConfigData;
   /** If true, creates entries with negative values (for credit notes / estorno) */
   isEstorno?: boolean;
+  /** Optional transaction client — if provided, operations run inside the transaction */
+  tx?: PrismaTransactionClient;
 }
 
 // ---------------------------------------------------------------------------
@@ -40,9 +47,11 @@ function getDefaultDueDate(): Date {
 /**
  * Create TaxEntry records for each applicable tax on an invoice.
  * Only creates entries for taxes with rate > 0 in the FiscalConfig.
+ * Pass `tx` to run inside an existing Prisma transaction.
  */
 export async function createTaxEntriesForInvoice(input: TaxEntryInput) {
-  const { invoiceId, companyId, value, fiscalConfig, isEstorno } = input;
+  const { invoiceId, companyId, value, fiscalConfig, isEstorno, tx } = input;
+  const db = tx ?? prisma;
   const period = getCurrentPeriod();
   const dueDate = getDefaultDueDate();
   const sign = isEstorno ? -1 : 1;
@@ -68,15 +77,20 @@ export async function createTaxEntriesForInvoice(input: TaxEntryInput) {
     }));
 
   if (entries.length > 0) {
-    await prisma.taxEntry.createMany({ data: entries });
+    await db.taxEntry.createMany({ data: entries });
   }
 }
 
 /**
  * Cancel all TaxEntries linked to an invoice.
+ * Pass `tx` to run inside an existing Prisma transaction.
  */
-export async function cancelTaxEntriesForInvoice(invoiceId: string) {
-  await prisma.taxEntry.updateMany({
+export async function cancelTaxEntriesForInvoice(
+  invoiceId: string,
+  tx?: PrismaTransactionClient
+) {
+  const db = tx ?? prisma;
+  await db.taxEntry.updateMany({
     where: { invoiceId, status: { not: "CANCELLED" } },
     data: { status: "CANCELLED" },
   });

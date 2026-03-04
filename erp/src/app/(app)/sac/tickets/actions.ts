@@ -2230,7 +2230,7 @@ export async function executeRefund(
         },
       });
 
-      // Create estorno TaxEntries for the credit note
+      // Create estorno TaxEntries for the credit note (inside tx for rollback safety)
       const fiscalConfig = await getCachedFiscalConfig(companyId);
       await createTaxEntriesForInvoice({
         invoiceId: creditNote.id,
@@ -2238,6 +2238,7 @@ export async function executeRefund(
         value: Number(refund.amount),
         fiscalConfig,
         isEstorno: true,
+        tx,
       });
     }
 

@@ -72,6 +72,24 @@ export async function getFiscalConfig(companyId: string): Promise<FiscalConfigDa
 export async function saveFiscalConfig(companyId: string, data: FiscalConfigData) {
   const session = await requireCompanyAccess(companyId);
 
+  // Server-side validation
+  const rateFields = ["issRate", "pisRate", "cofinsRate", "irpjRate", "csllRate"] as const;
+  for (const field of rateFields) {
+    const v = data[field];
+    if (typeof v !== "number" || !Number.isFinite(v) || v < 0 || v > 100) {
+      throw new Error(`Alíquota ${field.replace("Rate", "").toUpperCase()} deve ser um número entre 0 e 100`);
+    }
+  }
+
+  const validRegimes = ["SIMPLES_NACIONAL", "LUCRO_PRESUMIDO", "LUCRO_REAL"];
+  if (!validRegimes.includes(data.taxRegime)) {
+    throw new Error("Regime tributário inválido");
+  }
+
+  if (typeof data.nfseNextNumber !== "number" || !Number.isFinite(data.nfseNextNumber) || data.nfseNextNumber < 1) {
+    throw new Error("Próximo número da NFS-e deve ser >= 1");
+  }
+
   const result = await prisma.fiscalConfig.upsert({
     where: { companyId },
     create: {

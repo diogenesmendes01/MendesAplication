@@ -190,6 +190,8 @@ export async function cancelInvoice(invoiceId: string, companyId: string) {
 
 /**
  * Manually emit a PENDING invoice (retry after auto-emit failure).
+ * Deletes the PENDING record first (emitInvoiceForBoleto checks for duplicates),
+ * then recreates it if emission fails so the user can retry.
  */
 export async function emitPendingInvoice(invoiceId: string, companyId: string) {
   await requireCompanyAccess(companyId);
@@ -209,6 +211,28 @@ export async function emitPendingInvoice(invoiceId: string, companyId: string) {
   // Delete the PENDING invoice so emitInvoiceForBoleto can create a new ISSUED one
   await prisma.invoice.delete({ where: { id: invoiceId } });
 
-  const { emitInvoiceForBoleto } = await import("@/lib/nfse-actions");
-  return emitInvoiceForBoleto(invoice.boletoId, companyId);
+  try {
+    const { emitInvoiceForBoleto } = await import("@/lib/nfse-actions");
+    return await emitInvoiceForBoleto(invoice.boletoId, companyId);
+  } catch (err) {
+    // Emission failed — recreate the PENDING invoice so the user can retry
+    const existing = await prisma.invoice.findFirst({
+      where: { boletoId: invoice.boletoId, companyId },
+    });
+    if (!existing) {
+      await prisma.invoice.create({
+        data: {
+          proposalId: invoice.proposalId,
+          boletoId: invoice.boletoId,
+          clientId: invoice.clientId,
+          serviceDescription: invoice.serviceDescription,
+          value: invoice.value,
+          issRate: invoice.issRate,
+          status: "PENDING",
+          companyId,
+        },
+      });
+    }
+    throw err;
+  }
 }
