@@ -5,6 +5,8 @@ import makeWASocket, {
   makeCacheableSignalKeyStore,
   downloadMediaMessage,
   getContentType,
+  isLidUser,
+  jidNormalizedUser,
   type WAMessage,
   type AnyMessageContent,
 } from "@whiskeysockets/baileys";
@@ -673,7 +675,6 @@ class BaileysProvider {
       "messaging-history.set",
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       async (data: any) => {
-        // Process LID mappings from history if available
         if (data.lidMappings?.length) {
           for (const mapping of data.lidMappings) {
             try {
@@ -688,6 +689,47 @@ class BaileysProvider {
                 err
               );
             }
+          }
+        }
+      }
+    );
+
+    // Capture contacts with LID→phone mappings
+    socket.ev.on(
+      "contacts.upsert",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      async (contacts: any[]) => {
+        for (const contact of contacts) {
+          try {
+            const id = contact.id || "";
+            const lid = contact.lid || "";
+            // If we have both a regular JID and a LID, save the mapping
+            if (lid && id && !isLidUser(id)) {
+              const phoneDigits = id.replace(/@.*$/, "");
+              await this.saveLidMapping(companyId, lid.replace(/@.*$/, ""), phoneDigits);
+            }
+          } catch {
+            // ignore individual contact errors
+          }
+        }
+      }
+    );
+
+    // Capture contacts.update for additional LID mappings
+    socket.ev.on(
+      "contacts.update",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      async (updates: any[]) => {
+        for (const update of updates) {
+          try {
+            const id = update.id || "";
+            const lid = update.lid || "";
+            if (lid && id && !isLidUser(id)) {
+              const phoneDigits = id.replace(/@.*$/, "");
+              await this.saveLidMapping(companyId, lid.replace(/@.*$/, ""), phoneDigits);
+            }
+          } catch {
+            // ignore
           }
         }
       }
@@ -727,6 +769,9 @@ class BaileysProvider {
 
     // Resolve LID to phone number if needed
     const resolvedJid = await this.resolveLid(companyId, remoteJid);
+    // Check if the LID was NOT resolved (resolved still looks like a LID or has 14+ digits)
+    const resolvedDigits = resolvedJid.replace(/@.*$/, "").replace(/\D/g, "");
+    const unresolvedLid = isLidUser(resolvedJid) || resolvedDigits.length > 13;
 
     // Determine message type and extract content
     let messageType = "conversation";
@@ -820,13 +865,18 @@ class BaileysProvider {
             fileName: mediaFileName,
           },
         }),
+        // Flag if LID could not be resolved to real phone number
+        ...(unresolvedLid && {
+          unresolvedLid: true,
+          originalJid: remoteJid,
+        }),
       },
     };
 
     await this.dispatchWebhook(webhookPayload);
 
     console.log(
-      `[BaileysProvider] Incoming message for ${companyId}: type=${messageType}, from=${resolvedJid}`
+      `[BaileysProvider] Incoming message for ${companyId}: type=${messageType}, from=${resolvedJid}${unresolvedLid ? " (UNRESOLVED LID)" : ""}`
     );
   }
 
@@ -953,24 +1003,61 @@ class BaileysProvider {
       return;
     }
 
-    try {
-      const response = await fetch(WEBHOOK_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          apikey: WEBHOOK_SECRET,
-        },
-        body: JSON.stringify(payload),
-      });
+    const MAX_RETRIES = 3;
+    const TIMEOUT_MS = 10_000;
+    const idempotencyKey = payload.externalId
+      ? `${payload.companyId}:${payload.externalId}`
+      : undefined;
 
-      if (!response.ok) {
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+        const response = await fetch(WEBHOOK_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: WEBHOOK_SECRET,
+            ...(idempotencyKey
+              ? { "X-Idempotency-Key": idempotencyKey }
+              : {}),
+          },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+
+        if (response.ok) return;
+
         console.error(
-          `[BaileysProvider] Webhook dispatch failed: ${response.status} ${response.statusText}`
+          `[BaileysProvider] Webhook attempt ${attempt + 1}/${MAX_RETRIES + 1} failed: ${response.status}`
+        );
+      } catch (err) {
+        const isTimeout = err instanceof Error && err.name === "AbortError";
+        console.error(
+          `[BaileysProvider] Webhook attempt ${attempt + 1}/${MAX_RETRIES + 1} ${isTimeout ? "timed out" : "error"}:`,
+          isTimeout ? "" : err
         );
       }
-    } catch (err) {
-      console.error("[BaileysProvider] Webhook dispatch error:", err);
+
+      if (attempt < MAX_RETRIES) {
+        const backoffMs =
+          Math.min(1000 * 2 ** attempt, 8000) + Math.random() * 1000;
+        await new Promise((r) => setTimeout(r, backoffMs));
+      }
     }
+
+    // All retries exhausted — log as DLQ (dead letter)
+    console.error(
+      `[BaileysProvider] DLQ: webhook failed after ${MAX_RETRIES + 1} attempts`,
+      JSON.stringify({
+        event: payload.event,
+        externalId: payload.externalId,
+        companyId: payload.companyId,
+      })
+    );
   }
 
   // ============================================
@@ -991,36 +1078,67 @@ class BaileysProvider {
   // PRIVATE: Resolve LID to Phone Number
   // ============================================
 
+  // In-memory cache for LID→phone resolution (stable mappings, rarely change)
+  private lidCache = new Map<
+    string,
+    { phone: string; timestamp: number }
+  >();
+  private static readonly LID_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+
   private async resolveLid(
     companyId: string,
     jid: string
   ): Promise<string> {
-    // LIDs contain ":" in the user part (e.g., "123:456@lid" or similar format)
-    if (!jid.includes(":") && !jid.includes("@lid")) {
+    const userPart = jid.replace(/@.*$/, "");
+    const digits = userPart.replace(/\D/g, "");
+
+    // Detect LIDs: explicit @lid domain, colon in user part, or suspiciously long number (14+ digits)
+    const looksLikeLid =
+      isLidUser(jid) ||
+      userPart.includes(":") ||
+      (digits.length > 13 && !jid.includes("@g.us"));
+
+    if (!looksLikeLid) {
       return jid;
     }
 
-    // Extract the LID portion
-    const lid = jid.replace(/@.*$/, "");
+    // Check in-memory cache first
+    const cacheKey = `${companyId}:${userPart}`;
+    const cached = this.lidCache.get(cacheKey);
+    if (
+      cached &&
+      Date.now() - cached.timestamp < BaileysProvider.LID_CACHE_TTL
+    ) {
+      return `${cached.phone}@s.whatsapp.net`;
+    }
 
+    // Try to resolve the LID to a real phone number
+    // Search by exact LID and also by digits (some LIDs are stored without colons)
     try {
       const mapping = await prisma.lidMapping.findFirst({
-        where: { companyId, lid },
+        where: {
+          companyId,
+          OR: [{ lid: userPart }, { lid: digits }],
+        },
       });
 
       if (mapping) {
         console.log(
-          `[BaileysProvider] Resolved LID ${lid} -> ${mapping.phoneNumber}`
+          `[BaileysProvider] Resolved LID ${userPart} -> ${mapping.phoneNumber}`
         );
+        this.lidCache.set(cacheKey, {
+          phone: mapping.phoneNumber,
+          timestamp: Date.now(),
+        });
         return `${mapping.phoneNumber}@s.whatsapp.net`;
       }
     } catch (err) {
-      console.error(`[BaileysProvider] Error resolving LID ${lid}:`, err);
+      console.error(`[BaileysProvider] Error resolving LID ${userPart}:`, err);
     }
 
     // If no mapping found, return original JID
     console.warn(
-      `[BaileysProvider] No LID mapping found for ${lid} (company ${companyId})`
+      `[BaileysProvider] No LID mapping found for ${userPart} (company ${companyId})`
     );
     return jid;
   }
@@ -1044,6 +1162,11 @@ class BaileysProvider {
         },
         update: { phoneNumber: cleanPhone },
         create: { companyId, lid: cleanLid, phoneNumber: cleanPhone },
+      });
+      // Invalidate LID cache for this mapping
+      this.lidCache.set(`${companyId}:${cleanLid}`, {
+        phone: cleanPhone,
+        timestamp: Date.now(),
       });
     } catch (err) {
       console.error(
