@@ -771,7 +771,8 @@ export interface TimelineEvent {
 export async function listTimelineEvents(
   ticketId: string,
   companyId: string,
-  since?: string // ISO timestamp — only return events after this time
+  since?: string, // ISO timestamp — only return events after this time
+  limit?: number // Cap total events returned (e.g. 50 for initial load)
 ): Promise<TimelineEvent[]> {
   await requireCompanyAccess(companyId);
 
@@ -784,10 +785,14 @@ export async function listTimelineEvents(
     throw new Error("Ticket não encontrado");
   }
 
+  // When limit is set, over-fetch per source then truncate merged result
+  const perSourceLimit = limit ? limit + 10 : undefined;
+
   const [messages, refunds, statusChanges] = await Promise.all([
     prisma.ticketMessage.findMany({
       where: { ticketId, ...(since ? { createdAt: { gt: new Date(since) } } : {}) },
-      orderBy: { createdAt: "asc" },
+      orderBy: { createdAt: "desc" },
+      ...(perSourceLimit ? { take: perSourceLimit } : {}),
       include: {
         sender: { select: { id: true, name: true } },
         contact: { select: { id: true, name: true, role: true } },
@@ -804,6 +809,7 @@ export async function listTimelineEvents(
     }),
     prisma.refund.findMany({
       where: { ticketId, ...(since ? { requestedAt: { gt: new Date(since) } } : {}) },
+      ...(perSourceLimit ? { take: perSourceLimit } : {}),
       include: {
         requestedBy: { select: { name: true } },
       },
@@ -818,7 +824,8 @@ export async function listTimelineEvents(
       include: {
         user: { select: { name: true } },
       },
-      orderBy: { createdAt: "asc" },
+      orderBy: { createdAt: "desc" },
+      ...(perSourceLimit ? { take: perSourceLimit } : {}),
     }),
   ]);
 
@@ -908,7 +915,8 @@ export async function listTimelineEvents(
     (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
   );
 
-  return events;
+  // When limit is set, return only the N most recent events
+  return limit ? events.slice(-limit) : events;
 }
 
 // ---------------------------------------------------------------------------

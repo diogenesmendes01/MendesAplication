@@ -568,7 +568,7 @@ export default function TicketTimeline({
     if (!ticketId || !companyId) return;
     setLoading(true);
     try {
-      const data = await listTimelineEvents(ticketId, companyId);
+      const data = await listTimelineEvents(ticketId, companyId, undefined, 50);
       setEvents(data);
       // Record latest event timestamp for incremental polling
       if (data.length > 0) {
