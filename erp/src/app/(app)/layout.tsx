@@ -23,7 +23,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <CompanyProvider>
-      {/* Mobile overlay */}
+      {/* Mobile backdrop */}
       {mobileOpen && (
         <div
           className="fixed inset-0 z-30 bg-black/50 md:hidden"
@@ -31,19 +31,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         />
       )}
 
-      {/* Desktop sidebar */}
-      <div className="hidden md:block">
-        <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} />
-      </div>
-
-      {/* Mobile sidebar (slides in/out) */}
+      {/* Single sidebar — always mounted, CSS handles responsive */}
       <div
         className={cn(
-          "fixed inset-y-0 left-0 z-50 transition-transform duration-300 md:hidden",
-          mobileOpen ? "translate-x-0" : "-translate-x-full"
+          "fixed inset-y-0 left-0 z-40 transition-transform duration-300",
+          // Mobile: slide in/out based on mobileOpen; Desktop: always visible
+          mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
         )}
       >
-        <Sidebar collapsed={false} onToggle={() => setMobileOpen(false)} />
+        <Sidebar
+          collapsed={collapsed}
+          onToggle={() => setCollapsed(!collapsed)}
+          onMobileClose={() => setMobileOpen(false)}
+        />
       </div>
 
       {/* Header */}

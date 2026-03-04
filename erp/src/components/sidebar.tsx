@@ -18,6 +18,7 @@ import {
   BookOpen,
   Bot,
   Receipt,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -54,9 +55,10 @@ const navItems: NavItem[] = [
 interface SidebarProps {
   collapsed: boolean;
   onToggle: () => void;
+  onMobileClose?: () => void;
 }
 
-export function Sidebar({ collapsed, onToggle }: SidebarProps) {
+export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
   const pathname = usePathname();
   const { selectedCompanyId } = useCompany();
   const [sacBadge, setSacBadge] = useState(0);
@@ -98,12 +100,26 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       )}
     >
       {/* Logo / Brand */}
-      <div className="flex h-14 items-center border-b px-4">
-        {!collapsed && (
-          <span className="text-lg font-bold text-primary">MendesERP</span>
-        )}
-        {collapsed && (
-          <span className="mx-auto text-lg font-bold text-primary">M</span>
+      <div className="flex h-14 items-center justify-between border-b px-4">
+        <div>
+          {!collapsed && (
+            <span className="text-lg font-bold text-primary">MendesERP</span>
+          )}
+          {collapsed && (
+            <span className="text-lg font-bold text-primary">M</span>
+          )}
+        </div>
+        {/* Mobile close button */}
+        {onMobileClose && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="md:hidden"
+            onClick={onMobileClose}
+            aria-label="Fechar menu"
+          >
+            <X className="h-5 w-5" />
+          </Button>
         )}
       </div>
 
