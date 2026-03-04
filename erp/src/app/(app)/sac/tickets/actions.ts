@@ -2678,3 +2678,47 @@ export async function approveCancellation(
 
   return { success: true };
 }
+
+// ---------------------------------------------------------------------------
+// Aggregated Bootstrap — single roundtrip for ticket detail page
+// ---------------------------------------------------------------------------
+
+export interface TicketDetailBootstrap {
+  ticket: TicketDetail;
+  financialSummary: ClientFinancialSummary;
+  refunds: RefundSummary[];
+  cancellation: CancellationInfo | null;
+  aiEnabled: boolean;
+  users: { id: string; name: string }[];
+  userRole: string;
+}
+
+export async function getTicketDetailBootstrap(
+  ticketId: string,
+  companyId: string
+): Promise<TicketDetailBootstrap | null> {
+  await requireCompanyAccess(companyId);
+
+  const ticket = await getTicketById(ticketId, companyId);
+  if (!ticket) return null;
+
+  const [financialSummary, refunds, cancellation, aiEnabled, users, userRole] =
+    await Promise.all([
+      getClientFinancialSummary(ticket.client.id, companyId),
+      getTicketRefunds(ticketId, companyId),
+      getCancellationInfo(ticketId, companyId),
+      getAiConfigEnabled(companyId),
+      listUsersForAssign(companyId),
+      getUserRole(companyId),
+    ]);
+
+  return {
+    ticket,
+    financialSummary,
+    refunds,
+    cancellation,
+    aiEnabled,
+    users,
+    userRole,
+  };
+}

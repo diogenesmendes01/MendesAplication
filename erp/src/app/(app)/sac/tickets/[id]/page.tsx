@@ -55,15 +55,12 @@ import { useCompany } from "@/contexts/company-context";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
-  getTicketById,
+  getTicketDetailBootstrap,
   updateTicketStatus,
   reassignTicket,
-  listUsersForAssign,
   addTag,
   removeTag,
-  getClientFinancialSummary,
   getTicketRefunds,
-  getUserRole,
   requestRefund,
   approveRefund,
   rejectRefund,
@@ -82,7 +79,6 @@ import {
   type CancellationInfo,
   type CancellationType,
   listTimelineEvents,
-  getAiConfigEnabled,
 } from "../actions";
 import type { TicketStatus } from "@prisma/client";
 import { generateTicketPdf } from "@/lib/ticket-pdf";
@@ -326,26 +322,19 @@ export default function TicketDetailPage() {
     if (!selectedCompanyId || !ticketId) return;
     setLoading(true);
     try {
-      // Load ticket first (others depend on client.id)
-      const data = await getTicketById(ticketId, selectedCompanyId);
-      setTicket(data);
-      setTags(data.tags);
-
-      // Run all secondary queries in parallel
-      await Promise.all([
-        getClientFinancialSummary(data.client.id, selectedCompanyId)
-          .then(setFinancial)
-          .catch(() => {}),
-        getTicketRefunds(ticketId, selectedCompanyId)
-          .then(setRefunds)
-          .catch(() => {}),
-        getCancellationInfo(ticketId, selectedCompanyId)
-          .then(setCancellation)
-          .catch(() => {}),
-        getAiConfigEnabled(selectedCompanyId)
-          .then(setAiConfigEnabled)
-          .catch(() => {}),
-      ]);
+      const result = await getTicketDetailBootstrap(ticketId, selectedCompanyId);
+      if (!result) {
+        setTicket(null);
+        return;
+      }
+      setTicket(result.ticket);
+      setTags(result.ticket.tags);
+      setFinancial(result.financialSummary);
+      setRefunds(result.refunds);
+      setCancellation(result.cancellation);
+      setAiConfigEnabled(result.aiEnabled);
+      setUsers(result.users);
+      setUserRole(result.userRole);
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : "Erro ao carregar ticket"
@@ -358,16 +347,6 @@ export default function TicketDetailPage() {
   useEffect(() => {
     loadTicket();
   }, [loadTicket]);
-
-  // Load users for reassignment and user role
-  useEffect(() => {
-    if (!selectedCompanyId) return;
-    // Run both in parallel
-    Promise.all([
-      listUsersForAssign(selectedCompanyId).then(setUsers).catch(() => {}),
-      getUserRole(selectedCompanyId).then(setUserRole).catch(() => {}),
-    ]);
-  }, [selectedCompanyId]);
 
   // ---------------------------------------------------
   // Status change
