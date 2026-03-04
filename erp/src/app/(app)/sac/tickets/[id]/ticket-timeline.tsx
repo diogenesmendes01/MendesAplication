@@ -14,6 +14,8 @@ import {
   Upload,
   Smile,
   Bot,
+  Wifi,
+  RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,6 +37,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
+import Link from "next/link";
 import {
   listTimelineEvents,
   createInternalNote,
@@ -48,6 +51,7 @@ import {
   type EmailRecipient,
   type WhatsAppRecipient,
 } from "../actions";
+import { getWhatsAppStatus } from "../../../configuracoes/canais/actions";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -505,6 +509,7 @@ interface TicketTimelineProps {
   ticketSubject: string;
   aiEnabled: boolean;
   aiConfigEnabled: boolean;
+  channelType?: string | null;
 }
 
 export default function TicketTimeline({
@@ -513,6 +518,7 @@ export default function TicketTimeline({
   ticketSubject,
   aiEnabled: initialAiEnabled,
   aiConfigEnabled,
+  channelType,
 }: TicketTimelineProps) {
   const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -549,6 +555,12 @@ export default function TicketTimeline({
   const waFileInputRef = useRef<HTMLInputElement>(null);
   const waEndRef = useRef<HTMLDivElement>(null);
 
+  // WhatsApp connection status
+  const [waConnected, setWaConnected] = useState<boolean | null>(null);
+
+  // Active tab — controlled for lazy-loading recipients
+  const [activeTab, setActiveTab] = useState("todos");
+
   const loadEvents = useCallback(async () => {
     if (!ticketId || !companyId) return;
     setLoading(true);
@@ -566,12 +578,42 @@ export default function TicketTimeline({
     loadEvents();
   }, [loadEvents]);
 
+  // Auto-refresh timeline — only for WhatsApp tickets (real-time needed)
+  // Email and web tickets use manual refresh
+  useEffect(() => {
+    if (!ticketId || !companyId) return;
+    if (channelType !== "WHATSAPP") return;
+
+    const interval = setInterval(() => {
+      listTimelineEvents(ticketId, companyId)
+        .then((data) => {
+          setEvents((prev) => {
+            if (data.length !== prev.length) return data;
+            return prev;
+          });
+        })
+        .catch(() => {});
+    }, 10_000); // 10 seconds for WhatsApp instead of 5
+
+    return () => clearInterval(interval);
+  }, [ticketId, companyId, channelType]);
+
   useEffect(() => {
     timelineEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [events]);
 
-  // Load email recipients
+  // Manual refresh — exposed via button in the UI
+  const [refreshing, setRefreshing] = useState(false);
+  async function handleManualRefresh() {
+    setRefreshing(true);
+    await loadEvents();
+    setRefreshing(false);
+  }
+
+  // Load email recipients — only when Email tab is first opened
+  const [recipientsLoaded, setRecipientsLoaded] = useState(false);
   useEffect(() => {
+    if (activeTab !== "email" || recipientsLoaded) return;
     if (!ticketId || !companyId) return;
     getEmailRecipients(ticketId, companyId)
       .then((r) => {
@@ -579,13 +621,16 @@ export default function TicketTimeline({
         if (r.length > 0 && !emailTo) {
           setEmailTo(r[0].email);
         }
+        setRecipientsLoaded(true);
       })
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ticketId, companyId]);
+  }, [activeTab, ticketId, companyId, recipientsLoaded]);
 
-  // Load WhatsApp recipients
+  // Load WhatsApp recipients — only when WhatsApp tab is first opened
+  const [waRecipientsLoaded, setWaRecipientsLoaded] = useState(false);
   useEffect(() => {
+    if (activeTab !== "whatsapp" || waRecipientsLoaded) return;
     if (!ticketId || !companyId) return;
     getWhatsAppRecipients(ticketId, companyId)
       .then((r) => {
@@ -593,10 +638,19 @@ export default function TicketTimeline({
         if (r.length > 0 && !waTo) {
           setWaTo(r[0].phone);
         }
+        setWaRecipientsLoaded(true);
       })
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ticketId, companyId]);
+  }, [activeTab, ticketId, companyId, waRecipientsLoaded]);
+
+  // Check WhatsApp connection status
+  useEffect(() => {
+    if (!companyId) return;
+    getWhatsAppStatus(companyId)
+      .then((s: { isConnected: boolean }) => setWaConnected(s.isConnected))
+      .catch(() => setWaConnected(false));
+  }, [companyId]);
 
   // Filter email-only events (no internal notes, only channel=EMAIL)
   const emailEvents = events.filter(
@@ -849,7 +903,19 @@ export default function TicketTimeline({
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0">
-        <CardTitle className="text-lg">Timeline</CardTitle>
+        <div className="flex items-center gap-2">
+          <CardTitle className="text-lg">Timeline</CardTitle>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleManualRefresh}
+            disabled={refreshing}
+            title="Atualizar timeline"
+            className="h-7 w-7"
+          >
+            <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+          </Button>
+        </div>
         {aiConfigEnabled && (
           <div className="flex items-center gap-2">
             <Bot className="h-4 w-4 text-muted-foreground" />
@@ -866,7 +932,7 @@ export default function TicketTimeline({
         )}
       </CardHeader>
       <CardContent>
-        <Tabs defaultValue="todos">
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList>
             <TabsTrigger value="todos">Todos</TabsTrigger>
             <TabsTrigger value="email">Email</TabsTrigger>
@@ -1079,24 +1145,45 @@ export default function TicketTimeline({
 
             {/* WhatsApp reply form */}
             <div className="border-t pt-4 space-y-3">
-              <div>
-                <Label htmlFor="wa-to" className="text-sm font-medium">
-                  Para
-                </Label>
-                <Select value={waTo} onValueChange={setWaTo}>
-                  <SelectTrigger id="wa-to">
-                    <SelectValue placeholder="Selecione o numero" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {waRecipients.map((r) => (
-                      <SelectItem key={r.phone} value={r.phone}>
-                        {r.name}
-                        {r.role ? ` (${r.role})` : ""} — {r.phone}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {waConnected === false && (
+                <div className="flex items-center justify-between rounded-md bg-red-50 border border-red-200 px-4 py-3">
+                  <div className="flex items-center gap-2 text-sm text-red-700">
+                    <Wifi className="h-4 w-4" />
+                    <span>WhatsApp desconectado. Reconecte para enviar mensagens.</span>
+                  </div>
+                  <Link href="/configuracoes/canais">
+                    <Button variant="outline" size="sm" className="border-red-300 text-red-700 hover:bg-red-100">
+                      Reconectar
+                    </Button>
+                  </Link>
+                </div>
+              )}
+
+              {waRecipients.length > 1 ? (
+                <div>
+                  <Label htmlFor="wa-to" className="text-sm font-medium">
+                    Para
+                  </Label>
+                  <Select value={waTo} onValueChange={setWaTo}>
+                    <SelectTrigger id="wa-to">
+                      <SelectValue placeholder="Selecione o número" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {waRecipients.map((r) => (
+                        <SelectItem key={r.phone} value={r.phone}>
+                          {r.name}
+                          {r.role ? ` (${r.role})` : ""} — {r.phone}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : waRecipients.length === 1 ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <MessageSquare className="h-4 w-4" />
+                  <span>Para: <strong className="text-foreground">{waRecipients[0].name} — {waRecipients[0].phone}</strong></span>
+                </div>
+              ) : null}
 
               <Textarea
                 placeholder="Digite sua mensagem..."
@@ -1151,7 +1238,7 @@ export default function TicketTimeline({
                 </div>
                 <Button
                   onClick={handleSendWhatsApp}
-                  disabled={sendingWa || !waContent.trim() || !waTo}
+                  disabled={sendingWa || !waContent.trim() || !waTo || waConnected === false}
                   size="sm"
                   className="bg-green-600 hover:bg-green-700"
                 >

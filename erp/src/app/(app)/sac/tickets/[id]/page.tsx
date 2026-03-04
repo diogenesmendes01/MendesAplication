@@ -885,6 +885,7 @@ export default function TicketDetailPage() {
             ticketSubject={ticket.subject}
             aiEnabled={ticket.aiEnabled}
             aiConfigEnabled={aiConfigEnabled}
+            channelType={ticket.channelType ?? null}
           />
         </div>
 
