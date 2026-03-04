@@ -24,6 +24,12 @@ export async function processWhatsAppOutbound(job: Job<WhatsAppOutboundJobData>)
     return;
   }
 
+  // Mark as QUEUED
+  await prisma.ticketMessage.update({
+    where: { id: messageId },
+    data: { deliveryStatus: "QUEUED" },
+  });
+
   try {
     // Send text message
     const externalId = await sendTextMessage(companyId, to, content);
@@ -41,16 +47,22 @@ export async function processWhatsAppOutbound(job: Job<WhatsAppOutboundJobData>)
       }
     }
 
-    // Update message with external ID
-    if (externalId) {
-      await prisma.ticketMessage.update({
-        where: { id: messageId },
-        data: { externalId },
-      });
-    }
+    // Update message with external ID and SENT status
+    await prisma.ticketMessage.update({
+      where: { id: messageId },
+      data: {
+        ...(externalId ? { externalId } : {}),
+        deliveryStatus: "SENT",
+      },
+    });
 
     console.log(`[whatsapp-outbound] Message sent to ${to}, externalId: ${externalId}`);
   } catch (err) {
+    // Mark as FAILED
+    await prisma.ticketMessage.update({
+      where: { id: messageId },
+      data: { deliveryStatus: "FAILED" },
+    }).catch(() => {}); // Don't let status update failure mask the original error
     console.error(`[whatsapp-outbound] Failed to send WhatsApp for message ${messageId}:`, err);
     throw err; // Let BullMQ retry
   }

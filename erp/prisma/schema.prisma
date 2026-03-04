@@ -492,6 +492,7 @@ model TicketMessage {
   contactId    String?
   isInternal      Boolean           @default(false)
   isAiGenerated   Boolean           @default(false)
+  deliveryStatus  String?           // QUEUED, SENT, DELIVERED, FAILED
   createdAt       DateTime          @default(now())
 
   ticket      Ticket              @relation(fields: [ticketId], references: [id], onDelete: Cascade)
