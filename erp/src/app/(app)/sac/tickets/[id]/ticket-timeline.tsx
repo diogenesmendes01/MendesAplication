@@ -53,6 +53,7 @@ import {
   type AttachmentData,
 } from "../actions";
 import { getWhatsAppStatus } from "../../../configuracoes/canais/actions";
+import { useEventStream } from "@/hooks/use-event-stream";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -621,15 +622,24 @@ export default function TicketTimeline({
     }
   }, [ticketId, companyId]);
 
-  // Auto-refresh timeline — only for WhatsApp tickets (real-time needed)
-  // Email and web tickets use manual refresh
+  // SSE-driven timeline updates — instant push for all channels
+  useEventStream(companyId, {
+    "timeline-update": (data: unknown) => {
+      const event = data as { ticketId: string; timestamp: number };
+      if (event.ticketId === ticketId) {
+        pollNewEvents();
+      }
+    },
+  });
+
+  // Fallback polling — 60s safety net in case SSE connection drops
   useEffect(() => {
     if (!ticketId || !companyId) return;
     if (channelType !== "WHATSAPP") return;
 
     const interval = setInterval(() => {
       pollNewEvents();
-    }, 10_000); // 10 seconds for WhatsApp
+    }, 60_000);
 
     return () => clearInterval(interval);
   }, [ticketId, companyId, channelType, pollNewEvents]);
