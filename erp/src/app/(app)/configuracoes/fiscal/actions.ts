@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireCompanyAccess } from "@/lib/rbac";
 import { logAuditEvent } from "@/lib/audit";
+import { encrypt, decrypt } from "@/lib/encryption";
 import { Prisma } from "@prisma/client";
 import type { TaxRegime } from "@prisma/client";
 
@@ -23,6 +24,12 @@ export interface FiscalConfigData {
   nfseSerieNumber: string;
   nfseNextNumber: number;
   autoEmitNfse: boolean;
+  // NFS-e — campos sensíveis (não retornados ao cliente em plain text)
+  itemListaServico: string;
+  codigoTributacaoMunicipio: string;
+  certificadoToken1: string;
+  certificadoToken2: string;
+  hasCertificado: boolean; // indica se há .pfx salvo (sem expor o conteúdo)
 }
 
 // ---------------------------------------------------------------------------
@@ -50,6 +57,11 @@ export async function getFiscalConfig(companyId: string): Promise<FiscalConfigDa
       nfseSerieNumber: "1",
       nfseNextNumber: 1,
       autoEmitNfse: false,
+      itemListaServico: "",
+      codigoTributacaoMunicipio: "",
+      certificadoToken1: "",
+      certificadoToken2: "",
+      hasCertificado: false,
     };
   }
 
@@ -66,7 +78,45 @@ export async function getFiscalConfig(companyId: string): Promise<FiscalConfigDa
     nfseSerieNumber: config.nfseSerieNumber,
     nfseNextNumber: config.nfseNextNumber,
     autoEmitNfse: config.autoEmitNfse,
+    itemListaServico: config.itemListaServico ?? "",
+    codigoTributacaoMunicipio: config.codigoTributacaoMunicipio ?? "",
+    // Tokens são retornados em plain text (não são certificados criptográficos)
+    certificadoToken1: config.certificadoToken1 ?? "",
+    certificadoToken2: config.certificadoToken2 ?? "",
+    // Apenas informa se há certificado — nunca expõe o .pfx ao cliente
+    hasCertificado: !!config.certificadoPfx,
   };
+}
+
+/**
+ * Salva o certificado .pfx (base64) e sua senha de forma encriptada.
+ * Ação separada para evitar reenvio do arquivo a cada save de config.
+ */
+export async function saveCertificado(
+  companyId: string,
+  pfxBase64: string,
+  senha: string
+): Promise<{ success: true }> {
+  await requireCompanyAccess(companyId);
+
+  const encryptedPfx = encrypt(pfxBase64);
+  const encryptedSenha = encrypt(senha);
+
+  await prisma.fiscalConfig.upsert({
+    where: { companyId },
+    create: {
+      companyId,
+      certificadoPfx: encryptedPfx,
+      certificadoSenha: encryptedSenha,
+    },
+    update: {
+      certificadoPfx: encryptedPfx,
+      certificadoSenha: encryptedSenha,
+    },
+  });
+
+  fiscalConfigCache.delete(companyId);
+  return { success: true };
 }
 
 export async function saveFiscalConfig(companyId: string, data: FiscalConfigData) {
@@ -90,37 +140,29 @@ export async function saveFiscalConfig(companyId: string, data: FiscalConfigData
     throw new Error("Próximo número da NFS-e deve ser >= 1");
   }
 
+  const baseData = {
+    taxRegime: data.taxRegime,
+    issRate: data.issRate,
+    pisRate: data.pisRate,
+    cofinsRate: data.cofinsRate,
+    irpjRate: data.irpjRate,
+    csllRate: data.csllRate,
+    cnae: data.cnae || null,
+    inscricaoMunicipal: data.inscricaoMunicipal || null,
+    codigoMunicipio: data.codigoMunicipio || null,
+    nfseSerieNumber: data.nfseSerieNumber || "1",
+    nfseNextNumber: data.nfseNextNumber || 1,
+    autoEmitNfse: data.autoEmitNfse,
+    itemListaServico: data.itemListaServico || null,
+    codigoTributacaoMunicipio: data.codigoTributacaoMunicipio || null,
+    certificadoToken1: data.certificadoToken1 || null,
+    certificadoToken2: data.certificadoToken2 || null,
+  };
+
   const result = await prisma.fiscalConfig.upsert({
     where: { companyId },
-    create: {
-      companyId,
-      taxRegime: data.taxRegime,
-      issRate: data.issRate,
-      pisRate: data.pisRate,
-      cofinsRate: data.cofinsRate,
-      irpjRate: data.irpjRate,
-      csllRate: data.csllRate,
-      cnae: data.cnae || null,
-      inscricaoMunicipal: data.inscricaoMunicipal || null,
-      codigoMunicipio: data.codigoMunicipio || null,
-      nfseSerieNumber: data.nfseSerieNumber || "1",
-      nfseNextNumber: data.nfseNextNumber || 1,
-      autoEmitNfse: data.autoEmitNfse,
-    },
-    update: {
-      taxRegime: data.taxRegime,
-      issRate: data.issRate,
-      pisRate: data.pisRate,
-      cofinsRate: data.cofinsRate,
-      irpjRate: data.irpjRate,
-      csllRate: data.csllRate,
-      cnae: data.cnae || null,
-      inscricaoMunicipal: data.inscricaoMunicipal || null,
-      codigoMunicipio: data.codigoMunicipio || null,
-      nfseSerieNumber: data.nfseSerieNumber || "1",
-      nfseNextNumber: data.nfseNextNumber || 1,
-      autoEmitNfse: data.autoEmitNfse,
-    },
+    create: { companyId, ...baseData },
+    update: baseData,
   });
 
   await logAuditEvent({
@@ -169,6 +211,11 @@ export async function getCachedFiscalConfig(companyId: string): Promise<FiscalCo
         nfseSerieNumber: config.nfseSerieNumber,
         nfseNextNumber: config.nfseNextNumber,
         autoEmitNfse: config.autoEmitNfse,
+        itemListaServico: config.itemListaServico ?? "",
+        codigoTributacaoMunicipio: config.codigoTributacaoMunicipio ?? "",
+        certificadoToken1: config.certificadoToken1 ?? "",
+        certificadoToken2: config.certificadoToken2 ?? "",
+        hasCertificado: !!config.certificadoPfx,
       }
     : {
         taxRegime: "SIMPLES_NACIONAL",
@@ -183,6 +230,11 @@ export async function getCachedFiscalConfig(companyId: string): Promise<FiscalCo
         nfseSerieNumber: "1",
         nfseNextNumber: 1,
         autoEmitNfse: false,
+        itemListaServico: "",
+        codigoTributacaoMunicipio: "",
+        certificadoToken1: "",
+        certificadoToken2: "",
+        hasCertificado: false,
       };
 
   fiscalConfigCache.set(companyId, { data, timestamp: Date.now() });

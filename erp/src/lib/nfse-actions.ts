@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { requireCompanyAccess } from "@/lib/rbac";
-import { emitNFSe } from "@/lib/nfse";
+import { getNfseProviderForCompany } from "@/lib/nfse";
 import { sendEmail } from "@/lib/email";
 import { logAuditEvent } from "@/lib/audit";
 import {
@@ -149,8 +149,11 @@ export async function emitInvoiceForBoleto(
   const fiscalConfig = await getCachedFiscalConfig(companyId);
   const issRate = fiscalConfig.issRate;
 
-  // Call NFS-e provider
-  const result = await emitNFSe({
+  // Seleciona o provider NFS-e correto para o município da empresa
+  const nfseProvider = await getNfseProviderForCompany(companyId);
+
+  // Emite a NFS-e via provider real (Campinas, São Paulo ou Taboão)
+  const result = await nfseProvider.emitNFSe({
     companyData: {
       razaoSocial: company.razaoSocial,
       cnpj: company.cnpj,

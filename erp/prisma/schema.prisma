@@ -765,22 +765,31 @@ model Document {
 }
 
 model FiscalConfig {
-  id                  String    @id @default(cuid())
-  companyId           String    @unique
-  taxRegime           TaxRegime @default(SIMPLES_NACIONAL)
-  issRate             Decimal   @db.Decimal(5, 2) @default(5)
-  pisRate             Decimal   @db.Decimal(5, 2) @default(0)
-  cofinsRate          Decimal   @db.Decimal(5, 2) @default(0)
-  irpjRate            Decimal   @db.Decimal(5, 2) @default(0)
-  csllRate            Decimal   @db.Decimal(5, 2) @default(0)
-  cnae                String?
-  inscricaoMunicipal  String?
-  codigoMunicipio     String?
-  nfseSerieNumber     String    @default("1")
-  nfseNextNumber      Int       @default(1)
-  autoEmitNfse        Boolean   @default(false)
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  id                        String    @id @default(cuid())
+  companyId                 String    @unique
+  taxRegime                 TaxRegime @default(SIMPLES_NACIONAL)
+  issRate                   Decimal   @db.Decimal(5, 2) @default(5)
+  pisRate                   Decimal   @db.Decimal(5, 2) @default(0)
+  cofinsRate                Decimal   @db.Decimal(5, 2) @default(0)
+  irpjRate                  Decimal   @db.Decimal(5, 2) @default(0)
+  csllRate                  Decimal   @db.Decimal(5, 2) @default(0)
+  cnae                      String?
+  inscricaoMunicipal        String?
+  codigoMunicipio           String?
+  nfseSerieNumber           String    @default("1")
+  nfseNextNumber            Int       @default(1)
+  autoEmitNfse              Boolean   @default(false)
+  // NFS-e: certificado digital A1 (Campinas e São Paulo)
+  certificadoPfx            String?   // base64 do .pfx encriptado via AES
+  certificadoSenha          String?   // senha do .pfx encriptada via AES
+  // NFS-e: tokens para municípios sem certificado (ex: Taboão da Serra / CONAM)
+  certificadoToken1         String?   // token de usuário
+  certificadoToken2         String?   // senha do webservice
+  // NFS-e: código de serviço
+  itemListaServico          String?   // código LC116 ex: "01.07"
+  codigoTributacaoMunicipio String?   // código tributação opcional
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
