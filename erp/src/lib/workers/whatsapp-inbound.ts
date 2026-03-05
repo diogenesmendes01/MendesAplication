@@ -2,6 +2,7 @@ import { Job } from "bullmq";
 import { prisma } from "@/lib/prisma";
 import { aiAgentQueue } from "@/lib/queue";
 import { sseBus } from "@/lib/sse";
+import { invalidateKpiCache } from "@/lib/kpi-cache";
 import path from "path";
 import fs from "fs/promises";
 
@@ -525,6 +526,7 @@ export async function processWhatsAppInbound(job: Job<any>) {
     `[whatsapp-inbound] Message ${message.id} added to ticket ${ticketId} (${direction}/${origin}, phone: ${phone})`
   );
 
+  invalidateKpiCache(companyId);
   sseBus.publish(`company:${companyId}`, "timeline-update", { ticketId, timestamp: Date.now() });
   sseBus.publish(`company:${companyId}`, "sla-update", { timestamp: Date.now() });
 

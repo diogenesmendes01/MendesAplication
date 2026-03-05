@@ -11,23 +11,7 @@ import { createTaxEntriesForInvoice } from "@/lib/tax-entries";
 import { getCachedFiscalConfig } from "@/app/(app)/configuracoes/fiscal/actions";
 import type { JwtPayload } from "@/lib/auth";
 import { sseBus } from "@/lib/sse";
-
-// In-memory SLA config cache — configs change rarely, fetched frequently
-const slaConfigCache = new Map<string, { data: { priority: string | null; stage: string; alertBeforeMinutes: number }[]; timestamp: number }>();
-const SLA_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-
-async function fetchSlaConfigs(companyId: string) {
-  const cached = slaConfigCache.get(companyId);
-  if (cached && Date.now() - cached.timestamp < SLA_CACHE_TTL) {
-    return cached.data;
-  }
-  const configs = await prisma.slaConfig.findMany({
-    where: { companyId, type: "TICKET" },
-    select: { priority: true, stage: true, alertBeforeMinutes: true },
-  });
-  slaConfigCache.set(companyId, { data: configs, timestamp: Date.now() });
-  return configs;
-}
+import { getCompanyKpis, invalidateKpiCache, fetchSlaConfigs } from "@/lib/kpi-cache";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -249,30 +233,11 @@ async function _getTicketTabCountsInternal(companyId: string, _session: JwtPaylo
   slaCritical: number;
   refunds: number;
 }> {
-  const now = new Date();
-  const soon = new Date(now.getTime() + 30 * 60_000);
-
-  const [slaCritical, refunds] = await Promise.all([
-    prisma.ticket.count({
-      where: {
-        companyId,
-        status: { notIn: ["RESOLVED", "CLOSED"] },
-        OR: [
-          { slaBreached: true },
-          { slaResolution: { not: null, lte: soon } },
-          { slaFirstReply: { not: null, lte: soon } },
-        ],
-      },
-    }),
-    prisma.ticket.count({
-      where: {
-        companyId,
-        refunds: { some: {} },
-      },
-    }),
-  ]);
-
-  return { slaCritical, refunds };
+  const kpis = await getCompanyKpis(companyId);
+  return {
+    slaCritical: kpis.slaBreachedCount + kpis.slaAtRiskCount,
+    refunds: kpis.pendingRefundsCount,
+  };
 }
 
 export async function getTicketTabCounts(companyId: string): Promise<{
@@ -288,31 +253,8 @@ async function _getSlaAlertCountsInternal(companyId: string, _session: JwtPayloa
   breached: number;
   atRisk: number;
 }> {
-  const now = new Date();
-  const soon = new Date(now.getTime() + 30 * 60_000);
-
-  const [breached, atRisk] = await Promise.all([
-    prisma.ticket.count({
-      where: {
-        companyId,
-        status: { notIn: ["RESOLVED", "CLOSED"] },
-        slaBreached: true,
-      },
-    }),
-    prisma.ticket.count({
-      where: {
-        companyId,
-        status: { notIn: ["RESOLVED", "CLOSED"] },
-        slaBreached: { not: true },
-        OR: [
-          { slaResolution: { not: null, lte: soon } },
-          { slaFirstReply: { not: null, lte: soon } },
-        ],
-      },
-    }),
-  ]);
-
-  return { breached, atRisk };
+  const kpis = await getCompanyKpis(companyId);
+  return { breached: kpis.slaBreachedCount, atRisk: kpis.slaAtRiskCount };
 }
 
 export async function getSlaAlertCounts(companyId: string): Promise<{
@@ -379,6 +321,7 @@ export async function createTicket(input: CreateTicketInput) {
     companyId: input.companyId,
   });
 
+  invalidateKpiCache(input.companyId);
   sseBus.publish(`company:${input.companyId}`, "sla-update", { timestamp: Date.now() });
 
   return { id: ticket.id };
@@ -542,6 +485,7 @@ export async function updateTicketStatus(
     companyId,
   });
 
+  invalidateKpiCache(companyId);
   sseBus.publish(`company:${companyId}`, "sla-update", { timestamp: Date.now() });
   sseBus.publish(`company:${companyId}`, "timeline-update", { ticketId, timestamp: Date.now() });
 
@@ -1981,6 +1925,7 @@ export async function requestRefund(
     companyId,
   });
 
+  invalidateKpiCache(companyId);
   sseBus.publish(`company:${companyId}`, "sla-update", { timestamp: Date.now() });
   sseBus.publish(`company:${companyId}`, "timeline-update", { ticketId, timestamp: Date.now() });
 
@@ -2088,6 +2033,7 @@ export async function approveRefund(refundId: string, companyId: string) {
     companyId,
   });
 
+  invalidateKpiCache(companyId);
   sseBus.publish(`company:${companyId}`, "sla-update", { timestamp: Date.now() });
   sseBus.publish(`company:${companyId}`, "timeline-update", { ticketId: refund.ticketId, timestamp: Date.now() });
 
@@ -2159,6 +2105,7 @@ export async function rejectRefund(
     companyId,
   });
 
+  invalidateKpiCache(companyId);
   sseBus.publish(`company:${companyId}`, "sla-update", { timestamp: Date.now() });
   sseBus.publish(`company:${companyId}`, "timeline-update", { ticketId: refund.ticketId, timestamp: Date.now() });
 
@@ -2424,6 +2371,7 @@ export async function executeRefund(
     companyId,
   });
 
+  invalidateKpiCache(companyId);
   sseBus.publish(`company:${companyId}`, "sla-update", { timestamp: Date.now() });
   sseBus.publish(`company:${companyId}`, "timeline-update", { ticketId: refund.ticketId, timestamp: Date.now() });
 
@@ -2675,6 +2623,7 @@ export async function requestCancellation(
     companyId,
   });
 
+  invalidateKpiCache(companyId);
   sseBus.publish(`company:${companyId}`, "sla-update", { timestamp: Date.now() });
   sseBus.publish(`company:${companyId}`, "timeline-update", { ticketId, timestamp: Date.now() });
 
@@ -2808,6 +2757,7 @@ export async function approveCancellation(
     companyId,
   });
 
+  invalidateKpiCache(companyId);
   sseBus.publish(`company:${companyId}`, "sla-update", { timestamp: Date.now() });
   sseBus.publish(`company:${companyId}`, "timeline-update", { ticketId, timestamp: Date.now() });
 
