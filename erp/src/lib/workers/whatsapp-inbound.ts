@@ -1,6 +1,7 @@
 import { Job } from "bullmq";
 import { prisma } from "@/lib/prisma";
 import { aiAgentQueue } from "@/lib/queue";
+import { sseBus } from "@/lib/sse";
 import path from "path";
 import fs from "fs/promises";
 
@@ -523,6 +524,9 @@ export async function processWhatsAppInbound(job: Job<any>) {
   console.log(
     `[whatsapp-inbound] Message ${message.id} added to ticket ${ticketId} (${direction}/${origin}, phone: ${phone})`
   );
+
+  sseBus.publish(`company:${companyId}`, "timeline-update", { ticketId, timestamp: Date.now() });
+  sseBus.publish(`company:${companyId}`, "sla-update", { timestamp: Date.now() });
 
   // Enqueue AI agent job for inbound messages with text content
   if (direction === "INBOUND" && content) {

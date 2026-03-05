@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useCompany } from "@/contexts/company-context";
 import { getSlaAlertCounts } from "@/app/(app)/sac/tickets/actions";
+import { useEventStream } from "@/hooks/use-event-stream";
 
 interface NavItem {
   label: string;
@@ -63,34 +64,31 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
   const { selectedCompanyId } = useCompany();
   const [sacBadge, setSacBadge] = useState(0);
 
+  const fetchBadge = useCallback(() => {
+    if (!selectedCompanyId) return;
+    getSlaAlertCounts(selectedCompanyId)
+      .then(({ breached, atRisk }) => {
+        setSacBadge(breached + atRisk);
+      })
+      .catch(() => {
+        setSacBadge(0);
+      });
+  }, [selectedCompanyId]);
+
   useEffect(() => {
     if (!selectedCompanyId) {
       setSacBadge(0);
       return;
     }
 
-    let stale = false;
-
-    function fetchBadge() {
-      getSlaAlertCounts(selectedCompanyId!)
-        .then(({ breached, atRisk }) => {
-          if (!stale) setSacBadge(breached + atRisk);
-        })
-        .catch(() => {
-          if (!stale) setSacBadge(0);
-        });
-    }
-
     fetchBadge();
+  }, [selectedCompanyId, fetchBadge]);
 
-    // Refresh every 60 seconds instead of never
-    const interval = setInterval(fetchBadge, 60_000);
-
-    return () => {
-      stale = true;
-      clearInterval(interval);
-    };
-  }, [selectedCompanyId]);
+  useEventStream(selectedCompanyId, {
+    "sla-update": () => {
+      fetchBadge();
+    },
+  });
 
   return (
     <aside

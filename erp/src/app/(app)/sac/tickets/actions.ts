@@ -10,6 +10,7 @@ import { getSharedCompanyIds } from "@/lib/shared-clients";
 import { createTaxEntriesForInvoice } from "@/lib/tax-entries";
 import { getCachedFiscalConfig } from "@/app/(app)/configuracoes/fiscal/actions";
 import type { JwtPayload } from "@/lib/auth";
+import { sseBus } from "@/lib/sse";
 
 // In-memory SLA config cache — configs change rarely, fetched frequently
 const slaConfigCache = new Map<string, { data: { priority: string | null; stage: string; alertBeforeMinutes: number }[]; timestamp: number }>();
@@ -378,6 +379,8 @@ export async function createTicket(input: CreateTicketInput) {
     companyId: input.companyId,
   });
 
+  sseBus.publish(`company:${input.companyId}`, "sla-update", { timestamp: Date.now() });
+
   return { id: ticket.id };
 }
 
@@ -538,6 +541,9 @@ export async function updateTicketStatus(
     dataAfter: { status: newStatus } as unknown as Prisma.InputJsonValue,
     companyId,
   });
+
+  sseBus.publish(`company:${companyId}`, "sla-update", { timestamp: Date.now() });
+  sseBus.publish(`company:${companyId}`, "timeline-update", { ticketId, timestamp: Date.now() });
 
   return { status: updated.status };
 }
@@ -755,6 +761,8 @@ export async function createTicketReply(input: CreateTicketReplyInput) {
     } as unknown as Prisma.InputJsonValue,
     companyId: input.companyId,
   });
+
+  sseBus.publish(`company:${input.companyId}`, "timeline-update", { ticketId: input.ticketId, timestamp: Date.now() });
 
   return {
     id: message.id,
@@ -1008,6 +1016,8 @@ export async function createInternalNote(
     companyId,
   });
 
+  sseBus.publish(`company:${companyId}`, "timeline-update", { ticketId, timestamp: Date.now() });
+
   return { id: message.id, createdAt: message.createdAt.toISOString() };
 }
 
@@ -1178,6 +1188,8 @@ export async function sendEmailReply(
     } as unknown as Prisma.InputJsonValue,
     companyId,
   });
+
+  sseBus.publish(`company:${companyId}`, "timeline-update", { ticketId, timestamp: Date.now() });
 
   return { id: message.id, createdAt: message.createdAt.toISOString() };
 }
@@ -1445,6 +1457,8 @@ export async function sendWhatsAppMessage(
     } as unknown as Prisma.InputJsonValue,
     companyId,
   });
+
+  sseBus.publish(`company:${companyId}`, "timeline-update", { ticketId, timestamp: Date.now() });
 
   return { id: message.id, createdAt: message.createdAt.toISOString() };
 }
@@ -1967,6 +1981,9 @@ export async function requestRefund(
     companyId,
   });
 
+  sseBus.publish(`company:${companyId}`, "sla-update", { timestamp: Date.now() });
+  sseBus.publish(`company:${companyId}`, "timeline-update", { ticketId, timestamp: Date.now() });
+
   return {
     id: refund.id,
     status: refund.status,
@@ -2071,6 +2088,9 @@ export async function approveRefund(refundId: string, companyId: string) {
     companyId,
   });
 
+  sseBus.publish(`company:${companyId}`, "sla-update", { timestamp: Date.now() });
+  sseBus.publish(`company:${companyId}`, "timeline-update", { ticketId: refund.ticketId, timestamp: Date.now() });
+
   return { success: true };
 }
 
@@ -2138,6 +2158,9 @@ export async function rejectRefund(
     } as unknown as Prisma.InputJsonValue,
     companyId,
   });
+
+  sseBus.publish(`company:${companyId}`, "sla-update", { timestamp: Date.now() });
+  sseBus.publish(`company:${companyId}`, "timeline-update", { ticketId: refund.ticketId, timestamp: Date.now() });
 
   return { success: true };
 }
@@ -2401,6 +2424,9 @@ export async function executeRefund(
     companyId,
   });
 
+  sseBus.publish(`company:${companyId}`, "sla-update", { timestamp: Date.now() });
+  sseBus.publish(`company:${companyId}`, "timeline-update", { ticketId: refund.ticketId, timestamp: Date.now() });
+
   return { success: true };
 }
 
@@ -2649,6 +2675,9 @@ export async function requestCancellation(
     companyId,
   });
 
+  sseBus.publish(`company:${companyId}`, "sla-update", { timestamp: Date.now() });
+  sseBus.publish(`company:${companyId}`, "timeline-update", { ticketId, timestamp: Date.now() });
+
   return { success: true };
 }
 
@@ -2778,6 +2807,9 @@ export async function approveCancellation(
     } as unknown as Prisma.InputJsonValue,
     companyId,
   });
+
+  sseBus.publish(`company:${companyId}`, "sla-update", { timestamp: Date.now() });
+  sseBus.publish(`company:${companyId}`, "timeline-update", { ticketId, timestamp: Date.now() });
 
   return { success: true };
 }
