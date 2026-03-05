@@ -9,6 +9,7 @@ import { Prisma, type TicketStatus, type TicketPriority, type ChannelType, type 
 import { getSharedCompanyIds } from "@/lib/shared-clients";
 import { createTaxEntriesForInvoice } from "@/lib/tax-entries";
 import { getCachedFiscalConfig } from "@/app/(app)/configuracoes/fiscal/actions";
+import type { JwtPayload } from "@/lib/auth";
 
 // In-memory SLA config cache — configs change rarely, fetched frequently
 const slaConfigCache = new Map<string, { data: { priority: string | null; stage: string; alertBeforeMinutes: number }[]; timestamp: number }>();
@@ -89,11 +90,10 @@ export interface TicketRow {
 // Server Actions
 // ---------------------------------------------------------------------------
 
-export async function listTickets(
-  params: ListTicketsParams
+async function _listTicketsInternal(
+  params: ListTicketsParams,
+  session: JwtPayload
 ): Promise<PaginatedResult<TicketRow>> {
-  const session = await requireCompanyAccess(params.companyId);
-
   const page = Math.max(1, params.page ?? 1);
   const pageSize = Math.min(100, Math.max(1, params.pageSize ?? 10));
   const skip = (page - 1) * pageSize;
@@ -236,13 +236,18 @@ export async function listTickets(
   };
 }
 
+export async function listTickets(
+  params: ListTicketsParams
+): Promise<PaginatedResult<TicketRow>> {
+  const session = await requireCompanyAccess(params.companyId);
+  return _listTicketsInternal(params, session);
+}
+
 /** Get counts for tab badges */
-export async function getTicketTabCounts(companyId: string): Promise<{
+async function _getTicketTabCountsInternal(companyId: string, _session: JwtPayload): Promise<{
   slaCritical: number;
   refunds: number;
 }> {
-  await requireCompanyAccess(companyId);
-
   const now = new Date();
   const soon = new Date(now.getTime() + 30 * 60_000);
 
@@ -269,13 +274,19 @@ export async function getTicketTabCounts(companyId: string): Promise<{
   return { slaCritical, refunds };
 }
 
+export async function getTicketTabCounts(companyId: string): Promise<{
+  slaCritical: number;
+  refunds: number;
+}> {
+  const session = await requireCompanyAccess(companyId);
+  return _getTicketTabCountsInternal(companyId, session);
+}
+
 /** Get SLA alert counts for sidebar badge and banner */
-export async function getSlaAlertCounts(companyId: string): Promise<{
+async function _getSlaAlertCountsInternal(companyId: string, _session: JwtPayload): Promise<{
   breached: number;
   atRisk: number;
 }> {
-  await requireCompanyAccess(companyId);
-
   const now = new Date();
   const soon = new Date(now.getTime() + 30 * 60_000);
 
@@ -301,6 +312,14 @@ export async function getSlaAlertCounts(companyId: string): Promise<{
   ]);
 
   return { breached, atRisk };
+}
+
+export async function getSlaAlertCounts(companyId: string): Promise<{
+  breached: number;
+  atRisk: number;
+}> {
+  const session = await requireCompanyAccess(companyId);
+  return _getSlaAlertCountsInternal(companyId, session);
 }
 
 export async function createTicket(input: CreateTicketInput) {
@@ -373,9 +392,7 @@ export async function listClientsForSelect(companyId: string) {
   });
 }
 
-export async function listUsersForAssign(companyId: string) {
-  await requireCompanyAccess(companyId);
-
+async function _listUsersForAssignInternal(companyId: string, _session: JwtPayload) {
   const users = await prisma.user.findMany({
     where: {
       status: "ACTIVE",
@@ -393,6 +410,11 @@ export async function listUsersForAssign(companyId: string) {
   });
 
   return users;
+}
+
+export async function listUsersForAssign(companyId: string) {
+  const session = await requireCompanyAccess(companyId);
+  return _listUsersForAssignInternal(companyId, session);
 }
 
 // ---------------------------------------------------------------------------
@@ -421,12 +443,11 @@ export interface TicketDetail {
   aiEnabled: boolean;
 }
 
-export async function getTicketById(
+async function _getTicketByIdInternal(
   ticketId: string,
-  companyId: string
+  companyId: string,
+  _session: JwtPayload
 ): Promise<TicketDetail> {
-  await requireCompanyAccess(companyId);
-
   const ticket = await prisma.ticket.findFirst({
     where: { id: ticketId, companyId },
     include: {
@@ -463,6 +484,14 @@ export async function getTicketById(
     channelType: ticket.channel?.type ?? null,
     aiEnabled: ticket.aiEnabled,
   };
+}
+
+export async function getTicketById(
+  ticketId: string,
+  companyId: string
+): Promise<TicketDetail> {
+  const session = await requireCompanyAccess(companyId);
+  return _getTicketByIdInternal(ticketId, companyId, session);
 }
 
 const VALID_STATUS_TRANSITIONS: Record<TicketStatus, TicketStatus[]> = {
@@ -544,15 +573,18 @@ export async function toggleTicketAi(
   });
 }
 
-export async function getAiConfigEnabled(companyId: string): Promise<boolean> {
-  await requireCompanyAccess(companyId);
-
+async function _getAiConfigEnabledInternal(companyId: string, _session: JwtPayload): Promise<boolean> {
   const config = await prisma.aiConfig.findUnique({
     where: { companyId },
     select: { enabled: true },
   });
 
   return config?.enabled ?? false;
+}
+
+export async function getAiConfigEnabled(companyId: string): Promise<boolean> {
+  const session = await requireCompanyAccess(companyId);
+  return _getAiConfigEnabledInternal(companyId, session);
 }
 
 export async function reassignTicket(
@@ -1428,12 +1460,11 @@ export interface ClientFinancialSummary {
   lastPayment: string | null;
 }
 
-export async function getClientFinancialSummary(
+async function _getClientFinancialSummaryInternal(
   clientId: string,
-  companyId: string
+  companyId: string,
+  _session: JwtPayload
 ): Promise<ClientFinancialSummary> {
-  await requireCompanyAccess(companyId);
-
   const [pending, overdue, lastPaid] = await Promise.all([
     prisma.accountReceivable.aggregate({
       where: { clientId, companyId, status: "PENDING" },
@@ -1473,6 +1504,14 @@ export async function getClientFinancialSummary(
     overdueTotal,
     lastPayment: lastPaid?.paidAt?.toISOString() ?? null,
   };
+}
+
+export async function getClientFinancialSummary(
+  clientId: string,
+  companyId: string
+): Promise<ClientFinancialSummary> {
+  const session = await requireCompanyAccess(companyId);
+  return _getClientFinancialSummaryInternal(clientId, companyId, session);
 }
 
 // ---------------------------------------------------------------------------
@@ -1725,12 +1764,11 @@ export interface RefundSummary {
   approvedBy: { id: string; name: string } | null;
 }
 
-export async function getTicketRefunds(
+async function _getTicketRefundsInternal(
   ticketId: string,
-  companyId: string
+  companyId: string,
+  _session: JwtPayload
 ): Promise<RefundSummary[]> {
-  await requireCompanyAccess(companyId);
-
   const refunds = await prisma.refund.findMany({
     where: { ticketId, companyId },
     include: {
@@ -1757,9 +1795,22 @@ export async function getTicketRefunds(
   }));
 }
 
+export async function getTicketRefunds(
+  ticketId: string,
+  companyId: string
+): Promise<RefundSummary[]> {
+  const session = await requireCompanyAccess(companyId);
+  return _getTicketRefundsInternal(ticketId, companyId, session);
+}
+
+async function _getUserRoleInternal(companyId: string, session: JwtPayload): Promise<string> {
+  void companyId; // companyId was already validated by caller
+  return session.role;
+}
+
 export async function getUserRole(companyId: string): Promise<string> {
   const session = await requireCompanyAccess(companyId);
-  return session.role;
+  return _getUserRoleInternal(companyId, session);
 }
 
 // ---------------------------------------------------------------------------
@@ -2366,12 +2417,12 @@ export interface TicketListBootstrap {
 export async function getTicketListBootstrap(
   params: ListTicketsParams
 ): Promise<TicketListBootstrap> {
-  await requireCompanyAccess(params.companyId);
+  const session = await requireCompanyAccess(params.companyId);
 
   const [tickets, tabCounts, slaAlerts] = await Promise.all([
-    listTickets(params),
-    getTicketTabCounts(params.companyId),
-    getSlaAlertCounts(params.companyId),
+    _listTicketsInternal(params, session),
+    _getTicketTabCountsInternal(params.companyId, session),
+    _getSlaAlertCountsInternal(params.companyId, session),
   ]);
 
   return { tickets, tabCounts, slaAlerts };
@@ -2472,12 +2523,11 @@ export interface CancellationInfo {
   requestedAt: string | null;
 }
 
-export async function getCancellationInfo(
+async function _getCancellationInfoInternal(
   ticketId: string,
-  companyId: string
+  companyId: string,
+  _session: JwtPayload
 ): Promise<CancellationInfo> {
-  await requireCompanyAccess(companyId);
-
   const ticket = await prisma.ticket.findFirst({
     where: { id: ticketId, companyId },
     select: { tags: true },
@@ -2514,6 +2564,14 @@ export async function getCancellationInfo(
     requestedBy: note.sender?.name ?? null,
     requestedAt: note.createdAt.toISOString(),
   };
+}
+
+export async function getCancellationInfo(
+  ticketId: string,
+  companyId: string
+): Promise<CancellationInfo> {
+  const session = await requireCompanyAccess(companyId);
+  return _getCancellationInfoInternal(ticketId, companyId, session);
 }
 
 export async function requestCancellation(
@@ -2742,19 +2800,19 @@ export async function getTicketDetailBootstrap(
   ticketId: string,
   companyId: string
 ): Promise<TicketDetailBootstrap | null> {
-  await requireCompanyAccess(companyId);
+  const session = await requireCompanyAccess(companyId);
 
-  const ticket = await getTicketById(ticketId, companyId);
+  const ticket = await _getTicketByIdInternal(ticketId, companyId, session);
   if (!ticket) return null;
 
   const [financialSummary, refunds, cancellation, aiEnabled, users, userRole] =
     await Promise.all([
-      getClientFinancialSummary(ticket.client.id, companyId),
-      getTicketRefunds(ticketId, companyId),
-      getCancellationInfo(ticketId, companyId),
-      getAiConfigEnabled(companyId),
-      listUsersForAssign(companyId),
-      getUserRole(companyId),
+      _getClientFinancialSummaryInternal(ticket.client.id, companyId, session),
+      _getTicketRefundsInternal(ticketId, companyId, session),
+      _getCancellationInfoInternal(ticketId, companyId, session),
+      _getAiConfigEnabledInternal(companyId, session),
+      _listUsersForAssignInternal(companyId, session),
+      _getUserRoleInternal(companyId, session),
     ]);
 
   return {
