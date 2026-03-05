@@ -229,6 +229,7 @@ export async function listTickets(
 }
 
 /** Get counts for tab badges */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function _getTicketTabCountsInternal(companyId: string, _session: JwtPayload): Promise<{
   slaCritical: number;
   refunds: number;
@@ -249,6 +250,7 @@ export async function getTicketTabCounts(companyId: string): Promise<{
 }
 
 /** Get SLA alert counts for sidebar badge and banner */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function _getSlaAlertCountsInternal(companyId: string, _session: JwtPayload): Promise<{
   breached: number;
   atRisk: number;
@@ -338,6 +340,7 @@ export async function listClientsForSelect(companyId: string) {
   });
 }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function _listUsersForAssignInternal(companyId: string, _session: JwtPayload) {
   const users = await prisma.user.findMany({
     where: {
@@ -392,6 +395,7 @@ export interface TicketDetail {
 async function _getTicketByIdInternal(
   ticketId: string,
   companyId: string,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _session: JwtPayload
 ): Promise<TicketDetail> {
   const ticket = await prisma.ticket.findFirst({
@@ -523,6 +527,7 @@ export async function toggleTicketAi(
   });
 }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function _getAiConfigEnabledInternal(companyId: string, _session: JwtPayload): Promise<boolean> {
   const config = await prisma.aiConfig.findUnique({
     where: { companyId },
@@ -1421,6 +1426,7 @@ export interface ClientFinancialSummary {
 async function _getClientFinancialSummaryInternal(
   clientId: string,
   companyId: string,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _session: JwtPayload
 ): Promise<ClientFinancialSummary> {
   const [pending, overdue, lastPaid] = await Promise.all([
@@ -1725,6 +1731,7 @@ export interface RefundSummary {
 async function _getTicketRefundsInternal(
   ticketId: string,
   companyId: string,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _session: JwtPayload
 ): Promise<RefundSummary[]> {
   const refunds = await prisma.refund.findMany({
@@ -2500,6 +2507,7 @@ export interface CancellationInfo {
 async function _getCancellationInfoInternal(
   ticketId: string,
   companyId: string,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _session: JwtPayload
 ): Promise<CancellationInfo> {
   const ticket = await prisma.ticket.findFirst({
