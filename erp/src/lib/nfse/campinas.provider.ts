@@ -5,10 +5,12 @@ import { ExigibilidadeISS } from "@4success/nfse-campinas/dist/soap/notafiscalso
 import { Binario } from "@4success/nfse-campinas/dist/soap/notafiscalsoap/definitions/Binario";
 import type { EmitNfseInput, EmitNfseResult, NfseProvider } from "../nfse";
 
+// Sistema migrado em 17/03/2025 para nova plataforma (novanfse.campinas.sp.gov.br)
+// O antigo domínio issdigital.campinas.sp.gov.br agora retorna página de manutenção HTML.
 const WSDL_HOMOLOG =
-  "https://homol-rps.ima.sp.gov.br/notafiscal-abrasfv203-ws/NotaFiscalSoap?wsdl";
+  "https://novanfse.campinas.sp.gov.br/notafiscal-abrasfv203-ws/NotaFiscalSoap?wsdl";
 const WSDL_PROD =
-  "https://rps.ima.sp.gov.br/notafiscal-abrasfv203-ws/NotaFiscalSoap?wsdl";
+  "https://novanfse.campinas.sp.gov.br/notafiscal-abrasfv203-ws/NotaFiscalSoap?wsdl";
 
 // Código IBGE de Campinas-SP
 const CODIGO_MUNICIPIO_CAMPINAS = 3509502;

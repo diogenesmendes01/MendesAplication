@@ -1,37 +1,41 @@
 /**
- * Script de teste — NFS-e Taboão da Serra (CONAM)
- * ⚠️  CONAM pode não ter ambiente de homologação separado — confirmar antes de rodar!
+ * Script de teste — NFS-e Taboão da Serra (eTransparência)
  * Uso:
- *   TOKEN1=usuarioWS \
- *   TOKEN2=senhaWS \
+ *   CODIGO_USUARIO=XXX \
+ *   CODIGO_CONTRIBUINTE=YYY \
  *   INSCRICAO_MUNICIPAL=12345678 \
  *   CNPJ=00000000000100 \
  *   ITEM_LISTA=01.07 \
+ *   NFSE_ENV=homolog|production \
  *   npx tsx scripts/test-nfse-taboao.ts
+ *
+ * CodigoUsuario: obtido no portal eTransparência em perfil do usuário
+ * CodigoContribuinte: código do contribuinte autorizado na prefeitura
  */
 
 import { TaboaoDaSerraNfseProvider } from "../src/lib/nfse/taboao.provider";
 
 async function main() {
-  const token1           = process.env.TOKEN1;
-  const token2           = process.env.TOKEN2;
-  const inscricao        = process.env.INSCRICAO_MUNICIPAL;
-  const cnpj             = process.env.CNPJ;
-  const itemListaServico = process.env.ITEM_LISTA ?? "01.07";
+  const codigoUsuario      = process.env.CODIGO_USUARIO;
+  const codigoContribuinte = process.env.CODIGO_CONTRIBUINTE;
+  const inscricao          = process.env.INSCRICAO_MUNICIPAL;
+  const cnpj               = process.env.CNPJ;
+  const itemListaServico   = process.env.ITEM_LISTA ?? "01.07";
+  const env                = process.env.NFSE_ENV ?? "homolog";
 
-  if (!token1 || !token2 || !inscricao || !cnpj) {
-    console.error("❌  Variáveis obrigatórias: TOKEN1, TOKEN2, INSCRICAO_MUNICIPAL, CNPJ");
+  if (!codigoUsuario || !codigoContribuinte || !inscricao || !cnpj) {
+    console.error("❌  Variáveis obrigatórias: CODIGO_USUARIO, CODIGO_CONTRIBUINTE, INSCRICAO_MUNICIPAL, CNPJ");
     process.exit(1);
   }
 
-  console.log("🔧  Provider: Taboão da Serra (CONAM)");
-  console.log(`⚠️   Sem NFSE_ENV — verificar se CONAM tem homologação separada`);
+  console.log("🔧  Provider: Taboão da Serra (eTransparência)");
+  console.log(`🌐  Ambiente: ${env === "production" ? "PRODUÇÃO ⚠️" : "Homologação ✅"}`);
   console.log(`🏢  CNPJ: ${cnpj} | IM: ${inscricao} | LC116: ${itemListaServico}`);
   console.log("");
 
   const provider = new TaboaoDaSerraNfseProvider(
-    token1,
-    token2,
+    codigoUsuario,
+    codigoContribuinte,
     inscricao,
     itemListaServico
   );
@@ -40,7 +44,7 @@ async function main() {
 
   const result = await provider.emitNFSe({
     companyData: {
-      razaoSocial: "EMPRESA TESTE LTDA",
+      razaoSocial: "M2 SOLUÇÕES EM NUVEM LTDA",
       cnpj,
       inscricaoEstadual: null,
     },
@@ -48,7 +52,7 @@ async function main() {
       name: "TOMADOR TESTE LTDA",
       cpfCnpj: "11222333000181",
       email: "teste@teste.com",
-      endereco: null,
+      endereco: "Rua Teste, 123 - Centro",
     },
     serviceDescription: "Teste de integração NFS-e — Vex/MendesERP",
     value: 1.00,
@@ -57,7 +61,7 @@ async function main() {
 
   console.log("");
   console.log("✅  NFS-e emitida com sucesso!");
-  console.log(`🔢  Número: ${result.nfNumber}`);
+  console.log(`🔢  Número/Protocolo: ${result.nfNumber}`);
 }
 
 main().catch((err) => {
