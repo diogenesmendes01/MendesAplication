@@ -657,16 +657,29 @@ class BaileysProvider {
         // Only process real-time notifications, not history sync
         if (type !== "notify") return;
 
+        // Process messages concurrently with semaphore limit
+        const CONCURRENCY_LIMIT = 5;
+        const executing = new Set<Promise<void>>();
+
         for (const msg of messages as WAMessage[]) {
-          try {
-            await this.handleMessage(msg, companyId);
-          } catch (err) {
-            console.error(
-              `[BaileysProvider] Error handling message for ${companyId}:`,
-              err
-            );
+          const p = this.handleMessage(msg, companyId)
+            .catch((err) => {
+              console.error(
+                `[BaileysProvider] Error handling message for ${companyId}:`,
+                err
+              );
+            })
+            .then(() => {
+              executing.delete(p);
+            });
+          executing.add(p);
+
+          if (executing.size >= CONCURRENCY_LIMIT) {
+            await Promise.race(executing);
           }
         }
+
+        await Promise.allSettled(executing);
       }
     );
 
