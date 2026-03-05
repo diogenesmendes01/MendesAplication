@@ -3,7 +3,8 @@ import { connection, type QueueName } from '@/lib/queue'
 
 export function createWorker(
   queueName: QueueName,
-  processor: (job: Job) => Promise<void>
+  processor: (job: Job) => Promise<void>,
+  concurrency = 1
 ): Worker {
   const worker = new Worker(
     queueName,
@@ -19,6 +20,7 @@ export function createWorker(
     },
     {
       connection,
+      concurrency,
       stalledInterval: 60_000,
       maxStalledCount: 2,
     }

@@ -32,17 +32,17 @@ slaCheckQueue.upsertJobScheduler(
   console.error('[sla-check] Failed to schedule repeatable job:', err)
 })
 
-const emailInboundWorker = createWorker(QUEUE_NAMES.EMAIL_INBOUND, processEmailInbound)
+const emailInboundWorker = createWorker(QUEUE_NAMES.EMAIL_INBOUND, processEmailInbound, 2)
 
-const emailOutboundWorker = createWorker(QUEUE_NAMES.EMAIL_OUTBOUND, processEmailOutbound)
+const emailOutboundWorker = createWorker(QUEUE_NAMES.EMAIL_OUTBOUND, processEmailOutbound, 2)
 
-const whatsappInboundWorker = createWorker(QUEUE_NAMES.WHATSAPP_INBOUND, processWhatsAppInbound)
+const whatsappInboundWorker = createWorker(QUEUE_NAMES.WHATSAPP_INBOUND, processWhatsAppInbound, 4)
 
-const whatsappOutboundWorker = createWorker(QUEUE_NAMES.WHATSAPP_OUTBOUND, processWhatsAppOutbound)
+const whatsappOutboundWorker = createWorker(QUEUE_NAMES.WHATSAPP_OUTBOUND, processWhatsAppOutbound, 3)
 
 const slaCheckWorker = createWorker(QUEUE_NAMES.SLA_CHECK, processSlaCheck)
 
-const aiAgentWorker = createWorker(QUEUE_NAMES.AI_AGENT, processAiAgent)
+const aiAgentWorker = createWorker(QUEUE_NAMES.AI_AGENT, processAiAgent, 2)
 
 const documentProcessingWorker = createWorker(QUEUE_NAMES.DOCUMENT_PROCESSING, processDocumentProcessing)
 
