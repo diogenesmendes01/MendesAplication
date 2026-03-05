@@ -37,7 +37,12 @@ async function main() {
     codigoUsuario,
     codigoContribuinte,
     inscricao,
-    itemListaServico
+    itemListaServico,
+    {
+      codCTN: "01.07.01.000",
+      codNBS: "1.1501.30.00",
+      cClassTrib: "000001",
+    }
   );
 
   console.log("📡  Enviando NFS-e de teste (R$ 1,00)...");

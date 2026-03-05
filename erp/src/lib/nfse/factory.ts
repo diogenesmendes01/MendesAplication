@@ -100,7 +100,14 @@ export async function getNfseProviderForCompany(
       token1,
       token2,
       inscricaoMunicipal,
-      itemListaServico
+      itemListaServico,
+      {
+        // Códigos para serviço 01.07 — Suporte técnico em TI (LC 214/2025)
+        // Fonte: portal eTransparência Taboão → TABELAS – SISTEMA NACIONAL
+        codCTN: "01.07.01.000",
+        codNBS: "1.1501.30.00",
+        cClassTrib: "000001",
+      }
     );
     providerCache.set(companyId, { provider: taboaoProvider, expiresAt: Date.now() + CACHE_TTL_MS });
     return taboaoProvider;
