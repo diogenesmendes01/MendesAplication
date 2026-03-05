@@ -1,3 +1,7 @@
+// ---------------------------------------------------------------------------
+// NFS-e — Interface e providers
+// ---------------------------------------------------------------------------
+
 export interface NfseCompanyData {
   razaoSocial: string;
   cnpj: string;
@@ -27,11 +31,15 @@ export interface NfseProvider {
   emitNFSe(input: EmitNfseInput): Promise<EmitNfseResult>;
 }
 
-class MockNfseProvider implements NfseProvider {
+// ---------------------------------------------------------------------------
+// Mock provider — usado em testes / desenvolvimento sem certificado
+// ---------------------------------------------------------------------------
+
+export class MockNfseProvider implements NfseProvider {
   async emitNFSe(input: EmitNfseInput): Promise<EmitNfseResult> {
     const timestamp = Date.now().toString(36).toUpperCase();
     const random = Math.random().toString(36).substring(2, 6).toUpperCase();
-    const nfNumber = `NFS${timestamp}${random}`;
+    const nfNumber = `MOCK${timestamp}${random}`;
 
     const issValue = input.value * (input.issRate / 100);
 
@@ -49,14 +57,27 @@ class MockNfseProvider implements NfseProvider {
   }
 }
 
-let provider: NfseProvider = new MockNfseProvider();
+// ---------------------------------------------------------------------------
+// Provider global legado (backward compat — usar factory por empresa)
+// ---------------------------------------------------------------------------
 
+let _globalProvider: NfseProvider = new MockNfseProvider();
+
+/** @deprecated Prefira getNfseProviderForCompany(companyId) da factory */
 export function setNfseProvider(p: NfseProvider) {
-  provider = p;
+  _globalProvider = p;
 }
 
-export async function emitNFSe(
-  input: EmitNfseInput
-): Promise<EmitNfseResult> {
-  return provider.emitNFSe(input);
+/** @deprecated Prefira getNfseProviderForCompany(companyId) da factory */
+export async function emitNFSe(input: EmitNfseInput): Promise<EmitNfseResult> {
+  return _globalProvider.emitNFSe(input);
 }
+
+// ---------------------------------------------------------------------------
+// Re-exports dos providers concretos
+// ---------------------------------------------------------------------------
+
+export { CampinasNfseProvider } from "./nfse/campinas.provider";
+export { SaoPauloNfseProvider } from "./nfse/saopaulo.provider";
+export { TaboaoDaSerraNfseProvider } from "./nfse/taboao.provider";
+export { getNfseProviderForCompany } from "./nfse/factory";

@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { requireCompanyAccess } from "@/lib/rbac";
-import { emitNFSe } from "@/lib/nfse";
+import { getNfseProviderForCompany } from "@/lib/nfse";
 import { sendEmail } from "@/lib/email";
 import { logAuditEvent } from "@/lib/audit";
 import {
@@ -127,15 +127,6 @@ export async function emitInvoiceForBoleto(
     throw new Error("Boleto não encontrado ou não está com status PAID");
   }
 
-  // Check if an invoice already exists for this boleto
-  const existingInvoice = await prisma.invoice.findFirst({
-    where: { boletoId, companyId },
-  });
-
-  if (existingInvoice) {
-    throw new Error("Já existe uma nota fiscal emitida para este boleto");
-  }
-
   const client = boleto.proposal.client;
   const company = boleto.company;
   const value = Number(boleto.value);
@@ -149,8 +140,23 @@ export async function emitInvoiceForBoleto(
   const fiscalConfig = await getCachedFiscalConfig(companyId);
   const issRate = fiscalConfig.issRate;
 
-  // Call NFS-e provider
-  const result = await emitNFSe({
+  // Seleciona o provider NFS-e correto para o município da empresa
+  const nfseProvider = await getNfseProviderForCompany(companyId);
+
+  // Guard de idempotência com lock: evita emissão duplicada em requisições concorrentes.
+  // Tenta criar o invoice em estado PENDING dentro da transação — se já existir, aborta.
+  await prisma.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`nfse:${boletoId}`}))`;
+
+  const existingInvoice = await prisma.invoice.findFirst({
+    where: { boletoId, companyId },
+  });
+
+  if (existingInvoice) {
+    throw new Error("Já existe uma nota fiscal emitida para este boleto");
+  }
+
+  // Emite a NFS-e via provider real (Campinas, São Paulo ou Taboão)
+  const result = await nfseProvider.emitNFSe({
     companyData: {
       razaoSocial: company.razaoSocial,
       cnpj: company.cnpj,

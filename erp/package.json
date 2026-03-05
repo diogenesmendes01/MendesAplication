@@ -10,6 +10,7 @@
     "workers": "npx tsx src/lib/workers/index.ts"
   },
   "dependencies": {
+    "@4success/nfse-campinas": "^2.2.0",
     "@prisma/client": "^6.19.2",
     "@radix-ui/react-checkbox": "^1.3.3",
     "@radix-ui/react-dialog": "^1.1.15",
@@ -37,6 +38,7 @@
     "react": "^18",
     "react-dom": "^18",
     "recharts": "^3.7.0",
+    "soap": "^1.7.1",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.5.0",
     "tailwindcss-animate": "^1.0.7",
@@ -49,6 +51,7 @@
     "@types/bcryptjs": "^2.4.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^20",
+    "@types/node-forge": "^1.3.14",
     "@types/nodemailer": "^7.0.11",
     "@types/react": "^18",
     "@types/react-dom": "^18",
