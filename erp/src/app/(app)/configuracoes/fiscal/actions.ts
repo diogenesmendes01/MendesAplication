@@ -80,9 +80,9 @@ export async function getFiscalConfig(companyId: string): Promise<FiscalConfigDa
     autoEmitNfse: config.autoEmitNfse,
     itemListaServico: config.itemListaServico ?? "",
     codigoTributacaoMunicipio: config.codigoTributacaoMunicipio ?? "",
-    // Tokens são retornados em plain text (não são certificados criptográficos)
-    certificadoToken1: config.certificadoToken1 ?? "",
-    certificadoToken2: config.certificadoToken2 ?? "",
+    // Tokens mascarados — nunca expostos ao cliente em plain text
+    certificadoToken1: config.certificadoToken1 ? "••••••••" : "",
+    certificadoToken2: config.certificadoToken2 ? "••••••••" : "",
     // Apenas informa se há certificado — nunca expõe o .pfx ao cliente
     hasCertificado: !!config.certificadoPfx,
   };
@@ -140,6 +140,8 @@ export async function saveFiscalConfig(companyId: string, data: FiscalConfigData
     throw new Error("Próximo número da NFS-e deve ser >= 1");
   }
 
+  // Nunca sobrescreve tokens com o valor mascarado retornado ao cliente
+  const MASKED = "••••••••";
   const baseData = {
     taxRegime: data.taxRegime,
     issRate: data.issRate,
@@ -155,8 +157,13 @@ export async function saveFiscalConfig(companyId: string, data: FiscalConfigData
     autoEmitNfse: data.autoEmitNfse,
     itemListaServico: data.itemListaServico || null,
     codigoTributacaoMunicipio: data.codigoTributacaoMunicipio || null,
-    certificadoToken1: data.certificadoToken1 || null,
-    certificadoToken2: data.certificadoToken2 || null,
+    // Tokens são salvos apenas via saveTokensConam — ignorados aqui se mascarados
+    ...(data.certificadoToken1 && data.certificadoToken1 !== MASKED
+      ? { certificadoToken1: encrypt(data.certificadoToken1) }
+      : {}),
+    ...(data.certificadoToken2 && data.certificadoToken2 !== MASKED
+      ? { certificadoToken2: encrypt(data.certificadoToken2) }
+      : {}),
   };
 
   const result = await prisma.fiscalConfig.upsert({

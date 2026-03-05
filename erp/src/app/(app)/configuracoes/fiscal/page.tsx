@@ -110,7 +110,11 @@ export default function FiscalConfigPage() {
     setSavingCert(true);
     try {
       const arrayBuffer = await certFile.arrayBuffer();
-      const base64 = Buffer.from(arrayBuffer).toString("base64");
+      // Buffer é API Node.js — usar Uint8Array + btoa no browser
+      const bytes = new Uint8Array(arrayBuffer);
+      let binary = "";
+      bytes.forEach((b) => { binary += String.fromCharCode(b); });
+      const base64 = btoa(binary);
       await saveCertificado(selectedCompanyId, base64, certSenha);
       toast.success("Certificado digital salvo com sucesso");
       setForm((prev) => ({ ...prev, hasCertificado: true }));

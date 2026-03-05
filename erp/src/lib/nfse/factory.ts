@@ -61,14 +61,15 @@ export async function getNfseProviderForCompany(
 
   // --- Taboão da Serra (autenticação por tokens, sem certificado) ---
   if (codigoMunicipio === MUNICIPIOS.TABOAO_DA_SERRA) {
-    const token1 = config.certificadoToken1;
-    const token2 = config.certificadoToken2;
-
-    if (!token1 || !token2) {
+    if (!config.certificadoToken1 || !config.certificadoToken2) {
       throw new Error(
         "Tokens de acesso não configurados para Taboão da Serra. Acesse Configurações → Fiscal."
       );
     }
+
+    // Decripta os tokens antes de usar
+    const token1 = decrypt(config.certificadoToken1);
+    const token2 = decrypt(config.certificadoToken2);
 
     return new TaboaoDaSerraNfseProvider(
       token1,
