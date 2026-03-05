@@ -3,7 +3,8 @@
 import { prisma } from "@/lib/prisma";
 import { requireCompanyAccess } from "@/lib/rbac";
 import { logAuditEvent } from "@/lib/audit";
-import { encrypt, decrypt } from "@/lib/encryption";
+import { encrypt } from "@/lib/encryption";
+import { invalidateNfseProviderCache } from "@/lib/nfse/factory";
 import { Prisma } from "@prisma/client";
 import type { TaxRegime } from "@prisma/client";
 
@@ -116,6 +117,7 @@ export async function saveCertificado(
   });
 
   fiscalConfigCache.delete(companyId);
+  invalidateNfseProviderCache(companyId);
   return { success: true };
 }
 
@@ -181,8 +183,9 @@ export async function saveFiscalConfig(companyId: string, data: FiscalConfigData
     companyId,
   });
 
-  // Clear FiscalConfig cache when saved
+  // Limpa caches ao salvar config
   fiscalConfigCache.delete(companyId);
+  invalidateNfseProviderCache(companyId);
 
   return { success: true };
 }

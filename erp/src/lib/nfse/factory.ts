@@ -16,9 +16,34 @@ const MUNICIPIOS = {
   TABOAO_DA_SERRA: "3552809",
 } as const;
 
+// ---------------------------------------------------------------------------
+// Cache de providers por empresa — evita re-parse do certificado a cada emissão
+// TTL de 10 minutos; invalidado automaticamente quando o config é salvo
+// ---------------------------------------------------------------------------
+
+const CACHE_TTL_MS = 10 * 60 * 1000; // 10 min
+
+interface CacheEntry {
+  provider: NfseProvider;
+  expiresAt: number;
+}
+
+const providerCache = new Map<string, CacheEntry>();
+
+/** Invalida o cache de um provider (chamar ao salvar certificado ou config fiscal) */
+export function invalidateNfseProviderCache(companyId: string): void {
+  providerCache.delete(companyId);
+}
+
 export async function getNfseProviderForCompany(
   companyId: string
 ): Promise<NfseProvider> {
+  // Verifica cache antes de ir ao banco e re-parsear o certificado
+  const cached = providerCache.get(companyId);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.provider;
+  }
+
   const config = await prisma.fiscalConfig.findUnique({
     where: { companyId },
     select: {
@@ -71,12 +96,14 @@ export async function getNfseProviderForCompany(
     const token1 = decrypt(config.certificadoToken1);
     const token2 = decrypt(config.certificadoToken2);
 
-    return new TaboaoDaSerraNfseProvider(
+    const taboaoProvider = new TaboaoDaSerraNfseProvider(
       token1,
       token2,
       inscricaoMunicipal,
       itemListaServico
     );
+    providerCache.set(companyId, { provider: taboaoProvider, expiresAt: Date.now() + CACHE_TTL_MS });
+    return taboaoProvider;
   }
 
   // --- Campinas e São Paulo (autenticação por certificado A1) ---
@@ -98,23 +125,29 @@ export async function getNfseProviderForCompany(
   const certBuffer = Buffer.from(certPfxBase64, "base64");
 
   switch (codigoMunicipio) {
-    case MUNICIPIOS.CAMPINAS:
-      return new CampinasNfseProvider(
+    case MUNICIPIOS.CAMPINAS: {
+      const campinasProvider = new CampinasNfseProvider(
         certBuffer,
         certPassword,
         inscricaoMunicipal,
         itemListaServico,
         config.codigoTributacaoMunicipio ?? undefined
       );
+      providerCache.set(companyId, { provider: campinasProvider, expiresAt: Date.now() + CACHE_TTL_MS });
+      return campinasProvider;
+    }
 
-    case MUNICIPIOS.SAO_PAULO:
-      return new SaoPauloNfseProvider(
+    case MUNICIPIOS.SAO_PAULO: {
+      const spProvider = new SaoPauloNfseProvider(
         certBuffer,
         certPassword,
         inscricaoMunicipal,
         itemListaServico,
         config.codigoTributacaoMunicipio ?? ""
       );
+      providerCache.set(companyId, { provider: spProvider, expiresAt: Date.now() + CACHE_TTL_MS });
+      return spProvider;
+    }
 
     default:
       throw new Error(
