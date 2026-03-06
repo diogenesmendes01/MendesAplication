@@ -21,6 +21,7 @@ export class CampinasNfseProvider implements NfseProvider {
   private itemListaServico: string;
   private codigoTributacao?: string;
   private codigoCnae?: string;
+  private simplesNacional: boolean;
 
   constructor(
     certBuffer: Buffer,
@@ -28,7 +29,8 @@ export class CampinasNfseProvider implements NfseProvider {
     inscricaoMunicipal: string,
     itemListaServico: string,
     codigoTributacao?: string,
-    codigoCnae?: string
+    codigoCnae?: string,
+    simplesNacional = false
   ) {
     const wsdl =
       process.env.NFSE_ENV === "production" ? WSDL_PROD : WSDL_HOMOLOG;
@@ -39,6 +41,7 @@ export class CampinasNfseProvider implements NfseProvider {
     // Campinas exige CNAE com 9 dígitos (ex: "620400001")
     // Fonte: https://groups.google.com/g/wsnfsecampinas
     this.codigoCnae = codigoCnae;
+    this.simplesNacional = simplesNacional;
   }
 
   async emitNFSe(input: EmitNfseInput): Promise<EmitNfseResult> {
@@ -91,7 +94,7 @@ export class CampinasNfseProvider implements NfseProvider {
               },
               RazaoSocial: input.clientData.name.substring(0, 115),
             },
-            OptanteSimplesNacional: Binario.NAO,
+            OptanteSimplesNacional: this.simplesNacional ? Binario.SIM : Binario.NAO,
             IncentivoFiscal: Binario.NAO,
           },
         },
