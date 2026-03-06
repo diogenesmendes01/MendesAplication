@@ -540,8 +540,8 @@ class BaileysProvider {
             session.isConnecting = false;
             session.lastError =
               "Device was removed from WhatsApp. Please reconnect by scanning a new QR code.";
-            // Clear auth state so next connection starts fresh
-            await this.clearAuthState(companyId);
+            // Full wipe (auth + LID mappings): device is gone, mappings are stale
+            await this.clearAuthStateFull(companyId);
             console.log(
               `[BaileysProvider] Device removed for ${companyId}, NOT reconnecting`
             );
@@ -1214,10 +1214,31 @@ class BaileysProvider {
   }
 
   // ============================================
-  // PRIVATE: Clear Auth State
+  // PRIVATE: Clear Auth State (credentials only — preserves LID mappings)
+  // Use for: manual disconnect, reconnect flows, QR/pairing initiation.
   // ============================================
 
   private async clearAuthState(companyId: string): Promise<void> {
+    try {
+      await prisma.baileysAuthState.deleteMany({
+        where: { companyId },
+      });
+    } catch (err) {
+      console.error(
+        `[BaileysProvider] Error clearing auth state for ${companyId}:`,
+        err
+      );
+    }
+  }
+
+  // ============================================
+  // PRIVATE: Clear Auth State + LID Mappings (full wipe)
+  // Use ONLY for: loggedOut / device_removed events.
+  // LID mappings are stable per device — wiping them on a simple disconnect
+  // forces expensive re-resolution of all incoming messages after reconnect.
+  // ============================================
+
+  private async clearAuthStateFull(companyId: string): Promise<void> {
     try {
       await prisma.baileysAuthState.deleteMany({
         where: { companyId },
@@ -1227,7 +1248,7 @@ class BaileysProvider {
       });
     } catch (err) {
       console.error(
-        `[BaileysProvider] Error clearing auth state for ${companyId}:`,
+        `[BaileysProvider] Error clearing full auth state for ${companyId}:`,
         err
       );
     }
