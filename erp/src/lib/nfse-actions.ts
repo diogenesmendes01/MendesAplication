@@ -169,26 +169,16 @@ export async function emitInvoiceForBoleto(
     throw new Error("Já existe uma nota fiscal emitida para este boleto");
   }
 
-  // Emite a NFS-e via provider real (Campinas, São Paulo ou Taboão)
-  const result = await nfseProvider.emitNFSe({
-    companyData: {
-      razaoSocial: company.razaoSocial,
-      cnpj: company.cnpj,
-      inscricaoEstadual: company.inscricaoEstadual,
-    },
-    clientData: {
-      name: client.name,
-      cpfCnpj: client.cpfCnpj,
-      email: client.email,
-      endereco: client.endereco,
-    },
-    serviceDescription,
-    value,
-    issRate,
-    rpsNumero,
-  });
-
-  // Create the Invoice record with ISSUED status
+  // FLUXO SEGURO: salvar PENDING primeiro, emitir depois, atualizar para ISSUED.
+  //
+  // Problema anterior: a NFS-e era emitida ANTES do prisma.invoice.create.
+  // Se o create falhasse (ex: constraint violation, timeout), a NFS-e já existia
+  // na prefeitura mas não havia registro no banco — documento fiscal perdido.
+  //
+  // Solução: criar o invoice com status PENDING antes de qualquer comunicação com
+  // a prefeitura. Se a emissão falhar, marcamos como FAILED. Se o update final
+  // falhar após emissão bem-sucedida, o status PENDING sinaliza inconsistência
+  // para reconciliação manual (nfNumber fica no banco mesmo assim via catch).
   const invoice = await prisma.invoice.create({
     data: {
       proposalId: boleto.proposal.id ?? undefined,
@@ -197,11 +187,65 @@ export async function emitInvoiceForBoleto(
       serviceDescription,
       value: new Prisma.Decimal(value),
       issRate: new Prisma.Decimal(issRate),
-      status: "ISSUED",
-      nfNumber: result.nfNumber,
+      status: "PENDING",
+      nfNumber: null,
       companyId,
     },
   });
+
+  // Emite a NFS-e via provider real (Campinas, São Paulo ou Taboão)
+  let result: { nfNumber: string };
+  try {
+    result = await nfseProvider.emitNFSe({
+      companyData: {
+        razaoSocial: company.razaoSocial,
+        cnpj: company.cnpj,
+        inscricaoEstadual: company.inscricaoEstadual,
+      },
+      clientData: {
+        name: client.name,
+        cpfCnpj: client.cpfCnpj,
+        email: client.email,
+        endereco: client.endereco,
+      },
+      serviceDescription,
+      value,
+      issRate,
+      rpsNumero,
+    });
+  } catch (emitError) {
+    // Compensação: a emissão falhou antes de chegar na prefeitura (ou a prefeitura
+    // rejeitou). Marcar como CANCELLED para distinguir de PENDING legítimo.
+    await prisma.invoice.update({
+      where: { id: invoice.id },
+      data: { status: "CANCELLED", cancellationReason: String(emitError) },
+    }).catch((updateErr) => {
+      console.error("Falha ao cancelar invoice após erro de emissão:", updateErr);
+    });
+    throw emitError;
+  }
+
+  // Atualizar para ISSUED com o número da NFS-e retornado pela prefeitura.
+  // Se este update falhar por algum motivo, o nfNumber fica salvo no catch
+  // para facilitar reconciliação manual — o invoice permanece PENDING.
+  try {
+    await prisma.invoice.update({
+      where: { id: invoice.id },
+      data: { status: "ISSUED", nfNumber: result.nfNumber },
+    });
+  } catch (updateError) {
+    // Registrar o nfNumber mesmo com falha no update para não perder o número
+    console.error(
+      `ATENÇÃO: NFS-e ${result.nfNumber} emitida na prefeitura mas falha ao atualizar invoice ${invoice.id}:`,
+      updateError
+    );
+    // Tentar novamente sem o status para pelo menos salvar o nfNumber
+    await prisma.invoice.update({
+      where: { id: invoice.id },
+      data: { nfNumber: result.nfNumber },
+    }).catch(console.error);
+    throw updateError;
+  }
 
   // Log audit event for invoice creation
   await logAuditEvent({
