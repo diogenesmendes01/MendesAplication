@@ -85,9 +85,10 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Access token cookie — not httpOnly so middleware can read it
+    // Access token cookie — httpOnly:true protege contra XSS.
+    // O middleware lê via Authorization header (server-side), não via JS.
     response.cookies.set("accessToken", accessToken, {
-      httpOnly: false,
+      httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       path: "/",
