@@ -55,6 +55,8 @@ export async function getNfseProviderForCompany(
       certificadoToken2: true,
       itemListaServico: true,
       codigoTributacaoMunicipio: true,
+      cnae: true,
+      taxRegime: true,
     },
   });
 
@@ -133,12 +135,21 @@ export async function getNfseProviderForCompany(
 
   switch (codigoMunicipio) {
     case MUNICIPIOS.CAMPINAS: {
+      // O constructor do CampinasNfseProvider já normaliza o CNAE internamente.
+      // Passamos o valor bruto do banco; a normalização (remoção de não-dígitos) é feita lá.
+      const cnaeNormalizado = config.cnae ?? undefined;
       const campinasProvider = new CampinasNfseProvider(
         certBuffer,
         certPassword,
-        inscricaoMunicipal,
-        itemListaServico,
-        config.codigoTributacaoMunicipio ?? undefined
+        {
+          inscricaoMunicipal,
+          itemListaServico,
+          codigoTributacao: config.codigoTributacaoMunicipio ?? undefined,
+          codigoCnae: cnaeNormalizado,
+          // OptanteSimplesNacional: aplica-se ao schema ABRASF (Campinas).
+          // São Paulo (TributacaoRPS) e Taboão (CONAM) não têm campo equivalente.
+          simplesNacional: config.taxRegime === "SIMPLES_NACIONAL",
+        }
       );
       providerCache.set(companyId, { provider: campinasProvider, expiresAt: Date.now() + CACHE_TTL_MS });
       return campinasProvider;

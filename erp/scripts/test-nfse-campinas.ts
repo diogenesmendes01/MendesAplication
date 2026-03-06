@@ -6,6 +6,7 @@
  *   INSCRICAO_MUNICIPAL=12345678 \
  *   CNPJ=00000000000100 \
  *   ITEM_LISTA=01.07 \
+ *   CNAE=620400001 \
  *   NFSE_ENV=homolog \
  *   npx tsx scripts/test-nfse-campinas.ts
  */
@@ -20,6 +21,9 @@ async function main() {
   const inscricao       = process.env.INSCRICAO_MUNICIPAL;
   const cnpj            = process.env.CNPJ;
   const itemListaServico = process.env.ITEM_LISTA ?? "01.07";
+  // Campinas exige CNAE com 9 dígitos — ex: "620400001" para CNAE 6204-0/00-01
+  // O constructor do provider normaliza o valor automaticamente
+  const cnae            = process.env.CNAE || undefined;
 
   if (!certPath || !certSenha || !inscricao || !cnpj) {
     console.error("❌  Variáveis obrigatórias: CERT_PATH, CERT_SENHA, INSCRICAO_MUNICIPAL, CNPJ");
@@ -31,14 +35,18 @@ async function main() {
   console.log("🔧  Provider: Campinas (ABRASF 2.03)");
   console.log(`🌐  Ambiente: ${process.env.NFSE_ENV === "production" ? "PRODUÇÃO ⚠️" : "Homologação ✅"}`);
   console.log(`📄  Certificado: ${certPath} (${certBuffer.length} bytes)`);
-  console.log(`🏢  CNPJ: ${cnpj} | IM: ${inscricao} | LC116: ${itemListaServico}`);
+  console.log(`🏢  CNPJ: ${cnpj} | IM: ${inscricao} | LC116: ${itemListaServico} | CNAE: ${cnae ?? "(não informado)"}`);
   console.log("");
 
   const provider = new CampinasNfseProvider(
     certBuffer,
     certSenha,
-    inscricao,
-    itemListaServico
+    {
+      inscricaoMunicipal: inscricao,
+      itemListaServico,
+      codigoCnae: cnae,
+      simplesNacional: process.env.SIMPLES_NACIONAL !== "false",
+    }
   );
 
   console.log("📡  Enviando NFS-e de teste (R$ 1,00)...");
