@@ -41,10 +41,12 @@ async function main() {
   const provider = new CampinasNfseProvider(
     certBuffer,
     certSenha,
-    inscricao,
-    itemListaServico,
-    undefined,
-    cnae
+    {
+      inscricaoMunicipal: inscricao,
+      itemListaServico,
+      codigoCnae: cnae,
+      simplesNacional: process.env.SIMPLES_NACIONAL !== "false",
+    }
   );
 
   console.log("📡  Enviando NFS-e de teste (R$ 1,00)...");

@@ -138,18 +138,18 @@ export async function getNfseProviderForCompany(
       // O constructor do CampinasNfseProvider já normaliza o CNAE internamente.
       // Passamos o valor bruto do banco; a normalização (remoção de não-dígitos) é feita lá.
       const cnaeNormalizado = config.cnae ?? undefined;
-      // OptanteSimplesNacional: aplica-se ao schema ABRASF (Campinas).
-      // São Paulo (Nota Paulistana v1) usa TributacaoRPS="T" sem este campo.
-      // Taboão da Serra (CONAM) usa cClassTrib/codNBS sem equivalente de Simples.
-      const isSimples = config.taxRegime === "SIMPLES_NACIONAL";
       const campinasProvider = new CampinasNfseProvider(
         certBuffer,
         certPassword,
-        inscricaoMunicipal,
-        itemListaServico,
-        config.codigoTributacaoMunicipio ?? undefined,
-        cnaeNormalizado,
-        isSimples
+        {
+          inscricaoMunicipal,
+          itemListaServico,
+          codigoTributacao: config.codigoTributacaoMunicipio ?? undefined,
+          codigoCnae: cnaeNormalizado,
+          // OptanteSimplesNacional: aplica-se ao schema ABRASF (Campinas).
+          // São Paulo (TributacaoRPS) e Taboão (CONAM) não têm campo equivalente.
+          simplesNacional: config.taxRegime === "SIMPLES_NACIONAL",
+        }
       );
       providerCache.set(companyId, { provider: campinasProvider, expiresAt: Date.now() + CACHE_TTL_MS });
       return campinasProvider;

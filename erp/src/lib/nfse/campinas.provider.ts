@@ -15,6 +15,31 @@ const WSDL_PROD =
 // Código IBGE de Campinas-SP
 const CODIGO_MUNICIPIO_CAMPINAS = 3509502;
 
+// ---------------------------------------------------------------------------
+// Config object — evita constructor com 7+ parâmetros posicionais
+// ---------------------------------------------------------------------------
+
+export interface CampinasNfseConfig {
+  /** Inscrição Municipal do prestador */
+  inscricaoMunicipal: string;
+  /** Código de serviço LC116 (ex: "01.06") */
+  itemListaServico: string;
+  /** Código de tributação municipal (opcional) */
+  codigoTributacao?: string;
+  /**
+   * CNAE do prestador — Campinas exige 9 dígitos na tag <CodigoCnae>.
+   * Pode ser passado com ou sem formatação (ex: "6204-0/00-01" ou "620400001").
+   * O constructor normaliza automaticamente removendo caracteres não numéricos.
+   */
+  codigoCnae?: string;
+  /**
+   * Optante pelo Simples Nacional.
+   * Aplica-se ao schema ABRASF (Campinas).
+   * São Paulo (TributacaoRPS) e Taboão (CONAM) não têm campo equivalente.
+   */
+  simplesNacional?: boolean;
+}
+
 export class CampinasNfseProvider implements NfseProvider {
   private campinas: NfseCampinas;
   private inscricaoMunicipal: string;
@@ -26,23 +51,18 @@ export class CampinasNfseProvider implements NfseProvider {
   constructor(
     certBuffer: Buffer,
     certPassword: string,
-    inscricaoMunicipal: string,
-    itemListaServico: string,
-    codigoTributacao?: string,
-    codigoCnae?: string,
-    simplesNacional = false
+    config: CampinasNfseConfig
   ) {
     const wsdl =
       process.env.NFSE_ENV === "production" ? WSDL_PROD : WSDL_HOMOLOG;
     this.campinas = new NfseCampinas(wsdl, certBuffer, certPassword);
-    this.inscricaoMunicipal = inscricaoMunicipal;
-    this.itemListaServico = itemListaServico;
-    this.codigoTributacao = codigoTributacao;
-    // Campinas exige CNAE com 9 dígitos (ex: "620400001").
-    // Normaliza aqui para garantir consistência independente de quem instanciar
-    // (ex: "6204-0/00-01" → "620400001", "6204000" → "6204000" mantido como está).
-    this.codigoCnae = codigoCnae?.replace(/\D/g, "") || undefined;
-    this.simplesNacional = simplesNacional;
+    this.inscricaoMunicipal = config.inscricaoMunicipal;
+    this.itemListaServico = config.itemListaServico;
+    this.codigoTributacao = config.codigoTributacao;
+    // Normaliza CNAE removendo caracteres não numéricos
+    // (ex: "6204-0/00-01" → "620400001"). Campinas exige 9 dígitos.
+    this.codigoCnae = config.codigoCnae?.replace(/\D/g, "") || undefined;
+    this.simplesNacional = config.simplesNacional ?? false;
   }
 
   async emitNFSe(input: EmitNfseInput): Promise<EmitNfseResult> {
