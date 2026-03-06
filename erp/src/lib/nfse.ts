@@ -27,8 +27,30 @@ export interface EmitNfseResult {
   nfNumber: string;
 }
 
+export interface CancelNfseInput {
+  /** Número da NFS-e emitida pela prefeitura */
+  nfNumber: string;
+  /** CNPJ do prestador */
+  cnpj: string;
+  /** Inscrição municipal do prestador */
+  inscricaoMunicipal: string;
+  /** Motivo do cancelamento (obrigatório pela maioria das prefeituras) */
+  motivo: string;
+}
+
+export interface CancelNfseResult {
+  success: true;
+  protocol?: string;
+}
+
 export interface NfseProvider {
   emitNFSe(input: EmitNfseInput): Promise<EmitNfseResult>;
+  /**
+   * Cancela uma NFS-e já emitida junto à prefeitura.
+   * Deve ser implementado por cada provider municipal.
+   * Lança erro se o cancelamento não for aceito.
+   */
+  cancelNFSe(input: CancelNfseInput): Promise<CancelNfseResult>;
 }
 
 // ---------------------------------------------------------------------------
@@ -54,6 +76,11 @@ export class MockNfseProvider implements NfseProvider {
     console.log("==================================");
 
     return { nfNumber };
+  }
+
+  async cancelNFSe(input: CancelNfseInput): Promise<CancelNfseResult> {
+    console.log(`[MockNfseProvider] cancelNFSe MOCK — NFS-e ${input.nfNumber} cancelada (simulação)`);
+    return { success: true, protocol: `MOCK-CANCEL-${Date.now()}` };
   }
 }
 

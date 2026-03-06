@@ -17,7 +17,7 @@
  */
 
 import axios from "axios";
-import type { EmitNfseInput, EmitNfseResult, NfseProvider } from "../nfse";
+import type { CancelNfseInput, CancelNfseResult, EmitNfseInput, EmitNfseResult, NfseProvider } from "../nfse";
 
 const URL_PROD =
   "https://nfe.etransparencia.com.br/sp.taboaodaserra/webservice/aws_nfe.aspx";
@@ -298,5 +298,18 @@ export class TaboaoDaSerraNfseProvider implements NfseProvider {
     });
 
     return { nfNumber: parseSoapResponse(response.data as string) };
+  }
+
+  async cancelNFSe(input: CancelNfseInput): Promise<CancelNfseResult> {
+    // Taboão da Serra — sistema eTransparência (W5/CONAM)
+    // TODO: mapear endpoint e schema exato de cancelamento do portal CONAM
+    // Documentação: https://www.taboaodaserra.sp.gov.br/transparencia/nfse
+    // Por ora, lançar erro explicativo para que o operador cancele manualmente no portal.
+    throw new Error(
+      `Cancelamento automático de NFS-e não disponível para Taboão da Serra. ` +
+      `Cancele manualmente em https://www.taboaodaserra.sp.gov.br/transparencia/nfse ` +
+      `com o número ${input.nfNumber}. ` +
+      `Após o cancelamento manual, atualize o status diretamente no ERP.`
+    );
   }
 }

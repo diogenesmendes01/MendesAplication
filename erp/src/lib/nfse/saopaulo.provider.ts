@@ -19,7 +19,7 @@ import https from "https";
 import axios from "axios";
 import forge from "node-forge";
 import { SignedXml } from "xml-crypto";
-import type { EmitNfseInput, EmitNfseResult, NfseProvider } from "../nfse";
+import type { CancelNfseInput, CancelNfseResult, EmitNfseInput, EmitNfseResult, NfseProvider } from "../nfse";
 
 // nfews suporta v1 e v2; nfe (legado) só v1
 // Nota: a Prefeitura de SP unificou o endpoint NFS-e em nfews.prefeitura.sp.gov.br
@@ -452,5 +452,67 @@ export class SaoPauloNfseProvider implements NfseProvider {
     }
 
     return { nfNumber: parseSoapResponse(response.data as string) };
+  }
+
+  async cancelNFSe(input: CancelNfseInput): Promise<CancelNfseResult> {
+    // Nota Paulistana v1 — endpoint CancelamentoNFe
+    // Referência: Manual NFe-WS Prefeitura SP (jan/2026)
+    const url = process.env.NFSE_ENV === "production" ? URL_PROD : URL_HOMOLOG;
+
+    const agent = new https.Agent({
+      pfx: this.certBuffer,
+      passphrase: this.certPassword,
+      rejectUnauthorized: true,
+    });
+
+    const xmlCancelamento = `<?xml version="1.0" encoding="utf-8"?>
+<ns1:PedidoCancelamentoNFe xmlns:ns1="http://www.prefeitura.sp.gov.br/nfe">
+  <Cabecalho Versao="1">
+    <CPFCNPJRemetente>
+      <CNPJ>${input.cnpj.replace(/\D/g, "")}</CNPJ>
+    </CPFCNPJRemetente>
+  </Cabecalho>
+  <Detalhe>
+    <ChaveNFe>
+      <InscricaoPrestador>${input.inscricaoMunicipal}</InscricaoPrestador>
+      <NumeroNFe>${input.nfNumber}</NumeroNFe>
+    </ChaveNFe>
+    <AssinaturaCancelamento></AssinaturaCancelamento>
+  </Detalhe>
+</ns1:PedidoCancelamentoNFe>`;
+
+    const soapBody = `<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <CancelamentoNFeRequest xmlns="http://www.prefeitura.sp.gov.br/nfe">
+      <VersaoSchema>1</VersaoSchema>
+      <MensagemXML><![CDATA[${xmlCancelamento}]]></MensagemXML>
+    </CancelamentoNFeRequest>
+  </soap:Body>
+</soap:Envelope>`;
+
+    const response = await axios.post(url, soapBody, {
+      httpsAgent: agent,
+      headers: {
+        "Content-Type": "text/xml; charset=utf-8",
+        SOAPAction: `"http://www.prefeitura.sp.gov.br/nfe/ws/cancelamentoNFe"`,
+      },
+      validateStatus: (s) => s < 600,
+      timeout: 30_000,
+    });
+
+    if (response.status >= 400 && !String(response.data).toLowerCase().includes("<soap")) {
+      throw new Error(`Erro de transporte cancelamento NFS-e SP: HTTP ${response.status}`);
+    }
+
+    const resXml = response.data as string;
+    const mSucesso = resXml.match(/<Sucesso>(true|1)<\/Sucesso>/i);
+    if (mSucesso) return { success: true };
+
+    const mDescricao = resXml.match(/<Descricao>([\s\S]*?)<\/Descricao>/);
+    const mCodigo = resXml.match(/<Codigo>(\d+)<\/Codigo>/);
+    throw new Error(
+      `Erro ao cancelar NFS-e SP ${input.nfNumber}${mCodigo ? ` [${mCodigo[1]}]` : ""}: ${mDescricao?.[1]?.trim() ?? "Resposta inesperada"}`
+    );
   }
 }
