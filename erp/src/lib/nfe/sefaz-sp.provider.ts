@@ -318,7 +318,7 @@ export class SefazSpNfeProvider implements NfeProvider {
       }
     );
 
-    if (response.status >= 400 && !String(response.data).includes("<soap")) {
+    if (response.status >= 400 && !String(response.data).toLowerCase().includes("<soap")) {
       throw new Error(`Erro de transporte SEFAZ: HTTP ${response.status}`);
     }
 
@@ -396,7 +396,7 @@ export class SefazSpNfeProvider implements NfeProvider {
         }
       );
 
-      if (response.status >= 400 && !String(response.data).includes("<soap")) {
+      if (response.status >= 400 && !String(response.data).toLowerCase().includes("<soap")) {
         throw new Error(`Erro de transporte SEFAZ (poll): HTTP ${response.status}`);
       }
 

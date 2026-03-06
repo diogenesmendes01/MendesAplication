@@ -22,6 +22,9 @@ import { SignedXml } from "xml-crypto";
 import type { EmitNfseInput, EmitNfseResult, NfseProvider } from "../nfse";
 
 // nfews suporta v1 e v2; nfe (legado) só v1
+// Nota: a Prefeitura de SP unificou o endpoint NFS-e em nfews.prefeitura.sp.gov.br
+// para ambos os ambientes (homologação e produção). O endpoint legado nfe.prefeitura.sp.gov.br
+// está descontinuado. Mantemos as constantes separadas para clareza e fácil atualização futura.
 const URL_HOMOLOG = "https://nfews.prefeitura.sp.gov.br/lotenfe.asmx";
 const URL_PROD    = "https://nfews.prefeitura.sp.gov.br/lotenfe.asmx";
 
@@ -391,9 +394,20 @@ export class SaoPauloNfseProvider implements NfseProvider {
 
     const assinatura = assinarRps(dadosAssinatura, this.certBuffer, this.certPassword);
 
-    // codigoTributacao mapeia para TributacaoRPS (ex: "T"=tributado, "F"=fixo, "J"=isento)
-    // Se não fornecido, usa padrão "T" (tributado no município)
-    const tributacaoRps = this.codigoTributacao || "T";
+    // codigoTributacao para SP deve ser um dos valores aceitos pela Nota Paulistana:
+    //   "T" = Tributado no Município (padrão)
+    //   "F" = Tributado Fora do Município
+    //   "A" = Tributado no Município, porém Isento
+    //   "B" = Tributado Fora do Município, porém Isento
+    //   "M" = Micro Empreendedor Individual (MEI)
+    //   "X" = Tributado no Município, porém Exigível
+    //   "V" = Tributado no Município, porém Imune
+    //   "P" = Exportação de Serviços
+    //   "C" = Cancelado
+    // ATENÇÃO: NÃO use código LC116 numérico aqui (ex: "01.07"). Use somente letras acima.
+    const TRIBUTACAO_VALIDA = new Set(["T", "F", "A", "B", "M", "X", "V", "P", "C"]);
+    const tributacaoRaw = this.codigoTributacao?.toUpperCase() || "T";
+    const tributacaoRps = TRIBUTACAO_VALIDA.has(tributacaoRaw) ? tributacaoRaw : "T";
 
     const xmlPedido = buildPedidoXml(
       input,
@@ -433,7 +447,7 @@ export class SaoPauloNfseProvider implements NfseProvider {
       timeout: 30_000,
     });
 
-    if (response.status >= 400 && !String(response.data).includes("<soap")) {
+    if (response.status >= 400 && !String(response.data).toLowerCase().includes("<soap")) {
       throw new Error(`Erro de transporte NFS-e São Paulo: HTTP ${response.status}`);
     }
 
