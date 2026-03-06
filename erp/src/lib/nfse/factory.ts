@@ -55,6 +55,7 @@ export async function getNfseProviderForCompany(
       certificadoToken2: true,
       itemListaServico: true,
       codigoTributacaoMunicipio: true,
+      cnae: true,
     },
   });
 
@@ -133,12 +134,16 @@ export async function getNfseProviderForCompany(
 
   switch (codigoMunicipio) {
     case MUNICIPIOS.CAMPINAS: {
+      // Campinas exige CNAE com 9 dígitos no campo CodigoCnae
+      // Normaliza removendo caracteres não numéricos (ex: "6204-0/00-01" → "620400001")
+      const cnaeNormalizado = config.cnae?.replace(/\D/g, "") || undefined;
       const campinasProvider = new CampinasNfseProvider(
         certBuffer,
         certPassword,
         inscricaoMunicipal,
         itemListaServico,
-        config.codigoTributacaoMunicipio ?? undefined
+        config.codigoTributacaoMunicipio ?? undefined,
+        cnaeNormalizado
       );
       providerCache.set(companyId, { provider: campinasProvider, expiresAt: Date.now() + CACHE_TTL_MS });
       return campinasProvider;
