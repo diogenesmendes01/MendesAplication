@@ -10,6 +10,33 @@ const PORT = parseInt(process.env.WHATSAPP_SERVICE_PORT || "3001", 10);
 const API_KEY = process.env.WHATSAPP_SERVICE_API_KEY || "";
 
 // ============================================
+// Startup config validation
+// ============================================
+
+if (!API_KEY) {
+  console.error(
+    "[FATAL] WHATSAPP_SERVICE_API_KEY não está definida. " +
+      "O serviço não pode subir sem uma chave de API. " +
+      "Defina a variável de ambiente e reinicie."
+  );
+  process.exit(1);
+}
+
+const WEBHOOK_URL_LOG = process.env.WHATSAPP_WEBHOOK_URL || "(não definida)";
+const SERVICE_BASE_URL_LOG =
+  process.env.WHATSAPP_SERVICE_BASE_URL || `http://localhost:${PORT}`;
+const maskedKey =
+  API_KEY.length > 8
+    ? `${API_KEY.slice(0, 4)}${"*".repeat(API_KEY.length - 8)}${API_KEY.slice(-4)}`
+    : "****";
+
+console.log("[Config] WhatsApp Service iniciando com:");
+console.log(`  PORT             = ${PORT}`);
+console.log(`  API_KEY          = ${maskedKey}`);
+console.log(`  WEBHOOK_URL      = ${WEBHOOK_URL_LOG}`);
+console.log(`  SERVICE_BASE_URL = ${SERVICE_BASE_URL_LOG}`);
+
+// ============================================
 // Middleware
 // ============================================
 
