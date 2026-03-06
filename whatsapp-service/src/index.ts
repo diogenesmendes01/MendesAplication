@@ -13,7 +13,11 @@ const API_KEY = process.env.WHATSAPP_SERVICE_API_KEY || "";
 // Middleware
 // ============================================
 
-app.use(cors());
+// WHATSAPP_CORS_ORIGIN: allowed CORS origin (default "*" for dev).
+// In production, set to the specific origin of your ERP frontend/backend,
+// e.g. "https://erp.mendes.app" to block unauthorized cross-origin requests.
+const CORS_ORIGIN = process.env.WHATSAPP_CORS_ORIGIN || "*";
+app.use(cors({ origin: CORS_ORIGIN }));
 app.use(express.json());
 
 // Serve uploaded media files
