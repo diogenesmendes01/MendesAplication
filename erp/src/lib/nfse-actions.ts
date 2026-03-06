@@ -143,6 +143,17 @@ export async function emitInvoiceForBoleto(
   // Seleciona o provider NFS-e correto para o município da empresa
   const nfseProvider = await getNfseProviderForCompany(companyId);
 
+  // Gera o número RPS de forma atômica via banco para evitar colisões em
+  // emissões simultâneas. FiscalConfig.nfseNextNumber é incrementado com
+  // uma operação atômica (UPDATE ... SET nfseNextNumber = nfseNextNumber + 1),
+  // garantindo unicidade mesmo sob alta concorrência.
+  const fiscalConfigUpdated = await prisma.fiscalConfig.update({
+    where: { companyId },
+    data: { nfseNextNumber: { increment: 1 } },
+    select: { nfseNextNumber: true },
+  });
+  const rpsNumero = String(fiscalConfigUpdated.nfseNextNumber);
+
   // Guard de idempotência com lock: evita emissão duplicada em requisições concorrentes.
   // Tenta criar o invoice em estado PENDING dentro da transação — se já existir, aborta.
   await prisma.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`nfse:${boletoId}`}))`;
@@ -171,6 +182,7 @@ export async function emitInvoiceForBoleto(
     serviceDescription,
     value,
     issRate,
+    rpsNumero,
   });
 
   // Create the Invoice record with ISSUED status

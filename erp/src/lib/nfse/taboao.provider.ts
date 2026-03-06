@@ -274,7 +274,11 @@ export class TaboaoDaSerraNfseProvider implements NfseProvider {
   }
 
   async emitNFSe(input: EmitNfseInput): Promise<EmitNfseResult> {
-    const rpsNumero = String(Date.now()).slice(-9);
+    // Usar o rpsNumero fornecido (gerado atomicamente via banco) para evitar
+    // colisões em emissões simultâneas. Date.now() como fallback apenas para
+    // compatibilidade com chamadas legadas que não passam o campo.
+    // TODO: remover fallback quando todos os callers passarem rpsNumero.
+    const rpsNumero = input.rpsNumero ?? String(Date.now()).slice(-9);
 
     const soapBody = buildSoapEnvelope(
       this.codigoUsuario,
