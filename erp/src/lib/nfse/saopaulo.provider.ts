@@ -22,6 +22,9 @@ import { SignedXml } from "xml-crypto";
 import type { EmitNfseInput, EmitNfseResult, NfseProvider } from "../nfse";
 
 // nfews suporta v1 e v2; nfe (legado) só v1
+// Nota: a Prefeitura de SP unificou o endpoint NFS-e em nfews.prefeitura.sp.gov.br
+// para ambos os ambientes (homologação e produção). O endpoint legado nfe.prefeitura.sp.gov.br
+// está descontinuado. Mantemos as constantes separadas para clareza e fácil atualização futura.
 const URL_HOMOLOG = "https://nfews.prefeitura.sp.gov.br/lotenfe.asmx";
 const URL_PROD    = "https://nfews.prefeitura.sp.gov.br/lotenfe.asmx";
 
@@ -126,8 +129,10 @@ function buildPedidoXml(
   rpsSerieNumero: string,
   assinatura: string,
   dtInicio: string, // AAAA-MM-DD
-  dtFim: string
+  dtFim: string,
+  tributacaoRps = "T" // "T"=tributado no município; usa codigoTributacao quando fornecido
 ): string {
+  const params = { tributacaoRps };
   const hoje = new Date();
   const dataEmissao = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}-${String(hoje.getDate()).padStart(2, "0")}`;
   const valorServicos = input.value.toFixed(2);
@@ -171,7 +176,7 @@ function buildPedidoXml(
     <TipoRPS>RPS</TipoRPS>
     <DataEmissao>${dataEmissao}</DataEmissao>
     <StatusRPS>N</StatusRPS>
-    <TributacaoRPS>T</TributacaoRPS>
+    <TributacaoRPS>${params.tributacaoRps}</TributacaoRPS>
     <ValorServicos>${valorServicos}</ValorServicos>
     <ValorDeducoes>0.00</ValorDeducoes>
     <ValorPIS>0.00</ValorPIS>
@@ -389,6 +394,21 @@ export class SaoPauloNfseProvider implements NfseProvider {
 
     const assinatura = assinarRps(dadosAssinatura, this.certBuffer, this.certPassword);
 
+    // codigoTributacao para SP deve ser um dos valores aceitos pela Nota Paulistana:
+    //   "T" = Tributado no Município (padrão)
+    //   "F" = Tributado Fora do Município
+    //   "A" = Tributado no Município, porém Isento
+    //   "B" = Tributado Fora do Município, porém Isento
+    //   "M" = Micro Empreendedor Individual (MEI)
+    //   "X" = Tributado no Município, porém Exigível
+    //   "V" = Tributado no Município, porém Imune
+    //   "P" = Exportação de Serviços
+    //   "C" = Cancelado
+    // ATENÇÃO: NÃO use código LC116 numérico aqui (ex: "01.07"). Use somente letras acima.
+    const TRIBUTACAO_VALIDA = new Set(["T", "F", "A", "B", "M", "X", "V", "P", "C"]);
+    const tributacaoRaw = this.codigoTributacao?.toUpperCase() || "T";
+    const tributacaoRps = TRIBUTACAO_VALIDA.has(tributacaoRaw) ? tributacaoRaw : "T";
+
     const xmlPedido = buildPedidoXml(
       input,
       this.inscricaoMunicipal,
@@ -397,7 +417,8 @@ export class SaoPauloNfseProvider implements NfseProvider {
       rpsSerieNumero,
       assinatura,
       dtInicio,
-      dtFim
+      dtFim,
+      tributacaoRps
     );
 
     // Assina o documento XML inteiro (xmldsig enveloped)
@@ -420,9 +441,15 @@ export class SaoPauloNfseProvider implements NfseProvider {
         "Content-Type": "text/xml; charset=utf-8",
         SOAPAction: `"http://www.prefeitura.sp.gov.br/nfe/ws/envioLoteRPS"`,
       },
-      validateStatus: () => true, // captura 4xx/5xx para extrair mensagem SOAP
+      // Aceita até 599: SOAP fault vem com HTTP 500 em erros de negócio.
+      // Falhas de transporte puras (sem corpo SOAP) são detectadas logo abaixo.
+      validateStatus: (s) => s < 600,
       timeout: 30_000,
     });
+
+    if (response.status >= 400 && !String(response.data).toLowerCase().includes("<soap")) {
+      throw new Error(`Erro de transporte NFS-e São Paulo: HTTP ${response.status}`);
+    }
 
     return { nfNumber: parseSoapResponse(response.data as string) };
   }

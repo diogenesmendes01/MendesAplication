@@ -4,7 +4,7 @@
  *
  * Uso:
  *   CERT_PATH="path/to/cert.pfx" CERT_SENHA="123456" \
- *   NFSE_ENV="homolog" \
+ *   NFE_ENV="homolog" \
  *   NF_NUMERO="1" NF_SERIE="1" \
  *   npx tsx scripts/test-nfe-codewave.ts
  */
@@ -19,7 +19,7 @@ async function main() {
   const certSenha = process.env.CERT_SENHA ?? "123456";
   const nfNumero = parseInt(process.env.NF_NUMERO ?? "1", 10);
   const nfSerie = process.env.NF_SERIE ?? "1";
-  const env = process.env.NFSE_ENV ?? "homolog";
+  const env = process.env.NFE_ENV ?? process.env.NFSE_ENV ?? "homolog";
 
   if (!certPath) {
     console.error("❌  CERT_PATH não definido");
