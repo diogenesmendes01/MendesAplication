@@ -135,9 +135,12 @@ export async function getNfseProviderForCompany(
 
   switch (codigoMunicipio) {
     case MUNICIPIOS.CAMPINAS: {
-      // Campinas exige CNAE com 9 dígitos no campo CodigoCnae
-      // Normaliza removendo caracteres não numéricos (ex: "6204-0/00-01" → "620400001")
-      const cnaeNormalizado = config.cnae?.replace(/\D/g, "") || undefined;
+      // O constructor do CampinasNfseProvider já normaliza o CNAE internamente.
+      // Passamos o valor bruto do banco; a normalização (remoção de não-dígitos) é feita lá.
+      const cnaeNormalizado = config.cnae ?? undefined;
+      // OptanteSimplesNacional: aplica-se ao schema ABRASF (Campinas).
+      // São Paulo (Nota Paulistana v1) usa TributacaoRPS="T" sem este campo.
+      // Taboão da Serra (CONAM) usa cClassTrib/codNBS sem equivalente de Simples.
       const isSimples = config.taxRegime === "SIMPLES_NACIONAL";
       const campinasProvider = new CampinasNfseProvider(
         certBuffer,

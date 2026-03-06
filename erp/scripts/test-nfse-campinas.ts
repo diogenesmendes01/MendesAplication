@@ -22,7 +22,8 @@ async function main() {
   const cnpj            = process.env.CNPJ;
   const itemListaServico = process.env.ITEM_LISTA ?? "01.07";
   // Campinas exige CNAE com 9 dígitos — ex: "620400001" para CNAE 6204-0/00-01
-  const cnae            = process.env.CNAE?.replace(/\D/g, "") || undefined;
+  // O constructor do provider normaliza o valor automaticamente
+  const cnae            = process.env.CNAE || undefined;
 
   if (!certPath || !certSenha || !inscricao || !cnpj) {
     console.error("❌  Variáveis obrigatórias: CERT_PATH, CERT_SENHA, INSCRICAO_MUNICIPAL, CNPJ");

@@ -38,9 +38,10 @@ export class CampinasNfseProvider implements NfseProvider {
     this.inscricaoMunicipal = inscricaoMunicipal;
     this.itemListaServico = itemListaServico;
     this.codigoTributacao = codigoTributacao;
-    // Campinas exige CNAE com 9 dígitos (ex: "620400001")
-    // Fonte: https://groups.google.com/g/wsnfsecampinas
-    this.codigoCnae = codigoCnae;
+    // Campinas exige CNAE com 9 dígitos (ex: "620400001").
+    // Normaliza aqui para garantir consistência independente de quem instanciar
+    // (ex: "6204-0/00-01" → "620400001", "6204000" → "6204000" mantido como está).
+    this.codigoCnae = codigoCnae?.replace(/\D/g, "") || undefined;
     this.simplesNacional = simplesNacional;
   }
 
