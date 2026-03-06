@@ -126,8 +126,10 @@ function buildPedidoXml(
   rpsSerieNumero: string,
   assinatura: string,
   dtInicio: string, // AAAA-MM-DD
-  dtFim: string
+  dtFim: string,
+  tributacaoRps = "T" // "T"=tributado no município; usa codigoTributacao quando fornecido
 ): string {
+  const params = { tributacaoRps };
   const hoje = new Date();
   const dataEmissao = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}-${String(hoje.getDate()).padStart(2, "0")}`;
   const valorServicos = input.value.toFixed(2);
@@ -171,7 +173,7 @@ function buildPedidoXml(
     <TipoRPS>RPS</TipoRPS>
     <DataEmissao>${dataEmissao}</DataEmissao>
     <StatusRPS>N</StatusRPS>
-    <TributacaoRPS>T</TributacaoRPS>
+    <TributacaoRPS>${params.tributacaoRps}</TributacaoRPS>
     <ValorServicos>${valorServicos}</ValorServicos>
     <ValorDeducoes>0.00</ValorDeducoes>
     <ValorPIS>0.00</ValorPIS>
@@ -389,6 +391,10 @@ export class SaoPauloNfseProvider implements NfseProvider {
 
     const assinatura = assinarRps(dadosAssinatura, this.certBuffer, this.certPassword);
 
+    // codigoTributacao mapeia para TributacaoRPS (ex: "T"=tributado, "F"=fixo, "J"=isento)
+    // Se não fornecido, usa padrão "T" (tributado no município)
+    const tributacaoRps = this.codigoTributacao || "T";
+
     const xmlPedido = buildPedidoXml(
       input,
       this.inscricaoMunicipal,
@@ -397,7 +403,8 @@ export class SaoPauloNfseProvider implements NfseProvider {
       rpsSerieNumero,
       assinatura,
       dtInicio,
-      dtFim
+      dtFim,
+      tributacaoRps
     );
 
     // Assina o documento XML inteiro (xmldsig enveloped)
@@ -420,9 +427,15 @@ export class SaoPauloNfseProvider implements NfseProvider {
         "Content-Type": "text/xml; charset=utf-8",
         SOAPAction: `"http://www.prefeitura.sp.gov.br/nfe/ws/envioLoteRPS"`,
       },
-      validateStatus: () => true, // captura 4xx/5xx para extrair mensagem SOAP
+      // Aceita até 599: SOAP fault vem com HTTP 500 em erros de negócio.
+      // Falhas de transporte puras (sem corpo SOAP) são detectadas logo abaixo.
+      validateStatus: (s) => s < 600,
       timeout: 30_000,
     });
+
+    if (response.status >= 400 && !String(response.data).includes("<soap")) {
+      throw new Error(`Erro de transporte NFS-e São Paulo: HTTP ${response.status}`);
+    }
 
     return { nfNumber: parseSoapResponse(response.data as string) };
   }

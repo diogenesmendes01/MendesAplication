@@ -232,10 +232,14 @@ export class SefazSpNfeProvider implements NfeProvider {
   }
 
   private getHttpsAgent(privateKeyPem: string, certPem: string): https.Agent {
+    // Em produção, valida o certificado do servidor (ICP-Brasil).
+    // Em homologação, SEFAZ pode usar certificado auto-assinado — desabilitar apenas com flag explícita.
+    const isProd = process.env.NFE_ENV === "production";
+    const rejectUnauthorized = isProd || process.env.NFE_TLS_VERIFY !== "false";
     return new https.Agent({
       key: privateKeyPem,
       cert: certPem,
-      rejectUnauthorized: false, // SEFAZ usa CA própria
+      rejectUnauthorized,
     });
   }
 
@@ -261,7 +265,8 @@ export class SefazSpNfeProvider implements NfeProvider {
   }
 
   async emitNFe(input: EmitNfeInput): Promise<EmitNfeResult> {
-    const isProd = process.env.NFSE_ENV === "production";
+    // NFE_ENV controla o ambiente; NFSE_ENV é mantido como fallback por compatibilidade
+    const isProd = (process.env.NFE_ENV ?? process.env.NFSE_ENV) === "production";
     const tpAmb: "1" | "2" = isProd ? "1" : "2";
     const baseUrl = isProd ? SEFAZ_PROD : SEFAZ_HOMOLOG;
 
@@ -306,10 +311,16 @@ export class SefazSpNfeProvider implements NfeProvider {
           "Content-Type": "application/soap+xml; charset=utf-8; action=\"http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4/nfeAutorizacaoLote\"",
         },
         httpsAgent,
-        validateStatus: () => true,
+        // Aceita 500 pois SEFAZ retorna SOAP fault com HTTP 500 em rejeições fiscais.
+        // Outros erros (4xx, etc.) são tratados abaixo antes do parse XML.
+        validateStatus: (s) => s < 600,
         timeout: 30_000,
       }
     );
+
+    if (response.status >= 400 && !String(response.data).includes("<soap")) {
+      throw new Error(`Erro de transporte SEFAZ: HTTP ${response.status}`);
+    }
 
     const resXml = (response.data as string)
       .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
@@ -366,7 +377,7 @@ export class SefazSpNfeProvider implements NfeProvider {
     agent: https.Agent,
     attempts = 5
   ): Promise<EmitNfeResult> {
-    const tpAmb = process.env.NFSE_ENV === "production" ? "1" : "2";
+    const tpAmb = (process.env.NFE_ENV ?? process.env.NFSE_ENV) === "production" ? "1" : "2";
 
     for (let i = 0; i < attempts; i++) {
       await new Promise((r) => setTimeout(r, 3000 + i * 2000));
@@ -380,10 +391,14 @@ export class SefazSpNfeProvider implements NfeProvider {
             "Content-Type": "application/soap+xml; charset=utf-8; action=\"http://www.portalfiscal.inf.br/nfe/wsdl/NFeRetAutorizacao4/nfeRetAutorizacaoLote\"",
           },
           httpsAgent: agent,
-          validateStatus: () => true,
+          validateStatus: (s) => s < 600,
           timeout: 15_000,
         }
       );
+
+      if (response.status >= 400 && !String(response.data).includes("<soap")) {
+        throw new Error(`Erro de transporte SEFAZ (poll): HTTP ${response.status}`);
+      }
 
       const resXml = (response.data as string)
         .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
@@ -391,9 +406,17 @@ export class SefazSpNfeProvider implements NfeProvider {
       const cStat = resXml.match(/<cStat>(\d+)/)?.[1];
       const xMotivo = resXml.match(/<xMotivo>([^<]+)/)?.[1] ?? "";
 
-      if (cStat === "100") {
-        const nProt = resXml.match(/<nProt>([^<]+)/)?.[1] ?? "";
-        return { chave, protocolo: nProt, numero };
+      // 104 = Lote processado (assíncrono) — extrair infProt individual
+      if (cStat === "104" || cStat === "100") {
+        const infProt = resXml.match(/<infProt>([\s\S]*?)<\/infProt>/)?.[1] ?? "";
+        const nfeStat = infProt.match(/<cStat>(\d+)/)?.[1] ?? cStat;
+        const nfeMotivo = infProt.match(/<xMotivo>([^<]+)/)?.[1] ?? xMotivo;
+        const nProt = infProt.match(/<nProt>([^<]+)/)?.[1] ?? "";
+
+        if (nfeStat === "100") {
+          return { chave, protocolo: nProt, numero };
+        }
+        throw new Error(`SEFAZ rejeitou NF-e (poll): cStat=${nfeStat} | ${nfeMotivo}`);
       }
 
       if (cStat === "105") continue; // em processamento, tentar novamente
