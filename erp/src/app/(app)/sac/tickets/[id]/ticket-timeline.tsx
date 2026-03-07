@@ -41,6 +41,7 @@ import Link from "next/link";
 import {
   listTimelineEvents,
   createInternalNote,
+  createTicketReply,
   attachFileToTicket,
   getEmailRecipients,
   sendEmailReply,
@@ -528,6 +529,7 @@ export default function TicketTimeline({
   const [togglingAi, setTogglingAi] = useState(false);
   const [noteContent, setNoteContent] = useState("");
   const [submittingNote, setSubmittingNote] = useState(false);
+  const [isInternalNote, setIsInternalNote] = useState(true);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const timelineEndRef = useRef<HTMLDivElement>(null);
@@ -716,9 +718,19 @@ export default function TicketTimeline({
     if (!noteContent.trim()) return;
     setSubmittingNote(true);
     try {
-      await createInternalNote(ticketId, companyId, noteContent.trim());
+      if (isInternalNote) {
+        await createInternalNote(ticketId, companyId, noteContent.trim());
+        toast.success("Nota interna adicionada");
+      } else {
+        await createTicketReply({
+          ticketId,
+          companyId,
+          content: noteContent.trim(),
+          sendViaEmail: false,
+        });
+        toast.success("Comentário adicionado");
+      }
       setNoteContent("");
-      toast.success("Nota interna adicionada");
       await loadEvents();
     } catch (err) {
       toast.error(
@@ -1000,14 +1012,47 @@ export default function TicketTimeline({
               <div ref={timelineEndRef} />
             </div>
 
-            {/* Internal note form */}
+            {/* Reply / internal note form */}
             <div className="border-t pt-4 space-y-3">
+              {/* Internal note toggle */}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={isInternalNote}
+                  onClick={() => setIsInternalNote((v) => !v)}
+                  className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:ring-offset-1 ${
+                    isInternalNote ? "bg-yellow-400" : "bg-muted"
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                      isInternalNote ? "translate-x-4" : "translate-x-0"
+                    }`}
+                  />
+                </button>
+                <span className="flex items-center gap-1 text-sm text-muted-foreground">
+                  <Lock className="h-3 w-3" />
+                  Nota interna
+                  {isInternalNote && (
+                    <span className="ml-1 rounded-full bg-yellow-100 px-1.5 py-0.5 text-xs text-yellow-700 font-medium">
+                      visível só para a equipe
+                    </span>
+                  )}
+                </span>
+              </div>
+
               <Textarea
-                placeholder="Escreva uma nota interna..."
+                placeholder={
+                  isInternalNote
+                    ? "Escreva uma nota interna (não visível ao cliente)..."
+                    : "Escreva um comentário..."
+                }
                 value={noteContent}
                 onChange={(e) => setNoteContent(e.target.value)}
                 rows={3}
                 disabled={submittingNote}
+                className={isInternalNote ? "border-yellow-200 bg-yellow-50/40" : ""}
               />
               <div className="flex items-center justify-between flex-wrap gap-3">
                 <div>
@@ -1032,9 +1077,22 @@ export default function TicketTimeline({
                   onClick={handleSubmitNote}
                   disabled={submittingNote || !noteContent.trim()}
                   size="sm"
+                  className={
+                    isInternalNote
+                      ? "bg-yellow-500 hover:bg-yellow-600 text-white"
+                      : ""
+                  }
                 >
-                  <Send className="mr-2 h-4 w-4" />
-                  {submittingNote ? "Enviando..." : "Comentar"}
+                  {isInternalNote ? (
+                    <Lock className="mr-2 h-4 w-4" />
+                  ) : (
+                    <Send className="mr-2 h-4 w-4" />
+                  )}
+                  {submittingNote
+                    ? "Enviando..."
+                    : isInternalNote
+                      ? "Salvar nota interna"
+                      : "Comentar"}
                 </Button>
               </div>
             </div>
