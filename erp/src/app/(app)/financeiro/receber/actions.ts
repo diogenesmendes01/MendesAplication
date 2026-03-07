@@ -172,7 +172,12 @@ export async function createReceivable(input: CreateReceivableInput) {
   return { id: receivable.id };
 }
 
-export async function markReceivableAsPaid(id: string, companyId: string) {
+export async function markReceivableAsPaid(
+  id: string,
+  companyId: string,
+  paidAt?: Date,
+  notes?: string
+) {
   const session = await requireCompanyAccess(companyId);
 
   const receivable = await prisma.accountReceivable.findFirst({
@@ -185,11 +190,13 @@ export async function markReceivableAsPaid(id: string, companyId: string) {
     throw new Error("Esta conta já foi paga");
   }
 
+  const effectivePaidAt = paidAt ?? new Date();
+
   const updated = await prisma.accountReceivable.update({
     where: { id },
     data: {
       status: "PAID",
-      paidAt: new Date(),
+      paidAt: effectivePaidAt,
     },
   });
 
@@ -199,7 +206,11 @@ export async function markReceivableAsPaid(id: string, companyId: string) {
     entity: "AccountReceivable",
     entityId: id,
     dataBefore: { status: receivable.status },
-    dataAfter: { status: "PAID", paidAt: updated.paidAt?.toISOString() },
+    dataAfter: {
+      status: "PAID",
+      paidAt: updated.paidAt?.toISOString(),
+      ...(notes ? { notes } : {}),
+    },
     companyId,
   });
 
