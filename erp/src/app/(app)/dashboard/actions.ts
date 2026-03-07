@@ -194,3 +194,145 @@ export async function getDashboardData(filters: DashboardFilters): Promise<Dashb
     periodLabel: getPeriodLabel(filters.period, filters.customStart, filters.customEnd),
   };
 }
+
+// ---------------------------------------------------------------------------
+// Dashboard Alerts
+// ---------------------------------------------------------------------------
+
+export type AlertType =
+  | "BOLETO_VENCIDO"
+  | "SLA_BREACH"
+  | "SLA_RISK"
+  | "NFSE_FAILED"
+  | "PROPOSTA_SEM_RESPOSTA";
+
+export interface DashboardAlert {
+  type: AlertType;
+  title: string;
+  description: string;
+  href: string;
+  severity: "critical" | "warning";
+}
+
+/**
+ * Agrega alertas de todos os módulos para exibição no dashboard.
+ * Considera todas as empresas que o usuário tem acesso.
+ */
+export async function getDashboardAlerts(): Promise<DashboardAlert[]> {
+  const session = await requireSession();
+  if (!session) throw new Error("Não autenticado");
+
+  // Resolve company IDs accessible to this user
+  let companyIds: string[];
+  if (session.role === "ADMIN") {
+    const companies = await prisma.company.findMany({
+      where: { status: "ACTIVE" },
+      select: { id: true },
+    });
+    companyIds = companies.map((c) => c.id);
+  } else {
+    const assignments = await prisma.userCompany.findMany({
+      where: { userId: session.userId },
+      include: { company: { select: { id: true, status: true } } },
+    });
+    companyIds = assignments
+      .filter((a) => a.company.status === "ACTIVE")
+      .map((a) => a.company.id);
+  }
+
+  if (companyIds.length === 0) return [];
+
+  const alerts: DashboardAlert[] = [];
+  const now = new Date();
+  const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+  // 1. Boletos vencidos (status OVERDUE)
+  const overdueCount = await prisma.boleto.count({
+    where: { companyId: { in: companyIds }, status: "OVERDUE" },
+  });
+  if (overdueCount > 0) {
+    alerts.push({
+      type: "BOLETO_VENCIDO",
+      title: `${overdueCount} boleto${overdueCount > 1 ? "s" : ""} vencido${overdueCount > 1 ? "s" : ""}`,
+      description: "Boletos vencidos aguardando regularização ou cobrança.",
+      href: "/comercial/propostas",
+      severity: "critical",
+    });
+  }
+
+  // 2. Tickets com SLA violado
+  const slaBreachedCount = await prisma.ticket.count({
+    where: {
+      companyId: { in: companyIds },
+      slaBreached: true,
+      status: { notIn: ["RESOLVED", "CLOSED"] },
+    },
+  });
+  if (slaBreachedCount > 0) {
+    alerts.push({
+      type: "SLA_BREACH",
+      title: `${slaBreachedCount} ticket${slaBreachedCount > 1 ? "s" : ""} com SLA estourado`,
+      description: "Tickets que ultrapassaram o prazo de atendimento definido.",
+      href: "/sac/tickets",
+      severity: "critical",
+    });
+  }
+
+  // 3. Tickets em risco de estourar SLA
+  const slaAtRiskCount = await prisma.ticket.count({
+    where: {
+      companyId: { in: companyIds },
+      slaAtRisk: true,
+      slaBreached: false,
+      status: { notIn: ["RESOLVED", "CLOSED"] },
+    },
+  });
+  if (slaAtRiskCount > 0) {
+    alerts.push({
+      type: "SLA_RISK",
+      title: `${slaAtRiskCount} ticket${slaAtRiskCount > 1 ? "s" : ""} em risco de estourar SLA`,
+      description: "Tickets próximos do prazo limite — ação urgente recomendada.",
+      href: "/sac/tickets",
+      severity: "warning",
+    });
+  }
+
+  // 4. NFS-e com status PENDING há mais de 24h (possível falha na emissão)
+  const pendingNfseCount = await prisma.invoice.count({
+    where: {
+      companyId: { in: companyIds },
+      status: "PENDING",
+      createdAt: { lt: oneDayAgo },
+    },
+  });
+  if (pendingNfseCount > 0) {
+    alerts.push({
+      type: "NFSE_FAILED",
+      title: `${pendingNfseCount} NFS-e pendente${pendingNfseCount > 1 ? "s" : ""} há mais de 24h`,
+      description: "Notas fiscais em estado PENDING por mais de 24h — possível falha na emissão.",
+      href: "/fiscal",
+      severity: "warning",
+    });
+  }
+
+  // 5. Propostas SENT há mais de 7 dias sem resposta
+  const oldSentProposalsCount = await prisma.proposal.count({
+    where: {
+      companyId: { in: companyIds },
+      status: "SENT",
+      updatedAt: { lt: sevenDaysAgo },
+    },
+  });
+  if (oldSentProposalsCount > 0) {
+    alerts.push({
+      type: "PROPOSTA_SEM_RESPOSTA",
+      title: `${oldSentProposalsCount} proposta${oldSentProposalsCount > 1 ? "s" : ""} sem resposta há +7 dias`,
+      description: "Propostas enviadas sem aceite ou rejeição — pode ser hora de um follow-up.",
+      href: "/comercial/propostas",
+      severity: "warning",
+    });
+  }
+
+  return alerts;
+}

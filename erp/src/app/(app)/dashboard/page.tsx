@@ -46,7 +46,9 @@ import {
 } from "@/components/ui/select";
 import {
   getDashboardData,
+  getDashboardAlerts,
   type DashboardData,
+  type DashboardAlert,
   type PeriodType,
 } from "./actions";
 
@@ -111,6 +113,8 @@ export default function DashboardPage() {
   const [period, setPeriod] = useState<PeriodType>("month");
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
+  const [alerts, setAlerts] = useState<DashboardAlert[]>([]);
+  const [alertsLoading, setAlertsLoading] = useState(true);
 
   const loadData = useCallback(async () => {
     try {
@@ -127,6 +131,22 @@ export default function DashboardPage() {
       setLoading(false);
     }
   }, [period, customStart, customEnd]);
+
+  const loadAlerts = useCallback(async () => {
+    try {
+      setAlertsLoading(true);
+      const result = await getDashboardAlerts();
+      setAlerts(result);
+    } catch {
+      // Silencia erros de alertas — não deve quebrar o dashboard
+    } finally {
+      setAlertsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadAlerts();
+  }, [loadAlerts]);
 
   useEffect(() => {
     // For custom period, only load when both dates are set
@@ -190,6 +210,49 @@ export default function DashboardPage() {
           )}
         </div>
       </div>
+
+      {/* Unified Alerts Card — só aparece quando há alertas */}
+      {!alertsLoading && alerts.length > 0 && (
+        <Card className="border-orange-200 bg-orange-50">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-orange-800 text-base">
+              <AlertTriangle className="h-5 w-5 text-orange-500" />
+              Atenção necessária
+              <span className="ml-auto rounded-full bg-orange-500 px-2 py-0.5 text-xs font-bold text-white">
+                {alerts.length}
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-2">
+              {alerts.map((alert, i) => (
+                <li key={i} className="flex items-start gap-3">
+                  <span
+                    className={`mt-0.5 flex-shrink-0 rounded-full w-2 h-2 ${
+                      alert.severity === "critical" ? "bg-red-500" : "bg-yellow-500"
+                    }`}
+                    style={{ marginTop: "6px" }}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-orange-900 leading-snug">
+                      {alert.title}
+                    </p>
+                    <p className="text-xs text-orange-700 leading-snug">
+                      {alert.description}
+                    </p>
+                  </div>
+                  <a
+                    href={alert.href}
+                    className="flex-shrink-0 text-xs text-orange-600 underline hover:text-orange-800 whitespace-nowrap"
+                  >
+                    Ver →
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
 
       {/* KPI Cards */}
       {loading ? (
