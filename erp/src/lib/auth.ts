@@ -2,9 +2,23 @@ import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 
-const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-change-in-production";
-const REFRESH_SECRET =
-  process.env.REFRESH_SECRET || "dev-refresh-secret-change-in-production";
+// Segurança: JWT_SECRET e REFRESH_SECRET NUNCA devem ter fallback hardcoded.
+// Um fallback fixo significa que qualquer pessoa com acesso ao código-fonte pode
+// forjar JWTs válidos e autenticar-se como qualquer usuário do sistema.
+// A aplicação deve falhar no startup se as variáveis não estiverem definidas.
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(
+      `Variável de ambiente obrigatória não definida: ${name}. ` +
+      `Configure ${name} com um valor seguro de no mínimo 32 caracteres aleatórios.`
+    );
+  }
+  return value;
+}
+
+const JWT_SECRET = requireEnv("JWT_SECRET");
+const REFRESH_SECRET = requireEnv("REFRESH_SECRET");
 
 const ACCESS_TOKEN_EXPIRY = "30m";
 const REFRESH_TOKEN_EXPIRY = "7d";
