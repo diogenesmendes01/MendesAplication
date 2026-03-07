@@ -3,7 +3,7 @@ import { StatusRps } from "@4success/nfse-campinas/dist/soap/notafiscalsoap/defi
 import { TipoRps } from "@4success/nfse-campinas/dist/soap/notafiscalsoap/definitions/IdentificacaoRps";
 import { ExigibilidadeISS } from "@4success/nfse-campinas/dist/soap/notafiscalsoap/definitions/Servico";
 import { Binario } from "@4success/nfse-campinas/dist/soap/notafiscalsoap/definitions/Binario";
-import type { EmitNfseInput, EmitNfseResult, NfseProvider } from "../nfse";
+import type { CancelNfseInput, CancelNfseResult, EmitNfseInput, EmitNfseResult, NfseProvider } from "../nfse";
 
 // Sistema migrado em 17/03/2025 para nova plataforma (novanfse.campinas.sp.gov.br)
 // O antigo domínio issdigital.campinas.sp.gov.br agora retorna página de manutenção HTML.
@@ -140,5 +140,35 @@ export class CampinasNfseProvider implements NfseProvider {
     return {
       nfNumber: String(infNfse.Numero),
     };
+  }
+
+  async cancelNFSe(input: CancelNfseInput): Promise<CancelNfseResult> {
+    // ABRASF 2.03 — operação CancelarNfse
+    // Referência: https://novanfse.campinas.sp.gov.br/notafiscal-abrasfv203-ws/NotaFiscalSoap?wsdl
+    const [result] = await this.campinas.CancelarNfse({
+      CancelarNfseEnvio: {
+        Pedido: {
+          InfPedidoCancelamento: {
+            IdentificacaoNfse: {
+              Numero: input.nfNumber,
+              CpfCnpj: { Cnpj: input.cnpj.replace(/\D/g, "") },
+              InscricaoMunicipal: input.inscricaoMunicipal,
+              CodigoMunicipio: 3509502, // Campinas IBGE
+            },
+            CodigoCancelamento: "1", // 1 = Erro na emissão
+          },
+        },
+      },
+    } as Parameters<typeof this.campinas.CancelarNfse>[0]);
+
+    const erros = (result as Record<string, unknown>)?.CancelarNfseResposta
+      ? ((result as Record<string, unknown>).CancelarNfseResposta as Record<string, unknown>)?.ListaMensagemRetorno
+      : undefined;
+
+    if (erros) {
+      throw new Error(`Erro ao cancelar NFS-e Campinas ${input.nfNumber}: ${JSON.stringify(erros)}`);
+    }
+
+    return { success: true };
   }
 }

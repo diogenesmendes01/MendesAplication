@@ -144,11 +144,20 @@ export async function listClientsForSelect(companyId: string) {
 /**
  * Cancel an issued invoice.
  */
-export async function cancelInvoice(invoiceId: string, companyId: string) {
+export async function cancelInvoice(
+  invoiceId: string,
+  companyId: string,
+  motivo = "Erro na emissão"
+) {
   const session = await requireCompanyAccess(companyId);
 
   const invoice = await prisma.invoice.findFirst({
     where: { id: invoiceId, companyId },
+    include: {
+      company: {
+        select: { cnpj: true },
+      },
+    },
   });
 
   if (!invoice) {
@@ -163,9 +172,31 @@ export async function cancelInvoice(invoiceId: string, companyId: string) {
     throw new Error("Não é possível cancelar uma nota fiscal pendente");
   }
 
+  // Notificar a prefeitura antes de atualizar o banco
+  // Se o cancelamento falhar na prefeitura, o status no banco NÃO é alterado
+  const { getNfseProviderForCompany } = await import("@/lib/nfse");
+  const { getCachedFiscalConfig } = await import(
+    "@/app/(app)/configuracoes/fiscal/actions"
+  );
+
+  const fiscalConfig = await getCachedFiscalConfig(companyId);
+  const provider = await getNfseProviderForCompany(companyId);
+
+  await provider.cancelNFSe({
+    nfNumber: invoice.nfNumber!,
+    cnpj: invoice.company.cnpj,
+    inscricaoMunicipal: fiscalConfig.inscricaoMunicipal,
+    motivo,
+  });
+
+  // Prefeitura aceitou — agora atualiza o banco
   await prisma.invoice.update({
     where: { id: invoiceId },
-    data: { status: "CANCELLED" },
+    data: {
+      status: "CANCELLED",
+      cancellationReason: motivo,
+      cancelledAt: new Date(),
+    },
   });
 
   // Cancel associated TaxEntries
