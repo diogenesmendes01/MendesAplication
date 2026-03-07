@@ -778,6 +778,8 @@ model FiscalConfig {
   codigoMunicipio           String?
   nfseSerieNumber           String    @default("1")
   nfseNextNumber            Int       @default(1)
+  nfeSerieNumber            String    @default("1")
+  nfeNextNumber             Int       @default(1)
   autoEmitNfse              Boolean   @default(false)
   // NFS-e: certificado digital A1 (Campinas e São Paulo)
   certificadoPfx            String?   // base64 do .pfx encriptado via AES
