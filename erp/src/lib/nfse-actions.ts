@@ -140,6 +140,16 @@ export async function emitInvoiceForBoleto(
   const fiscalConfig = await getCachedFiscalConfig(companyId);
   const issRate = fiscalConfig.issRate;
 
+  // Validação obrigatória: emitir NFS-e com ISS zerado ou negativo é inválido
+  // fiscalmente e pode resultar em multas ou rejeição pela prefeitura.
+  // issRate deve ser > 0 antes de qualquer comunicação com o provider.
+  if (issRate <= 0) {
+    throw new Error(
+      `ISS rate inválido para emissão de NFS-e: ${issRate}%. ` +
+      "Configure a alíquota ISS correta em Configurações → Fiscal antes de emitir notas."
+    );
+  }
+
   // Seleciona o provider NFS-e correto para o município da empresa
   const nfseProvider = await getNfseProviderForCompany(companyId);
 
