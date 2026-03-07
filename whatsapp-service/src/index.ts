@@ -1,6 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
+import rateLimit from "express-rate-limit";
 import path from "path";
 import { prisma } from "./lib/prisma.js";
 import { baileysProvider } from "./providers/baileys.provider.js";
@@ -211,8 +212,18 @@ app.post("/instance/:companyId/disconnect", async (req, res) => {
 // Message Routes
 // ============================================
 
+const messageSendLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: "Too many requests. Limit: 30 requests per minute per IP.",
+  },
+});
+
 // POST /message/send-text — Send text message
-app.post("/message/send-text", async (req, res) => {
+app.post("/message/send-text", messageSendLimiter, async (req, res) => {
   try {
     const { companyId, to, content } = req.body;
     if (!companyId || !to || !content) {
@@ -233,7 +244,7 @@ app.post("/message/send-text", async (req, res) => {
 });
 
 // POST /message/send-media — Send media message
-app.post("/message/send-media", async (req, res) => {
+app.post("/message/send-media", messageSendLimiter, async (req, res) => {
   try {
     const { companyId, to, mediaUrl, caption, mediaType } = req.body;
     if (!companyId || !to || !mediaUrl) {
