@@ -10,6 +10,26 @@ import { getCachedFiscalConfig } from "@/app/(app)/configuracoes/fiscal/actions"
 import { emitInvoiceForBoleto } from "@/lib/nfse-actions";
 
 // ---------------------------------------------------------------------------
+// Proposal Event Helper
+// ---------------------------------------------------------------------------
+
+async function createProposalEvent(
+  proposalId: string,
+  type: string,
+  description: string,
+  userId?: string
+) {
+  try {
+    await prisma.proposalEvent.create({
+      data: { proposalId, type, description, userId },
+    });
+  } catch (err) {
+    // Não propagar erro de log — o evento principal não deve falhar por causa do log
+    console.error("[ProposalEvent] Falha ao registrar evento:", err);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
@@ -273,6 +293,13 @@ export async function createProposal(
     companyId,
   });
 
+  await createProposalEvent(
+    proposal.id,
+    "CREATED",
+    `Proposta criada com ${proposal.items.length} item(s). Valor total: R$ ${proposal.totalValue}.`,
+    session.userId
+  );
+
   return { id: proposal.id };
 }
 
@@ -427,6 +454,13 @@ export async function updateProposalStatus(
     dataAfter: { status: newStatus },
     companyId,
   });
+
+  await createProposalEvent(
+    proposalId,
+    "STATUS_CHANGED",
+    `Status alterado: ${proposal.status} → ${newStatus}.`,
+    session.userId
+  );
 
   return { success: true };
 }
@@ -606,6 +640,13 @@ export async function generateBoletosForProposal(
     companyId: input.companyId,
   });
 
+  await createProposalEvent(
+    input.proposalId,
+    "BOLETO_GENERATED",
+    `${createdBoletos.length} boleto(s) gerado(s) no valor total de R$ ${totalValue.toFixed(2)}.`,
+    session.userId
+  );
+
   return { boletos: createdBoletos };
 }
 
@@ -675,6 +716,23 @@ export async function updateBoletoStatus(
     companyId,
   });
 
+  // Registrar evento de log na proposta
+  if (newStatus === "PAID") {
+    await createProposalEvent(
+      boleto.proposalId,
+      "PAID",
+      `Boleto #${boleto.installmentNumber} marcado como pago (R$ ${boleto.value}).`,
+      session.userId
+    );
+  } else if (newStatus === "SENT") {
+    await createProposalEvent(
+      boleto.proposalId,
+      "BOLETO_SENT",
+      `Boleto #${boleto.installmentNumber} marcado como enviado.`,
+      session.userId
+    );
+  }
+
   // Auto-emit NFS-e when boleto is paid
   if (newStatus === "PAID") {
     try {
@@ -725,4 +783,36 @@ export async function updateBoletoStatus(
   }
 
   return { success: true };
+}
+
+// ---------------------------------------------------------------------------
+// Proposal Events
+// ---------------------------------------------------------------------------
+
+export interface ProposalEventRow {
+  id: string;
+  type: string;
+  description: string;
+  userId: string | null;
+  createdAt: string;
+}
+
+export async function listProposalEvents(
+  proposalId: string,
+  companyId: string
+): Promise<ProposalEventRow[]> {
+  await requireCompanyAccess(companyId);
+
+  const events = await prisma.proposalEvent.findMany({
+    where: { proposalId, proposal: { companyId } },
+    orderBy: { createdAt: "asc" },
+  });
+
+  return events.map((e) => ({
+    id: e.id,
+    type: e.type,
+    description: e.description,
+    userId: e.userId,
+    createdAt: e.createdAt.toISOString(),
+  }));
 }

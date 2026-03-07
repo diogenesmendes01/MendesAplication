@@ -257,6 +257,20 @@ export async function sendProposalEmail(
     companyId,
   });
 
+  // Registrar evento na proposta
+  try {
+    await prisma.proposalEvent.create({
+      data: {
+        proposalId: proposal.id,
+        type: "EMAIL_SENT",
+        description: `Proposta enviada por e-mail para ${proposal.client.email}.`,
+        userId: session.userId,
+      },
+    });
+  } catch (eventErr) {
+    console.error("[ProposalEvent] Falha ao registrar evento EMAIL_SENT:", eventErr);
+  }
+
   return { success: true };
 }
 
@@ -387,6 +401,20 @@ export async function sendBoletoEmail(
     } as unknown as Prisma.InputJsonValue,
     companyId,
   });
+
+  // Registrar evento na proposta
+  try {
+    await prisma.proposalEvent.create({
+      data: {
+        proposalId: boleto.proposalId,
+        type: "BOLETO_SENT",
+        description: `Boleto #${boleto.installmentNumber} enviado por e-mail para ${client.email}.`,
+        userId: session.userId,
+      },
+    });
+  } catch (eventErr) {
+    console.error("[ProposalEvent] Falha ao registrar evento BOLETO_SENT:", eventErr);
+  }
 
   return { success: true };
 }

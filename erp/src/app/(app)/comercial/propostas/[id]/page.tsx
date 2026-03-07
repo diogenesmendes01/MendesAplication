@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowLeft, FileText, Mail, Receipt } from "lucide-react";
+import { ArrowLeft, FileText, Mail, Receipt, CheckCircle2, Send, FileCheck, AlertCircle, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -35,8 +35,10 @@ import {
   getProposalById,
   listBoletosForProposal,
   generateBoletosForProposal,
+  listProposalEvents,
   type ProposalDetail,
   type BoletoRow,
+  type ProposalEventRow,
 } from "../actions";
 import {
   sendProposalEmail,
@@ -139,6 +141,7 @@ export default function ProposalDetailPage() {
 
   const [proposal, setProposal] = useState<ProposalDetail | null>(null);
   const [boletos, setBoletos] = useState<BoletoRow[]>([]);
+  const [events, setEvents] = useState<ProposalEventRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Generate boleto dialog
@@ -169,12 +172,14 @@ export default function ProposalDetailPage() {
     if (!selectedCompanyId || !proposalId) return;
     setLoading(true);
     try {
-      const [proposalData, boletosData] = await Promise.all([
+      const [proposalData, boletosData, eventsData] = await Promise.all([
         getProposalById(proposalId, selectedCompanyId),
         listBoletosForProposal(proposalId, selectedCompanyId),
+        listProposalEvents(proposalId, selectedCompanyId),
       ]);
       setProposal(proposalData);
       setBoletos(boletosData);
+      setEvents(eventsData);
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : "Erro ao carregar proposta"
@@ -588,6 +593,47 @@ export default function ProposalDetailPage() {
           </CardContent>
         )}
       </Card>
+
+      {/* Activity Log */}
+      {events.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Clock className="h-4 w-4 text-muted-foreground" />
+              Histórico de atividades
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ol className="relative border-l border-muted-foreground/20 ml-3 space-y-4">
+              {events.map((evt) => (
+                <li key={evt.id} className="ml-4">
+                  <div className="absolute -left-[7px] mt-0.5 h-3.5 w-3.5 rounded-full border-2 border-background bg-muted-foreground/30 flex items-center justify-center">
+                    {evt.type === "CREATED" && <CheckCircle2 className="h-2 w-2 text-green-600" />}
+                    {evt.type === "EMAIL_SENT" && <Send className="h-2 w-2 text-blue-600" />}
+                    {evt.type === "BOLETO_GENERATED" && <FileText className="h-2 w-2 text-purple-600" />}
+                    {evt.type === "BOLETO_SENT" && <Send className="h-2 w-2 text-indigo-600" />}
+                    {evt.type === "PAID" && <CheckCircle2 className="h-2 w-2 text-green-600" />}
+                    {evt.type === "NFSE_EMITTED" && <FileCheck className="h-2 w-2 text-teal-600" />}
+                    {evt.type === "STATUS_CHANGED" && <AlertCircle className="h-2 w-2 text-orange-600" />}
+                  </div>
+                  <div className="pl-1">
+                    <p className="text-sm text-foreground leading-snug">{evt.description}</p>
+                    <time className="text-xs text-muted-foreground">
+                      {new Intl.DateTimeFormat("pt-BR", {
+                        day: "2-digit",
+                        month: "2-digit",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      }).format(new Date(evt.createdAt))}
+                    </time>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Generate Boletos Dialog */}
       <Dialog open={generateDialogOpen} onOpenChange={setGenerateDialogOpen}>

@@ -598,6 +598,7 @@ model Proposal {
   boletos  Boleto[]
   tickets  Ticket[] @relation("TicketProposal")
   invoices Invoice[]
+  events   ProposalEvent[]
 
   @@index([companyId, status])
   @@map("proposals")
@@ -613,6 +614,20 @@ model ProposalItem {
   proposal Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
 
   @@map("proposal_items")
+}
+
+model ProposalEvent {
+  id          String   @id @default(cuid())
+  proposalId  String
+  type        String   // CREATED, EMAIL_SENT, BOLETO_GENERATED, BOLETO_SENT, PAID, NFSE_EMITTED, STATUS_CHANGED
+  description String
+  userId      String?
+  createdAt   DateTime @default(now())
+
+  proposal Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  @@index([proposalId, createdAt])
+  @@map("proposal_events")
 }
 
 model Boleto {
