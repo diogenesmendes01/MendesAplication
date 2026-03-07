@@ -88,9 +88,10 @@ export async function emitInvoiceForBoleto(
 ): Promise<{ success: true; invoiceId: string; nfNumber: string }> {
   const session = await requireCompanyAccess(companyId);
 
-  // Fetch boleto with related data
+  // Fetch boleto with related data — sem filtro de status para poder
+  // reportar o status real caso o boleto não esteja pago.
   const boleto = await prisma.boleto.findFirst({
-    where: { id: boletoId, companyId, status: "PAID" },
+    where: { id: boletoId, companyId },
     include: {
       proposal: {
         include: {
@@ -124,7 +125,16 @@ export async function emitInvoiceForBoleto(
   });
 
   if (!boleto) {
-    throw new Error("Boleto não encontrado ou não está com status PAID");
+    throw new Error("Boleto não encontrado");
+  }
+
+  // Regra de negócio: NFS-e só pode ser emitida para boletos pagos.
+  // Emitir nota para boleto não quitado gera inconsistência fiscal.
+  if (boleto.status !== "PAID") {
+    throw new Error(
+      "NFS-e só pode ser emitida para boletos pagos. " +
+        `Boleto atual: ${boleto.status}.`
+    );
   }
 
   const client = boleto.proposal.client;
