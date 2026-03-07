@@ -512,7 +512,10 @@ export async function generateBoletosForProposal(
     throw new Error("Proposta não encontrada");
   }
   if (proposal.status !== "ACCEPTED") {
-    throw new Error("Somente propostas aceitas podem gerar boletos");
+    throw new Error(
+      "Boletos só podem ser gerados para propostas aceitas. " +
+        `Status atual: ${proposal.status}.`
+    );
   }
   if (proposal.boletos.length > 0) {
     throw new Error("Esta proposta já possui boletos gerados");
