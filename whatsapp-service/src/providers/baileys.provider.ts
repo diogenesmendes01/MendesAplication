@@ -24,6 +24,17 @@ const SERVICE_PORT = process.env.WHATSAPP_SERVICE_PORT || "3001";
 const SERVICE_BASE_URL =
   process.env.WHATSAPP_SERVICE_BASE_URL || `http://localhost:${SERVICE_PORT}`;
 
+if (
+  !process.env.WHATSAPP_SERVICE_BASE_URL &&
+  process.env.NODE_ENV === "production"
+) {
+  console.warn(
+    "[BaileysProvider] AVISO: WHATSAPP_SERVICE_BASE_URL não está definida. " +
+      `URLs de mídia usarão '${SERVICE_BASE_URL}', que é inacessível externamente. ` +
+      "Defina WHATSAPP_SERVICE_BASE_URL com a URL pública do serviço."
+  );
+}
+
 // ============================================
 // Types
 // ============================================
