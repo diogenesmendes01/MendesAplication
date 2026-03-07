@@ -144,11 +144,14 @@ export async function emitInvoiceForBoleto(
   const nfseProvider = await getNfseProviderForCompany(companyId);
 
   // Guard de idempotência com lock: evita emissão duplicada em requisições concorrentes.
-  // Tenta criar o invoice em estado PENDING dentro da transação — se já existir, aborta.
-  await prisma.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`nfse:${boletoId}`}))`;
-
-  const existingInvoice = await prisma.invoice.findFirst({
-    where: { boletoId, companyId },
+  // pg_advisory_xact_lock SÓ funciona dentro de uma $transaction — o lock é liberado
+  // ao fim da transação. Fora de $transaction o lock é liberado imediatamente, tornando
+  // a proteção contra corridas ineficaz.
+  const existingInvoice = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`nfse:${boletoId}`}))`;
+    return tx.invoice.findFirst({
+      where: { boletoId, companyId },
+    });
   });
 
   if (existingInvoice) {
