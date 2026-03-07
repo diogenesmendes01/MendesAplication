@@ -67,7 +67,11 @@ export class CampinasNfseProvider implements NfseProvider {
 
   async emitNFSe(input: EmitNfseInput): Promise<EmitNfseResult> {
     const hoje = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
-    const rpsNumero = Date.now().toString();
+    // Usar o rpsNumero fornecido (gerado atomicamente via banco) para evitar
+    // colisões em emissões simultâneas. Date.now() como fallback apenas para
+    // compatibilidade com chamadas legadas que não passam o campo.
+    // TODO: remover fallback quando todos os callers passarem rpsNumero.
+    const rpsNumero = input.rpsNumero ?? Date.now().toString();
 
     // Separar CPF e CNPJ do tomador
     const cpfCnpjTomadorRaw = input.clientData.cpfCnpj.replace(/\D/g, "");

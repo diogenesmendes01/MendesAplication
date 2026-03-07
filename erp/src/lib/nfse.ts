@@ -21,6 +21,12 @@ export interface EmitNfseInput {
   serviceDescription: string;
   value: number;
   issRate: number;
+  /**
+   * Número RPS gerado atomicamente via banco (FiscalConfig.nfseNextNumber).
+   * Quando fornecido, os providers devem usá-lo em vez de Date.now().
+   * Evita colisão de numeração em emissões simultâneas.
+   */
+  rpsNumero?: string;
 }
 
 export interface EmitNfseResult {
