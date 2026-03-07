@@ -237,6 +237,36 @@ const server = app.listen(PORT, () => {
 });
 
 // ============================================
+// Auto-reconnect sessions saved in DB
+// ============================================
+
+(async () => {
+  try {
+    const rows = await prisma.$queryRaw<{ companyId: string }[]>`
+      SELECT DISTINCT "companyId" FROM "baileysAuthState"
+    `;
+    if (rows.length === 0) {
+      console.log("[Startup] No saved sessions found, skipping auto-reconnect");
+      return;
+    }
+    console.log(
+      `[Startup] Auto-reconnecting ${rows.length} company session(s)...`
+    );
+    for (const { companyId } of rows) {
+      console.log(`[Startup] Scheduling reconnect for company: ${companyId}`);
+      baileysProvider.initiateQrCode(companyId, true).catch((err) => {
+        console.error(`[Startup] Failed to reconnect ${companyId}:`, err);
+      });
+    }
+  } catch (err) {
+    console.error(
+      "[Startup] Error loading saved sessions for auto-reconnect:",
+      err
+    );
+  }
+})();
+
+// ============================================
 // Graceful Shutdown
 // ============================================
 
