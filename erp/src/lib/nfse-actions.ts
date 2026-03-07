@@ -355,6 +355,20 @@ export async function emitInvoiceForBoleto(
     }
   }
 
+  // Registrar evento na proposta (best-effort — não falhar se der erro)
+  try {
+    await prisma.proposalEvent.create({
+      data: {
+        proposalId: boleto.proposal.id,
+        type: "NFSE_EMITTED",
+        description: `NFS-e emitida: número ${result.nfNumber}. Valor: R$ ${value.toFixed(2)}.`,
+        userId: session.userId,
+      },
+    });
+  } catch (eventErr) {
+    console.error("[ProposalEvent] Falha ao registrar evento NFSE_EMITTED:", eventErr);
+  }
+
   return {
     success: true,
     invoiceId: invoice.id,
