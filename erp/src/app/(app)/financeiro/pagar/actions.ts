@@ -337,7 +337,12 @@ export async function updatePayable(input: UpdatePayableInput) {
   return { id: updated.id };
 }
 
-export async function markPayableAsPaid(id: string, companyId: string) {
+export async function markPayableAsPaid(
+  id: string,
+  companyId: string,
+  paidAt?: Date,
+  notes?: string
+) {
   const session = await requireCompanyAccess(companyId);
 
   const payable = await prisma.accountPayable.findFirst({
@@ -350,11 +355,13 @@ export async function markPayableAsPaid(id: string, companyId: string) {
     throw new Error("Esta conta já foi paga");
   }
 
+  const effectivePaidAt = paidAt ?? new Date();
+
   const updated = await prisma.accountPayable.update({
     where: { id },
     data: {
       status: "PAID",
-      paidAt: new Date(),
+      paidAt: effectivePaidAt,
     },
   });
 
@@ -364,7 +371,11 @@ export async function markPayableAsPaid(id: string, companyId: string) {
     entity: "AccountPayable",
     entityId: id,
     dataBefore: { status: payable.status },
-    dataAfter: { status: "PAID", paidAt: updated.paidAt?.toISOString() },
+    dataAfter: {
+      status: "PAID",
+      paidAt: updated.paidAt?.toISOString(),
+      ...(notes ? { notes } : {}),
+    },
     companyId,
   });
 

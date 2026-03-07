@@ -150,8 +150,14 @@ export default function ContasPagarPage() {
   // Alerts summary
   const [alerts, setAlerts] = useState<PayableAlertSummary | null>(null);
 
-  // Mark as paid
+  // Mark as paid — confirmation dialog
   const [markingId, setMarkingId] = useState<string | null>(null);
+  const [payConfirmOpen, setPayConfirmOpen] = useState(false);
+  const [payConfirmId, setPayConfirmId] = useState<string | null>(null);
+  const [payConfirmDate, setPayConfirmDate] = useState(() =>
+    new Date().toISOString().slice(0, 10)
+  );
+  const [payConfirmNotes, setPayConfirmNotes] = useState("");
 
   const hasActiveFilters =
     filterStatus !== "" ||
@@ -304,12 +310,25 @@ export default function ContasPagarPage() {
   // Mark as paid
   // ---------------------------------------------------
 
-  async function handleMarkAsPaid(id: string) {
-    if (!selectedCompanyId) return;
-    setMarkingId(id);
+  function openPayConfirm(id: string) {
+    setPayConfirmId(id);
+    setPayConfirmDate(new Date().toISOString().slice(0, 10));
+    setPayConfirmNotes("");
+    setPayConfirmOpen(true);
+  }
+
+  async function handleConfirmPayment() {
+    if (!selectedCompanyId || !payConfirmId) return;
+    setMarkingId(payConfirmId);
     try {
-      await markPayableAsPaid(id, selectedCompanyId);
+      await markPayableAsPaid(
+        payConfirmId,
+        selectedCompanyId,
+        new Date(payConfirmDate),
+        payConfirmNotes || undefined
+      );
       toast.success("Conta marcada como paga");
+      setPayConfirmOpen(false);
       await loadPayables();
     } catch (err) {
       toast.error(
@@ -574,7 +593,7 @@ export default function ContasPagarPage() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleMarkAsPaid(row.id)}
+                            onClick={() => openPayConfirm(row.id)}
                             disabled={markingId === row.id}
                             title="Marcar como pago (baixa manual)"
                           >
@@ -753,6 +772,68 @@ export default function ContasPagarPage() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Payment Confirmation Dialog                                         */}
+      {/* ------------------------------------------------------------------ */}
+      <Dialog open={payConfirmOpen} onOpenChange={setPayConfirmOpen}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>Confirmar pagamento</DialogTitle>
+            <DialogDescription>
+              Informe a data do pagamento e, opcionalmente, uma observação ou
+              referência ao comprovante.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="pay-date">
+                Data do pagamento <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="pay-date"
+                type="date"
+                value={payConfirmDate}
+                onChange={(e) => setPayConfirmDate(e.target.value)}
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="pay-notes">
+                Observação / comprovante{" "}
+                <span className="text-muted-foreground text-xs">(opcional)</span>
+              </Label>
+              <textarea
+                id="pay-notes"
+                className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                placeholder="Ex: Transferência efetuada, NF #456..."
+                value={payConfirmNotes}
+                onChange={(e) => setPayConfirmNotes(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setPayConfirmOpen(false)}
+              disabled={!!markingId}
+            >
+              Cancelar
+            </Button>
+            <Button
+              className="bg-green-600 hover:bg-green-700 text-white"
+              onClick={handleConfirmPayment}
+              disabled={!payConfirmDate || !!markingId}
+            >
+              <CheckCircle className="mr-2 h-4 w-4" />
+              {markingId ? "Confirmando..." : "Confirmar pagamento"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
