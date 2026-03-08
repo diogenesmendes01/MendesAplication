@@ -22,6 +22,7 @@ import forge from "node-forge";
 import { SignedXml } from "xml-crypto";
 import axios from "axios";
 import https from "https";
+import fs from "fs";
 import type {
   EmitNfeInput,
   EmitNfeResult,
@@ -113,7 +114,7 @@ function nfeDatetime(d: Date): string {
 }
 
 /** Data AAAA-MM-DD */
-function nfeDate(d: Date): string {
+function _nfeDate(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
@@ -292,11 +293,11 @@ export class SefazSpNfeProvider implements NfeProvider {
 
     // 3. Assinar
     if (process.env.NFE_DEBUG) {
-      require("fs").writeFileSync("/tmp/nfe_debug_unsigned.xml", xmlUnsigned);
+      fs.writeFileSync("/tmp/nfe_debug_unsigned.xml", xmlUnsigned);
     }
     const xmlSigned = signNFe(xmlUnsigned, privateKey, cert);
     if (process.env.NFE_DEBUG) {
-      require("fs").writeFileSync("/tmp/nfe_debug_signed.xml", xmlSigned);
+      fs.writeFileSync("/tmp/nfe_debug_signed.xml", xmlSigned);
     }
 
     // 4. Enviar lote (indSinc=1 = síncrono, espera resposta imediata)

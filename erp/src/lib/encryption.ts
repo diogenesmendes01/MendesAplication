@@ -25,7 +25,7 @@ const AUTH_TAG_LENGTH = 16; // bytes
 
 // Parâmetros v1 (AES-128-CBC) — mantidos apenas para descriptografia retroativa
 const ALGO_V1 = "aes-128-cbc";
-const IV_LENGTH_V1 = 16; // bytes
+const _IV_LENGTH_V1 = 16; // mantido para referência da v1 // bytes
 
 // ---------------------------------------------------------------------------
 // Chaves
