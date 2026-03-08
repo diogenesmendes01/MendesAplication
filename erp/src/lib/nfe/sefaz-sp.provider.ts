@@ -114,9 +114,6 @@ function nfeDatetime(d: Date): string {
 }
 
 /** Data AAAA-MM-DD */
-function _nfeDate(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
 
 // ─── XML NF-e 4.0 ─────────────────────────────────────────────────────────────
 
