@@ -27,7 +27,7 @@ const loginAttempts = new Map<string, RateLimitEntry>();
 // Limpar entradas expiradas periodicamente para evitar memory leak
 setInterval(() => {
   const now = Date.now();
-  for (const [ip, entry] of loginAttempts.entries()) {
+  for (const [ip, entry] of Array.from(loginAttempts.entries())) {
     if (now - entry.windowStart > WINDOW_MS) {
       loginAttempts.delete(ip);
     }
