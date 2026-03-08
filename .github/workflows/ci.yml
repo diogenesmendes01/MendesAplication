@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  erp-check:
+    name: ERP — Type Check & Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: erp
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: erp/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+        env:
+          # Variáveis mínimas pro build não falhar
+          DATABASE_URL: postgresql://x:x@localhost:5432/x
+          JWT_SECRET: ci-secret-not-real
+          REFRESH_SECRET: ci-secret-not-real
+          ENCRYPTION_KEY: ci-secret-not-real-32chars-padding
+
+  whatsapp-check:
+    name: WhatsApp Service — Type Check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: whatsapp-service
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: whatsapp-service/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit

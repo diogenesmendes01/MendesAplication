@@ -1,20 +1,91 @@
 version: "3.8"
 
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: mendes-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-mendes}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD é obrigatório}
+      POSTGRES_DB: ${POSTGRES_DB:-erp_mendes}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mendes}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: mendes-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  erp:
+    build:
+      context: ./erp
+      dockerfile: Dockerfile
+    container_name: mendes-erp
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-mendes}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-erp_mendes}?schema=public
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET é obrigatório}
+      - REFRESH_SECRET=${REFRESH_SECRET:?REFRESH_SECRET é obrigatório}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:?ENCRYPTION_KEY é obrigatório}
+      - WHATSAPP_SERVICE_URL=http://whatsapp-service:3001
+      - WHATSAPP_SERVICE_API_KEY=${WHATSAPP_SERVICE_API_KEY}
+      - WHATSAPP_WEBHOOK_SECRET=${WHATSAPP_WEBHOOK_SECRET}
+      - AI_PROVIDER=${AI_PROVIDER:-openai}
+      - AI_API_KEY=${AI_API_KEY}
+      - AI_MODEL=${AI_MODEL}
+      - AI_EMBEDDING_PROVIDER=${AI_EMBEDDING_PROVIDER:-openai}
+      - AI_EMBEDDING_KEY=${AI_EMBEDDING_KEY}
+      - AI_EMBEDDING_MODEL=${AI_EMBEDDING_MODEL}
+      - NODE_ENV=production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - erp_uploads:/app/uploads
+
   whatsapp-service:
-    build: ./whatsapp-service
-    container_name: whatsapp-service
+    build:
+      context: ./whatsapp-service
+      dockerfile: Dockerfile
+    container_name: mendes-whatsapp
+    restart: unless-stopped
     ports:
       - "3001:3001"
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@host.docker.internal:5432/mendeserp?schema=public
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-mendes}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-erp_mendes}?schema=public
       - WHATSAPP_SERVICE_PORT=3001
-      - WHATSAPP_SERVICE_API_KEY=${WHATSAPP_SERVICE_API_KEY:-your-api-key-here}
-      - WHATSAPP_WEBHOOK_URL=http://host.docker.internal:3000/api/webhooks/whatsapp
-      - WHATSAPP_WEBHOOK_SECRET=${WHATSAPP_WEBHOOK_SECRET:-your-webhook-secret-here}
+      - WHATSAPP_SERVICE_API_KEY=${WHATSAPP_SERVICE_API_KEY}
+      - WHATSAPP_WEBHOOK_URL=http://erp:3000/api/webhooks/whatsapp
+      - WHATSAPP_WEBHOOK_SECRET=${WHATSAPP_WEBHOOK_SECRET}
+      - WHATSAPP_CORS_ORIGIN=${WHATSAPP_CORS_ORIGIN:-*}
+      - NODE_ENV=production
+    depends_on:
+      postgres:
+        condition: service_healthy
     volumes:
       - whatsapp_uploads:/app/uploads
-    restart: unless-stopped
 
 volumes:
+  postgres_data:
+  redis_data:
+  erp_uploads:
   whatsapp_uploads:
