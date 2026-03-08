@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyAccessToken } from "@/lib/auth";
 import { getFilePath, getMimeType } from "@/lib/file-upload";
 import fs from "fs/promises";
+import path from "path";
 
 export async function GET(
   req: NextRequest,
@@ -21,8 +22,11 @@ export async function GET(
     const { path: pathSegments } = await params;
     const storagePath = pathSegments.join("/");
 
-    // Prevent path traversal
-    if (storagePath.includes("..")) {
+    // Prevent path traversal: resolve o caminho completo e verifica se está
+    // dentro de UPLOADS_DIR. Checar só ".." não é suficiente (e.g. encoded %2e%2e).
+    const uploadsDir = path.join(process.cwd(), "uploads");
+    const resolvedPath = path.resolve(uploadsDir, storagePath);
+    if (!resolvedPath.startsWith(uploadsDir + path.sep) && resolvedPath !== uploadsDir) {
       return NextResponse.json({ error: "Caminho inválido" }, { status: 400 });
     }
 

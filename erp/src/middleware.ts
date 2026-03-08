@@ -12,9 +12,13 @@ const PUBLIC_PATHS = [
 
 const SESSION_MAX_AGE = 30 * 60; // 30 minutes in seconds
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || "dev-secret-change-in-production"
-);
+const jwtSecretValue = process.env.JWT_SECRET;
+if (!jwtSecretValue) {
+  throw new Error(
+    "JWT_SECRET não configurada. Configure a variável de ambiente antes de iniciar a aplicação."
+  );
+}
+const JWT_SECRET = new TextEncoder().encode(jwtSecretValue);
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -57,7 +61,7 @@ export async function middleware(req: NextRequest) {
   if (exp && exp - now < REFRESH_WINDOW) {
     const response = NextResponse.next();
     response.cookies.set("accessToken", accessToken, {
-      httpOnly: false,
+      httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       path: "/",

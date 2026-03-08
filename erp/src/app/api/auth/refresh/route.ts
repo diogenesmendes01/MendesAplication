@@ -51,9 +51,9 @@ export async function POST() {
 
   const response = NextResponse.json({ accessToken: newAccessToken });
 
-  // Access token cookie — not httpOnly so middleware can read it
+  // Access token cookie — httpOnly:true protege contra XSS
   response.cookies.set("accessToken", newAccessToken, {
-    httpOnly: false,
+    httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",

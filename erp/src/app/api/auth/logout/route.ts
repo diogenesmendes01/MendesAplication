@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
 
     // Clear both cookies
     response.cookies.set("accessToken", "", {
-      httpOnly: false,
+      httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       path: "/",

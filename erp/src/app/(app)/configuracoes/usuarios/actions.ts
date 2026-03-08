@@ -58,7 +58,7 @@ function validateCreateUserInput(input: CreateUserInput) {
   if (!emailRegex.test(input.email)) {
     throw new Error("Email inválido");
   }
-  if (!input.password || input.password.length < 6) {
+  if (!input.password || input.password.length < 8) {
     throw new Error("Senha deve ter pelo menos 6 caracteres");
   }
   if (!["ADMIN", "MANAGER"].includes(input.role)) {
@@ -77,7 +77,7 @@ function validateUpdateUserInput(input: UpdateUserInput) {
   if (!emailRegex.test(input.email)) {
     throw new Error("Email inválido");
   }
-  if (input.password !== undefined && input.password.length < 6) {
+  if (input.password !== undefined && input.password.length < 8) {
     throw new Error("Senha deve ter pelo menos 6 caracteres");
   }
   if (!["ADMIN", "MANAGER"].includes(input.role)) {

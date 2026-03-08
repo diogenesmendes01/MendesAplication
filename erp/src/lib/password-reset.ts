@@ -86,7 +86,7 @@ export async function validateResetToken(token: string) {
  * Reset the user's password using a valid reset token.
  */
 export async function resetPassword(token: string, newPassword: string) {
-  if (!newPassword || newPassword.length < 6) {
+  if (!newPassword || newPassword.length < 8) {
     return { success: false, error: "A senha deve ter pelo menos 6 caracteres." };
   }
 
