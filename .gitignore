@@ -7,3 +7,10 @@ dist/
 Thumbs.db
 erp/uploads/*
 !erp/uploads/.gitkeep
+uploads/
+*.tgz
+*.tar.gz
+.devcontainer/
+.claude/
+tasks/
+docs/plans/
