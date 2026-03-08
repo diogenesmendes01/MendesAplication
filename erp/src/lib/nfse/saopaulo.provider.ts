@@ -244,10 +244,6 @@ function signXmlDocument(
   const { privateKeyPem, certPem } = extractPemFromPfx(pfxBuffer, pfxPassword);
 
   // Remove cabeçalho PEM para usar como X509Certificate (só o base64)
-  const certBase64 = certPem
-    .replace("-----BEGIN CERTIFICATE-----", "")
-    .replace("-----END CERTIFICATE-----", "")
-    .replace(/\r?\n/g, "");
 
   const sig = new SignedXml({
     privateKey: privateKeyPem,

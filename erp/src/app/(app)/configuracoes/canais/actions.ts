@@ -265,3 +265,33 @@ export async function testChannelConnection(
 
   return { success: false, message: "Tipo de canal não suportado" };
 }
+
+export async function getWhatsAppStatus(
+  companyId: string
+): Promise<{ isConnected: boolean }> {
+  try {
+    const channel = await prisma.channel.findFirst({
+      where: { companyId, type: "WHATSAPP", isActive: true },
+    });
+
+    if (!channel) return { isConnected: false };
+
+    const config = decryptConfig(channel.config as Record<string, unknown>);
+    const serviceUrl = process.env.WHATSAPP_SERVICE_URL || "http://localhost:3001";
+    const serviceApiKey = process.env.WHATSAPP_SERVICE_API_KEY;
+    const instanceName = config.instanceName as string;
+
+    if (!instanceName || !serviceApiKey) return { isConnected: false };
+
+    const response = await fetch(`${serviceUrl}/instance/${instanceName}/status`, {
+      headers: { apikey: serviceApiKey },
+    });
+
+    if (!response.ok) return { isConnected: false };
+
+    const data = await response.json();
+    return { isConnected: Boolean(data.isConnected) };
+  } catch {
+    return { isConnected: false };
+  }
+}
