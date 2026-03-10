@@ -1,5 +1,6 @@
 import type { PaymentGateway } from "./types";
 import { PROVIDER_REGISTRY } from "./registry";
+import { MockProvider } from "./providers/mock.provider";
 
 /**
  * Instancia o gateway correto baseado no tipo do provider.
@@ -21,11 +22,9 @@ export function getGateway(
     throw new Error(`Provider not found: ${providerType}`);
   }
 
-  // Providers will be implemented in US-003 (mock) and US-004 (pagarme).
-  // US-013 will add pinbank placeholder.
-  // For now, all known providers throw "not implemented".
   switch (providerType) {
     case "mock":
+      return new MockProvider();
     case "pagarme":
     case "pinbank":
       throw new Error(

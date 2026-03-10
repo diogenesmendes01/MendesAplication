@@ -43,7 +43,7 @@
       "title": "Mock provider + migrar boleto.ts atual",
       "description": "Como desenvolvedor, quero migrar o MockBoletoProvider atual para o novo sistema de providers, para manter compatibilidade com boletos de teste.",
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "erp/src/lib/payment/providers/mock.provider.ts implementa PaymentGateway completo",
         "createBoleto retorna gatewayId fake, URL fake, linha fake, etc (mesma lógica do MockBoletoProvider atual)",
