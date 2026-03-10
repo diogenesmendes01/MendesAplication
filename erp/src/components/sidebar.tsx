@@ -19,6 +19,7 @@ import {
   BookOpen,
   Bot,
   Receipt,
+  Landmark,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -57,11 +58,12 @@ const navItems: NavItem[] = [
     href: "/configuracoes",
     icon: Settings,
     children: [
-      { label: "Canais", href: "/configuracoes/canais", icon: Radio },
       { label: "SLA", href: "/configuracoes/sla", icon: Clock },
       { label: "Knowledge Base", href: "/configuracoes/knowledge-base", icon: BookOpen },
       { label: "Agente IA", href: "/configuracoes/ai", icon: Bot },
       { label: "Fiscal", href: "/configuracoes/fiscal", icon: Receipt },
+      { label: "Integrações Bancárias", href: "/configuracoes/integracoes-bancarias", icon: Landmark },
+      { label: "Canais", href: "/configuracoes/canais", icon: Radio },
     ],
   },
 ];
