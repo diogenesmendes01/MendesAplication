@@ -87,7 +87,7 @@ jobs:
 
       - name: Verify deployment
         run: |
-          sleep 5
+          sleep 15
           docker exec coolify-proxy ping -c1 -W2 mendeserp > /dev/null 2>&1 && echo "✅ mendeserp reachable" || echo "⚠️ mendeserp alias not responding"
           docker exec coolify-proxy ping -c1 -W2 whatsapp-service > /dev/null 2>&1 && echo "✅ whatsapp-service reachable" || echo "⚠️ whatsapp-service not responding"
 
