@@ -25,27 +25,62 @@ jobs:
             -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}" \
             --fail-with-body
 
-      - name: Wait for containers
-        run: sleep 120
+      - name: Wait for containers to be ready
+        run: |
+          echo "Waiting for ERP container to be healthy..."
+          for i in $(seq 1 30); do
+            STATUS=$(docker ps --format '{{.Status}}' --filter "name=ygs0kks0sw8w048wcgw8wos0" | head -1)
+            if echo "$STATUS" | grep -q "healthy"; then
+              echo "ERP healthy after ${i}0s"
+              break
+            fi
+            sleep 10
+          done
+          echo "Waiting for WhatsApp container..."
+          for i in $(seq 1 15); do
+            if docker ps --format '{{.Names}}' | grep -q "zskog8c8gkw0sk4s04gs4goc"; then
+              echo "WhatsApp running after ${i}0s"
+              break
+            fi
+            sleep 10
+          done
+
+      - name: Cleanup duplicate containers
+        run: |
+          # Keep only the newest container for each app
+          ERP_CONTAINERS=$(docker ps --format '{{.Names}}' | grep ygs0kks0sw8w048wcgw8wos0 | sort -t- -k2 -n)
+          NEWEST_ERP=$(echo "$ERP_CONTAINERS" | tail -1)
+          for c in $ERP_CONTAINERS; do
+            if [ "$c" != "$NEWEST_ERP" ]; then
+              echo "Removing old ERP: $c"
+              docker rm -f "$c" 2>/dev/null || true
+            fi
+          done
+
+          WA_CONTAINERS=$(docker ps --format '{{.Names}}' | grep zskog8c8gkw0sk4s04gs4goc | sort -t- -k2 -n)
+          NEWEST_WA=$(echo "$WA_CONTAINERS" | tail -1)
+          for c in $WA_CONTAINERS; do
+            if [ "$c" != "$NEWEST_WA" ]; then
+              echo "Removing old WA: $c"
+              docker rm -f "$c" 2>/dev/null || true
+            fi
+          done
 
       - name: Fix network aliases
         run: |
-          # ERP alias
-          for c in $(docker ps --format '{{.Names}}' | grep ygs0kks0sw8w048wcgw8wos0 | head -1); do
-            docker network disconnect coolify "$c" 2>/dev/null || true
-            docker network connect --alias mendeserp coolify "$c"
-            echo "mendeserp → $c"
-          done
-          # WhatsApp alias
-          for c in $(docker ps --format '{{.Names}}' | grep zskog8c8gkw0sk4s04gs4goc | head -1); do
-            docker network disconnect coolify "$c" 2>/dev/null || true
-            docker network connect --alias whatsapp-service coolify "$c"
-            echo "whatsapp-service → $c"
-          done
+          ERP=$(docker ps --format '{{.Names}}' | grep ygs0kks0sw8w048wcgw8wos0 | head -1)
+          WA=$(docker ps --format '{{.Names}}' | grep zskog8c8gkw0sk4s04gs4goc | head -1)
+
+          docker network disconnect coolify "$ERP" 2>/dev/null || true
+          docker network connect --alias mendeserp coolify "$ERP"
+          echo "mendeserp → $ERP"
+
+          docker network disconnect coolify "$WA" 2>/dev/null || true
+          docker network connect --alias whatsapp-service coolify "$WA"
+          echo "whatsapp-service → $WA"
 
       - name: Update Traefik config
         run: |
-          ERP_CONTAINER=$(docker ps --format '{{.Names}}' | grep ygs0kks0sw8w048wcgw8wos0 | head -1)
           python3 -c "
           content = '''http:
             routers:
@@ -89,9 +124,15 @@ jobs:
           print('Traefik config updated')
           "
 
-      - name: Verify
+      - name: Verify deployment
         run: |
           sleep 5
-          docker exec coolify-proxy ping -c1 -W2 mendeserp > /dev/null && echo "✅ mendeserp reachable"
-          docker exec coolify-proxy ping -c1 -W2 whatsapp-service > /dev/null && echo "✅ whatsapp-service reachable"
-          curl -s -o /dev/null -w "ERP: %{http_code}\n" --max-time 10 https://boletoapi.com/login
+          docker exec coolify-proxy ping -c1 -W2 mendeserp > /dev/null && echo "✅ mendeserp reachable" || echo "❌ mendeserp unreachable"
+          docker exec coolify-proxy ping -c1 -W2 whatsapp-service > /dev/null && echo "✅ whatsapp-service reachable" || echo "❌ whatsapp-service unreachable"
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 https://boletoapi.com/login)
+          echo "ERP HTTPS: $HTTP_CODE"
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "❌ ERP not responding correctly"
+            exit 1
+          fi
+          echo "✅ Deploy complete!"
