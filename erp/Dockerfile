@@ -38,6 +38,6 @@ COPY --from=builder /app/node_modules ./node_modules
 USER nextjs
 EXPOSE 3000
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=5 CMD wget -q --spider http://localhost:3000/api/health || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=5 CMD wget -q --spider http://127.0.0.1:3000/ || exit 1
 
 CMD ["sh", "-c", "node node_modules/prisma/build/index.js migrate deploy && HOSTNAME=0.0.0.0 node server.js"]
