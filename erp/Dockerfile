@@ -12,7 +12,6 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
-# Dummy URL for prisma generate (only generates client, no DB connection needed)
 ENV DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy"
 RUN mkdir -p public
 RUN npx prisma generate
@@ -33,14 +32,12 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
-# Copy full node_modules for prisma migrate deploy (has deep dependency tree)
 COPY --from=builder /app/node_modules ./node_modules
 
 USER nextjs
 EXPOSE 3000
 ENV PORT=3000
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=5 CMD wget -q --spider http://localhost:3000/api/health || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=5 CMD wget -q --spider http://localhost:3000/api/health || exit 1
 
-# Use project's prisma (not npx which fetches latest)
 CMD ["sh", "-c", "node node_modules/prisma/build/index.js migrate deploy && node server.js"]
