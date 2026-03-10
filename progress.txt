@@ -126,3 +126,23 @@
 - Dashboard `resolveCompanyIds` now accepts optional `selectedCompanyId` parameter — when provided, validates access and returns single-element array
 - For expense-type KPIs, color inversion is a UI concern (not data) — handled via `invertColors` prop rather than changing the data model
 - Advisory lock idempotency guards should match on terminal status (ISSUED) only — intermediate states (PENDING/CANCELLED) are transient and should not block retries
+
+## PR #34 Re-Review Bug Fixes (2026-03-10) ✅
+
+### What was fixed (4 bugs from re-review)
+
+- **BUG A** (High): Replaced `allPaidHaveNfse` with `allBoletosComplete` in proposal detail page and stepper. New logic: `boletos.every((b) => b.status === "PAID" && issuedInvoiceMap[b.id])` — requires ALL boletos paid with NFS-e, not just the paid subset. Updated stepper prop, per-boleto action guard, and "Fluxo concluído" block.
+- **BUG B** (Medium): Simplified `getChartDateRange()` — chart always shows monthly bars, so day/week/month all use 6 months of SQL data, year uses 12. Removed unnecessary day/week-specific ranges that returned too-short windows.
+- **BUG C** (Low): Chart subtitle now dynamic: `{period === "year" ? "Últimos 12 meses" : "Últimos 6 meses"}` instead of hardcoded "Últimos 6 meses".
+- **BUG D** (Low/Security): `listInvoicesForBoletos` in `nfse-actions.ts` now uses `requireCompanyAccess(companyId)` instead of `requireSession()`, enforcing proper RBAC tenant isolation. Removed unused `requireSession` import.
+
+### Files changed
+- `erp/src/app/(app)/comercial/propostas/[id]/page.tsx` — BUG A
+- `erp/src/components/proposal-stepper.tsx` — BUG A (prop rename)
+- `erp/src/app/(app)/dashboard/actions.ts` — BUG B
+- `erp/src/app/(app)/dashboard/page.tsx` — BUG C
+- `erp/src/lib/nfse-actions.ts` — BUG D
+
+### Learnings
+- When checking "flow complete", must verify ALL items are in terminal state, not just a subset — partial completion ≠ completion
+- Chart rendering and SQL range must be aligned: if chart always shows N monthly bars, SQL must always fetch N months regardless of KPI filter
