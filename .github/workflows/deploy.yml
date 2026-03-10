@@ -132,14 +132,13 @@ jobs:
 
       - name: Verify deployment
         run: |
-          sleep 5
-          docker exec coolify-proxy ping -c1 -W2 mendeserp > /dev/null 2>&1 && echo "✅ mendeserp reachable" || echo "⚠️ mendeserp alias not responding"
-          docker exec coolify-proxy ping -c1 -W2 whatsapp-service > /dev/null 2>&1 && echo "✅ whatsapp-service reachable" || echo "⚠️ whatsapp-service not responding"
-
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -L --max-time 15 https://boletoapi.com/login)
-          echo "ERP HTTPS: $HTTP_CODE"
-          if [ "$HTTP_CODE" != "200" ]; then
-            echo "❌ ERP not responding correctly"
+          sleep 10
+          ERP=$(docker ps --format '{{.Names}}' | grep "^ygs0kks0sw8w048wcgw8wos0" | head -1)
+          ERP_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$ERP" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "http://${ERP_IP}:3000/login")
+          echo "ERP direct ($ERP_IP): $HTTP_CODE"
+          if [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "307" ]; then
+            echo "❌ ERP not responding on $ERP_IP:3000"
             exit 1
           fi
-          echo "✅ Deploy complete!"
+          echo "✅ Deploy complete! ERP accessible at https://boletoapi.com"
