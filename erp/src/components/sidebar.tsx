@@ -68,6 +68,7 @@ const navItems: NavItem[] = [
 
 const roleLabels: Record<string, string> = {
   ADMIN: "Administrador",
+  MANAGER: "Gerente",
   USER: "Usuário",
   VIEWER: "Visualizador",
 };

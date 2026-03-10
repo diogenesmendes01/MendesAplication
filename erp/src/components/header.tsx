@@ -30,11 +30,18 @@ const routeLabels: Record<string, string> = {
   nova: "Nova",
 };
 
+// Match CUID (clx..., cm...) or UUID patterns to replace with "Detalhe"
+const idPattern = /^(cl[a-z0-9]{20,}|cm[a-z0-9]{20,}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
+
 function buildBreadcrumb(pathname: string) {
   const segments = pathname.split("/").filter(Boolean);
   return segments
     .filter((s) => !s.startsWith("(")) // skip route groups like (app)
-    .map((s) => routeLabels[s] || s.charAt(0).toUpperCase() + s.slice(1));
+    .map((s) => {
+      if (routeLabels[s]) return routeLabels[s];
+      if (idPattern.test(s)) return "Detalhe";
+      return s.charAt(0).toUpperCase() + s.slice(1);
+    });
 }
 
 interface HeaderProps {
