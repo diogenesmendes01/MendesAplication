@@ -99,3 +99,30 @@
 - Pattern: always validate existing code against ACs before writing new code — saves time and avoids duplicate implementation
 - The contextual actions section uses a clean pattern: "Próxima ação" label + state-conditional blocks, making it easy to audit which states show which buttons
 - Edge cases handled well: `canGenerateBoletos` guards against re-generating, `allBoletosPaid` vs `hasBoletoPaid` distinguishes partial from full payment
+
+## PR #34 Code Review Bug Fixes (2026-03-10) ✅
+
+### What was fixed (13 bugs total)
+- **BUG 1** (BLOCKER): Verified already correct — no change needed
+- **BUG 2** (Critical): Dashboard now filters by selectedCompanyId from CompanyContext
+- **BUG 3** (Critical): Stepper checks per-boleto ISSUED invoice via `listInvoicesForBoletos()` — no longer marks "complete" after 1 partial NFS-e
+- **BUG 4** (High): "Enviar Boleto" button rendered per-boleto based on individual GENERATED status
+- **BUG 5** (High): Unified per-boleto action block replaces separate conditional blocks
+- **BUG 6** (Medium): KPI labels dynamic via `periodSuffix()` — maps period to "do dia/da semana/do mês/do ano/do período"
+- **BUG 7** (Medium): Chart date range respects period filter via `getChartDateRange()` helper
+- **BUG 8** (Medium): `loadAlerts` useCallback depends on `selectedCompanyId`, reloads on company change
+- **BUG 9** (Medium): Idempotency guard checks `status: "ISSUED"` only — PENDING/CANCELLED invoices cleaned up before re-emit
+- **BUG 10** (Low): `useCountUp` stores previous target via `useRef`, animates from previous→new value
+- **BUG 11** (Low): `window.location.href` replaced with `router.push()` in proposal table rows
+- **BUG 12** (Low): `<a>` replaced with Next.js `<Link>` in AttentionCard
+- **BUG 13** (Medium): KPICard accepts `invertColors` prop — expenses card shows red for increases, green for decreases
+
+### New exports added
+- `listInvoicesForBoletos(boletoIds, companyId)` in `nfse-actions.ts` — returns `Record<string, boolean>` for per-boleto ISSUED status
+
+### Learnings
+- Per-boleto NFS-e tracking requires querying Invoice table directly (not ProposalEvent), since events don't track which boleto the NFS-e belongs to
+- `useRef` for storing previous animation target must update in the cleanup function of `useEffect`, not in the main body — avoids stale values
+- Dashboard `resolveCompanyIds` now accepts optional `selectedCompanyId` parameter — when provided, validates access and returns single-element array
+- For expense-type KPIs, color inversion is a UI concern (not data) — handled via `invertColors` prop rather than changing the data model
+- Advisory lock idempotency guards should match on terminal status (ISSUED) only — intermediate states (PENDING/CANCELLED) are transient and should not block retries
