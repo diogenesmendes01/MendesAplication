@@ -75,15 +75,60 @@ jobs:
             echo "whatsapp-service -> $WA"
           fi
 
-          # Get ERP IP and update Traefik dynamic config with real IP
+          # Get ERP container IP
           sleep 2
           ERP_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$ERP" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1)
           echo "ERP IP: $ERP_IP"
 
-          # Update Traefik config using sed (reliable, no heredoc escaping issues)
-          sed -i "s|url: http://[0-9.]*:3000|url: http://${ERP_IP}:3000|g" /data/coolify/proxy/dynamic/mendeserp.yaml
-          echo "Traefik config updated with IP $ERP_IP"
-          cat /data/coolify/proxy/dynamic/mendeserp.yaml
+          TRAEFIK_YAML="/data/coolify/proxy/dynamic/mendeserp.yaml"
+
+          # Write complete YAML if file doesn't exist or is empty
+          if [ ! -s "$TRAEFIK_YAML" ]; then
+            echo "Creating Traefik config from scratch..."
+            mkdir -p /data/coolify/proxy/dynamic
+            cat > "$TRAEFIK_YAML" <<YAMLEOF
+          http:
+            routers:
+              http-mendeserp:
+                entryPoints:
+                  - http
+                middlewares:
+                  - redirect-to-https
+                rule: "Host(\`boletoapi.com\`)"
+                service: mendeserp-svc
+                priority: 999
+              https-mendeserp:
+                entryPoints:
+                  - https
+                middlewares:
+                  - gzip
+                rule: "Host(\`boletoapi.com\`)"
+                service: mendeserp-svc
+                priority: 999
+                tls:
+                  certResolver: letsencrypt
+            services:
+              mendeserp-svc:
+                loadBalancer:
+                  servers:
+                    - url: "http://${ERP_IP}:3000"
+            middlewares:
+              redirect-to-https:
+                redirectScheme:
+                  scheme: https
+                  permanent: true
+              gzip:
+                compress: true
+          YAMLEOF
+          else
+            # File exists — update the service URL (matches IP, hostname, or any url pattern)
+            sed -i "s|url: \"http://[^\"]*:3000\"|url: \"http://${ERP_IP}:3000\"|g" "$TRAEFIK_YAML"
+            # Fallback: if sed didn't match (unquoted url), try without quotes
+            sed -i "s|url: http://[^ ]*:3000|url: http://${ERP_IP}:3000|g" "$TRAEFIK_YAML"
+          fi
+
+          echo "Traefik config:"
+          cat "$TRAEFIK_YAML"
 
       - name: Verify deployment
         run: |
