@@ -20,6 +20,10 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Variáveis de Ambiente (Segurança)
+
+- **FILE_TOKEN_SECRET**: Recomendado em produção para links assinados de arquivos (anexos WhatsApp, uploads). Se não definido, usa `WHATSAPP_SERVICE_API_KEY` como fallback — usar secret separado reduz o blast radius em caso de vazamento.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

@@ -3,16 +3,19 @@ import crypto from "crypto";
 const MEDIA_TOKEN_SECRET =
   process.env.WHATSAPP_MEDIA_TOKEN_SECRET || process.env.WHATSAPP_SERVICE_API_KEY || "";
 
-if (!MEDIA_TOKEN_SECRET) {
-  throw new Error(
-    "WHATSAPP_MEDIA_TOKEN_SECRET ou WHATSAPP_SERVICE_API_KEY deve estar definida para proteger os uploads."
-  );
+function getSecret(): string {
+  if (!MEDIA_TOKEN_SECRET) {
+    throw new Error(
+      "WHATSAPP_MEDIA_TOKEN_SECRET ou WHATSAPP_SERVICE_API_KEY deve estar definida para proteger os uploads."
+    );
+  }
+  return MEDIA_TOKEN_SECRET;
 }
 
 function createSignature(relativePath: string, expires: number): string {
   const normalizedPath = relativePath.replace(/\\/g, "/");
   return crypto
-    .createHmac("sha256", MEDIA_TOKEN_SECRET)
+    .createHmac("sha256", getSecret())
     .update(`${normalizedPath}:${expires}`)
     .digest("hex");
 }

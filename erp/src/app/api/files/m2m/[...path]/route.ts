@@ -48,10 +48,13 @@ export async function GET(
     const fileBuffer = await fs.readFile(fullPath);
     const mimeType = getMimeType(storagePath);
 
+    const rawName = pathSegments[pathSegments.length - 1];
+    const safeName = path.basename(rawName).replace(/["\r\n]/g, "_");
+
     return new NextResponse(fileBuffer, {
       headers: {
         "Content-Type": mimeType,
-        "Content-Disposition": `inline; filename="${pathSegments[pathSegments.length - 1]}"`,
+        "Content-Disposition": `inline; filename="${safeName}"`,
         "Cache-Control": "private, max-age=300",
       },
     });

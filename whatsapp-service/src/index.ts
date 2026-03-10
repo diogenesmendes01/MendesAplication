@@ -65,6 +65,16 @@ app.get("/media/:companyId/:fileName", (req, res) => {
   const { companyId, fileName } = req.params;
   const { expires, signature } = req.query;
 
+  // Guard against path traversal (e.g. fileName = "..")
+  if (
+    !fileName ||
+    fileName.includes("..") ||
+    fileName.includes(path.sep)
+  ) {
+    res.status(400).json({ error: "Invalid fileName" });
+    return;
+  }
+
   if (
     !verifySignedMediaRequest(
       companyId,
