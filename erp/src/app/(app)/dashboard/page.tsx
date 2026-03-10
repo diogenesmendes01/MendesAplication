@@ -348,7 +348,7 @@ export default function DashboardPage() {
               <div className="flex items-center justify-between px-5 py-4 border-b border-border-subtle">
                 <div>
                   <div className="text-sm font-semibold text-text-primary">Receita × Despesas</div>
-                  <div className="text-caption text-text-secondary mt-0.5">Últimos 6 meses</div>
+                  <div className="text-caption text-text-secondary mt-0.5">{period === "year" ? "Últimos 12 meses" : "Últimos 6 meses"}</div>
                 </div>
                 <div className="flex gap-3.5 items-center">
                   <div className="flex items-center gap-1.5 text-caption text-text-secondary">

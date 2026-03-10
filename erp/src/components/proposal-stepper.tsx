@@ -14,15 +14,15 @@ interface ProposalStepperProps {
   proposalStatus: string;
   hasBoletos: boolean;
   hasBoletoPaid: boolean;
-  /** True only when ALL paid boletos have a corresponding ISSUED invoice */
-  allPaidHaveNfse: boolean;
+  /** True only when ALL boletos are PAID and each has a corresponding ISSUED invoice */
+  allBoletosComplete: boolean;
 }
 
 function resolveSteps({
   proposalStatus,
   hasBoletos,
   hasBoletoPaid,
-  allPaidHaveNfse,
+  allBoletosComplete,
 }: ProposalStepperProps): Step[] {
   const steps: Step[] = [
     { label: "Criada", status: "future" },
@@ -42,7 +42,7 @@ function resolveSteps({
   // Determine the current level
   let currentLevel = 0;
 
-  if (hasBoletoPaid && allPaidHaveNfse) {
+  if (hasBoletoPaid && allBoletosComplete) {
     currentLevel = 6; // all done
   } else if (hasBoletoPaid) {
     currentLevel = 5; // waiting NFS-e for some paid boletos

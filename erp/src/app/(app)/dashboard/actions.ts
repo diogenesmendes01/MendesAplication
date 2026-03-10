@@ -229,45 +229,19 @@ async function resolveCompanyIds(session: { userId: string; role: string }, sele
 function getChartDateRange(period: PeriodType, customStart?: string, customEnd?: string): { chartStart: Date; chartEnd: Date } {
   const now = new Date();
 
-  switch (period) {
-    case "day": {
-      // Last 7 days
-      const chartStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
-      const chartEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-      return { chartStart, chartEnd };
-    }
-    case "week": {
-      // Last 8 weeks
-      const chartStart = new Date(now);
-      chartStart.setDate(now.getDate() - 8 * 7);
-      chartStart.setHours(0, 0, 0, 0);
-      return { chartStart, chartEnd: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1) };
-    }
-    case "month": {
-      // Last 6 months (default)
-      const chartStart = new Date(now.getFullYear(), now.getMonth() - 5, 1);
-      const chartEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-      return { chartStart, chartEnd };
-    }
-    case "year": {
-      // Last 12 months
-      const chartStart = new Date(now.getFullYear(), now.getMonth() - 11, 1);
-      const chartEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-      return { chartStart, chartEnd };
-    }
-    case "custom": {
-      if (customStart && customEnd) {
-        return {
-          chartStart: new Date(customStart + "T00:00:00"),
-          chartEnd: new Date(customEnd + "T23:59:59"),
-        };
-      }
-      // Fallback to last 6 months
-      const chartStart = new Date(now.getFullYear(), now.getMonth() - 5, 1);
-      const chartEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-      return { chartStart, chartEnd };
-    }
+  // Chart always renders monthly bars — ensure minimum 6 months of data
+  // regardless of KPI period filter (day/week/month all show 6 months).
+  if (period === "custom" && customStart && customEnd) {
+    return {
+      chartStart: new Date(customStart + "T00:00:00"),
+      chartEnd: new Date(customEnd + "T23:59:59"),
+    };
   }
+
+  const monthsBack = period === "year" ? 11 : 5;
+  const chartStart = new Date(now.getFullYear(), now.getMonth() - monthsBack, 1);
+  const chartEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  return { chartStart, chartEnd };
 }
 
 // ---------------------------------------------------------------------------

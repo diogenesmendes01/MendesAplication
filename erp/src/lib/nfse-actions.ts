@@ -2,7 +2,6 @@
 
 import { prisma } from "@/lib/prisma";
 import { requireCompanyAccess } from "@/lib/rbac";
-import { requireSession } from "@/lib/session";
 import { getNfseProviderForCompany } from "@/lib/nfse";
 import { sendEmail } from "@/lib/email";
 import { logAuditEvent } from "@/lib/audit";
@@ -86,7 +85,7 @@ export async function listInvoicesForBoletos(
   boletoIds: string[],
   companyId: string
 ): Promise<Record<string, boolean>> {
-  await requireSession();
+  await requireCompanyAccess(companyId);
 
   if (boletoIds.length === 0) return {};
 

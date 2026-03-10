@@ -316,8 +316,8 @@ export default function ProposalDetailPage() {
   const companyName = selectedCompany?.nomeFantasia || "Empresa";
 
   // BUG 3 fix: Check per-boleto NFS-e status instead of global event flag
-  const paidBoletos = boletos.filter((b) => b.status === "PAID");
-  const allPaidHaveNfse = paidBoletos.length > 0 && paidBoletos.every((b) => issuedInvoiceMap[b.id]);
+  
+  const allBoletosComplete = hasBoletos && boletos.every((b) => b.status === "PAID" && issuedInvoiceMap[b.id]);
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-1 duration-300">
@@ -348,7 +348,7 @@ export default function ProposalDetailPage() {
             proposalStatus={proposal.status}
             hasBoletos={hasBoletos}
             hasBoletoPaid={hasBoletoPaid}
-            allPaidHaveNfse={allPaidHaveNfse}
+            allBoletosComplete={allBoletosComplete}
           />
         </CardContent>
       </Card>
@@ -397,7 +397,7 @@ export default function ProposalDetailPage() {
         )}
 
         {/* BUG 4+5 fix: Unified per-boleto actions based on individual status */}
-        {proposal.status === "ACCEPTED" && hasBoletos && !allPaidHaveNfse && (
+        {proposal.status === "ACCEPTED" && hasBoletos && !allBoletosComplete && (
           <div className="space-y-3">
             {/* Per-boleto action rows */}
             {boletos.map((b) => {
@@ -468,7 +468,7 @@ export default function ProposalDetailPage() {
         )}
 
         {/* All done */}
-        {allPaidHaveNfse && paidBoletos.length > 0 && (
+        {allBoletosComplete && (
           <div className="flex items-center gap-2 rounded-lg bg-success-subtle px-3 py-2 text-body-sm text-success">
             <CheckCircle2 className="h-4 w-4" />
             Fluxo concluído — todas as NFS-e emitidas
