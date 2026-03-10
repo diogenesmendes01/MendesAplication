@@ -15,6 +15,7 @@ import QRCode from "qrcode";
 import fs from "fs/promises";
 import path from "path";
 import { prisma } from "../lib/prisma.js";
+import { buildSignedMediaUrl } from "../lib/media-token.js";
 import { useDatabaseAuthState } from "./useDatabaseAuthState.js";
 
 const WEBHOOK_URL =
@@ -1023,8 +1024,11 @@ class BaileysProvider {
 
       await fs.writeFile(fullPath, buffer as Buffer);
 
-      // Return URL accessible via Express static serving
-      const publicUrl = `${SERVICE_BASE_URL}/uploads/${companyId}/${fullName}`;
+      const publicUrl = buildSignedMediaUrl(
+        companyId,
+        fullName,
+        SERVICE_BASE_URL
+      );
 
       console.log(
         `[BaileysProvider] Media saved for ${companyId}: ${fullPath}`

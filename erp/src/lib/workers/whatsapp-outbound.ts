@@ -1,6 +1,7 @@
 import { Job } from "bullmq";
 import { prisma } from "@/lib/prisma";
 import { sendTextMessage, sendMediaMessage } from "@/lib/whatsapp-api";
+import { generateSignedFileUrl } from "@/lib/file-token";
 
 export interface WhatsAppOutboundJobData {
   messageId: string;
@@ -40,9 +41,10 @@ export async function processWhatsAppOutbound(job: Job<WhatsAppOutboundJobData>)
         where: { id: { in: attachmentIds } },
       });
 
-      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
       for (const att of attachments) {
-        const mediaUrl = `${baseUrl}/api/files/${att.storagePath}`;
+        const mediaUrl = generateSignedFileUrl(att.storagePath, {
+          ttlSeconds: 15 * 60,
+        });
         await sendMediaMessage(companyId, to, mediaUrl, att.fileName);
       }
     }

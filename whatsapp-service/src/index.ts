@@ -4,6 +4,7 @@ import cors from "cors";
 import rateLimit from "express-rate-limit";
 import path from "path";
 import { prisma } from "./lib/prisma.js";
+import { verifySignedMediaRequest } from "./lib/media-token.js";
 import { baileysProvider } from "./providers/baileys.provider.js";
 
 const app = express();
@@ -48,15 +49,44 @@ const CORS_ORIGIN = process.env.WHATSAPP_CORS_ORIGIN || "*";
 app.use(cors({ origin: CORS_ORIGIN }));
 app.use(express.json());
 
-// Serve uploaded media files
-app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
-
 // ============================================
 // Health check (no auth)
 // ============================================
 
 app.get("/health", (_req, res) => {
   res.status(200).json({ status: "ok" });
+});
+
+// ============================================
+// Signed media download (used by ERP)
+// ============================================
+
+app.get("/media/:companyId/:fileName", (req, res) => {
+  const { companyId, fileName } = req.params;
+  const { expires, signature } = req.query;
+
+  if (
+    !verifySignedMediaRequest(
+      companyId,
+      fileName,
+      expires as string | undefined,
+      signature as string | undefined
+    )
+  ) {
+    res.status(401).json({ error: "Invalid or expired signature" });
+    return;
+  }
+
+  const filePath = path.join(process.cwd(), "uploads", companyId, fileName);
+  res.sendFile(filePath, (err) => {
+    if (!err) return;
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      res.status(404).json({ error: "File not found" });
+    } else {
+      console.error("[Media] Failed to send file:", err);
+      res.status(500).json({ error: "Failed to load file" });
+    }
+  });
 });
 
 // ============================================

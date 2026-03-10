@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAccessToken } from "@/lib/auth";
+import { canAccessCompany } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
 import { uploadFile, getFilePath } from "@/lib/file-upload";
 import { documentProcessingQueue } from "@/lib/queue";
@@ -23,6 +24,18 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(
         { error: "companyId é obrigatório" },
         { status: 400 }
+      );
+    }
+
+    const hasAccess = await canAccessCompany(
+      payload.userId,
+      payload.role,
+      companyId
+    );
+    if (!hasAccess) {
+      return NextResponse.json(
+        { error: "Acesso negado a esta empresa" },
+        { status: 403 }
       );
     }
 
@@ -72,6 +85,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { error: "companyId é obrigatório" },
         { status: 400 }
+      );
+    }
+
+    const hasAccess = await canAccessCompany(
+      payload.userId,
+      payload.role,
+      companyId
+    );
+    if (!hasAccess) {
+      return NextResponse.json(
+        { error: "Acesso negado a esta empresa" },
+        { status: 403 }
       );
     }
 
@@ -132,6 +157,18 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json(
         { error: "id e companyId são obrigatórios" },
         { status: 400 }
+      );
+    }
+
+    const hasAccess = await canAccessCompany(
+      payload.userId,
+      payload.role,
+      companyId
+    );
+    if (!hasAccess) {
+      return NextResponse.json(
+        { error: "Acesso negado a esta empresa" },
+        { status: 403 }
       );
     }
 
