@@ -9,7 +9,7 @@ on:
 jobs:
   deploy:
     name: Trigger Coolify Deploy
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
 
     steps:
@@ -18,5 +18,3 @@ jobs:
           curl -s -X GET "${{ secrets.COOLIFY_WEBHOOK_URL }}" \
             -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}" \
             --fail-with-body
-        # COOLIFY_WEBHOOK_URL e COOLIFY_TOKEN devem ser configurados
-        # em Settings > Secrets no GitHub do repo
