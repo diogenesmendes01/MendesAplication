@@ -17,3 +17,18 @@
 - Tickets: OPEN, IN_PROGRESS, WAITING_CLIENT are "open" statuses; RESOLVED and CLOSED are terminal
 - KPICard supports both `previousValue` (auto-computes variation) and `badgeOverride` (custom badge text/variant)
 - The `cn()` utility from `@/lib/utils` is used for conditional class merging
+
+## US-002 — Empty State Component (2026-03-10) ✅
+
+### What was implemented
+- Refactored `src/components/empty-state.tsx` to accept `LucideIcon` type instead of `ReactNode` for the icon prop
+- Component now internally enforces: 48px size, strokeWidth 1.5, text-tertiary color
+- Title: 16px font-medium, Description: 14px text-secondary
+- Added `"use client"` directive (needed for onAction callback)
+- Optional action button supports both href (link) and onAction (callback)
+- Updated all 4 EmptyState usages in dashboard/page.tsx to pass icon components directly
+
+### Learnings
+- Using `LucideIcon` type (from `lucide-react`) instead of `ReactNode` gives type safety and lets the component control rendering (size, stroke, color)
+- Passing icon as component reference (`icon={Calendar}`) instead of JSX (`icon={<Calendar />}`) enables the wrapper to apply consistent styles
+- Previous version relied on callers to set correct size/stroke — now enforced centrally for design consistency

@@ -25,7 +25,7 @@
       "title": "Empty state component",
       "description": "Como usuário, quero ver um estado vazio elegante quando não há dados numa listagem.",
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "Componente empty-state.tsx criado: ícone 48px Lucide stroke 1.5 text-tertiary + título 16px medium + descrição 14px secondary + botão de ação opcional",
         "Reutilizável em qualquer listagem",
