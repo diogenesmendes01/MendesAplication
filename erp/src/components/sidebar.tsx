@@ -29,6 +29,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useCompany } from "@/contexts/company-context";
 import { getSlaAlertCounts } from "@/app/(app)/sac/tickets/actions";
 import { useEventStream } from "@/hooks/use-event-stream";
@@ -97,6 +102,25 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
     },
   });
 
+  /* ── Shared company dropdown content ── */
+  const companyDropdownItems = companies.map((company) => (
+    <DropdownMenuItem
+      key={company.id}
+      onClick={() => setSelectedCompanyId(company.id)}
+      className="flex items-center justify-between"
+    >
+      <div className="min-w-0 flex-1">
+        <div className="truncate font-medium">{company.nomeFantasia}</div>
+        <div className="truncate text-xs text-text-secondary">
+          {company.cnpj}
+        </div>
+      </div>
+      {selectedCompany?.id === company.id && (
+        <ChevronDown className="ml-2 h-4 w-4 shrink-0 rotate-180 text-accent" />
+      )}
+    </DropdownMenuItem>
+  ));
+
   return (
     <aside
       className={cn(
@@ -114,7 +138,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
                 variant="ghost"
                 className="h-10 w-full justify-start gap-2 px-2"
               >
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent-subtle text-accent">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-subtle text-accent">
                   {selectedCompany?.nomeFantasia?.charAt(0) || "E"}
                 </div>
                 <span className="flex-1 truncate text-left text-sm font-medium">
@@ -124,30 +148,31 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-[280px]">
-              {companies.map((company) => (
-                <DropdownMenuItem
-                  key={company.id}
-                  onClick={() => setSelectedCompanyId(company.id)}
-                  className="flex items-center justify-between"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate font-medium">{company.nomeFantasia}</div>
-                    <div className="truncate text-xs text-text-secondary">
-                      {company.cnpj}
-                    </div>
-                  </div>
-                  {selectedCompany?.id === company.id && (
-                    <ChevronDown className="ml-2 h-4 w-4 shrink-0 rotate-180 text-accent" />
-                  )}
-                </DropdownMenuItem>
-              ))}
+              {companyDropdownItems}
             </DropdownMenuContent>
           </DropdownMenu>
         )}
         {collapsed && (
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent-subtle text-accent">
-            {selectedCompany?.nomeFantasia?.charAt(0) || "E"}
-          </div>
+          <DropdownMenu>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    className="flex h-8 w-8 items-center justify-center rounded-full bg-accent-subtle text-accent transition-colors hover:bg-accent-muted"
+                    aria-label="Trocar empresa"
+                  >
+                    {selectedCompany?.nomeFantasia?.charAt(0) || "E"}
+                  </button>
+                </DropdownMenuTrigger>
+              </TooltipTrigger>
+              <TooltipContent side="right">
+                {selectedCompany?.nomeFantasia || "Trocar empresa"}
+              </TooltipContent>
+            </Tooltip>
+            <DropdownMenuContent align="start" side="right" className="w-[280px]">
+              {companyDropdownItems}
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
         {onMobileClose && (
           <Button
