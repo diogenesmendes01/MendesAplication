@@ -223,6 +223,15 @@ export async function savePaymentProvider(
     : Prisma.JsonNull;
 
   if (data.id) {
+    // Check if provider type changed — regenerate webhook URL/secret if so
+    const providerChanged = data.provider !== existing.provider;
+    const webhookUpdate: { webhookUrl?: string; webhookSecret?: string } = {};
+    if (providerChanged) {
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://boletoapi.com";
+      webhookUpdate.webhookUrl = `${baseUrl}/api/webhooks/payment/${data.provider}`;
+      webhookUpdate.webhookSecret = crypto.randomUUID();
+    }
+
     // Update
     const result = await prisma.paymentProvider.update({
       where: { id: data.id },
@@ -234,6 +243,7 @@ export async function savePaymentProvider(
         isDefault: data.isDefault,
         isActive: true,
         metadata,
+        ...webhookUpdate,
       },
     });
 
@@ -247,6 +257,9 @@ export async function savePaymentProvider(
         provider: data.provider,
         sandbox: data.sandbox,
         isDefault: data.isDefault,
+        ...(providerChanged
+          ? { webhookUrl: webhookUpdate.webhookUrl, providerChanged: true }
+          : {}),
       } as unknown as Prisma.InputJsonValue,
       companyId,
     });
@@ -254,7 +267,8 @@ export async function savePaymentProvider(
     return { id: result.id };
   } else {
     // Create
-    const webhookUrl = `https://boletoapi.com/api/webhooks/payment/${data.provider}`;
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://boletoapi.com";
+    const webhookUrl = `${baseUrl}/api/webhooks/payment/${data.provider}`;
     const webhookSecret = crypto.randomUUID();
 
     const result = await prisma.paymentProvider.create({

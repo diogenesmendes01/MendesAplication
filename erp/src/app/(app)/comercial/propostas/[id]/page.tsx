@@ -384,7 +384,11 @@ export default function ProposalDetailPage() {
       });
       setBoletos(result.boletos);
       setGenerateDialogOpen(false);
-      toast.success(`${result.boletos.length} boleto(s) gerado(s) com sucesso`);
+      if (result.error) {
+        toast.warning(result.error);
+      } else {
+        toast.success(`${result.boletos.length} boleto(s) gerado(s) com sucesso`);
+      }
       await loadData();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao gerar boletos");

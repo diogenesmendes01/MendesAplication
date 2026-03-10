@@ -653,7 +653,7 @@ async function resolveGatewayForBoleto(
 
 export async function generateBoletosForProposal(
   input: GenerateBoletosInput
-): Promise<{ boletos: BoletoRow[] }> {
+): Promise<{ boletos: BoletoRow[]; error?: string }> {
   const session = await requireCompanyAccess(input.companyId);
 
   if (!input.installments || input.installments < 1) {
@@ -717,96 +717,121 @@ export async function generateBoletosForProposal(
     );
 
   const createdBoletos: BoletoRow[] = [];
+  let failedAtInstallment: number | null = null;
+  let failureError: string | null = null;
 
-  await prisma.$transaction(async (tx) => {
-    for (let i = 1; i <= input.installments; i++) {
-      // Calculate due date for this installment
-      const dueDate = new Date(firstDue);
-      dueDate.setMonth(dueDate.getMonth() + (i - 1));
+  // Process each installment individually — NO wrapping transaction around
+  // external API calls to prevent ghost boletos at the provider when DB
+  // rolls back.
+  for (let i = 1; i <= input.installments; i++) {
+    // Calculate due date for this installment
+    const dueDate = new Date(firstDue);
+    dueDate.setMonth(dueDate.getMonth() + (i - 1));
 
-      // Adjust last installment to handle rounding
-      const value =
-        i === input.installments
-          ? Math.round((totalValue - installmentValue * (input.installments - 1)) * 100) / 100
-          : installmentValue;
+    // Adjust last installment to handle rounding
+    const value =
+      i === input.installments
+        ? Math.round((totalValue - installmentValue * (input.installments - 1)) * 100) / 100
+        : installmentValue;
 
-      // Build CreateBoletoInput for the new payment system
-      const documentType = clientType === "PF" ? "cpf" : "cnpj";
-      const boletoInput: CreateBoletoInput = {
-        customer: {
-          name: proposal.client.name,
-          document: proposal.client.cpfCnpj,
-          documentType,
-          email: proposal.client.email ?? undefined,
-        },
-        amount: Math.round(value * 100), // Convert R$ to centavos
+    // Build CreateBoletoInput for the new payment system
+    const documentType = clientType === "PF" ? "cpf" : "cnpj";
+    const boletoInput: CreateBoletoInput = {
+      customer: {
+        name: proposal.client.name,
+        document: proposal.client.cpfCnpj,
+        documentType,
+        email: proposal.client.email ?? undefined,
+      },
+      amount: Math.round(value * 100), // Convert R$ to centavos
+      dueDate,
+      installmentNumber: i,
+      totalInstallments: input.installments,
+      description: `Parcela ${i}/${input.installments} - Proposta #${input.proposalId.slice(-6)}`,
+      metadata: {
+        proposalId: input.proposalId,
+        companyRazaoSocial: proposal.company.razaoSocial,
+        companyCnpj: proposal.company.cnpj,
+      },
+    };
+
+    // 1) Call external gateway FIRST (outside any transaction)
+    let result: CreateBoletoResult;
+    try {
+      result = await gateway.createBoleto(boletoInput);
+    } catch (err) {
+      // Gateway failed — stop processing but keep previously created boletos
+      // (they already exist at the provider)
+      failedAtInstallment = i;
+      failureError =
+        err instanceof Error ? err.message : "Erro desconhecido no gateway";
+      break;
+    }
+
+    // 2) Gateway succeeded — persist boleto + receivable in DB
+    const gatewayData = {
+      url: result.url ?? null,
+      line: result.line ?? null,
+      barcode: result.barcode ?? null,
+      qrCode: result.qrCode ?? null,
+      pdf: result.pdf ?? null,
+      nossoNumero: result.nossoNumero ?? null,
+    };
+
+    const boleto = await prisma.boleto.create({
+      data: {
+        proposalId: input.proposalId,
+        bankReference: result.gatewayId, // Backward compatibility
+        providerId,
+        gatewayId: result.gatewayId,
+        gatewayData: gatewayData as unknown as Prisma.InputJsonValue,
+        manualOverride,
+        value: new Prisma.Decimal(value),
         dueDate,
         installmentNumber: i,
-        totalInstallments: input.installments,
-        description: `Parcela ${i}/${input.installments} - Proposta #${input.proposalId.slice(-6)}`,
-        metadata: {
-          proposalId: input.proposalId,
-          companyRazaoSocial: proposal.company.razaoSocial,
-          companyCnpj: proposal.company.cnpj,
-        },
-      };
+        status: "GENERATED",
+        companyId: input.companyId,
+      },
+    });
 
-      // Generate boleto via resolved gateway
-      const result: CreateBoletoResult = await gateway.createBoleto(boletoInput);
+    await prisma.accountReceivable.create({
+      data: {
+        clientId: proposal.clientId,
+        description: `Boleto ${i}/${input.installments} - Proposta #${proposal.id.slice(-6)}`,
+        value: new Prisma.Decimal(value),
+        dueDate,
+        status: "PENDING",
+        companyId: input.companyId,
+      },
+    });
 
-      // Build gatewayData from result
-      const gatewayData = {
-        url: result.url ?? null,
-        line: result.line ?? null,
-        barcode: result.barcode ?? null,
-        qrCode: result.qrCode ?? null,
-        pdf: result.pdf ?? null,
-        nossoNumero: result.nossoNumero ?? null,
-      };
+    createdBoletos.push({
+      id: boleto.id,
+      bankReference: boleto.bankReference,
+      value: boleto.value.toString(),
+      dueDate: boleto.dueDate.toISOString(),
+      installmentNumber: boleto.installmentNumber,
+      status: boleto.status,
+      createdAt: boleto.createdAt.toISOString(),
+      providerName,
+      manualOverride,
+      gatewayData,
+    });
+  }
 
-      // Create boleto record with new payment provider fields
-      const boleto = await tx.boleto.create({
-        data: {
-          proposalId: input.proposalId,
-          bankReference: result.gatewayId, // Backward compatibility
-          providerId,
-          gatewayId: result.gatewayId,
-          gatewayData: gatewayData as unknown as Prisma.InputJsonValue,
-          manualOverride,
-          value: new Prisma.Decimal(value),
-          dueDate,
-          installmentNumber: i,
-          status: "GENERATED",
-          companyId: input.companyId,
-        },
-      });
+  // Build audit/event messages reflecting partial success if applicable
+  const isPartial = failedAtInstallment !== null && createdBoletos.length > 0;
+  const isFullFailure = failedAtInstallment !== null && createdBoletos.length === 0;
 
-      // Create corresponding account receivable entry
-      await tx.accountReceivable.create({
-        data: {
-          clientId: proposal.clientId,
-          description: `Boleto ${i}/${input.installments} - Proposta #${proposal.id.slice(-6)}`,
-          value: new Prisma.Decimal(value),
-          dueDate,
-          status: "PENDING",
-          companyId: input.companyId,
-        },
-      });
+  if (isFullFailure) {
+    throw new Error(
+      `Falha ao gerar boleto da parcela ${failedAtInstallment}/${input.installments}: ${failureError}`
+    );
+  }
 
-      createdBoletos.push({
-        id: boleto.id,
-        bankReference: boleto.bankReference,
-        value: boleto.value.toString(),
-        dueDate: boleto.dueDate.toISOString(),
-        installmentNumber: boleto.installmentNumber,
-        status: boleto.status,
-        createdAt: boleto.createdAt.toISOString(),
-        providerName,
-        manualOverride,
-        gatewayData,
-      });
-    }
-  });
+  const auditSuffix = isPartial
+    ? ` (parcial: falha na parcela ${failedAtInstallment})`
+    : "";
 
   await logAuditEvent({
     userId: session.userId,
@@ -820,18 +845,36 @@ export async function generateBoletosForProposal(
       boletoCount: createdBoletos.length,
       providerName,
       manualOverride,
+      ...(isPartial
+        ? {
+            partialFailure: true,
+            failedAtInstallment,
+            failureError,
+          }
+        : {}),
     } as unknown as Prisma.InputJsonValue,
     companyId: input.companyId,
   });
 
+  const eventMessage = isPartial
+    ? `${createdBoletos.length}/${input.installments} boleto(s) gerado(s) via ${providerName}. Falha na parcela ${failedAtInstallment}: ${failureError}.`
+    : `${createdBoletos.length} boleto(s) gerado(s) no valor total de R$ ${totalValue.toFixed(2)} via ${providerName}.`;
+
   await createProposalEvent(
     input.proposalId,
-    "BOLETO_GENERATED",
-    `${createdBoletos.length} boleto(s) gerado(s) no valor total de R$ ${totalValue.toFixed(2)} via ${providerName}.`,
+    isPartial ? "BOLETO_PARTIAL" : "BOLETO_GENERATED",
+    eventMessage + auditSuffix,
     session.userId
   );
 
-  return { boletos: createdBoletos };
+  return {
+    boletos: createdBoletos,
+    ...(isPartial
+      ? {
+          error: `Parcela ${failedAtInstallment}/${input.installments} falhou: ${failureError}. ${createdBoletos.length} boleto(s) gerado(s) com sucesso.`,
+        }
+      : {}),
+  };
 }
 
 export async function listBoletosForProposal(
