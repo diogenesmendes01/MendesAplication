@@ -43,6 +43,9 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Test
+        run: npm test
+
   whatsapp-check:
     name: WhatsApp Service — Type Check
     runs-on: ubuntu-latest
