@@ -35,4 +35,6 @@ EXPOSE 3000
 ENV PORT 3000
 
 # Roda migrations e inicia o servidor
+HEALTHCHECK --interval=30s --timeout=3s CMD wget -q --spider http://localhost:3000/api/health || exit 1
+
 CMD ["sh", "-c", "npx prisma migrate deploy && node server.js"]
