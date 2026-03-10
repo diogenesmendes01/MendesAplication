@@ -111,7 +111,7 @@ export function KPICard({
 
       {/* Value */}
       <div
-        className="text-[26px] font-bold leading-tight tracking-tight text-text-primary mb-1"
+        className="text-[28px] font-bold leading-tight tracking-tight text-text-primary mb-1"
         style={{ fontVariantNumeric: "tabular-nums", letterSpacing: "-0.5px" }}
       >
         {formattedValue}
