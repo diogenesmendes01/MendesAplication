@@ -393,7 +393,7 @@ export default function DashboardPage() {
                   </div>
                 ) : (
                   <EmptyState
-                    icon={<Calendar className="h-12 w-12" strokeWidth={1.5} />}
+                    icon={Calendar}
                     title="Sem dados no período"
                     description="Registre receitas e despesas para visualizar o gráfico."
                   />
@@ -457,7 +457,7 @@ export default function DashboardPage() {
                   </div>
                 ) : (
                   <EmptyState
-                    icon={<Calendar className="h-10 w-10" strokeWidth={1.5} />}
+                    icon={Calendar}
                     title="Tudo em dia"
                     description="Nenhuma conta próxima do vencimento."
                     className="py-8"
@@ -537,7 +537,7 @@ export default function DashboardPage() {
                 </div>
               ) : (
                 <EmptyState
-                  icon={<ShoppingCart className="h-12 w-12" strokeWidth={1.5} />}
+                  icon={ShoppingCart}
                   title="Nenhuma proposta"
                   description="Crie sua primeira proposta comercial."
                   actionLabel="Nova Proposta"
@@ -606,7 +606,7 @@ export default function DashboardPage() {
                   </div>
                 ) : (
                   <EmptyState
-                    icon={<Headphones className="h-12 w-12" strokeWidth={1.5} />}
+                    icon={Headphones}
                     title="Nenhum alerta de SLA"
                     description="Todos os tickets estão dentro do prazo."
                     className="py-8"
