@@ -66,8 +66,6 @@ function getRedis(): Redis {
   return redis;
 }
 
-const KEY_PREFIX = "rate_limit:login:";
-
 interface RateLimitResult {
   allowed: boolean;
   retryAfterMs: number;
@@ -97,13 +95,15 @@ function parseExecResult(
  * @param ip - Client IP address
  * @param maxAttempts - Maximum attempts allowed (default: 10)
  * @param windowMs - Window duration in ms (default: 15 minutes)
+ * @param prefix - Key prefix for namespacing (default: "login")
  */
 export async function checkRateLimit(
   ip: string,
   maxAttempts = 10,
-  windowMs = 15 * 60 * 1000
+  windowMs = 15 * 60 * 1000,
+  prefix = "login"
 ): Promise<RateLimitResult> {
-  const key = `${KEY_PREFIX}${ip}`;
+  const key = `rate_limit:${prefix}:${ip}`;
 
   // Try Redis first
   if (redisAvailable) {
