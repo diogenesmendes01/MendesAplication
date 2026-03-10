@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   DollarSign,
@@ -33,6 +34,7 @@ import {
 import { KPICard } from "@/components/kpi-card";
 import { EmptyState } from "@/components/empty-state";
 import { AttentionCard } from "@/components/attention-card";
+import { useCompany } from "@/contexts/company-context";
 import {
   getDashboardData,
   getDashboardAlerts,
@@ -60,16 +62,11 @@ function formatChartCurrency(value: number): string {
   return `R$ ${value}`;
 }
 
-function formatDate(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
-}
-
 function relativeDate(daysUntilDue: number): string {
   if (daysUntilDue < 0) return `Vencido há ${Math.abs(daysUntilDue)}d`;
   if (daysUntilDue === 0) return "Hoje";
   if (daysUntilDue === 1) return "Amanhã";
-  return formatDate(new Date(Date.now() + daysUntilDue * 86400000).toISOString());
+  return new Date(Date.now() + daysUntilDue * 86400000).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
 }
 
 function timeAgo(iso: string): string {
@@ -79,6 +76,16 @@ function timeAgo(iso: string): string {
   if (hours < 24) return `${hours}h atrás`;
   const days = Math.floor(hours / 24);
   return `${days}d atrás`;
+}
+
+function periodSuffix(period: PeriodType): string {
+  switch (period) {
+    case "day": return "do dia";
+    case "week": return "da semana";
+    case "month": return "do mês";
+    case "year": return "do ano";
+    case "custom": return "do período";
+  }
 }
 
 const proposalStatusConfig: Record<string, { label: string; className: string }> = {
@@ -173,6 +180,8 @@ function DashboardSkeleton() {
 // ---------------------------------------------------------------------------
 
 export default function DashboardPage() {
+  const router = useRouter();
+  const { selectedCompanyId } = useCompany();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState<PeriodType>("month");
@@ -187,6 +196,7 @@ export default function DashboardPage() {
         period,
         customStart: period === "custom" ? customStart : undefined,
         customEnd: period === "custom" ? customEnd : undefined,
+        companyId: selectedCompanyId ?? undefined,
       });
       setData(result);
     } catch {
@@ -194,16 +204,16 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [period, customStart, customEnd]);
+  }, [period, customStart, customEnd, selectedCompanyId]);
 
   const loadAlerts = useCallback(async () => {
     try {
-      const result = await getDashboardAlerts();
+      const result = await getDashboardAlerts(selectedCompanyId ?? undefined);
       setAlerts(result);
     } catch {
       // silent — don't break dashboard
     }
-  }, []);
+  }, [selectedCompanyId]);
 
   useEffect(() => {
     loadAlerts();
@@ -213,6 +223,8 @@ export default function DashboardPage() {
     if (period === "custom" && (!customStart || !customEnd)) return;
     loadData();
   }, [loadData, period, customStart, customEnd]);
+
+  const suffix = periodSuffix(period);
 
   return (
     <div className="space-y-5 animate-in fade-in slide-in-from-bottom-1 duration-300">
@@ -286,14 +298,15 @@ export default function DashboardPage() {
               icon={<DollarSign className="h-5 w-5 text-accent" strokeWidth={1.75} />}
               iconBg="hsl(var(--accent-subtle))"
               value={data.kpis.revenue}
-              label="Receita do mês"
+              label={`Receita ${suffix}`}
               previousValue={data.kpis.revenuePrevious}
             />
             <KPICard
               icon={<ShieldAlert className="h-5 w-5 text-warning" strokeWidth={1.75} />}
               iconBg="hsl(var(--warning-subtle))"
               value={data.kpis.expenses}
-              label="Despesas do mês"
+              label={`Despesas ${suffix}`}
+              invertColors
               previousValue={data.kpis.expensesPrevious}
             />
             <KPICard
@@ -506,7 +519,7 @@ export default function DashboardPage() {
                           <tr
                             key={p.id}
                             className="hover:bg-background-subtle transition-colors cursor-pointer"
-                            onClick={() => (window.location.href = `/comercial/propostas/${p.id}`)}
+                            onClick={() => router.push(`/comercial/propostas/${p.id}`)}
                           >
                             <td className="px-5 py-2.5 border-t border-border-subtle">
                               <div className="text-body-sm font-medium text-text-primary">

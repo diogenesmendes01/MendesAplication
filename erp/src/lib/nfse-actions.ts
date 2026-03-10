@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { requireCompanyAccess } from "@/lib/rbac";
+import { requireSession } from "@/lib/session";
 import { getNfseProviderForCompany } from "@/lib/nfse";
 import { sendEmail } from "@/lib/email";
 import { logAuditEvent } from "@/lib/audit";
@@ -76,6 +77,39 @@ function buildNfsePdfText(data: {
 // ---------------------------------------------------------------------------
 // Server Actions
 // ---------------------------------------------------------------------------
+
+/**
+ * Returns a map of boletoId → boolean (true if that boleto has an ISSUED invoice).
+ * Used by the proposal detail page to determine per-boleto NFS-e status.
+ */
+export async function listInvoicesForBoletos(
+  boletoIds: string[],
+  companyId: string
+): Promise<Record<string, boolean>> {
+  await requireSession();
+
+  if (boletoIds.length === 0) return {};
+
+  const invoices = await prisma.invoice.findMany({
+    where: {
+      boletoId: { in: boletoIds },
+      companyId,
+      status: "ISSUED",
+    },
+    select: { boletoId: true },
+  });
+
+  const result: Record<string, boolean> = {};
+  for (const id of boletoIds) {
+    result[id] = false;
+  }
+  for (const inv of invoices) {
+    if (inv.boletoId) {
+      result[inv.boletoId] = true;
+    }
+  }
+  return result;
+}
 
 /**
  * Emit an NFS-e (Nota Fiscal de Serviço Eletrônica) linked to a paid boleto.
@@ -175,19 +209,28 @@ export async function emitInvoiceForBoleto(
   const rpsNumero = String(fiscalConfigUpdated.nfseNextNumber);
 
   // Guard de idempotência com lock: evita emissão duplicada em requisições concorrentes.
-  // pg_advisory_xact_lock SÓ funciona dentro de uma $transaction — o lock é liberado
-  // ao fim da transação. Fora de $transaction o lock é liberado imediatamente, tornando
-  // a proteção contra corridas ineficaz.
+  // BUG 9 fix: Only block if an ISSUED invoice already exists. PENDING or CANCELLED
+  // invoices (from failed auto-emit) should not block manual re-emission.
   const existingInvoice = await prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`nfse:${boletoId}`}))`;
     return tx.invoice.findFirst({
-      where: { boletoId, companyId },
+      where: { boletoId, companyId, status: "ISSUED" },
     });
   });
 
   if (existingInvoice) {
     throw new Error("Já existe uma nota fiscal emitida para este boleto");
   }
+
+  // Clean up any previous PENDING or CANCELLED invoices for this boleto
+  // so we don't accumulate orphaned records from failed attempts.
+  await prisma.invoice.deleteMany({
+    where: {
+      boletoId,
+      companyId,
+      status: { in: ["PENDING", "CANCELLED"] },
+    },
+  });
 
   // FLUXO SEGURO: salvar PENDING primeiro, emitir depois, atualizar para ISSUED.
   //

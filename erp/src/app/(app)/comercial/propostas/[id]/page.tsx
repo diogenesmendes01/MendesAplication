@@ -59,7 +59,10 @@ import {
   sendProposalEmail,
   sendBoletoEmail,
 } from "@/lib/email-actions";
-import { emitInvoiceForBoleto } from "@/lib/nfse-actions";
+import {
+  emitInvoiceForBoleto,
+  listInvoicesForBoletos,
+} from "@/lib/nfse-actions";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -134,6 +137,8 @@ export default function ProposalDetailPage() {
   const [boletos, setBoletos] = useState<BoletoRow[]>([]);
   const [events, setEvents] = useState<ProposalEventRow[]>([]);
   const [loading, setLoading] = useState(true);
+  // Map of boletoId -> true if that boleto has an ISSUED invoice
+  const [issuedInvoiceMap, setIssuedInvoiceMap] = useState<Record<string, boolean>>({});
 
   // Dialog states
   const [generateDialogOpen, setGenerateDialogOpen] = useState(false);
@@ -163,6 +168,15 @@ export default function ProposalDetailPage() {
       setProposal(proposalData);
       setBoletos(boletosData);
       setEvents(eventsData);
+
+      // Fetch ISSUED invoice status per boleto
+      if (boletosData.length > 0) {
+        const boletoIds = boletosData.map((b) => b.id);
+        const invoiceMap = await listInvoicesForBoletos(boletoIds, selectedCompanyId);
+        setIssuedInvoiceMap(invoiceMap);
+      } else {
+        setIssuedInvoiceMap({});
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao carregar proposta");
     } finally {
@@ -298,12 +312,12 @@ export default function ProposalDetailPage() {
   // Determine stepper state
   const hasBoletos = boletos.length > 0;
   const hasBoletoPaid = boletos.some((b) => b.status === "PAID");
-  const hasNfseIssued = events.some((e) => e.type === "NFSE_EMITTED");
-  const hasBoletoSent = boletos.some((b) => b.status === "SENT" || b.status === "PAID");
-  const allBoletosPaid = hasBoletos && boletos.every((b) => b.status === "PAID");
-  const hasGeneratedBoleto = boletos.some((b) => b.status === "GENERATED");
   const canGenerateBoletos = proposal.status === "ACCEPTED" && boletos.length === 0;
   const companyName = selectedCompany?.nomeFantasia || "Empresa";
+
+  // BUG 3 fix: Check per-boleto NFS-e status instead of global event flag
+  const paidBoletos = boletos.filter((b) => b.status === "PAID");
+  const allPaidHaveNfse = paidBoletos.length > 0 && paidBoletos.every((b) => issuedInvoiceMap[b.id]);
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-1 duration-300">
@@ -334,12 +348,12 @@ export default function ProposalDetailPage() {
             proposalStatus={proposal.status}
             hasBoletos={hasBoletos}
             hasBoletoPaid={hasBoletoPaid}
-            hasNfseIssued={hasNfseIssued}
+            allPaidHaveNfse={allPaidHaveNfse}
           />
         </CardContent>
       </Card>
 
-      {/* ── Contextual Actions ── */}
+      {/* ── Contextual Actions (unified per-boleto) ── */}
       <div className="rounded-xl border border-border bg-surface p-4 shadow-sm">
         <div className="text-caption font-semibold text-text-tertiary uppercase tracking-wider mb-3">
           Próxima ação
@@ -382,54 +396,82 @@ export default function ProposalDetailPage() {
           </Button>
         )}
 
-        {/* Boleto GENERATED → Send boleto email */}
-        {proposal.status === "ACCEPTED" && hasGeneratedBoleto && !hasBoletoSent && (
-          <div className="flex flex-wrap gap-2">
-            {boletos
-              .filter((b) => b.status === "GENERATED")
-              .map((b) => (
-                <Button key={b.id} variant="outline" onClick={() => openSendBoletoDialog(b)}>
-                  <Mail className="mr-2 h-4 w-4" />
-                  Enviar Boleto {b.installmentNumber}/{boletos.length}
-                </Button>
-              ))}
-          </div>
-        )}
+        {/* BUG 4+5 fix: Unified per-boleto actions based on individual status */}
+        {proposal.status === "ACCEPTED" && hasBoletos && !allPaidHaveNfse && (
+          <div className="space-y-3">
+            {/* Per-boleto action rows */}
+            {boletos.map((b) => {
+              const hasIssuedNfse = issuedInvoiceMap[b.id];
 
-        {/* Boleto SENT → Waiting */}
-        {proposal.status === "ACCEPTED" && hasBoletoSent && !allBoletosPaid && (
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 rounded-lg bg-info-subtle px-3 py-2 text-body-sm text-info">
-              <Info className="h-4 w-4" />
-              Aguardando pagamento
-            </div>
-            {boletos.filter((b) => b.status === "SENT").map((b) => (
-              <Button key={b.id} variant="outline" size="sm" onClick={() => openSendBoletoDialog(b)}>
-                Reenviar {b.installmentNumber}/{boletos.length}
-              </Button>
-            ))}
-          </div>
-        )}
+              // GENERATED → Send boleto email
+              if (b.status === "GENERATED") {
+                return (
+                  <div key={b.id} className="flex items-center gap-2">
+                    <Button variant="outline" onClick={() => openSendBoletoDialog(b)}>
+                      <Mail className="mr-2 h-4 w-4" />
+                      Enviar Boleto {b.installmentNumber}/{boletos.length}
+                    </Button>
+                  </div>
+                );
+              }
 
-        {/* Boleto PAID → Emit NFS-e */}
-        {proposal.status === "ACCEPTED" && hasBoletoPaid && !hasNfseIssued && (
-          <div className="flex flex-wrap gap-2">
-            {boletos
-              .filter((b) => b.status === "PAID")
-              .map((b) => (
-                <Button key={b.id} onClick={() => openEmitNfseDialog(b)}>
-                  <Receipt className="mr-2 h-4 w-4" />
-                  Emitir NFS-e — Parcela {b.installmentNumber}/{boletos.length}
-                </Button>
-              ))}
+              // SENT → Waiting + Resend
+              if (b.status === "SENT") {
+                return (
+                  <div key={b.id} className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 rounded-lg bg-info-subtle px-3 py-2 text-body-sm text-info">
+                      <Info className="h-4 w-4" />
+                      Aguardando pagamento — {b.installmentNumber}/{boletos.length}
+                    </div>
+                    <Button variant="outline" size="sm" onClick={() => openSendBoletoDialog(b)}>
+                      Reenviar
+                    </Button>
+                  </div>
+                );
+              }
+
+              // PAID without ISSUED NFS-e → Emit NFS-e
+              if (b.status === "PAID" && !hasIssuedNfse) {
+                return (
+                  <div key={b.id} className="flex items-center gap-2">
+                    <Button onClick={() => openEmitNfseDialog(b)}>
+                      <Receipt className="mr-2 h-4 w-4" />
+                      Emitir NFS-e — Parcela {b.installmentNumber}/{boletos.length}
+                    </Button>
+                  </div>
+                );
+              }
+
+              // PAID with ISSUED NFS-e → Done for this boleto
+              if (b.status === "PAID" && hasIssuedNfse) {
+                return (
+                  <div key={b.id} className="flex items-center gap-2 rounded-lg bg-success-subtle px-3 py-2 text-body-sm text-success">
+                    <CheckCircle2 className="h-4 w-4" />
+                    NFS-e emitida — Parcela {b.installmentNumber}/{boletos.length}
+                  </div>
+                );
+              }
+
+              // OVERDUE or other statuses
+              if (b.status === "OVERDUE") {
+                return (
+                  <div key={b.id} className="flex items-center gap-2 rounded-lg bg-danger-subtle px-3 py-2 text-body-sm text-danger">
+                    <AlertCircle className="h-4 w-4" />
+                    Boleto vencido — Parcela {b.installmentNumber}/{boletos.length}
+                  </div>
+                );
+              }
+
+              return null;
+            })}
           </div>
         )}
 
         {/* All done */}
-        {hasNfseIssued && (
+        {allPaidHaveNfse && paidBoletos.length > 0 && (
           <div className="flex items-center gap-2 rounded-lg bg-success-subtle px-3 py-2 text-body-sm text-success">
             <CheckCircle2 className="h-4 w-4" />
-            Fluxo concluído — NFS-e emitida
+            Fluxo concluído — todas as NFS-e emitidas
           </div>
         )}
 

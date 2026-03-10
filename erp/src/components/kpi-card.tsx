@@ -17,6 +17,8 @@ interface KPICardProps {
     text: string;
     variant: "up" | "down" | "neutral" | "danger";
   };
+  /** When true, positive variation = danger (red), negative = success (green). Use for expense-type KPIs. */
+  invertColors?: boolean;
   className?: string;
 }
 
@@ -32,10 +34,11 @@ function formatCurrencyCompact(value: number): string {
 function useCountUp(target: number, duration = 600): number {
   const [current, setCurrent] = useState(0);
   const rafRef = useRef<number | null>(null);
+  const prevTargetRef = useRef<number>(0);
 
   useEffect(() => {
     const startTime = performance.now();
-    const startValue = 0;
+    const startValue = prevTargetRef.current;
 
     function step(now: number) {
       const elapsed = now - startTime;
@@ -53,6 +56,7 @@ function useCountUp(target: number, duration = 600): number {
 
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      prevTargetRef.current = target;
     };
   }, [target, duration]);
 
@@ -67,6 +71,7 @@ export function KPICard({
   format = "currency",
   previousValue,
   badgeOverride,
+  invertColors = false,
   className,
 }: KPICardProps) {
   const animatedValue = useCountUp(value);
@@ -86,6 +91,15 @@ export function KPICard({
   } else if (previousValue === 0 && value > 0) {
     variationDirection = "up";
   }
+
+  // When invertColors is true, swap the color mapping (expenses: up=bad, down=good)
+  const colorDirection: "up" | "down" | "neutral" = invertColors
+    ? variationDirection === "up"
+      ? "down"
+      : variationDirection === "down"
+      ? "up"
+      : "neutral"
+    : variationDirection;
 
   const badgeStyles = {
     up: "bg-success-subtle text-success",
@@ -139,7 +153,7 @@ export function KPICard({
         <span
           className={cn(
             "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11.5px] font-semibold",
-            badgeStyles[variationDirection]
+            badgeStyles[colorDirection]
           )}
         >
           {variationDirection === "up" && <TrendingUp className="h-[11px] w-[11px]" />}

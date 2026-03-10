@@ -14,6 +14,7 @@ export interface DashboardFilters {
   period: PeriodType;
   customStart?: string;
   customEnd?: string;
+  companyId?: string;
 }
 
 export interface KPIData {
@@ -182,7 +183,28 @@ function getInitials(name: string): string {
 // Resolve accessible company IDs
 // ---------------------------------------------------------------------------
 
-async function resolveCompanyIds(session: { userId: string; role: string }): Promise<string[]> {
+async function resolveCompanyIds(session: { userId: string; role: string }, selectedCompanyId?: string): Promise<string[]> {
+  // If a specific company is selected, validate access and use only that one
+  if (selectedCompanyId) {
+    if (session.role === "ADMIN") {
+      const company = await prisma.company.findFirst({
+        where: { id: selectedCompanyId, status: "ACTIVE" },
+        select: { id: true },
+      });
+      return company ? [company.id] : [];
+    }
+
+    const assignment = await prisma.userCompany.findFirst({
+      where: { userId: session.userId, companyId: selectedCompanyId },
+      include: { company: { select: { id: true, status: true } } },
+    });
+    if (assignment && assignment.company.status === "ACTIVE") {
+      return [assignment.company.id];
+    }
+    return [];
+  }
+
+  // Fallback: all accessible companies
   if (session.role === "ADMIN") {
     const companies = await prisma.company.findMany({
       where: { status: "ACTIVE" },
@@ -201,12 +223,60 @@ async function resolveCompanyIds(session: { userId: string; role: string }): Pro
 }
 
 // ---------------------------------------------------------------------------
+// Chart date range helper
+// ---------------------------------------------------------------------------
+
+function getChartDateRange(period: PeriodType, customStart?: string, customEnd?: string): { chartStart: Date; chartEnd: Date } {
+  const now = new Date();
+
+  switch (period) {
+    case "day": {
+      // Last 7 days
+      const chartStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
+      const chartEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+      return { chartStart, chartEnd };
+    }
+    case "week": {
+      // Last 8 weeks
+      const chartStart = new Date(now);
+      chartStart.setDate(now.getDate() - 8 * 7);
+      chartStart.setHours(0, 0, 0, 0);
+      return { chartStart, chartEnd: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1) };
+    }
+    case "month": {
+      // Last 6 months (default)
+      const chartStart = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+      const chartEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      return { chartStart, chartEnd };
+    }
+    case "year": {
+      // Last 12 months
+      const chartStart = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+      const chartEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      return { chartStart, chartEnd };
+    }
+    case "custom": {
+      if (customStart && customEnd) {
+        return {
+          chartStart: new Date(customStart + "T00:00:00"),
+          chartEnd: new Date(customEnd + "T23:59:59"),
+        };
+      }
+      // Fallback to last 6 months
+      const chartStart = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+      const chartEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      return { chartStart, chartEnd };
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Server Action: getDashboardData
 // ---------------------------------------------------------------------------
 
 export async function getDashboardData(filters: DashboardFilters): Promise<DashboardData> {
   const session = await requireSession();
-  const companyIds = await resolveCompanyIds(session);
+  const companyIds = await resolveCompanyIds(session, filters.companyId);
 
   if (companyIds.length === 0) {
     return {
@@ -225,6 +295,7 @@ export async function getDashboardData(filters: DashboardFilters): Promise<Dashb
   const { start, end } = getDateRange(filters.period, filters.customStart, filters.customEnd);
   const prev = getPreviousDateRange(start, end);
   const now = new Date();
+  const { chartStart, chartEnd } = getChartDateRange(filters.period, filters.customStart, filters.customEnd);
 
   // Run all queries in parallel
   const [
@@ -297,26 +368,26 @@ export async function getDashboardData(filters: DashboardFilters): Promise<Dashb
       },
     }),
 
-    // Monthly revenue (last 6 months) — raw SQL for grouping by month
+    // Monthly revenue — uses period-aware date range
     prisma.$queryRaw<{ month: Date; total: Prisma.Decimal }[]>`
       SELECT date_trunc('month', "paidAt") AS month, SUM(value) AS total
       FROM accounts_receivable
       WHERE "companyId" = ANY(${companyIds})
         AND status = 'PAID'
-        AND "paidAt" >= ${new Date(now.getFullYear(), now.getMonth() - 5, 1)}
-        AND "paidAt" < ${new Date(now.getFullYear(), now.getMonth() + 1, 1)}
+        AND "paidAt" >= ${chartStart}
+        AND "paidAt" < ${chartEnd}
       GROUP BY date_trunc('month', "paidAt")
       ORDER BY month
     `,
 
-    // Monthly expenses (last 6 months)
+    // Monthly expenses — uses period-aware date range
     prisma.$queryRaw<{ month: Date; total: Prisma.Decimal }[]>`
       SELECT date_trunc('month', "paidAt") AS month, SUM(value) AS total
       FROM accounts_payable
       WHERE "companyId" = ANY(${companyIds})
         AND status = 'PAID'
-        AND "paidAt" >= ${new Date(now.getFullYear(), now.getMonth() - 5, 1)}
-        AND "paidAt" < ${new Date(now.getFullYear(), now.getMonth() + 1, 1)}
+        AND "paidAt" >= ${chartStart}
+        AND "paidAt" < ${chartEnd}
       GROUP BY date_trunc('month', "paidAt")
       ORDER BY month
     `,
@@ -380,7 +451,7 @@ export async function getDashboardData(filters: DashboardFilters): Promise<Dashb
     openTicketsCritical: criticalTicketsCount,
   };
 
-  // Build monthly chart (last 6 months)
+  // Build monthly chart from query results
   const monthNames = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
   const monthFullNames = [
     "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
@@ -401,8 +472,10 @@ export async function getDashboardData(filters: DashboardFilters): Promise<Dashb
     expensesByMonth.set(key, Number(e.total));
   }
 
+  // Calculate number of months to show based on period
+  const monthsToShow = filters.period === "year" ? 12 : 6;
   const monthlyChart: MonthlyChartEntry[] = [];
-  for (let i = 5; i >= 0; i--) {
+  for (let i = monthsToShow - 1; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const key = `${d.getFullYear()}-${String(d.getMonth()).padStart(2, "0")}`;
     monthlyChart.push({
@@ -468,9 +541,9 @@ export async function getDashboardData(filters: DashboardFilters): Promise<Dashb
 // Dashboard Alerts
 // ---------------------------------------------------------------------------
 
-export async function getDashboardAlerts(): Promise<DashboardAlert[]> {
+export async function getDashboardAlerts(companyId?: string): Promise<DashboardAlert[]> {
   const session = await requireSession();
-  const companyIds = await resolveCompanyIds(session);
+  const companyIds = await resolveCompanyIds(session, companyId);
 
   if (companyIds.length === 0) return [];
 
@@ -586,8 +659,6 @@ export async function getDashboardAlerts(): Promise<DashboardAlert[]> {
 // ---------------------------------------------------------------------------
 // Standalone Server Actions (US-004)
 // ---------------------------------------------------------------------------
-// These provide independent access to each dashboard section.
-// The main getDashboardData bundles them for efficient initial load.
 
 export async function getRevenueExpenseChart(): Promise<MonthlyChartEntry[]> {
   const session = await requireSession();

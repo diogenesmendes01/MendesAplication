@@ -1,6 +1,7 @@
 "use client";
 
 import { AlertTriangle } from "lucide-react";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 import type { DashboardAlert } from "@/app/(app)/dashboard/actions";
 
@@ -51,12 +52,12 @@ export function AttentionCard({ alerts, className }: AttentionCardProps) {
                 {alert.title}
               </span>
             </div>
-            <a
+            <Link
               href={alert.href}
               className="flex-shrink-0 text-caption text-accent hover:text-accent-hover underline whitespace-nowrap"
             >
               Ver →
-            </a>
+            </Link>
           </li>
         ))}
       </ul>
