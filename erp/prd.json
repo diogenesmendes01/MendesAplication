@@ -122,7 +122,7 @@
       "title": "Integrar novo sistema no fluxo de propostas (actions.ts)",
       "description": "Como vendedor, quero que ao gerar boletos de uma proposta aceita o sistema use o provider configurado (automático ou manual), para que boletos reais sejam gerados.",
       "priority": 7,
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "generateBoletosForProposal em comercial/propostas/actions.ts aceita parâmetro opcional providerId",
         "Se providerId passado: usa getProviderById (override manual), seta manualOverride=true no boleto",

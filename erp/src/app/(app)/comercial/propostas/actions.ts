@@ -4,10 +4,13 @@ import { prisma } from "@/lib/prisma";
 import { requireCompanyAccess } from "@/lib/rbac";
 import { logAuditEvent } from "@/lib/audit";
 import { Prisma, type ProposalStatus, type BoletoStatus } from "@prisma/client";
-import { generateBoleto } from "@/lib/boleto";
 import { getSharedCompanyIds } from "@/lib/shared-clients";
 import { getCachedFiscalConfig } from "@/app/(app)/configuracoes/fiscal/actions";
 import { emitInvoiceForBoleto } from "@/lib/nfse-actions";
+import { resolveProvider, getProviderById } from "@/lib/payment/router";
+import { getGateway } from "@/lib/payment/factory";
+import { decrypt } from "@/lib/encryption";
+import type { CreateBoletoInput, CreateBoletoResult, PaymentGateway } from "@/lib/payment/types";
 
 // ---------------------------------------------------------------------------
 // Proposal Event Helper
@@ -489,6 +492,7 @@ export interface GenerateBoletosInput {
   companyId: string;
   installments: number;
   firstDueDate: string;
+  providerId?: string | null;
 }
 
 export interface BoletoRow {
@@ -499,6 +503,82 @@ export interface BoletoRow {
   installmentNumber: number;
   status: BoletoStatus;
   createdAt: string;
+}
+
+// ---------------------------------------------------------------------------
+// Payment Provider Resolution Helper
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolves the payment gateway for boleto generation.
+ *
+ * Flow:
+ * 1. If providerId is given → getProviderById (manual override)
+ * 2. If not → resolveProvider with routing rules
+ * 3. If no providers configured → fallback to mock with console.warn
+ *
+ * Returns { gateway, providerId, manualOverride, providerName }
+ */
+async function resolveGatewayForBoleto(
+  companyId: string,
+  clientType: "PF" | "PJ",
+  value: number,
+  providerId?: string | null,
+): Promise<{
+  gateway: PaymentGateway;
+  providerId: string | null;
+  manualOverride: boolean;
+  providerName: string;
+}> {
+  // Manual override: specific provider requested
+  if (providerId) {
+    const provider = await getProviderById(companyId, providerId);
+    const decryptedCredentials = JSON.parse(decrypt(provider.credentials)) as Record<string, unknown>;
+    const metadata = provider.metadata as Record<string, unknown> | null;
+    const gateway = getGateway(
+      provider.provider,
+      decryptedCredentials,
+      metadata,
+      provider.webhookSecret ?? undefined,
+    );
+    return {
+      gateway,
+      providerId: provider.id,
+      manualOverride: true,
+      providerName: provider.name,
+    };
+  }
+
+  // Automatic routing
+  try {
+    const provider = await resolveProvider(companyId, { clientType, value });
+    const decryptedCredentials = JSON.parse(decrypt(provider.credentials)) as Record<string, unknown>;
+    const metadata = provider.metadata as Record<string, unknown> | null;
+    const gateway = getGateway(
+      provider.provider,
+      decryptedCredentials,
+      metadata,
+      provider.webhookSecret ?? undefined,
+    );
+    return {
+      gateway,
+      providerId: provider.id,
+      manualOverride: false,
+      providerName: provider.name,
+    };
+  } catch {
+    // No providers configured — fallback to mock
+    console.warn(
+      `[Payment] Nenhum provider configurado para empresa ${companyId}. Usando mock como fallback.`,
+    );
+    const gateway = getGateway("mock", {});
+    return {
+      gateway,
+      providerId: null,
+      manualOverride: false,
+      providerName: "Mock (fallback)",
+    };
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -530,6 +610,7 @@ export async function generateBoletosForProposal(
           cpfCnpj: true,
           email: true,
           endereco: true,
+          type: true,
         },
       },
       company: {
@@ -559,6 +640,16 @@ export async function generateBoletosForProposal(
   const installmentValue = Math.round((totalValue / input.installments) * 100) / 100;
   const firstDue = new Date(input.firstDueDate);
 
+  // Resolve payment gateway once (same provider for all installments)
+  const clientType = proposal.client.type as "PF" | "PJ";
+  const { gateway, providerId, manualOverride, providerName } =
+    await resolveGatewayForBoleto(
+      input.companyId,
+      clientType,
+      installmentValue,
+      input.providerId,
+    );
+
   const createdBoletos: BoletoRow[] = [];
 
   await prisma.$transaction(async (tx) => {
@@ -573,30 +664,49 @@ export async function generateBoletosForProposal(
           ? Math.round((totalValue - installmentValue * (input.installments - 1)) * 100) / 100
           : installmentValue;
 
-      // Generate boleto via provider
-      const result = await generateBoleto({
-        clientData: {
+      // Build CreateBoletoInput for the new payment system
+      const documentType = clientType === "PF" ? "cpf" : "cnpj";
+      const boletoInput: CreateBoletoInput = {
+        customer: {
           name: proposal.client.name,
-          cpfCnpj: proposal.client.cpfCnpj,
-          email: proposal.client.email ?? "",
-          endereco: proposal.client.endereco,
+          document: proposal.client.cpfCnpj,
+          documentType,
+          email: proposal.client.email ?? undefined,
         },
-        companyData: {
-          razaoSocial: proposal.company.razaoSocial,
-          cnpj: proposal.company.cnpj,
-        },
-        value,
+        amount: Math.round(value * 100), // Convert R$ to centavos
         dueDate,
         installmentNumber: i,
         totalInstallments: input.installments,
-        proposalId: input.proposalId,
-      });
+        description: `Parcela ${i}/${input.installments} - Proposta #${input.proposalId.slice(-6)}`,
+        metadata: {
+          proposalId: input.proposalId,
+          companyRazaoSocial: proposal.company.razaoSocial,
+          companyCnpj: proposal.company.cnpj,
+        },
+      };
 
-      // Create boleto record
+      // Generate boleto via resolved gateway
+      const result: CreateBoletoResult = await gateway.createBoleto(boletoInput);
+
+      // Build gatewayData from result
+      const gatewayData = {
+        url: result.url ?? null,
+        line: result.line ?? null,
+        barcode: result.barcode ?? null,
+        qrCode: result.qrCode ?? null,
+        pdf: result.pdf ?? null,
+        nossoNumero: result.nossoNumero ?? null,
+      };
+
+      // Create boleto record with new payment provider fields
       const boleto = await tx.boleto.create({
         data: {
           proposalId: input.proposalId,
-          bankReference: result.bankReference,
+          bankReference: result.gatewayId, // Backward compatibility
+          providerId,
+          gatewayId: result.gatewayId,
+          gatewayData: gatewayData as unknown as Prisma.InputJsonValue,
+          manualOverride,
           value: new Prisma.Decimal(value),
           dueDate,
           installmentNumber: i,
@@ -639,6 +749,8 @@ export async function generateBoletosForProposal(
       installments: input.installments,
       totalValue: totalValue.toString(),
       boletoCount: createdBoletos.length,
+      providerName,
+      manualOverride,
     } as unknown as Prisma.InputJsonValue,
     companyId: input.companyId,
   });
@@ -646,7 +758,7 @@ export async function generateBoletosForProposal(
   await createProposalEvent(
     input.proposalId,
     "BOLETO_GENERATED",
-    `${createdBoletos.length} boleto(s) gerado(s) no valor total de R$ ${totalValue.toFixed(2)}.`,
+    `${createdBoletos.length} boleto(s) gerado(s) no valor total de R$ ${totalValue.toFixed(2)} via ${providerName}.`,
     session.userId
   );
 
