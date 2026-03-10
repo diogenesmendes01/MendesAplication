@@ -1,0 +1,244 @@
+{
+  "project": "mendeserp",
+  "feature": "payment-providers",
+  "branchName": "feat/payment-providers",
+  "createdBy": "Vex",
+  "createdAt": "2026-03-10",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Schema & Migration — PaymentProvider, PaymentRoutingRule, Boleto changes",
+      "description": "Como admin, quero que o banco de dados suporte múltiplos providers de pagamento por empresa com regras de roteamento, para que cada empresa configure seus bancos.",
+      "priority": 1,
+      "passes": true,
+      "acceptanceCriteria": [
+        "Novo model PaymentProvider com campos: id, companyId, name, provider, credentials (String @db.Text), webhookUrl, webhookSecret, sandbox, isDefault, isActive, metadata (Json?), timestamps",
+        "Novo model PaymentRoutingRule com campos: id, providerId, priority, clientType (ClientType?), minValue (Decimal?), maxValue (Decimal?), tags (String[]), isActive, createdAt",
+        "Boleto ganha campos: providerId (String?), gatewayId (String?), gatewayData (Json?), manualOverride (Boolean @default(false))",
+        "Company ganha relação paymentProviders PaymentProvider[]",
+        "Boleto ganha relação provider PaymentProvider? com onDelete: SetNull",
+        "Índices: payment_providers(companyId, isActive), payment_routing_rules(providerId, priority)",
+        "Migration roda sem erro: npx prisma migrate dev --name add_payment_providers",
+        "npx prisma generate sem erros"
+      ],
+      "notes": "Ver schema detalhado em dev/erp/prd-payment-providers.md seção 3. Credentials é String @db.Text (não Json) porque será encriptado como string AES. Manter @@map com snake_case como o resto do schema."
+    },
+    {
+      "id": "US-002",
+      "title": "Payment types, registry e factory",
+      "description": "Como desenvolvedor, quero interfaces tipadas e um registro central de providers disponíveis, para que o frontend saiba quais campos renderizar e o backend instancie o provider correto.",
+      "priority": 2,
+      "passes": false,
+      "acceptanceCriteria": [
+        "erp/src/lib/payment/types.ts com interfaces: ConfigField, ProviderDefinition, PaymentGateway, CreateBoletoInput, CreateBoletoResult, BoletoStatusResult, WebhookEvent",
+        "erp/src/lib/payment/registry.ts com PROVIDER_REGISTRY contendo: pagarme (1 campo credentials: apiKey + 2 settings: defaultInstructions, daysToExpire), pinbank (6 campos credentials + 4 settings), mock (vazio)",
+        "erp/src/lib/payment/factory.ts com getGateway(providerType, decryptedCredentials, metadata) que retorna instância de PaymentGateway",
+        "Exportar tudo de erp/src/lib/payment/index.ts",
+        "Tudo compila sem erro (npx tsc --noEmit)"
+      ],
+      "notes": "Ver detalhes das interfaces e configSchema em dev/erp/prd-payment-providers.md seções 4.1 e 4.2. A factory importa os providers e instancia com as credentials decriptadas."
+    },
+    {
+      "id": "US-003",
+      "title": "Mock provider + migrar boleto.ts atual",
+      "description": "Como desenvolvedor, quero migrar o MockBoletoProvider atual para o novo sistema de providers, para manter compatibilidade com boletos de teste.",
+      "priority": 3,
+      "passes": false,
+      "acceptanceCriteria": [
+        "erp/src/lib/payment/providers/mock.provider.ts implementa PaymentGateway completo",
+        "createBoleto retorna gatewayId fake, URL fake, linha fake, etc (mesma lógica do MockBoletoProvider atual)",
+        "getBoletoStatus retorna 'pending' sempre",
+        "cancelBoleto retorna { success: true }",
+        "validateWebhook retorna true sempre",
+        "parseWebhookEvent retorna evento genérico",
+        "testConnection retorna { ok: true, message: 'Mock provider ativo' }",
+        "factory.ts registra mock no mapa de providers",
+        "Compila sem erro"
+      ],
+      "notes": "O boleto.ts atual em erp/src/lib/boleto.ts tem MockBoletoProvider — usar como base. Manter o boleto.ts existente por enquanto (será refatorado na US-007), apenas criar o novo provider."
+    },
+    {
+      "id": "US-004",
+      "title": "Pagar.me provider — geração de boleto",
+      "description": "Como admin da TrustCloud, quero gerar boletos reais via API da Pagar.me v5, para cobrar clientes automaticamente.",
+      "priority": 4,
+      "passes": false,
+      "acceptanceCriteria": [
+        "erp/src/lib/payment/providers/pagarme.provider.ts implementa PaymentGateway",
+        "createBoleto: POST /customers (cria/busca cliente) + POST /orders (com items + payments.boleto)",
+        "Auth: Basic Auth com apiKey como username, password vazio",
+        "getBoletoStatus: GET /charges/{id} e mapeia status (pending→pending, paid→paid, canceled→cancelled)",
+        "cancelBoleto: DELETE /charges/{id}",
+        "testConnection: GET /customers?size=1 — se 200 OK, conexão ok",
+        "Usa fetch nativo (sem SDK externo)",
+        "Trata erros HTTP (4xx, 5xx) com mensagens claras",
+        "factory.ts registra pagarme no mapa",
+        "Compila sem erro"
+      ],
+      "notes": "API docs: https://docs.pagar.me/reference/introducao-1 — Base URL: https://api.pagar.me/core/v5. Auth é Basic base64(sk_xxx:). createBoleto precisa criar customer primeiro (ou buscar por document), depois criar order com payment_method boleto. A response da order tem charges[0].last_transaction com url, line, barcode, qr_code."
+    },
+    {
+      "id": "US-005",
+      "title": "Router — motor de roteamento com regras",
+      "description": "Como sistema, quero resolver automaticamente qual provider usar baseado em regras configuradas, para que a geração de boletos seja automática.",
+      "priority": 5,
+      "passes": false,
+      "acceptanceCriteria": [
+        "erp/src/lib/payment/router.ts com funções: resolveProvider, getProviderById, previewRouting",
+        "resolveProvider: busca regras ativas da empresa ordenadas por priority ASC, avalia clientType + minValue + maxValue + tags, retorna primeiro provider que casa",
+        "Se nenhuma regra casa: retorna provider com isDefault=true",
+        "Se sem default: throw Error com mensagem clara",
+        "getProviderById: valida que provider pertence à empresa e está ativo",
+        "previewRouting: retorna {providerId, providerName, reason} sem gerar nada (pra UI)",
+        "Regra com campo null = match any (ex: clientType=null casa com PF e PJ)",
+        "Tags: regra casa se todos os tags da regra estão presentes no contexto (AND)",
+        "Compila sem erro"
+      ],
+      "notes": "Lógica: buscar PaymentRoutingRule where provider.companyId=X AND provider.isActive AND rule.isActive, orderBy priority ASC. Para cada regra, checar: clientType match (null=any), value >= minValue (null=no min), value <= maxValue (null=no max), tags subset."
+    },
+    {
+      "id": "US-006",
+      "title": "Webhook route + baixa automática no financeiro",
+      "description": "Como sistema, quero receber webhooks dos bancos e atualizar automaticamente o status dos boletos e contas a receber, para que o financeiro reflita pagamentos em tempo real.",
+      "priority": 6,
+      "passes": false,
+      "acceptanceCriteria": [
+        "erp/src/app/api/webhooks/payment/[provider]/route.ts com handler POST",
+        "Identifica provider type pelo path param",
+        "Busca PaymentProviders ativos desse tipo, tenta validar assinatura com webhookSecret de cada um",
+        "Parseia evento via provider.parseWebhookEvent()",
+        "Busca Boleto por gatewayId",
+        "Atualiza status do boleto conforme evento (paid→PAID, cancelled→CANCELLED, etc)",
+        "Se boleto pago: busca AccountReceivable vinculada (mesmo proposalId + valor similar + status PENDING) e atualiza pra PAID com paidAt",
+        "Cria AuditLog da operação",
+        "Retorna 200 OK pro banco (mesmo se boleto não encontrado — evita retry infinito)",
+        "Retorna 401 se assinatura inválida",
+        "Compila sem erro"
+      ],
+      "notes": "Pagar.me webhook: header x-hub-signature com HMAC-SHA1 do body usando webhookSecret. Eventos: charge.paid, charge.payment_failed, charge.canceled. O link boleto→AccountReceivable não é direto (não tem FK), então buscar por proposalId do boleto + valor aproximado + status PENDING."
+    },
+    {
+      "id": "US-007",
+      "title": "Integrar novo sistema no fluxo de propostas (actions.ts)",
+      "description": "Como vendedor, quero que ao gerar boletos de uma proposta aceita o sistema use o provider configurado (automático ou manual), para que boletos reais sejam gerados.",
+      "priority": 7,
+      "passes": false,
+      "acceptanceCriteria": [
+        "generateBoletosForProposal em comercial/propostas/actions.ts aceita parâmetro opcional providerId",
+        "Se providerId passado: usa getProviderById (override manual), seta manualOverride=true no boleto",
+        "Se não passado: usa resolveProvider com clientType do cliente e valor da parcela",
+        "Cria gateway via factory, chama gateway.createBoleto()",
+        "Salva no boleto: providerId, gatewayId, gatewayData (url, line, barcode, qrCode, pdf, nossoNumero)",
+        "Mantém bankReference = gatewayId (compatibilidade)",
+        "Se provider não configurado: fallback pro mock com warning no log",
+        "Credentials são decriptadas antes de passar pro factory (usar encryption.ts existente — ver como FiscalConfig faz com certificadoPfx)",
+        "Compila sem erro, lint ok"
+      ],
+      "notes": "Olhar como generateBoletosForProposal funciona hoje em erp/src/app/(app)/comercial/propostas/actions.ts. A mudança é trocar a chamada de generateBoleto() (do antigo boleto.ts) pelo novo sistema. Manter o boleto.ts existente como fallback (import condicional). Encryption: ver como erp/src/lib/encryption.ts é usado em nfse-actions.ts pro certificado."
+    },
+    {
+      "id": "US-008",
+      "title": "Server actions CRUD de Payment Providers",
+      "description": "Como admin, quero gerenciar (criar, editar, deletar, testar) providers de pagamento via server actions, para que a tela de configuração funcione.",
+      "priority": 8,
+      "passes": false,
+      "acceptanceCriteria": [
+        "erp/src/app/(app)/configuracoes/integracoes-bancarias/actions.ts com server actions",
+        "getPaymentProviders(companyId): lista providers da empresa com regras (credentials mascaradas — nunca retorna texto completo pro frontend)",
+        "getAvailableProviders(): retorna PROVIDER_REGISTRY (pra popular dropdown de 'novo provider')",
+        "savePaymentProvider(data): cria ou atualiza provider, encripta credentials antes de salvar",
+        "deletePaymentProvider(id): deleta provider e regras associadas",
+        "testProviderConnection(id): decripta credentials, instancia gateway, chama testConnection()",
+        "saveRoutingRules(providerId, rules[]): substitui regras do provider",
+        "toggleProviderActive(id): ativa/desativa",
+        "setDefaultProvider(id): marca como default (desmarca outros da empresa)",
+        "Todas actions verificam requireCompanyAccess e logam AuditLog",
+        "Compila sem erro"
+      ],
+      "notes": "Credentials mascaradas: retornar só os últimos 4 chars de campos password (ex: '****3f2a'). Na edição, se o campo vier vazio, manter o valor anterior (não sobrescrever com string vazia). Usar encryption.ts encrypt/decrypt."
+    },
+    {
+      "id": "US-009",
+      "title": "Página de Configuração — Integrações Bancárias",
+      "description": "Como admin, quero uma tela em Configurações para gerenciar meus providers de pagamento com formulário dinâmico baseado no tipo do banco.",
+      "priority": 9,
+      "passes": false,
+      "acceptanceCriteria": [
+        "erp/src/app/(app)/configuracoes/integracoes-bancarias/page.tsx — página principal",
+        "Lista providers como cards: nome, tipo (badge), ativo/inativo (badge), padrão (estrela), qtd regras",
+        "Botões por card: Editar, Testar Conexão (com loading + toast resultado), toggle Ativar/Desativar",
+        "Botão '+ Adicionar banco' abre modal/dialog",
+        "Modal de criar/editar com: dropdown tipo (do registry), campos dinâmicos renderizados do configSchema, campos do settingsSchema, seção de regras de roteamento, checkbox 'Padrão', toggle sandbox, webhook URL read-only",
+        "Formulário de regras: lista editável com priority (number), clientType (select PF/PJ/Qualquer), minValue, maxValue, tags (input com chips)",
+        "Usa componentes shadcn/ui existentes (Card, Dialog, Button, Input, Select, Switch, Badge, Toast)",
+        "Responsivo",
+        "Compila sem erro, lint ok"
+      ],
+      "notes": "Seguir o padrão visual de erp/src/app/(app)/configuracoes/fiscal/page.tsx como referência de layout. Renderização dinâmica: iterar configSchema do provider e criar Input/Select conforme field.type. Campos password: mostrar mascarado, com botão de olho pra revelar."
+    },
+    {
+      "id": "US-010",
+      "title": "Sidebar + menu item Integrações Bancárias",
+      "description": "Como admin, quero ver 'Integrações Bancárias' no menu de Configurações do sidebar.",
+      "priority": 10,
+      "passes": false,
+      "acceptanceCriteria": [
+        "Item 'Integrações Bancárias' aparece no menu Configurações do sidebar com ícone Landmark (lucide) ou Building2",
+        "Link aponta para /configuracoes/integracoes-bancarias",
+        "Highlight ativo quando na rota",
+        "Posição: após 'Fiscal', antes de 'Canais'",
+        "Compila sem erro"
+      ],
+      "notes": "O sidebar está em algum layout component — procurar em erp/src/app/(app)/layout.tsx ou erp/src/components/sidebar.tsx ou similar. Seguir o padrão dos outros items."
+    },
+    {
+      "id": "US-011",
+      "title": "Seletor de banco na proposta (dropdown auto + manual)",
+      "description": "Como vendedor, quero escolher qual banco usar ao gerar boletos de uma proposta, ou deixar no automático, para ter controle quando precisar.",
+      "priority": 11,
+      "passes": false,
+      "acceptanceCriteria": [
+        "No modal/seção de gerar boletos em propostas/[id]/page.tsx: dropdown de seleção de banco",
+        "Opção padrão: '⚡ Automático (NomeDoBanco)' — chama previewRouting pra mostrar qual seria usado",
+        "Lista todos providers ativos da empresa como opções adicionais",
+        "Se só 1 provider: não mostra dropdown (usa direto, mostra badge do banco)",
+        "Se 0 providers: mostra alerta 'Configure um banco em Configurações → Integrações Bancárias' com link",
+        "Valor selecionado é passado como providerId pro generateBoletosForProposal",
+        "Tooltip/texto pequeno explicando qual regra casou quando em modo automático",
+        "Compila sem erro, lint ok"
+      ],
+      "notes": "Precisa de um server action ou API que retorne os providers ativos + resultado do previewRouting. Importar da actions de integracoes-bancarias."
+    },
+    {
+      "id": "US-012",
+      "title": "Exibir dados do gateway no boleto (URL, linha, QR) + badge no financeiro",
+      "description": "Como admin, quero ver os dados do boleto gerado pelo banco (URL, linha digitável, QR code) e saber qual banco gerou cada boleto.",
+      "priority": 12,
+      "passes": false,
+      "acceptanceCriteria": [
+        "Na visualização do boleto (proposta ou financeiro): mostrar URL (link clicável), linha digitável (com botão copiar), QR code (imagem se disponível), link PDF, nosso número",
+        "Dados vêm do campo gatewayData do boleto",
+        "Se gatewayData null (boletos antigos/mock): mostrar 'Gerado localmente' ou similar",
+        "Na listagem de contas a receber: badge com nome do provider (Pagar.me, PinBank, etc)",
+        "Badge 'Manual' se manualOverride=true",
+        "Compila sem erro, lint ok"
+      ],
+      "notes": "gatewayData é Json com formato: { url?, line?, barcode?, qrCode?, pdf?, nossoNumero?, rawResponse? }. A listagem de receber está em erp/src/app/(app)/financeiro/receber/page.tsx."
+    },
+    {
+      "id": "US-013",
+      "title": "PinBank provider placeholder",
+      "description": "Como desenvolvedor, quero a estrutura do provider PinBank pronta para implementar quando tiver a documentação da API.",
+      "priority": 13,
+      "passes": false,
+      "acceptanceCriteria": [
+        "erp/src/lib/payment/providers/pinbank.provider.ts implementa PaymentGateway",
+        "Todos os métodos fazem throw new Error('PinBank provider não implementado — aguardando documentação da API')",
+        "testConnection retorna { ok: false, message: 'Provider em desenvolvimento' }",
+        "factory.ts registra pinbank no mapa",
+        "Compila sem erro"
+      ],
+      "notes": "Estrutura idêntica ao mock, mas com throw em vez de retornos fake. Quando a API da PinBank estiver documentada, basta preencher os métodos."
+    }
+  ]
+}

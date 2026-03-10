@@ -146,3 +146,22 @@
 ### Learnings
 - When checking "flow complete", must verify ALL items are in terminal state, not just a subset — partial completion ≠ completion
 - Chart rendering and SQL range must be aligned: if chart always shows N monthly bars, SQL must always fetch N months regardless of KPI filter
+
+## US-001 — Schema & Migration: PaymentProvider, PaymentRoutingRule, Boleto changes (2026-03-10) ✅
+
+### What was implemented
+- `PaymentProvider` model: id, companyId, name, provider, credentials (String @db.Text for AES), webhookUrl, webhookSecret, sandbox, isDefault, isActive, metadata (Json?), timestamps
+- `PaymentRoutingRule` model: id, providerId, priority, clientType (ClientType?), minValue/maxValue (Decimal?), tags (String[]), isActive, createdAt
+- `Boleto` new fields: providerId (String?), gatewayId (String?), gatewayData (Json?), manualOverride (Boolean @default(false))
+- `Company` new relation: paymentProviders PaymentProvider[]
+- `Boleto` new relation: provider PaymentProvider? with onDelete: SetNull
+- Indexes: payment_providers(companyId, isActive), payment_routing_rules(providerId, priority)
+- Migration `20260310184916_add_payment_providers` applied to production DB
+- `npx prisma generate` and `npm run lint` pass cleanly
+
+### Learnings
+- `prisma migrate dev` requires shadow DB access; when shadow DB can't be created (Coolify internal network), create migration manually and use `prisma migrate deploy`
+- The DB is on Coolify Docker network (container `ho084w448cs8sg4csgwo8wko`, internal IP 10.0.1.10:5432); use SSH tunnel via `ssh -f -N -L 15432:10.0.1.10:5432 root@coolify.boletoapi.com`
+- `prisma migrate diff --from-schema-datasource --to-schema-datamodel --script` shows accumulated drift from all previous migrations — must manually extract only the relevant SQL for the new migration
+- @@map with snake_case maintained consistently: `payment_providers`, `payment_routing_rules`
+- credentials is String @db.Text (not Json) because it will be AES-encrypted as a string
