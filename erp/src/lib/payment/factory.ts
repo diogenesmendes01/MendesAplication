@@ -2,6 +2,7 @@ import type { PaymentGateway } from "./types";
 import { PROVIDER_REGISTRY } from "./registry";
 import { MockProvider } from "./providers/mock.provider";
 import { PagarmeProvider } from "./providers/pagarme.provider";
+import { PinBankProvider } from "./providers/pinbank.provider";
 
 /**
  * Instancia o gateway correto baseado no tipo do provider.
@@ -42,10 +43,7 @@ export function getGateway(
         webhookSecret
       );
     case "pinbank":
-      throw new Error(
-        `Provider "${providerType}" not implemented yet. ` +
-          `Credentials and metadata received: ${!!decryptedCredentials}, ${!!metadata}`
-      );
+      return new PinBankProvider();
     default:
       throw new Error(`Provider not found: ${providerType}`);
   }
