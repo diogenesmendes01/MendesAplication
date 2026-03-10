@@ -1,7 +1,7 @@
 import type { Config } from "tailwindcss";
 
 const config: Config = {
-  // darkMode disabled — PRD says no dark mode for now
+  darkMode: "class", // locked to class-only — no .dark class is ever added, so dark mode is effectively off
   content: [
     "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
