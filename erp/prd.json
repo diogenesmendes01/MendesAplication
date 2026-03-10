@@ -162,7 +162,7 @@
       "title": "Página de Configuração — Integrações Bancárias",
       "description": "Como admin, quero uma tela em Configurações para gerenciar meus providers de pagamento com formulário dinâmico baseado no tipo do banco.",
       "priority": 9,
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "erp/src/app/(app)/configuracoes/integracoes-bancarias/page.tsx — página principal",
         "Lista providers como cards: nome, tipo (badge), ativo/inativo (badge), padrão (estrela), qtd regras",
