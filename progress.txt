@@ -165,3 +165,99 @@
 - `prisma migrate diff --from-schema-datasource --to-schema-datamodel --script` shows accumulated drift from all previous migrations — must manually extract only the relevant SQL for the new migration
 - @@map with snake_case maintained consistently: `payment_providers`, `payment_routing_rules`
 - credentials is String @db.Text (not Json) because it will be AES-encrypted as a string
+
+## US-002 — Payment types, registry e factory (2026-03-10) ✅
+
+### What was implemented
+- `src/lib/payment/types.ts` — All interfaces: ConfigField, ProviderDefinition, PaymentGateway, CreateBoletoInput, CreateBoletoResult, BoletoStatusResult, WebhookEvent
+- `src/lib/payment/registry.ts` — PROVIDER_REGISTRY with pagarme (1 credential + 2 settings), pinbank (6 credentials + 4 settings), mock (empty schemas)
+- `src/lib/payment/factory.ts` — getGateway(providerType, decryptedCredentials, metadata) validates against registry, throws "not implemented" for known providers (mock/pagarme/pinbank), throws "Provider not found" for unknown
+- `src/lib/payment/index.ts` — Barrel exports for all types and functions
+
+### Learnings
+- Factory uses switch/case for known providers that will be implemented in future stories (US-003, US-004, US-013) — keeps it type-safe and explicit
+- Using `type` imports in index.ts barrel for interfaces avoids runtime overhead — only re-exports types
+- Registry is a plain object (not a Map) — simpler, JSON-serializable, and easy for frontend to consume
+- ConfigField.group discriminates between 'credentials' (encrypted) and 'settings' (stored in metadata) — important for the UI rendering in US-009
+
+## US-003 — Mock Provider + migrar boleto.ts (2026-03-10) ✅
+
+### What was implemented
+- `src/lib/payment/providers/mock.provider.ts` — MockProvider implementing full PaymentGateway interface
+- createBoleto generates fake gatewayId (MOCK prefix + timestamp + random), fake URL/line/barcode/QR/PDF/nossoNumero with console.log matching original MockBoletoProvider style
+- getBoletoStatus always returns 'pending'
+- cancelBoleto always returns { success: true }
+- validateWebhook always returns true
+- parseWebhookEvent parses body JSON and returns generic boleto.paid event
+- testConnection returns { ok: true, message: 'Mock provider ativo' }
+- factory.ts updated: `case "mock"` now returns `new MockProvider()` instead of throwing
+
+### Learnings
+- The original MockBoletoProvider in boleto.ts used `value` as raw number (R$), the new CreateBoletoInput uses `amount` in centavos — mock provider follows new convention
+- cancelBoleto and validateWebhook don't need `gatewayId`/`headers`/`body` params used — omit unused params to satisfy lint (no-unused-vars)
+- parseWebhookEvent body param can be string or already-parsed object depending on caller — defensive parsing with typeof check
+- Keep boleto.ts untouched per instructions (will be refactored in US-007)
+
+## US-004 — Pagar.me Provider (2026-03-10) ✅
+
+### What was implemented
+- `src/lib/payment/providers/pagarme.provider.ts` — full PaymentGateway implementation for Pagar.me v5
+- createBoleto: searches customer by document (GET /customers?document=X), creates if not found (POST /customers), then creates order with boleto payment (POST /orders)
+- getBoletoStatus: GET /charges/{id} with status mapping (pending→pending, paid→paid, canceled→cancelled, etc.)
+- cancelBoleto: DELETE /charges/{id}
+- testConnection: GET /customers?size=1 — validates API key works
+- validateWebhook: HMAC-SHA1 of body with webhookSecret, compared against x-hub-signature header using timing-safe comparison
+- parseWebhookEvent: maps charge.paid→boleto.paid, charge.canceled→boleto.cancelled, charge.payment_failed→boleto.failed, charge.underpaid→boleto.failed, charge.overpaid→boleto.paid
+- factory.ts updated: `case "pagarme"` returns `new PagarmeProvider(credentials, metadata, webhookSecret)`
+- factory.ts signature extended with optional `webhookSecret` parameter
+
+### Learnings
+- Pagar.me Basic Auth uses apiKey as username with empty password: `base64(sk_xxx:)` — the colon after the key is critical
+- Pagar.me customer creation requires phones object even if dummy — API rejects without it
+- Pagar.me address uses line_1/line_2 format, not separate street/number fields
+- Pagar.me customer type is "individual" (not "PF") or "company" (not "PJ")
+- DELETE on charges may return 204 with no body — need to handle empty response
+- HMAC-SHA1 webhook validation: Pagar.me sends `sha1=<hex>` in x-hub-signature header
+- crypto.timingSafeEqual throws if buffers have different lengths — wrap in try/catch
+- Factory webhookSecret param added as 4th arg to support webhook validation in provider instances
+
+## US-005 — Router — motor de roteamento com regras (2026-03-10) ✅
+
+### What was implemented
+- `src/lib/payment/router.ts` — routing engine with 3 exported functions
+- `resolveProvider(companyId, context)`: fetches active rules ordered by priority ASC, evaluates clientType + minValue + maxValue + tags, returns first matching provider's full PaymentProvider record. Falls back to isDefault=true provider. Throws clear error if no default configured.
+- `getProviderById(companyId, providerId)`: validates provider exists, belongs to company, and is active. Throws if not found/inactive.
+- `previewRouting(companyId, context)`: returns `{providerId, providerName, reason}` without side effects, for frontend dropdown preview. Returns null if no provider available.
+- `matchesRule()` helper: null clientType = match any, null minValue = no min, null maxValue = no max, tags use AND logic (all rule tags must exist in context)
+- `buildReason()` helper: generates human-readable reason string for UI display
+- Updated `index.ts` barrel to export all 3 functions
+- Updated `prd.json`: US-005 passes=true
+
+### Learnings
+- Prisma `Decimal` fields from queries need `Number()` conversion for numeric comparison — same pattern as US-001 KPI aggregates
+- PaymentRoutingRule.tags is `String[]` in Prisma — can use `.every()` directly for AND-logic tag matching
+- `findMany` with nested `where` on relation (`provider: { companyId, isActive }`) works cleanly in Prisma for filtering rules by provider attributes
+- previewRouting returns null (not throws) when no provider available — cleaner for frontend to handle gracefully
+
+## US-006 — Webhook route + baixa automática no financeiro (2026-03-10) ✅
+
+### What was implemented
+- `src/app/api/webhooks/payment/[provider]/route.ts` — Next.js App Router POST handler
+- Identifies provider type from path param, finds all active PaymentProviders of that type
+- Decrypts credentials from each provider using `decrypt()` from encryption.ts, instantiates gateway via factory
+- Tries to validate webhook signature with each provider until one matches (supports multiple providers of same type)
+- Returns 401 if no provider validates the signature
+- Parses webhook event via `gateway.parseWebhookEvent(rawBody)`
+- Finds boleto by `gatewayId` + `providerId`
+- Updates boleto status: boleto.paid→PAID, boleto.cancelled→CANCELLED, boleto.expired→OVERDUE, boleto.failed→CANCELLED
+- If boleto paid: finds matching AccountReceivable by companyId + clientId (from proposal) + value (±R$0.01 tolerance) + dueDate (±15 days) + status PENDING, updates to PAID with paidAt
+- Creates AuditLog with userId "system" for all operations (including boleto not found)
+- Returns 200 OK to the bank even if boleto not found (avoids infinite retry loops)
+
+### Learnings
+- Next.js 15 App Router dynamic route params are now a Promise — must `await params` before destructuring
+- AccountReceivable doesn't have a direct FK to Boleto — matching is done by companyId + clientId (from boleto.proposal.clientId) + value with tolerance + dueDate window
+- Prisma Decimal fields accept plain numbers in `gte`/`lte` comparisons — no need for `new Prisma.Decimal()`
+- Webhook handlers should be defensive: always return 200 for parse errors and missing boletos to prevent infinite retries from payment providers
+- The `logAuditEvent` function is fire-and-forget (catches errors internally) — safe to use without try/catch
+- For webhook routes with no user session, using "system" as userId in audit logs is the established pattern
