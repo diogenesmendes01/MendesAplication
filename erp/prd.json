@@ -62,7 +62,7 @@
       "title": "Pagar.me provider — geração de boleto",
       "description": "Como admin da TrustCloud, quero gerar boletos reais via API da Pagar.me v5, para cobrar clientes automaticamente.",
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "erp/src/lib/payment/providers/pagarme.provider.ts implementa PaymentGateway",
         "createBoleto: POST /customers (cria/busca cliente) + POST /orders (com items + payments.boleto)",
