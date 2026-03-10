@@ -101,7 +101,7 @@
       "title": "Webhook route + baixa automática no financeiro",
       "description": "Como sistema, quero receber webhooks dos bancos e atualizar automaticamente o status dos boletos e contas a receber, para que o financeiro reflita pagamentos em tempo real.",
       "priority": 6,
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "erp/src/app/api/webhooks/payment/[provider]/route.ts com handler POST",
         "Identifica provider type pelo path param",
