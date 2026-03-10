@@ -48,9 +48,6 @@
     "xlsx": "^0.18.5",
     "xml-crypto": "^6.1.2"
   },
-  "prisma": {
-    "seed": "npx tsx prisma/seed.ts"
-  },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
