@@ -196,7 +196,7 @@
       "title": "Seletor de banco na proposta (dropdown auto + manual)",
       "description": "Como vendedor, quero escolher qual banco usar ao gerar boletos de uma proposta, ou deixar no automático, para ter controle quando precisar.",
       "priority": 11,
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "No modal/seção de gerar boletos em propostas/[id]/page.tsx: dropdown de seleção de banco",
         "Opção padrão: '⚡ Automático (NomeDoBanco)' — chama previewRouting pra mostrar qual seria usado",
@@ -214,7 +214,7 @@
       "title": "Exibir dados do gateway no boleto (URL, linha, QR) + badge no financeiro",
       "description": "Como admin, quero ver os dados do boleto gerado pelo banco (URL, linha digitável, QR code) e saber qual banco gerou cada boleto.",
       "priority": 12,
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "Na visualização do boleto (proposta ou financeiro): mostrar URL (link clicável), linha digitável (com botão copiar), QR code (imagem se disponível), link PDF, nosso número",
         "Dados vêm do campo gatewayData do boleto",

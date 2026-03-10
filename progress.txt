@@ -367,3 +367,39 @@
 - ESLint `no-unused-vars` rule in this project doesn't allow underscore-prefixed params either — must omit unused params entirely (same pattern as MockProvider)
 - Don't import types that aren't used (e.g., `CreateBoletoInput` not needed when params are omitted)
 - testConnection is the only method that returns normally — all others throw, which is the correct pattern for a placeholder provider
+
+## US-011 — Seletor de banco na proposta (2026-03-10) ✅
+
+### What was implemented
+- Server actions `getProvidersForProposal(companyId)` and `previewRoutingForProposal(companyId, clientType, value)` in propostas/actions.ts
+- Provider selector in Generate Boletos dialog with 3 states:
+  - 0 providers: warning alert with link to Configurações → Integrações Bancárias
+  - 1 provider: badge display only (no dropdown needed)
+  - Multiple providers: dropdown with "⚡ Automático (BankName)" default + all active providers
+- previewRouting called on dialog open to show which bank auto-routing would select
+- Tooltip on auto mode explains which routing rule matched
+- selectedProviderId passed to generateBoletosForProposal (null = automatic)
+- ProposalDetail extended with `clientType` field for routing context
+
+### Learnings
+- previewRouting is a server function — needs a wrapper server action (`previewRoutingForProposal`) for client-side consumption
+- Loading providers on dialog open (not on page load) avoids unnecessary queries
+- Single provider case doesn't need dropdown — simpler UX with just a badge
+
+## US-012 — Exibir dados do gateway no boleto + badge no financeiro (2026-03-10) ✅
+
+### What was implemented
+- `BoletoGatewayInfo` expandable component in proposal detail: nosso número, linha digitável (with copy button), URL (clickable), PDF (download), QR code (image)
+- BoletoRow type extended with `providerName`, `manualOverride`, `gatewayData`
+- `listBoletosForProposal` now includes provider relation for provider name
+- Boletos table: new "Banco" column with provider badge + Manual badge
+- `gatewayData=null` shows "Gerado localmente" fallback
+- Financeiro/receber: ReceivableRow extended with `providerName` and `manualOverride`
+- listReceivables enriches data by batch-querying boletos matching (clientId + value + dueDate)
+- New "Banco" column in accounts receivable table with provider badge
+
+### Learnings
+- AccountReceivable has no FK to Boleto — matching by (clientId + value + dueDate) works because both are created in same transaction with identical values
+- The boleto OR query groups by proposal.clientId since boleto doesn't have direct clientId
+- navigator.clipboard.writeText needs to be wrapped in try/catch for security context failures
+- Expandable gateway info avoids table clutter — details shown on demand
