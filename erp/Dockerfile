@@ -33,6 +33,10 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+# Prisma CLI + config for migrate deploy at runtime
+COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
+COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+COPY --from=builder /app/node_modules/dotenv ./node_modules/dotenv
 COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
 
 USER nextjs
@@ -41,4 +45,5 @@ ENV PORT 3000
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 CMD wget -q --spider http://localhost:3000/api/health || exit 1
 
-CMD ["sh", "-c", "npx prisma migrate deploy && node server.js"]
+# Use project's prisma (not npx which fetches latest)
+CMD ["sh", "-c", "node node_modules/prisma/build/index.js migrate deploy && node server.js"]
