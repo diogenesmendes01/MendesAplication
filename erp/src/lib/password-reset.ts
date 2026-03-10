@@ -87,7 +87,7 @@ export async function validateResetToken(token: string) {
  */
 export async function resetPassword(token: string, newPassword: string) {
   if (!newPassword || newPassword.length < 8) {
-    return { success: false, error: "A senha deve ter pelo menos 6 caracteres." };
+    return { success: false, error: "A senha deve ter pelo menos 8 caracteres." };
   }
 
   const resetToken = await prisma.passwordResetToken.findUnique({
