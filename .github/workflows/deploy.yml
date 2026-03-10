@@ -1,14 +1,16 @@
 name: Deploy
 
 on:
-  push:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
     branches: [main]
 
 jobs:
   deploy:
     name: Trigger Coolify Deploy
     runs-on: ubuntu-latest
-    needs: [] # roda após CI passar (configurar como required check no branch protection)
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
 
     steps:
       - name: Trigger deploy

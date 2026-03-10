@@ -113,7 +113,6 @@ function nfeDatetime(d: Date): string {
   return local.toISOString().slice(0, 19) + "-03:00";
 }
 
-/** Data AAAA-MM-DD */
 
 // ─── XML NF-e 4.0 ─────────────────────────────────────────────────────────────
 

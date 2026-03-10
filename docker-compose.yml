@@ -16,6 +16,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - internal
 
   redis:
     image: redis:7-alpine
@@ -29,6 +31,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - internal
 
   erp:
     build:
@@ -61,6 +65,9 @@ services:
         condition: service_healthy
     volumes:
       - erp_uploads:/app/uploads
+    networks:
+      - internal
+      - external
 
   whatsapp-service:
     build:
@@ -76,16 +83,26 @@ services:
       - WHATSAPP_SERVICE_API_KEY=${WHATSAPP_SERVICE_API_KEY}
       - WHATSAPP_WEBHOOK_URL=http://erp:3000/api/webhooks/whatsapp
       - WHATSAPP_WEBHOOK_SECRET=${WHATSAPP_WEBHOOK_SECRET}
-      - WHATSAPP_CORS_ORIGIN=${WHATSAPP_CORS_ORIGIN:-*}
+      - WHATSAPP_CORS_ORIGIN=${WHATSAPP_CORS_ORIGIN:?Defina WHATSAPP_CORS_ORIGIN}
       - NODE_ENV=production
     depends_on:
       postgres:
         condition: service_healthy
     volumes:
       - whatsapp_uploads:/app/uploads
+    networks:
+      - internal
+      - external
 
 volumes:
   postgres_data:
   redis_data:
   erp_uploads:
   whatsapp_uploads:
+
+networks:
+  internal:
+    driver: bridge
+    internal: true
+  external:
+    driver: bridge

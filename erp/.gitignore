@@ -42,3 +42,9 @@ next-env.d.ts
 /uploads/
 uploads/
 scripts/test-*.ts
+
+# additional patterns
+*.log
+.env.production
+.env.staging
+.env.local

@@ -6,52 +6,15 @@ import {
   generateRefreshToken,
 } from "@/lib/auth";
 import { logAuditEvent } from "@/lib/audit";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 // ---------------------------------------------------------------------------
-// Rate limiting simples em memória — protege contra brute force no login.
-// Limite: MAX_ATTEMPTS tentativas por IP em WINDOW_MS milissegundos.
-// Nota: em deploy multi-instância considere Redis ou um middleware externo
-// (ex: Cloudflare Rate Limiting) para compartilhar estado entre réplicas.
+// Rate limiting via Redis — compartilha estado entre réplicas.
+// Limite: 10 tentativas por IP em 15 minutos.
 // ---------------------------------------------------------------------------
 
 const MAX_ATTEMPTS = 10;
 const WINDOW_MS = 15 * 60 * 1000; // 15 minutos
-
-interface RateLimitEntry {
-  count: number;
-  windowStart: number;
-}
-
-const loginAttempts = new Map<string, RateLimitEntry>();
-
-// Limpar entradas expiradas periodicamente para evitar memory leak
-setInterval(() => {
-  const now = Date.now();
-  for (const [ip, entry] of Array.from(loginAttempts.entries())) {
-    if (now - entry.windowStart > WINDOW_MS) {
-      loginAttempts.delete(ip);
-    }
-  }
-}, WINDOW_MS);
-
-function checkRateLimit(ip: string): { allowed: boolean; retryAfterMs: number } {
-  const now = Date.now();
-  const entry = loginAttempts.get(ip);
-
-  if (!entry || now - entry.windowStart > WINDOW_MS) {
-    // Nova janela
-    loginAttempts.set(ip, { count: 1, windowStart: now });
-    return { allowed: true, retryAfterMs: 0 };
-  }
-
-  if (entry.count >= MAX_ATTEMPTS) {
-    const retryAfterMs = WINDOW_MS - (now - entry.windowStart);
-    return { allowed: false, retryAfterMs };
-  }
-
-  entry.count += 1;
-  return { allowed: true, retryAfterMs: 0 };
-}
 
 export async function POST(req: NextRequest) {
   try {
@@ -61,7 +24,11 @@ export async function POST(req: NextRequest) {
       req.headers.get("x-real-ip") ??
       "unknown";
 
-    const { allowed, retryAfterMs } = checkRateLimit(clientIp);
+    const { allowed, retryAfterMs } = await checkRateLimit(
+      clientIp,
+      MAX_ATTEMPTS,
+      WINDOW_MS
+    );
     if (!allowed) {
       const retryAfterSec = Math.ceil(retryAfterMs / 1000);
       return NextResponse.json(

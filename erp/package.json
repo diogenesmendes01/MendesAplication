@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "workers": "npx tsx src/lib/workers/index.ts"
+    "workers": "npx tsx src/lib/workers/index.ts",
+    "test": "vitest"
   },
   "dependencies": {
     "@4success/nfse-campinas": "^2.2.0",
@@ -51,6 +52,8 @@
     "seed": "npx tsx prisma/seed.ts"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
     "@types/bcryptjs": "^2.4.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^20",
@@ -60,10 +63,12 @@
     "@types/react-dom": "^18",
     "eslint": "^8",
     "eslint-config-next": "14.2.35",
+    "jsdom": "^28.1.0",
     "postcss": "^8",
     "prisma": "^6.19.2",
     "tailwindcss": "^3.4.1",
     "tsx": "^4.21.0",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.0.18"
   }
 }

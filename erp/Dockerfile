@@ -3,7 +3,7 @@ FROM node:20-alpine AS deps
 RUN apk add --no-cache libc6-compat openssl
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci --only=production
+RUN npm ci
 
 # Stage 2: builder
 FROM node:20-alpine AS builder
@@ -12,6 +12,7 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED 1
+RUN npx prisma generate
 RUN npm run build
 
 # Stage 3: runner
@@ -35,4 +36,6 @@ EXPOSE 3000
 ENV PORT 3000
 
 # Roda migrations e inicia o servidor
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 CMD wget -q --spider http://localhost:3000/api/health || exit 1
+
 CMD ["sh", "-c", "npx prisma migrate deploy && node server.js"]
