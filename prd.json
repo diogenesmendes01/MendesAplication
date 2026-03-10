@@ -85,7 +85,7 @@
       "title": "Contextual actions por estado na proposta",
       "description": "Como usuário, quero ver apenas a ação disponível no momento na proposta, não todos os botões sempre.",
       "priority": 6,
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "DRAFT → botão 'Enviar Proposta por E-mail'",
         "SENT → 'Registrar Aceite' + 'Reenviar E-mail'",

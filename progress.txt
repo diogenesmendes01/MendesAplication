@@ -83,3 +83,19 @@
 - Always check existing code before implementing — the component was already complete and passing lint
 - The stepper uses `resolveSteps()` pure function for testability — maps proposal state to step statuses
 - `cn()` utility from `@/lib/utils` handles conditional Tailwind classes cleanly
+
+## US-006 — Contextual Actions por Estado (2026-03-10) ✅
+
+### What was implemented
+- Contextual actions already fully implemented in the Fase 3 commit (4fa18b8)
+- The `[id]/page.tsx` proposal detail page has a "Próxima ação" section with state-conditional rendering
+- All 6 states covered: DRAFT (send email), SENT (accept + resend), ACCEPTED (generate boletos), GENERATED (send boleto email), SENT boleto (waiting + resend), PAID (emit NFS-e)
+- Terminal states (CANCELLED/REJECTED/EXPIRED) show info message
+- Completed state (NFS-e issued) shows success message
+- All buttons use conditional rendering (`{condition && (...)}`) — HIDDEN, not disabled
+
+### Learnings
+- The Fase 3 commit (4fa18b8) continues to be the comprehensive commit that pre-implemented most Sprint 2 features
+- Pattern: always validate existing code against ACs before writing new code — saves time and avoids duplicate implementation
+- The contextual actions section uses a clean pattern: "Próxima ação" label + state-conditional blocks, making it easy to audit which states show which buttons
+- Edge cases handled well: `canGenerateBoletos` guards against re-generating, `allBoletosPaid` vs `hasBoletoPaid` distinguishes partial from full payment
