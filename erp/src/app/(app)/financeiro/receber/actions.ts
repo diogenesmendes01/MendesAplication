@@ -48,6 +48,8 @@ export interface ReceivableRow {
     id: string;
     name: string;
   };
+  providerName: string | null;
+  manualOverride: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -102,16 +104,62 @@ export async function listReceivables(
     prisma.accountReceivable.count({ where }),
   ]);
 
-  const data: ReceivableRow[] = rows.map((r) => ({
-    id: r.id,
-    description: r.description,
-    value: r.value.toString(),
-    dueDate: r.dueDate.toISOString(),
-    status: r.status,
-    paidAt: r.paidAt?.toISOString() ?? null,
-    createdAt: r.createdAt.toISOString(),
-    client: r.client,
-  }));
+  // Enrich with provider info from matching boletos
+  // Match by: companyId + clientId + value + dueDate (exact match from same transaction)
+  const providerMap = new Map<string, { providerName: string | null; manualOverride: boolean }>();
+
+  if (rows.length > 0) {
+    // Build match conditions for boletos
+    const matchConditions = rows.map((r) => ({
+      companyId: params.companyId,
+      proposal: { clientId: r.clientId },
+      value: r.value,
+      dueDate: r.dueDate,
+    }));
+
+    // Batch query boletos that match any of our receivables
+    const boletos = await prisma.boleto.findMany({
+      where: {
+        companyId: params.companyId,
+        OR: matchConditions.map((mc) => ({
+          proposal: { clientId: mc.proposal.clientId },
+          value: mc.value,
+          dueDate: mc.dueDate,
+        })),
+      },
+      include: {
+        provider: { select: { name: true } },
+        proposal: { select: { clientId: true } },
+      },
+    });
+
+    // Build lookup key: clientId|value|dueDate
+    for (const b of boletos) {
+      const key = `${b.proposal.clientId}|${b.value.toString()}|${b.dueDate.toISOString()}`;
+      providerMap.set(key, {
+        providerName: b.provider?.name ?? null,
+        manualOverride: b.manualOverride,
+      });
+    }
+  }
+
+  const data: ReceivableRow[] = rows.map((r) => {
+    const key = `${r.clientId}|${r.value.toString()}|${r.dueDate.toISOString()}`;
+    const providerInfo = providerMap.get(key);
+
+    return {
+      id: r.id,
+      description: r.description,
+      value: r.value.toString(),
+      dueDate: r.dueDate.toISOString(),
+      status: r.status,
+      paidAt: r.paidAt?.toISOString() ?? null,
+      createdAt: r.createdAt.toISOString(),
+      client: r.client,
+      providerName: providerInfo?.providerName ?? null,
+      manualOverride: providerInfo?.manualOverride ?? false,
+    };
+  });
 
   return {
     data,
