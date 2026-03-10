@@ -28,7 +28,7 @@
       "title": "Payment types, registry e factory",
       "description": "Como desenvolvedor, quero interfaces tipadas e um registro central de providers disponíveis, para que o frontend saiba quais campos renderizar e o backend instancie o provider correto.",
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "erp/src/lib/payment/types.ts com interfaces: ConfigField, ProviderDefinition, PaymentGateway, CreateBoletoInput, CreateBoletoResult, BoletoStatusResult, WebhookEvent",
         "erp/src/lib/payment/registry.ts com PROVIDER_REGISTRY contendo: pagarme (1 campo credentials: apiKey + 2 settings: defaultInstructions, daysToExpire), pinbank (6 campos credentials + 4 settings), mock (vazio)",
