@@ -38,7 +38,7 @@
       "title": "Card Atenção Necessária (alertas unificados)",
       "description": "Como gestor, quero ver um card no topo do dashboard que agrega alertas de todos os módulos para agir proativamente.",
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "Server action getUnifiedAlerts(companyId) agrega: tickets SLA violado/risco, boletos vencidos, propostas sem resposta >7 dias",
         "Componente attention-card.tsx renderiza os alertas com ícone colorido + link direto pro item",

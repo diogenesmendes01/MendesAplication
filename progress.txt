@@ -32,3 +32,17 @@
 - Using `LucideIcon` type (from `lucide-react`) instead of `ReactNode` gives type safety and lets the component control rendering (size, stroke, color)
 - Passing icon as component reference (`icon={Calendar}`) instead of JSX (`icon={<Calendar />}`) enables the wrapper to apply consistent styles
 - Previous version relied on callers to set correct size/stroke — now enforced centrally for design consistency
+
+## US-003 — Attention Card / Unified Alerts (2026-03-10) ✅
+
+### What was implemented
+- `src/components/attention-card.tsx` — renders unified alerts with severity-colored dots, module labels [SAC/Financeiro/Fiscal/Comercial], and direct links
+- Server action `getDashboardAlerts()` in `actions.ts` aggregates: SLA breached tickets, SLA at-risk tickets, overdue boletos, pending NFS-e >24h, proposals without response >7 days
+- Card positioned above KPIs in dashboard, only visible when alerts exist (double-guarded: component returns null + conditional render in page)
+- Alerts sorted by severity: critical first (SLA_BREACH, BOLETO_VENCIDO), then warnings (SLA_RISK, NFSE_FAILED, PROPOSTA_SEM_RESPOSTA)
+
+### Learnings
+- The Fase 3 commit (4fa18b8) already included both the server action and component — US-003 was pre-implemented as part of the comprehensive dashboard redesign
+- `getDashboardAlerts` runs independently from `getDashboardData` (separate `useCallback` + `useEffect`) so alerts load without waiting for period-filtered data
+- The `DashboardAlert` type with `AlertType` union provides type safety for alert categorization
+- Module labels in the component are derived from `alert.type` mapping, not stored in the alert data — keeps the server action focused on data
