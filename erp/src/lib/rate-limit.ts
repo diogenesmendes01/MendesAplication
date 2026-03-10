@@ -74,6 +74,24 @@ interface RateLimitResult {
 }
 
 /**
+ * Safely extract a numeric value from a Redis multi/exec result entry.
+ * Returns null if the entry is malformed or contains an error.
+ */
+function parseExecResult(
+  entry: [error: Error | null, result: unknown] | undefined
+): number | null {
+  if (!entry) return null;
+  const [err, value] = entry;
+  if (err) return null;
+  if (typeof value === "number") return value;
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+/**
  * Check and increment rate limit for a given IP.
  * Uses Redis when available, falls back to in-memory store.
  * @param ip - Client IP address
@@ -93,11 +111,21 @@ export async function checkRateLimit(
       const client = getRedis();
       const windowSec = Math.ceil(windowMs / 1000);
 
-      const [[, count], [, ttl]] = (await client
-        .multi()
-        .incr(key)
-        .ttl(key)
-        .exec()) as [[null, number], [null, number]];
+      const results = await client.multi().incr(key).ttl(key).exec();
+
+      // exec() returns null when the transaction is aborted
+      if (!results || results.length < 2) {
+        throw new Error("Redis multi/exec returned unexpected result");
+      }
+
+      const count = parseExecResult(results[0]);
+      const ttl = parseExecResult(results[1]);
+
+      if (count === null || ttl === null) {
+        throw new Error(
+          `Redis multi/exec contained errors: incr=${JSON.stringify(results[0])}, ttl=${JSON.stringify(results[1])}`
+        );
+      }
 
       // Set TTL on first attempt (when ttl is -1, key has no expiry)
       if (ttl === -1) {
