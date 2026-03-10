@@ -5,9 +5,9 @@ WORKDIR /app
 # Install OpenSSL for Prisma
 RUN apt-get update && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 
-# Copy package files and install dependencies
+# Copy package files and install ALL dependencies (including devDeps for build)
 COPY package.json package-lock.json ./
-RUN npm install
+RUN npm install --include=dev
 
 # Copy prisma schema and generate client
 COPY prisma ./prisma/
@@ -17,6 +17,9 @@ RUN npx prisma generate
 COPY tsconfig.json ./
 COPY src ./src/
 RUN npx tsc
+
+# Remove devDependencies after build
+RUN npm prune --production
 
 # Create uploads directory
 RUN mkdir -p /app/uploads
