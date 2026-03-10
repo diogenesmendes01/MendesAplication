@@ -89,6 +89,7 @@ model Company {
   aiConfig           AiConfig?
   documents          Document[]
   fiscalConfig       FiscalConfig?
+  paymentProviders   PaymentProvider[]
 
   @@map("companies")
 }
@@ -640,9 +641,14 @@ model Boleto {
   status            BoletoStatus @default(GENERATED)
   companyId         String
   createdAt         DateTime     @default(now())
+  providerId        String?
+  gatewayId         String?
+  gatewayData       Json?
+  manualOverride    Boolean      @default(false)
 
   proposal Proposal  @relation(fields: [proposalId], references: [id], onDelete: Cascade)
   company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  provider PaymentProvider? @relation(fields: [providerId], references: [id], onDelete: SetNull)
   tickets  Ticket[]  @relation("TicketBoleto")
   invoices Invoice[]
 
@@ -824,4 +830,44 @@ model DocumentChunk {
   document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
 
   @@map("document_chunks")
+}
+
+model PaymentProvider {
+  id            String   @id @default(cuid())
+  companyId     String
+  name          String
+  provider      String
+  credentials   String   @db.Text
+  webhookUrl    String?
+  webhookSecret String?
+  sandbox       Boolean  @default(false)
+  isDefault     Boolean  @default(false)
+  isActive      Boolean  @default(true)
+  metadata      Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  company  Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  rules    PaymentRoutingRule[]
+  boletos  Boleto[]
+
+  @@index([companyId, isActive])
+  @@map("payment_providers")
+}
+
+model PaymentRoutingRule {
+  id          String      @id @default(cuid())
+  providerId  String
+  priority    Int         @default(0)
+  clientType  ClientType?
+  minValue    Decimal?    @db.Decimal(12, 2)
+  maxValue    Decimal?    @db.Decimal(12, 2)
+  tags        String[]
+  isActive    Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+
+  provider PaymentProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@index([providerId, priority])
+  @@map("payment_routing_rules")
 }
