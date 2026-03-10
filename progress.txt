@@ -46,3 +46,22 @@
 - `getDashboardAlerts` runs independently from `getDashboardData` (separate `useCallback` + `useEffect`) so alerts load without waiting for period-filtered data
 - The `DashboardAlert` type with `AlertType` union provides type safety for alert categorization
 - Module labels in the component are derived from `alert.type` mapping, not stored in the alert data — keeps the server action focused on data
+
+## US-004 — Dashboard Layout Completo (2026-03-10) ✅
+
+### What was implemented
+- Dashboard layout already complete from Fase 3 commit: Row1=KPIs(4), Row2=Chart(2/3)+Payables(1/3), Row3=Proposals(1/2)+Tickets(1/2)
+- Added 4 standalone server actions: `getRevenueExpenseChart`, `getUpcomingPayables`, `getRecentProposals`, `getSlaTickets`
+- These provide independent access to each dashboard section (AC requirement)
+- Main `getDashboardData` still bundles all queries efficiently for initial page load
+- Recharts bar chart with receita=#6366F1, despesas=#F59E0B, grid=border-subtle(#F0ECE8), tooltip white shadow-md
+- Empty states present for all sections (chart, payables, proposals, tickets)
+- Page fade-in + staggered slide animations via animate-in utility classes
+- All data from real Prisma queries, zero mocks
+
+### Learnings
+- Fase 3 commit (4fa18b8) was comprehensive — included full dashboard layout, chart, lists, and all server actions bundled in getDashboardData
+- The AC for named server actions was about having them as separate exports, not replacing the bundled call
+- Adding standalone actions provides future flexibility (independent refresh, lazy loading) while keeping the efficient bundled load
+- `charts.tsx` uses `next/dynamic` with `ssr: false` for all Recharts components — avoids SSR issues
+- The lazy chart approach means Recharts bundle is only loaded when dashboard renders, not on every page

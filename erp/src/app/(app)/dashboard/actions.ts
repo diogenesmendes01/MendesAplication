@@ -582,3 +582,162 @@ export async function getDashboardAlerts(): Promise<DashboardAlert[]> {
 
   return alerts;
 }
+
+// ---------------------------------------------------------------------------
+// Standalone Server Actions (US-004)
+// ---------------------------------------------------------------------------
+// These provide independent access to each dashboard section.
+// The main getDashboardData bundles them for efficient initial load.
+
+export async function getRevenueExpenseChart(): Promise<MonthlyChartEntry[]> {
+  const session = await requireSession();
+  const companyIds = await resolveCompanyIds(session);
+  if (companyIds.length === 0) return [];
+
+  const now = new Date();
+  const monthNames = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+  const monthFullNames = [
+    "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+    "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
+  ];
+
+  const [monthlyRevenue, monthlyExpenses] = await Promise.all([
+    prisma.$queryRaw<{ month: Date; total: Prisma.Decimal }[]>`
+      SELECT date_trunc('month', "paidAt") AS month, SUM(value) AS total
+      FROM accounts_receivable
+      WHERE "companyId" = ANY(${companyIds})
+        AND status = 'PAID'
+        AND "paidAt" >= ${new Date(now.getFullYear(), now.getMonth() - 5, 1)}
+        AND "paidAt" < ${new Date(now.getFullYear(), now.getMonth() + 1, 1)}
+      GROUP BY date_trunc('month', "paidAt")
+      ORDER BY month
+    `,
+    prisma.$queryRaw<{ month: Date; total: Prisma.Decimal }[]>`
+      SELECT date_trunc('month', "paidAt") AS month, SUM(value) AS total
+      FROM accounts_payable
+      WHERE "companyId" = ANY(${companyIds})
+        AND status = 'PAID'
+        AND "paidAt" >= ${new Date(now.getFullYear(), now.getMonth() - 5, 1)}
+        AND "paidAt" < ${new Date(now.getFullYear(), now.getMonth() + 1, 1)}
+      GROUP BY date_trunc('month', "paidAt")
+      ORDER BY month
+    `,
+  ]);
+
+  const revenueByMonth = new Map<string, number>();
+  for (const r of monthlyRevenue) {
+    const d = new Date(r.month);
+    revenueByMonth.set(`${d.getFullYear()}-${String(d.getMonth()).padStart(2, "0")}`, Number(r.total));
+  }
+
+  const expensesByMonth = new Map<string, number>();
+  for (const e of monthlyExpenses) {
+    const d = new Date(e.month);
+    expensesByMonth.set(`${d.getFullYear()}-${String(d.getMonth()).padStart(2, "0")}`, Number(e.total));
+  }
+
+  const chart: MonthlyChartEntry[] = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const key = `${d.getFullYear()}-${String(d.getMonth()).padStart(2, "0")}`;
+    chart.push({
+      month: monthFullNames[d.getMonth()],
+      monthShort: monthNames[d.getMonth()],
+      revenue: revenueByMonth.get(key) ?? 0,
+      expenses: expensesByMonth.get(key) ?? 0,
+    });
+  }
+
+  return chart;
+}
+
+export async function getUpcomingPayables(): Promise<UpcomingPayable[]> {
+  const session = await requireSession();
+  const companyIds = await resolveCompanyIds(session);
+  if (companyIds.length === 0) return [];
+
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  const payables = await prisma.accountPayable.findMany({
+    where: {
+      companyId: { in: companyIds },
+      status: { in: ["PENDING", "OVERDUE"] },
+      dueDate: { lte: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 30) },
+    },
+    orderBy: { dueDate: "asc" },
+    take: 8,
+  });
+
+  return payables.map((p) => {
+    const dueDate = new Date(p.dueDate);
+    const dueDateStart = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
+    const diffDays = Math.round((dueDateStart.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    return {
+      id: p.id,
+      supplier: p.supplier,
+      description: p.description,
+      value: Number(p.value),
+      dueDate: p.dueDate.toISOString(),
+      isOverdue: diffDays < 0,
+      daysUntilDue: diffDays,
+    };
+  });
+}
+
+export async function getRecentProposals(): Promise<RecentProposal[]> {
+  const session = await requireSession();
+  const companyIds = await resolveCompanyIds(session);
+  if (companyIds.length === 0) return [];
+
+  const proposals = await prisma.proposal.findMany({
+    where: { companyId: { in: companyIds } },
+    include: { client: { select: { name: true } } },
+    orderBy: { createdAt: "desc" },
+    take: 5,
+  });
+
+  return proposals.map((p) => ({
+    id: p.id,
+    clientName: p.client.name,
+    proposalNumber: `#P-${p.id.slice(-4).toUpperCase()}`,
+    totalValue: Number(p.totalValue),
+    status: p.status,
+    createdAt: p.createdAt.toISOString(),
+  }));
+}
+
+export async function getSlaTickets(): Promise<TicketWithSLA[]> {
+  const session = await requireSession();
+  const companyIds = await resolveCompanyIds(session);
+  if (companyIds.length === 0) return [];
+
+  const tickets = await prisma.ticket.findMany({
+    where: {
+      companyId: { in: companyIds },
+      status: { notIn: ["RESOLVED", "CLOSED"] },
+      OR: [{ slaBreached: true }, { slaAtRisk: true }],
+    },
+    include: {
+      client: { select: { name: true } },
+      company: { select: { nomeFantasia: true } },
+      assignee: { select: { name: true } },
+    },
+    orderBy: [{ slaBreached: "desc" }, { createdAt: "asc" }],
+    take: 6,
+  });
+
+  return tickets.map((t) => ({
+    id: t.id,
+    subject: t.subject,
+    clientName: t.client.name,
+    companyName: t.company.nomeFantasia,
+    priority: t.priority,
+    slaStatus: t.slaBreached ? "breached" as const : "at_risk" as const,
+    createdAt: t.createdAt.toISOString(),
+    assigneeName: t.assignee?.name ?? null,
+    assigneeInitials: t.assignee
+      ? t.assignee.name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()
+      : "?",
+  }));
+}
