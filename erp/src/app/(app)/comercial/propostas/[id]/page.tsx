@@ -1,5 +1,7 @@
 "use client";
 
+import { type ProposalStatus } from "@prisma/client";
+
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -211,7 +213,7 @@ export default function ProposalDetailPage() {
     if (!selectedCompanyId || !proposalId) return;
     setAcceptingProposal(true);
     try {
-      await updateProposalStatus(proposalId, selectedCompanyId, "ACCEPTED");
+      await updateProposalStatus(proposalId, selectedCompanyId, "ACCEPTED" as ProposalStatus);
       toast.success("Aceite registrado com sucesso");
       await loadData();
     } catch (err) {
