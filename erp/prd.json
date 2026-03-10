@@ -181,7 +181,7 @@
       "title": "Sidebar + menu item Integrações Bancárias",
       "description": "Como admin, quero ver 'Integrações Bancárias' no menu de Configurações do sidebar.",
       "priority": 10,
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "Item 'Integrações Bancárias' aparece no menu Configurações do sidebar com ícone Landmark (lucide) ou Building2",
         "Link aponta para /configuracoes/integracoes-bancarias",
@@ -230,7 +230,7 @@
       "title": "PinBank provider placeholder",
       "description": "Como desenvolvedor, quero a estrutura do provider PinBank pronta para implementar quando tiver a documentação da API.",
       "priority": 13,
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "erp/src/lib/payment/providers/pinbank.provider.ts implementa PaymentGateway",
         "Todos os métodos fazem throw new Error('PinBank provider não implementado — aguardando documentação da API')",
