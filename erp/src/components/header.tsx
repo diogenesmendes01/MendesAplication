@@ -1,22 +1,64 @@
 "use client";
 
-import { Menu, User, Search, Bell } from "lucide-react";
+import { usePathname } from "next/navigation";
+import { Menu, Search, Bell, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { useUser } from "@/contexts/user-context";
+
+/* ── Route → label map ── */
+const routeLabels: Record<string, string> = {
+  dashboard: "Dashboard",
+  comercial: "Comercial",
+  sac: "SAC",
+  financeiro: "Financeiro",
+  fiscal: "Fiscal",
+  configuracoes: "Configurações",
+  clientes: "Clientes",
+  propostas: "Propostas",
+  pipeline: "Pipeline",
+  tickets: "Tickets",
+  "notas-fiscais": "Notas Fiscais",
+  "plano-de-contas": "Plano de Contas",
+  impostos: "Impostos",
+  canais: "Canais",
+  sla: "SLA",
+  "knowledge-base": "Knowledge Base",
+  ai: "Agente IA",
+  usuarios: "Usuários",
+  nova: "Nova",
+};
+
+function buildBreadcrumb(pathname: string) {
+  const segments = pathname.split("/").filter(Boolean);
+  return segments
+    .filter((s) => !s.startsWith("(")) // skip route groups like (app)
+    .map((s) => routeLabels[s] || s.charAt(0).toUpperCase() + s.slice(1));
+}
 
 interface HeaderProps {
   sidebarCollapsed: boolean;
   onMenuClick: () => void;
-  userName?: string;
-  pageTitle?: string;
 }
 
-export function Header({ sidebarCollapsed, onMenuClick, userName, pageTitle }: HeaderProps) {
+export function Header({ sidebarCollapsed, onMenuClick }: HeaderProps) {
+  const pathname = usePathname();
+  const { user } = useUser();
+  const breadcrumb = buildBreadcrumb(pathname);
+
+  const userName = user?.name || "Usuário";
+  const userInitials = userName
+    .split(" ")
+    .map((w) => w[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+
   return (
     <header
       className={cn(
-        "fixed top-0 right-0 z-30 flex h-14 items-center bg-background transition-all duration-300",
+        "fixed top-0 right-0 z-30 flex h-14 items-center border-b border-border-subtle bg-background transition-all duration-300",
         sidebarCollapsed ? "left-16" : "left-60"
       )}
     >
@@ -33,12 +75,24 @@ export function Header({ sidebarCollapsed, onMenuClick, userName, pageTitle }: H
             <Menu className="h-5 w-5" />
           </Button>
 
-          {/* Breadcrumb simplificado */}
-          <div className="hidden items-center gap-1 text-sm text-text-secondary md:flex">
-            {pageTitle && (
-              <span className="font-medium text-text-primary">{pageTitle}</span>
-            )}
-          </div>
+          {/* Breadcrumb dinâmico */}
+          <nav className="hidden items-center gap-1 text-sm md:flex" aria-label="Breadcrumb">
+            <span className="text-text-tertiary">MendesERP</span>
+            {breadcrumb.map((label, i) => (
+              <span key={i} className="flex items-center gap-1">
+                <ChevronRight className="h-3.5 w-3.5 text-text-tertiary" />
+                <span
+                  className={cn(
+                    i === breadcrumb.length - 1
+                      ? "font-semibold text-text-primary"
+                      : "text-text-secondary"
+                  )}
+                >
+                  {label}
+                </span>
+              </span>
+            ))}
+          </nav>
         </div>
 
         {/* Lado direito: Busca + Notificações + Avatar */}
@@ -63,17 +117,16 @@ export function Header({ sidebarCollapsed, onMenuClick, userName, pageTitle }: H
             aria-label="Notificações"
           >
             <Bell className="h-5 w-5" />
-            {/* Badge de notificação (exemplo - pode ser dinâmico) */}
             <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-danger" />
           </Button>
 
-          {/* Avatar do usuário */}
+          {/* Avatar do usuário — dados da sessão */}
           <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent text-white">
-              <User className="h-4 w-4" />
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent text-xs font-bold text-white">
+              {userInitials}
             </div>
             <span className="hidden text-sm font-medium text-text-primary sm:inline">
-              {userName ?? "Usuário"}
+              {userName}
             </span>
           </div>
         </div>

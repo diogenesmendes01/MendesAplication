@@ -13,6 +13,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronDown,
+  Check,
   Radio,
   Clock,
   BookOpen,
@@ -35,6 +36,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useCompany } from "@/contexts/company-context";
+import { useUser } from "@/contexts/user-context";
 import { getSlaAlertCounts } from "@/app/(app)/sac/tickets/actions";
 import { useEventStream } from "@/hooks/use-event-stream";
 
@@ -65,6 +67,12 @@ const navItems: NavItem[] = [
   },
 ];
 
+const roleLabels: Record<string, string> = {
+  ADMIN: "Administrador",
+  USER: "Usuário",
+  VIEWER: "Visualizador",
+};
+
 interface SidebarProps {
   collapsed: boolean;
   onToggle: () => void;
@@ -74,6 +82,7 @@ interface SidebarProps {
 export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
   const pathname = usePathname();
   const { companies, selectedCompany, setSelectedCompanyId } = useCompany();
+  const { user } = useUser();
   const [sacBadge, setSacBadge] = useState(0);
 
   const fetchBadge = useCallback(() => {
@@ -102,6 +111,16 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
     },
   });
 
+  /* ── User display helpers ── */
+  const userName = user?.name || "Usuário";
+  const userRole = user?.role ? (roleLabels[user.role] || user.role) : "—";
+  const userInitials = userName
+    .split(" ")
+    .map((w) => w[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+
   /* ── Shared company dropdown content ── */
   const companyDropdownItems = companies.map((company) => (
     <DropdownMenuItem
@@ -116,7 +135,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
         </div>
       </div>
       {selectedCompany?.id === company.id && (
-        <ChevronDown className="ml-2 h-4 w-4 shrink-0 rotate-180 text-accent" />
+        <Check className="ml-2 h-4 w-4 shrink-0 text-accent" />
       )}
     </DropdownMenuItem>
   ));
@@ -259,18 +278,17 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
         })}
       </nav>
 
-      {/* Footer com Avatar */}
+      {/* Footer com Avatar — dados dinâmicos da sessão */}
       {!collapsed && (
         <div className="border-t border-border-subtle p-3">
           <div className="flex items-center gap-3 rounded-lg bg-sidebar-hover-bg p-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent text-white">
-              <User className="h-4 w-4" />
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent text-xs font-bold text-white">
+              {userInitials}
             </div>
             <div className="flex-1 truncate">
-              <div className="truncate text-sm font-medium text-text-primary">Mendes</div>
-              <div className="truncate text-xs text-text-tertiary">Administrador</div>
+              <div className="truncate text-sm font-medium text-text-primary">{userName}</div>
+              <div className="truncate text-xs text-text-tertiary">{userRole}</div>
             </div>
-            <ChevronDown className="h-4 w-4 text-text-tertiary" />
           </div>
         </div>
       )}
