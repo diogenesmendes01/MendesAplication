@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { Sidebar } from "@/components/sidebar";
 import { Header } from "@/components/header";
 import { CompanyProvider } from "@/contexts/company-context";
+import { UserProvider } from "@/contexts/user-context";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -23,44 +25,47 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <CompanyProvider>
-      {/* Mobile backdrop */}
-      {mobileOpen && (
-        <div
-          className="fixed inset-0 z-30 bg-black/50 md:hidden"
-          onClick={() => setMobileOpen(false)}
-        />
-      )}
+      <UserProvider>
+        <TooltipProvider delayDuration={300}>
+          {/* Mobile backdrop */}
+          {mobileOpen && (
+            <div
+              className="fixed inset-0 z-30 bg-black/50 md:hidden"
+              onClick={() => setMobileOpen(false)}
+            />
+          )}
 
-      {/* Single sidebar — always mounted, CSS handles responsive */}
-      <div
-        className={cn(
-          "fixed inset-y-0 left-0 z-40 transition-transform duration-300",
-          // Mobile: slide in/out based on mobileOpen; Desktop: always visible
-          mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
-        )}
-      >
-        <Sidebar
-          collapsed={collapsed}
-          onToggle={() => setCollapsed(!collapsed)}
-          onMobileClose={() => setMobileOpen(false)}
-        />
-      </div>
+          {/* Single sidebar — always mounted, CSS handles responsive */}
+          <div
+            className={cn(
+              "fixed inset-y-0 left-0 z-40 transition-transform duration-300",
+              mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+            )}
+          >
+            <Sidebar
+              collapsed={collapsed}
+              onToggle={() => setCollapsed(!collapsed)}
+              onMobileClose={() => setMobileOpen(false)}
+            />
+          </div>
 
-      {/* Header */}
-      <Header
-        sidebarCollapsed={collapsed}
-        onMenuClick={() => setMobileOpen(!mobileOpen)}
-      />
+          {/* Header */}
+          <Header
+            sidebarCollapsed={collapsed}
+            onMenuClick={() => setMobileOpen(!mobileOpen)}
+          />
 
-      {/* Main content */}
-      <main
-        className={cn(
-          "min-h-screen pt-14 transition-all duration-300",
-          collapsed ? "md:pl-16" : "md:pl-60"
-        )}
-      >
-        <div className="p-6">{children}</div>
-      </main>
+          {/* Main content */}
+          <main
+            className={cn(
+              "min-h-screen pt-14 transition-all duration-300",
+              collapsed ? "md:pl-16" : "md:pl-60"
+            )}
+          >
+            <div className="p-6">{children}</div>
+          </main>
+        </TooltipProvider>
+      </UserProvider>
     </CompanyProvider>
   );
 }
