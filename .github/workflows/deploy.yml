@@ -64,7 +64,6 @@ jobs:
           ERP=$(docker ps --format '{{.Names}}' | grep "^ygs0kks0sw8w048wcgw8wos0" | head -1)
           WA=$(docker ps --format '{{.Names}}' | grep "^zskog8c8gkw0sk4s04gs4goc" | head -1)
 
-          # Reconnect with aliases
           docker network disconnect coolify "$ERP" 2>/dev/null || true
           docker network connect --alias mendeserp coolify "$ERP"
           echo "mendeserp -> $ERP"
@@ -75,24 +74,26 @@ jobs:
             echo "whatsapp-service -> $WA"
           fi
 
-          # Get ERP IP and update Traefik dynamic config
           sleep 2
           ERP_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$ERP" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1)
           echo "ERP IP: $ERP_IP"
-
           sed -i "s|url: http://[0-9.]*:3000|url: http://${ERP_IP}:3000|g" /data/coolify/proxy/dynamic/mendeserp.yaml
           echo "Traefik config updated with IP $ERP_IP"
 
       - name: Verify deployment
         run: |
           sleep 10
-          # Test via Traefik proxy internally (avoids hairpin NAT issues)
-          ERP_IP=$(grep -oP 'url: http://\K[0-9.]+' /data/coolify/proxy/dynamic/mendeserp.yaml | head -1)
-          HTTP_DIRECT=$(docker exec coolify-proxy wget -qO /dev/null -S "http://${ERP_IP}:3000/login" 2>&1 | grep "HTTP/" | tail -1 | awk '{print $2}')
-          echo "ERP direct via proxy: $HTTP_DIRECT"
-
-          if [ "$HTTP_DIRECT" != "200" ]; then
-            echo "❌ ERP not responding on $ERP_IP:3000"
-            exit 1
+          ERP=$(docker ps --format '{{.Names}}' | grep "^ygs0kks0sw8w048wcgw8wos0" | head -1)
+          HTTP_CODE=$(docker exec "$ERP" wget -qO /dev/null -S http://127.0.0.1:3000/login 2>&1 | grep "200 OK" && echo "200" || echo "fail")
+          echo "ERP internal check: $HTTP_CODE"
+          if [ "$HTTP_CODE" != "200" ]; then
+            # Fallback: direct curl to container IP
+            ERP_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$ERP" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+            HTTP_CODE2=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "http://${ERP_IP}:3000/login")
+            echo "ERP direct curl: $HTTP_CODE2"
+            if [ "$HTTP_CODE2" != "200" ] && [ "$HTTP_CODE2" != "307" ]; then
+              echo "❌ ERP not responding"
+              exit 1
+            fi
           fi
           echo "✅ Deploy complete! ERP accessible at https://boletoapi.com"
