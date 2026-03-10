@@ -70,7 +70,7 @@
       "title": "Proposal stepper visual",
       "description": "Como usuário do comercial, quero ver um stepper no topo da proposta mostrando em qual etapa ela está.",
       "priority": 5,
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "Componente proposal-stepper.tsx: [Criada]→[Enviada]→[Aceita]→[Boleto]→[Pago]→[NFS-e]",
         "Etapa concluída: ✓ verde, atual: ● accent, futura: ○ cinza",

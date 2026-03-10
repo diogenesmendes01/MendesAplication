@@ -65,3 +65,21 @@
 - Adding standalone actions provides future flexibility (independent refresh, lazy loading) while keeping the efficient bundled load
 - `charts.tsx` uses `next/dynamic` with `ssr: false` for all Recharts components — avoids SSR issues
 - The lazy chart approach means Recharts bundle is only loaded when dashboard renders, not on every page
+
+## US-005 — Proposal Stepper Visual (2026-03-10) ✅
+
+### What was implemented
+- `src/components/proposal-stepper.tsx` — already existed from Fase 3 commit (4fa18b8)
+- Steps: [Criada]→[Enviada]→[Aceita]→[Boleto]→[Pago]→[NFS-e]
+- Completed step: ✓ green (border-success bg-success), Current: ● accent with shadow, Future: ○ grey
+- Integrated in proposal detail page `[id]/page.tsx` inside a Card at the top
+- Status derived from real data: proposalStatus, hasBoletos, hasBoletoPaid, hasNfseIssued
+- Connector lines between steps turn green when step is completed
+- Handles edge cases: CANCELLED/REJECTED/EXPIRED only marks "Criada" as completed
+- Logic: DRAFT→level 1, SENT→level 2, ACCEPTED→level 3, hasBoletos→level 4, hasBoletoPaid→level 5, hasNfseIssued→level 6
+
+### Learnings
+- The Fase 3 commit (4fa18b8) was very comprehensive — included stepper, contextual actions, and the full detail page redesign
+- Always check existing code before implementing — the component was already complete and passing lint
+- The stepper uses `resolveSteps()` pure function for testability — maps proposal state to step statuses
+- `cn()` utility from `@/lib/utils` handles conditional Tailwind classes cleanly
