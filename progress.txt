@@ -1,0 +1,148 @@
+# Progress — Dashboard UX Sprint 2
+
+## US-001 — KPI Cards (2026-03-10) ✅
+
+### What was implemented
+- `src/components/kpi-card.tsx` — reusable KPI card with countUp animation (ease-out cubic)
+- KPI data integrated into `src/app/(app)/dashboard/actions.ts` via getDashboardData
+- Dashboard page uses 4 KPI cards: Receita, Despesas, Saldo, Tickets Abertos
+- Hero number fixed to 28px per PRD spec
+
+### Learnings
+- `Prisma.Decimal` from aggregates needs explicit conversion to `number` via `Number(val)`
+- Existing dashboard had placeholder data generators — replaced with real Prisma queries
+- The remote branch had a comprehensive commit (4fa18b8) with Fase 3 + UX Sprint 2 changes — always pull before working
+- `tabular-nums` via `fontVariantNumeric` CSS ensures numbers align during countUp animation
+- AccountReceivable.paidAt and AccountPayable.paidAt are the correct fields for "paid in period" queries
+- Tickets: OPEN, IN_PROGRESS, WAITING_CLIENT are "open" statuses; RESOLVED and CLOSED are terminal
+- KPICard supports both `previousValue` (auto-computes variation) and `badgeOverride` (custom badge text/variant)
+- The `cn()` utility from `@/lib/utils` is used for conditional class merging
+
+## US-002 — Empty State Component (2026-03-10) ✅
+
+### What was implemented
+- Refactored `src/components/empty-state.tsx` to accept `LucideIcon` type instead of `ReactNode` for the icon prop
+- Component now internally enforces: 48px size, strokeWidth 1.5, text-tertiary color
+- Title: 16px font-medium, Description: 14px text-secondary
+- Added `"use client"` directive (needed for onAction callback)
+- Optional action button supports both href (link) and onAction (callback)
+- Updated all 4 EmptyState usages in dashboard/page.tsx to pass icon components directly
+
+### Learnings
+- Using `LucideIcon` type (from `lucide-react`) instead of `ReactNode` gives type safety and lets the component control rendering (size, stroke, color)
+- Passing icon as component reference (`icon={Calendar}`) instead of JSX (`icon={<Calendar />}`) enables the wrapper to apply consistent styles
+- Previous version relied on callers to set correct size/stroke — now enforced centrally for design consistency
+
+## US-003 — Attention Card / Unified Alerts (2026-03-10) ✅
+
+### What was implemented
+- `src/components/attention-card.tsx` — renders unified alerts with severity-colored dots, module labels [SAC/Financeiro/Fiscal/Comercial], and direct links
+- Server action `getDashboardAlerts()` in `actions.ts` aggregates: SLA breached tickets, SLA at-risk tickets, overdue boletos, pending NFS-e >24h, proposals without response >7 days
+- Card positioned above KPIs in dashboard, only visible when alerts exist (double-guarded: component returns null + conditional render in page)
+- Alerts sorted by severity: critical first (SLA_BREACH, BOLETO_VENCIDO), then warnings (SLA_RISK, NFSE_FAILED, PROPOSTA_SEM_RESPOSTA)
+
+### Learnings
+- The Fase 3 commit (4fa18b8) already included both the server action and component — US-003 was pre-implemented as part of the comprehensive dashboard redesign
+- `getDashboardAlerts` runs independently from `getDashboardData` (separate `useCallback` + `useEffect`) so alerts load without waiting for period-filtered data
+- The `DashboardAlert` type with `AlertType` union provides type safety for alert categorization
+- Module labels in the component are derived from `alert.type` mapping, not stored in the alert data — keeps the server action focused on data
+
+## US-004 — Dashboard Layout Completo (2026-03-10) ✅
+
+### What was implemented
+- Dashboard layout already complete from Fase 3 commit: Row1=KPIs(4), Row2=Chart(2/3)+Payables(1/3), Row3=Proposals(1/2)+Tickets(1/2)
+- Added 4 standalone server actions: `getRevenueExpenseChart`, `getUpcomingPayables`, `getRecentProposals`, `getSlaTickets`
+- These provide independent access to each dashboard section (AC requirement)
+- Main `getDashboardData` still bundles all queries efficiently for initial page load
+- Recharts bar chart with receita=#6366F1, despesas=#F59E0B, grid=border-subtle(#F0ECE8), tooltip white shadow-md
+- Empty states present for all sections (chart, payables, proposals, tickets)
+- Page fade-in + staggered slide animations via animate-in utility classes
+- All data from real Prisma queries, zero mocks
+
+### Learnings
+- Fase 3 commit (4fa18b8) was comprehensive — included full dashboard layout, chart, lists, and all server actions bundled in getDashboardData
+- The AC for named server actions was about having them as separate exports, not replacing the bundled call
+- Adding standalone actions provides future flexibility (independent refresh, lazy loading) while keeping the efficient bundled load
+- `charts.tsx` uses `next/dynamic` with `ssr: false` for all Recharts components — avoids SSR issues
+- The lazy chart approach means Recharts bundle is only loaded when dashboard renders, not on every page
+
+## US-005 — Proposal Stepper Visual (2026-03-10) ✅
+
+### What was implemented
+- `src/components/proposal-stepper.tsx` — already existed from Fase 3 commit (4fa18b8)
+- Steps: [Criada]→[Enviada]→[Aceita]→[Boleto]→[Pago]→[NFS-e]
+- Completed step: ✓ green (border-success bg-success), Current: ● accent with shadow, Future: ○ grey
+- Integrated in proposal detail page `[id]/page.tsx` inside a Card at the top
+- Status derived from real data: proposalStatus, hasBoletos, hasBoletoPaid, hasNfseIssued
+- Connector lines between steps turn green when step is completed
+- Handles edge cases: CANCELLED/REJECTED/EXPIRED only marks "Criada" as completed
+- Logic: DRAFT→level 1, SENT→level 2, ACCEPTED→level 3, hasBoletos→level 4, hasBoletoPaid→level 5, hasNfseIssued→level 6
+
+### Learnings
+- The Fase 3 commit (4fa18b8) was very comprehensive — included stepper, contextual actions, and the full detail page redesign
+- Always check existing code before implementing — the component was already complete and passing lint
+- The stepper uses `resolveSteps()` pure function for testability — maps proposal state to step statuses
+- `cn()` utility from `@/lib/utils` handles conditional Tailwind classes cleanly
+
+## US-006 — Contextual Actions por Estado (2026-03-10) ✅
+
+### What was implemented
+- Contextual actions already fully implemented in the Fase 3 commit (4fa18b8)
+- The `[id]/page.tsx` proposal detail page has a "Próxima ação" section with state-conditional rendering
+- All 6 states covered: DRAFT (send email), SENT (accept + resend), ACCEPTED (generate boletos), GENERATED (send boleto email), SENT boleto (waiting + resend), PAID (emit NFS-e)
+- Terminal states (CANCELLED/REJECTED/EXPIRED) show info message
+- Completed state (NFS-e issued) shows success message
+- All buttons use conditional rendering (`{condition && (...)}`) — HIDDEN, not disabled
+
+### Learnings
+- The Fase 3 commit (4fa18b8) continues to be the comprehensive commit that pre-implemented most Sprint 2 features
+- Pattern: always validate existing code against ACs before writing new code — saves time and avoids duplicate implementation
+- The contextual actions section uses a clean pattern: "Próxima ação" label + state-conditional blocks, making it easy to audit which states show which buttons
+- Edge cases handled well: `canGenerateBoletos` guards against re-generating, `allBoletosPaid` vs `hasBoletoPaid` distinguishes partial from full payment
+
+## PR #34 Code Review Bug Fixes (2026-03-10) ✅
+
+### What was fixed (13 bugs total)
+- **BUG 1** (BLOCKER): Verified already correct — no change needed
+- **BUG 2** (Critical): Dashboard now filters by selectedCompanyId from CompanyContext
+- **BUG 3** (Critical): Stepper checks per-boleto ISSUED invoice via `listInvoicesForBoletos()` — no longer marks "complete" after 1 partial NFS-e
+- **BUG 4** (High): "Enviar Boleto" button rendered per-boleto based on individual GENERATED status
+- **BUG 5** (High): Unified per-boleto action block replaces separate conditional blocks
+- **BUG 6** (Medium): KPI labels dynamic via `periodSuffix()` — maps period to "do dia/da semana/do mês/do ano/do período"
+- **BUG 7** (Medium): Chart date range respects period filter via `getChartDateRange()` helper
+- **BUG 8** (Medium): `loadAlerts` useCallback depends on `selectedCompanyId`, reloads on company change
+- **BUG 9** (Medium): Idempotency guard checks `status: "ISSUED"` only — PENDING/CANCELLED invoices cleaned up before re-emit
+- **BUG 10** (Low): `useCountUp` stores previous target via `useRef`, animates from previous→new value
+- **BUG 11** (Low): `window.location.href` replaced with `router.push()` in proposal table rows
+- **BUG 12** (Low): `<a>` replaced with Next.js `<Link>` in AttentionCard
+- **BUG 13** (Medium): KPICard accepts `invertColors` prop — expenses card shows red for increases, green for decreases
+
+### New exports added
+- `listInvoicesForBoletos(boletoIds, companyId)` in `nfse-actions.ts` — returns `Record<string, boolean>` for per-boleto ISSUED status
+
+### Learnings
+- Per-boleto NFS-e tracking requires querying Invoice table directly (not ProposalEvent), since events don't track which boleto the NFS-e belongs to
+- `useRef` for storing previous animation target must update in the cleanup function of `useEffect`, not in the main body — avoids stale values
+- Dashboard `resolveCompanyIds` now accepts optional `selectedCompanyId` parameter — when provided, validates access and returns single-element array
+- For expense-type KPIs, color inversion is a UI concern (not data) — handled via `invertColors` prop rather than changing the data model
+- Advisory lock idempotency guards should match on terminal status (ISSUED) only — intermediate states (PENDING/CANCELLED) are transient and should not block retries
+
+## PR #34 Re-Review Bug Fixes (2026-03-10) ✅
+
+### What was fixed (4 bugs from re-review)
+
+- **BUG A** (High): Replaced `allPaidHaveNfse` with `allBoletosComplete` in proposal detail page and stepper. New logic: `boletos.every((b) => b.status === "PAID" && issuedInvoiceMap[b.id])` — requires ALL boletos paid with NFS-e, not just the paid subset. Updated stepper prop, per-boleto action guard, and "Fluxo concluído" block.
+- **BUG B** (Medium): Simplified `getChartDateRange()` — chart always shows monthly bars, so day/week/month all use 6 months of SQL data, year uses 12. Removed unnecessary day/week-specific ranges that returned too-short windows.
+- **BUG C** (Low): Chart subtitle now dynamic: `{period === "year" ? "Últimos 12 meses" : "Últimos 6 meses"}` instead of hardcoded "Últimos 6 meses".
+- **BUG D** (Low/Security): `listInvoicesForBoletos` in `nfse-actions.ts` now uses `requireCompanyAccess(companyId)` instead of `requireSession()`, enforcing proper RBAC tenant isolation. Removed unused `requireSession` import.
+
+### Files changed
+- `erp/src/app/(app)/comercial/propostas/[id]/page.tsx` — BUG A
+- `erp/src/components/proposal-stepper.tsx` — BUG A (prop rename)
+- `erp/src/app/(app)/dashboard/actions.ts` — BUG B
+- `erp/src/app/(app)/dashboard/page.tsx` — BUG C
+- `erp/src/lib/nfse-actions.ts` — BUG D
+
+### Learnings
+- When checking "flow complete", must verify ALL items are in terminal state, not just a subset — partial completion ≠ completion
+- Chart rendering and SQL range must be aligned: if chart always shows N monthly bars, SQL must always fetch N months regardless of KPI filter
