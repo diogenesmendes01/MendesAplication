@@ -10,3 +10,4 @@ export type {
 
 export { PROVIDER_REGISTRY } from "./registry";
 export { getGateway } from "./factory";
+export { resolveProvider, getProviderById, previewRouting } from "./router";

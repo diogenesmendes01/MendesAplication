@@ -82,7 +82,7 @@
       "title": "Router — motor de roteamento com regras",
       "description": "Como sistema, quero resolver automaticamente qual provider usar baseado em regras configuradas, para que a geração de boletos seja automática.",
       "priority": 5,
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "erp/src/lib/payment/router.ts com funções: resolveProvider, getProviderById, previewRouting",
         "resolveProvider: busca regras ativas da empresa ordenadas por priority ASC, avalia clientType + minValue + maxValue + tags, retorna primeiro provider que casa",
