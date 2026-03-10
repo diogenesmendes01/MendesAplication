@@ -285,7 +285,7 @@ const server = app.listen(PORT, () => {
 (async () => {
   try {
     const rows = await prisma.$queryRaw<{ companyId: string }[]>`
-      SELECT DISTINCT "companyId" FROM "baileysAuthState"
+      SELECT DISTINCT "companyId" FROM "baileys_auth_state"
     `;
     if (rows.length === 0) {
       console.log("[Startup] No saved sessions found, skipping auto-reconnect");
