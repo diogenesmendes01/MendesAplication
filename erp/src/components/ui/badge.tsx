@@ -4,17 +4,23 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 const badgeVariants = cva(
-  "inline-flex items-center rounded-md border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+  "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-border-focus focus:ring-offset-2",
   {
     variants: {
       variant: {
         default:
-          "border-transparent bg-primary text-primary-foreground shadow hover:bg-primary/80",
+          "bg-accent-subtle text-accent",
         secondary:
-          "border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80",
+          "bg-background-subtle text-text-secondary",
         destructive:
-          "border-transparent bg-destructive text-destructive-foreground shadow hover:bg-destructive/80",
-        outline: "text-foreground",
+          "bg-danger-subtle text-danger",
+        success:
+          "bg-success-subtle text-success",
+        warning:
+          "bg-warning-subtle text-warning",
+        info:
+          "bg-info-subtle text-info",
+        outline: "border border-border text-text-secondary",
       },
     },
     defaultVariants: {
@@ -25,11 +31,28 @@ const badgeVariants = cva(
 
 export interface BadgeProps
   extends React.HTMLAttributes<HTMLDivElement>,
-    VariantProps<typeof badgeVariants> {}
+    VariantProps<typeof badgeVariants> {
+  withDot?: boolean
+}
 
-function Badge({ className, variant, ...props }: BadgeProps) {
+function Badge({ className, variant, withDot, ...props }: BadgeProps) {
   return (
-    <div className={cn(badgeVariants({ variant }), className)} {...props} />
+    <div className={cn(badgeVariants({ variant }), className)} {...props}>
+      {withDot && (
+        <span
+          className={cn(
+            "h-1.5 w-1.5 rounded-full",
+            variant === "default" && "bg-accent",
+            variant === "secondary" && "bg-text-secondary",
+            variant === "destructive" && "bg-danger",
+            variant === "success" && "bg-success",
+            variant === "warning" && "bg-warning",
+            variant === "info" && "bg-info"
+          )}
+        />
+      )}
+      {props.children}
+    </div>
   )
 }
 

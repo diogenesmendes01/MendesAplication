@@ -1,134 +1,81 @@
 "use client";
 
-import { Menu, User, Building2, ChevronDown, Check } from "lucide-react";
+import { Menu, User, Search, Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { useCompany } from "@/contexts/company-context";
 
 interface HeaderProps {
   sidebarCollapsed: boolean;
   onMenuClick: () => void;
   userName?: string;
+  pageTitle?: string;
 }
 
-export function Header({ sidebarCollapsed, onMenuClick, userName }: HeaderProps) {
-  const { companies, selectedCompany, setSelectedCompanyId, loading } = useCompany();
-
+export function Header({ sidebarCollapsed, onMenuClick, userName, pageTitle }: HeaderProps) {
   return (
     <header
       className={cn(
-        "fixed top-0 right-0 z-30 flex h-14 items-center border-b bg-card transition-all duration-300",
-        "left-0",
-        sidebarCollapsed ? "md:left-16" : "md:left-60"
+        "fixed top-0 right-0 z-30 flex h-14 items-center bg-background transition-all duration-300",
+        sidebarCollapsed ? "left-16" : "left-60"
       )}
     >
       <div className="flex w-full items-center justify-between px-4">
-        {/* Mobile hamburger */}
-        <Button
-          variant="ghost"
-          size="icon"
-          className="md:hidden"
-          onClick={onMenuClick}
-          aria-label="Abrir menu"
-        >
-          <Menu className="h-5 w-5" />
-        </Button>
+        {/* Lado esquerdo: Mobile hamburger + Breadcrumb */}
+        <div className="flex items-center gap-3">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="md:hidden"
+            onClick={onMenuClick}
+            aria-label="Abrir menu"
+          >
+            <Menu className="h-5 w-5" />
+          </Button>
 
-        {/* Company selector */}
-        <div className="hidden md:block">
-          {loading ? (
-            <div className="flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm text-muted-foreground">
-              <Building2 className="h-4 w-4" />
-              <span>Carregando...</span>
-            </div>
-          ) : companies.length === 0 ? (
-            <div className="flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm text-muted-foreground">
-              <Building2 className="h-4 w-4" />
-              <span>Nenhuma empresa</span>
-            </div>
-          ) : (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="gap-2">
-                  <Building2 className="h-4 w-4" />
-                  <span className="max-w-[200px] truncate">
-                    {selectedCompany?.nomeFantasia ?? "Selecionar empresa"}
-                  </span>
-                  <ChevronDown className="h-4 w-4 opacity-50" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-[280px]">
-                {companies.map((company) => (
-                  <DropdownMenuItem
-                    key={company.id}
-                    onClick={() => setSelectedCompanyId(company.id)}
-                    className="flex items-center justify-between"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate font-medium">{company.nomeFantasia}</div>
-                      <div className="truncate text-xs text-muted-foreground">
-                        {company.cnpj}
-                      </div>
-                    </div>
-                    {selectedCompany?.id === company.id && (
-                      <Check className="ml-2 h-4 w-4 shrink-0 text-primary" />
-                    )}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-        </div>
-
-        {/* Mobile company selector */}
-        <div className="md:hidden">
-          {!loading && companies.length > 0 && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" aria-label="Selecionar empresa">
-                  <Building2 className="h-5 w-5" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-[260px]">
-                {companies.map((company) => (
-                  <DropdownMenuItem
-                    key={company.id}
-                    onClick={() => setSelectedCompanyId(company.id)}
-                    className="flex items-center justify-between"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate font-medium">{company.nomeFantasia}</div>
-                      <div className="truncate text-xs text-muted-foreground">
-                        {company.cnpj}
-                      </div>
-                    </div>
-                    {selectedCompany?.id === company.id && (
-                      <Check className="ml-2 h-4 w-4 shrink-0 text-primary" />
-                    )}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-        </div>
-
-        {/* Spacer */}
-        <div className="flex-1" />
-
-        {/* User info */}
-        <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground">
-            <User className="h-4 w-4" />
+          {/* Breadcrumb simplificado */}
+          <div className="hidden items-center gap-1 text-sm text-text-secondary md:flex">
+            {pageTitle && (
+              <span className="font-medium text-text-primary">{pageTitle}</span>
+            )}
           </div>
-          <span className="hidden text-sm font-medium sm:inline">
-            {userName ?? "Usuário"}
-          </span>
+        </div>
+
+        {/* Lado direito: Busca + Notificações + Avatar */}
+        <div className="flex items-center gap-2">
+          {/* Busca global */}
+          <div className="hidden items-center gap-2 sm:flex">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text-tertiary" />
+              <Input
+                type="search"
+                placeholder="Buscar..."
+                className="h-9 w-64 pl-9"
+              />
+            </div>
+          </div>
+
+          {/* Notificações */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="relative text-text-secondary hover:text-text-primary"
+            aria-label="Notificações"
+          >
+            <Bell className="h-5 w-5" />
+            {/* Badge de notificação (exemplo - pode ser dinâmico) */}
+            <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-danger" />
+          </Button>
+
+          {/* Avatar do usuário */}
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent text-white">
+              <User className="h-4 w-4" />
+            </div>
+            <span className="hidden text-sm font-medium text-text-primary sm:inline">
+              {userName ?? "Usuário"}
+            </span>
+          </div>
         </div>
       </div>
     </header>

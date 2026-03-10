@@ -2,66 +2,98 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  :root {
+    /* Backgrounds — warm whites */
+    --background: 0 0% 97.3%;        /* #FAFAF8 */
+    --background-subtle: 0 0% 93.3%; /* #F4F2EE */
+    --surface: 0 0% 100%;            /* #FFFFFF */
+    --surface-raised: 0 0% 100%;     /* #FFFFFF */
+
+    /* Texto */
+    --text-primary: 215 25% 11%;     /* #0F172A */
+    --text-secondary: 215 16% 47%;   /* #475569 */
+    --text-tertiary: 210 16% 73%;    /* #94A3B8 */
+    --text-disabled: 30 8% 84%;      /* #D6D3D1 */
+
+    /* Accent — Violet sofisticado */
+    --accent: 234 84% 67%;           /* #6366F1 */
+    --accent-hover: 234 84% 60%;     /* #4F46E5 */
+    --accent-subtle: 234 100% 96%;   /* #EEF2FF */
+    --accent-muted: 234 76% 92%;     /* #E0E7FF */
+
+    /* Borders */
+    --border: 20 11% 90%;            /* #E8E4DF */
+    --border-subtle: 30 13% 93%;     /* #F0ECE8 */
+    --border-focus: 234 84% 67%;     /* #6366F1 */
+
+    /* Status */
+    --success: 157 84% 28%;          /* #059669 */
+    --success-subtle: 156 100% 93%;  /* #ECFDF5 */
+    --warning: 35 87% 44%;           /* #D97706 */
+    --warning-subtle: 40 100% 95%;   /* #FFFBEB */
+    --danger: 3 84% 51%;             /* #DC2626 */
+    --danger-subtle: 4 93% 97%;      /* #FEF2F2 */
+    --info: 221 83% 53%;             /* #2563EB */
+    --info-subtle: 217 91% 94%;      /* #EFF6FF */
+
+    /* Sidebar específico */
+    --sidebar-bg: 35 14% 92%;        /* #F2F0EB */
+    --sidebar-active-bg: 0 0% 100%;  /* #FFFFFF */
+    --sidebar-active-text: 234 84% 67%; /* #6366F1 */
+    --sidebar-hover-bg: 35 13% 91%;  /* #ECEAE4 */
+
+    /* Shadows (warm-tinted) */
+    --shadow-xs: 0 1px 2px rgba(28, 25, 23, 0.06);
+    --shadow-sm: 0 1px 3px rgba(28, 25, 23, 0.08), 0 1px 2px rgba(28, 25, 23, 0.06);
+    --shadow-md: 0 4px 6px rgba(28, 25, 23, 0.07), 0 2px 4px rgba(28, 25, 23, 0.06);
+    --shadow-lg: 0 10px 15px rgba(28, 25, 23, 0.08), 0 4px 6px rgba(28, 25, 23, 0.05);
+    --shadow-xl: 0 20px 25px rgba(28, 25, 23, 0.08), 0 8px 10px rgba(28, 25, 23, 0.04);
+
+    /* Radius */
+    --radius: 0.75rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  
+  body {
+    @apply bg-background text-text-primary;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
 @layer utilities {
   .text-balance {
     text-wrap: balance;
   }
 }
 
-
-
-@layer base {
-  :root {
-    --background: 0 0% 100%;
-    --foreground: 0 0% 3.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 3.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 3.9%;
-    --primary: 0 0% 9%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 0 0% 96.1%;
-    --secondary-foreground: 0 0% 9%;
-    --muted: 0 0% 96.1%;
-    --muted-foreground: 0 0% 45.1%;
-    --accent: 0 0% 96.1%;
-    --accent-foreground: 0 0% 9%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 89.8%;
-    --input: 0 0% 89.8%;
-    --ring: 0 0% 3.9%;
-    --chart-1: 12 76% 61%;
-    --chart-2: 173 58% 39%;
-    --chart-3: 197 37% 24%;
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
-    --radius: 0.5rem;
+/* Scrollbar customizada */
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
   }
-  .dark {
-    --background: 0 0% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 0 0% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 0 0% 3.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 0 0% 9%;
-    --secondary: 0 0% 14.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 14.9%;
-    --muted-foreground: 0 0% 63.9%;
-    --accent: 0 0% 14.9%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 14.9%;
-    --input: 0 0% 14.9%;
-    --ring: 0 0% 83.1%;
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: var(--border);
+    border-radius: 9999px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background-color: var(--text-tertiary);
   }
 }

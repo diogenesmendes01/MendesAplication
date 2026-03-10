@@ -19,9 +19,16 @@ import {
   Bot,
   Receipt,
   X,
+  User,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useCompany } from "@/contexts/company-context";
 import { getSlaAlertCounts } from "@/app/(app)/sac/tickets/actions";
 import { useEventStream } from "@/hooks/use-event-stream";
@@ -61,30 +68,30 @@ interface SidebarProps {
 
 export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
   const pathname = usePathname();
-  const { selectedCompanyId } = useCompany();
+  const { companies, selectedCompany, setSelectedCompanyId } = useCompany();
   const [sacBadge, setSacBadge] = useState(0);
 
   const fetchBadge = useCallback(() => {
-    if (!selectedCompanyId) return;
-    getSlaAlertCounts(selectedCompanyId)
+    if (!selectedCompany) return;
+    getSlaAlertCounts(selectedCompany.id)
       .then(({ breached, atRisk }) => {
         setSacBadge(breached + atRisk);
       })
       .catch(() => {
         setSacBadge(0);
       });
-  }, [selectedCompanyId]);
+  }, [selectedCompany]);
 
   useEffect(() => {
-    if (!selectedCompanyId) {
+    if (!selectedCompany) {
       setSacBadge(0);
       return;
     }
 
     fetchBadge();
-  }, [selectedCompanyId, fetchBadge]);
+  }, [selectedCompany, fetchBadge]);
 
-  useEventStream(selectedCompanyId, {
+  useEventStream(selectedCompany?.id ?? null, {
     "sla-update": () => {
       fetchBadge();
     },
@@ -93,21 +100,55 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
   return (
     <aside
       className={cn(
-        "fixed left-0 top-0 z-40 flex h-screen flex-col border-r bg-card transition-all duration-300",
-        collapsed ? "w-16" : "w-60"
+        "fixed left-0 top-0 z-40 flex h-screen flex-col transition-all duration-300",
+        collapsed ? "w-16" : "w-60",
+        "bg-sidebar"
       )}
     >
-      {/* Logo / Brand */}
-      <div className="flex h-14 items-center justify-between border-b px-4">
-        <div>
-          {!collapsed && (
-            <span className="text-lg font-bold text-primary">MendesERP</span>
-          )}
-          {collapsed && (
-            <span className="text-lg font-bold text-primary">M</span>
-          )}
-        </div>
-        {/* Mobile close button */}
+      {/* Seletor de Empresa */}
+      <div className="flex h-14 items-center justify-between border-b border-border-subtle px-3">
+        {!collapsed && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                className="h-10 w-full justify-start gap-2 px-2"
+              >
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent-subtle text-accent">
+                  {selectedCompany?.nomeFantasia?.charAt(0) || "E"}
+                </div>
+                <span className="flex-1 truncate text-left text-sm font-medium">
+                  {selectedCompany?.nomeFantasia || "Empresa"}
+                </span>
+                <ChevronDown className="h-4 w-4 opacity-50" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-[280px]">
+              {companies.map((company) => (
+                <DropdownMenuItem
+                  key={company.id}
+                  onClick={() => setSelectedCompanyId(company.id)}
+                  className="flex items-center justify-between"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate font-medium">{company.nomeFantasia}</div>
+                    <div className="truncate text-xs text-text-secondary">
+                      {company.cnpj}
+                    </div>
+                  </div>
+                  {selectedCompany?.id === company.id && (
+                    <ChevronDown className="ml-2 h-4 w-4 shrink-0 rotate-180 text-accent" />
+                  )}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+        {collapsed && (
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent-subtle text-accent">
+            {selectedCompany?.nomeFantasia?.charAt(0) || "E"}
+          </div>
+        )}
         {onMobileClose && (
           <Button
             variant="ghost"
@@ -129,23 +170,27 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
           const badge = item.href === "/sac" ? sacBadge : 0;
           const hasChildren = item.children && item.children.length > 0;
           const showChildren = hasChildren && isActive && !collapsed;
+
           return (
             <div key={item.href}>
               <Link
                 href={item.href}
                 className={cn(
-                  "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                  "group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-150",
+                  collapsed && "justify-center px-2",
                   isActive
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-                  collapsed && "justify-center px-2"
+                    ? "bg-sidebar-active-bg text-sidebar-active-text shadow-sm"
+                    : "text-text-secondary hover:bg-sidebar-hover-bg hover:text-text-primary"
                 )}
                 title={collapsed ? item.label : undefined}
               >
+                {isActive && !collapsed && (
+                  <div className="absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full bg-accent" />
+                )}
                 <div className="relative shrink-0">
                   <item.icon className="h-5 w-5" />
                   {badge > 0 && collapsed && (
-                    <span className="absolute -right-1.5 -top-1.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-600 px-1 text-[9px] font-bold text-white">
+                    <span className="absolute -right-1.5 -top-1.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-danger px-1 text-[9px] font-bold text-white">
                       {badge > 99 ? "99+" : badge}
                     </span>
                   )}
@@ -154,16 +199,16 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
                   <span className="flex-1">{item.label}</span>
                 )}
                 {!collapsed && badge > 0 && (
-                  <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-bold text-white">
+                  <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-danger-subtle px-1.5 text-[10px] font-bold text-danger">
                     {badge > 99 ? "99+" : badge}
                   </span>
                 )}
                 {!collapsed && hasChildren && (
-                  <ChevronDown className={cn("h-4 w-4 transition-transform", isActive && "rotate-0")} />
+                  <ChevronDown className={cn("h-4 w-4 transition-transform", isActive && "rotate-180")} />
                 )}
               </Link>
               {showChildren && (
-                <div className="ml-4 mt-1 space-y-1 border-l pl-3">
+                <div className="ml-4 mt-1 space-y-1 border-l border-border-subtle pl-3">
                   {item.children!.map((child) => {
                     const childActive = pathname === child.href || pathname.startsWith(child.href + "/");
                     return (
@@ -173,8 +218,8 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
                         className={cn(
                           "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
                           childActive
-                            ? "font-medium text-primary"
-                            : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                            ? "font-medium text-accent"
+                            : "text-text-secondary hover:bg-sidebar-hover-bg hover:text-text-primary"
                         )}
                       >
                         <child.icon className="h-4 w-4" />
@@ -189,13 +234,32 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
         })}
       </nav>
 
+      {/* Footer com Avatar */}
+      {!collapsed && (
+        <div className="border-t border-border-subtle p-3">
+          <div className="flex items-center gap-3 rounded-lg bg-sidebar-hover-bg p-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent text-white">
+              <User className="h-4 w-4" />
+            </div>
+            <div className="flex-1 truncate">
+              <div className="truncate text-sm font-medium text-text-primary">Mendes</div>
+              <div className="truncate text-xs text-text-tertiary">Administrador</div>
+            </div>
+            <ChevronDown className="h-4 w-4 text-text-tertiary" />
+          </div>
+        </div>
+      )}
+
       {/* Collapse toggle */}
-      <div className="border-t p-2">
+      <div className="border-t border-border-subtle p-2">
         <Button
           variant="ghost"
           size="icon"
           onClick={onToggle}
-          className={cn("w-full", collapsed ? "justify-center" : "justify-end")}
+          className={cn(
+            "w-full text-text-secondary hover:bg-sidebar-hover-bg hover:text-text-primary",
+            collapsed ? "justify-center" : "justify-end"
+          )}
           aria-label={collapsed ? "Expandir menu" : "Recolher menu"}
         >
           {collapsed ? (
