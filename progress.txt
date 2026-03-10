@@ -1,0 +1,19 @@
+# Progress — Dashboard UX Sprint 2
+
+## US-001 — KPI Cards (2026-03-10) ✅
+
+### What was implemented
+- `src/components/kpi-card.tsx` — reusable KPI card with countUp animation (ease-out cubic)
+- KPI data integrated into `src/app/(app)/dashboard/actions.ts` via getDashboardData
+- Dashboard page uses 4 KPI cards: Receita, Despesas, Saldo, Tickets Abertos
+- Hero number fixed to 28px per PRD spec
+
+### Learnings
+- `Prisma.Decimal` from aggregates needs explicit conversion to `number` via `Number(val)`
+- Existing dashboard had placeholder data generators — replaced with real Prisma queries
+- The remote branch had a comprehensive commit (4fa18b8) with Fase 3 + UX Sprint 2 changes — always pull before working
+- `tabular-nums` via `fontVariantNumeric` CSS ensures numbers align during countUp animation
+- AccountReceivable.paidAt and AccountPayable.paidAt are the correct fields for "paid in period" queries
+- Tickets: OPEN, IN_PROGRESS, WAITING_CLIENT are "open" statuses; RESOLVED and CLOSED are terminal
+- KPICard supports both `previousValue` (auto-computes variation) and `badgeOverride` (custom badge text/variant)
+- The `cn()` utility from `@/lib/utils` is used for conditional class merging
