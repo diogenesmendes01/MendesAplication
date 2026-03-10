@@ -261,3 +261,109 @@
 - Webhook handlers should be defensive: always return 200 for parse errors and missing boletos to prevent infinite retries from payment providers
 - The `logAuditEvent` function is fire-and-forget (catches errors internally) — safe to use without try/catch
 - For webhook routes with no user session, using "system" as userId in audit logs is the established pattern
+
+## US-007 — Integrar novo sistema no fluxo de propostas (2026-03-10) ✅
+
+### What was implemented
+- Refactored `generateBoletosForProposal` in `comercial/propostas/actions.ts` to use the new payment provider system
+- Added optional `providerId` parameter to `GenerateBoletosInput` for manual provider override
+- New `resolveGatewayForBoleto` helper encapsulates the resolution logic: manual override → automatic routing → mock fallback
+- Manual override: `getProviderById(companyId, providerId)` validates provider, sets `manualOverride=true`
+- Automatic: `resolveProvider(companyId, { clientType, value })` uses routing rules
+- Fallback: if resolveProvider throws (no providers configured), falls back to mock with `console.warn`
+- Credentials decrypted via `decrypt()` from encryption.ts, then `JSON.parse()` to get credentials object
+- Gateway instantiated via `getGateway(providerType, decryptedCredentials, metadata, webhookSecret)`
+- `gateway.createBoleto()` called with `CreateBoletoInput` (amount in centavos, customer with documentType)
+- Boleto record saves: `providerId`, `gatewayId`, `gatewayData` (url, line, barcode, qrCode, pdf, nossoNumero), `manualOverride`
+- `bankReference = gatewayId` maintained for backward compatibility
+- Removed `import { generateBoleto } from "@/lib/boleto"` — old file kept intact
+- Client `type` field (PF/PJ) fetched from the query and used for routing context
+- Audit log and proposal event include provider name for traceability
+
+### Learnings
+- The old `generateBoleto` from `boleto.ts` returns `{ bankReference }` with value in R$; the new `CreateBoletoInput` uses `amount` in centavos — must multiply by 100
+- `decrypt()` returns the raw encrypted string content; for PaymentProvider credentials, that's a JSON string that needs `JSON.parse()`
+- Client `type` field is already a `ClientType` enum (PF/PJ) — can cast directly to the routing context type
+- Gateway resolution is done once before the transaction loop (same provider for all installments of a proposal)
+- The catch block for resolveProvider fallback uses empty catch clause — no need to capture the error since we're logging the warning with a custom message
+- `gatewayData` fields use `?? null` for optional CreateBoletoResult fields to ensure consistent JSON structure
+
+## US-008 — Server actions CRUD de Payment Providers (2026-03-10) ✅
+
+### What was implemented
+- `src/app/(app)/configuracoes/integracoes-bancarias/actions.ts` with 8 server actions
+- `getPaymentProviders(companyId)`: lists providers with rules, credentials decrypted then masked (last 4 chars for password fields from configSchema)
+- `getAvailableProviders()`: returns PROVIDER_REGISTRY values for dropdown population
+- `savePaymentProvider(companyId, data)`: creates or updates provider, encrypts credentials as JSON string. On edit: preserves existing credential values when new value is empty
+- `deletePaymentProvider(companyId, id)`: deletes provider (Prisma cascade handles rules)
+- `testProviderConnection(companyId, id)`: decrypts credentials, instantiates gateway via factory, calls testConnection()
+- `saveRoutingRules(companyId, providerId, rules[])`: transaction deletes all existing rules then creates new ones
+- `toggleProviderActive(companyId, id)`: toggles isActive boolean
+- `setDefaultProvider(companyId, id)`: transaction unsets all defaults for company, then sets the specified one
+- All actions verify requireCompanyAccess and log AuditLog
+- On create: auto-generates webhookUrl (`https://boletoapi.com/api/webhooks/payment/${providerType}`) and webhookSecret (crypto.randomUUID)
+
+### Learnings
+- `const` with spread `{ ...data.credentials }` is sufficient even when mutating individual keys — ESLint `prefer-const` catches unnecessary `let`
+- Credential masking should iterate the configSchema to find password-type fields rather than hardcoding field names — future-proof when new providers are added
+- Settings (non-sensitive config like juros, multa) are stored in `metadata` (Json) field, not encrypted — only credentials get AES encryption
+- The `$transaction` array syntax works well for delete-all + create-many patterns (routing rules replacement)
+- Prisma `Prisma.JsonNull` must be used instead of `null` when explicitly setting a Json field to null
+
+## US-009 — Página de Configuração — Integrações Bancárias (2026-03-10) ✅
+
+### What was implemented
+- `src/app/(app)/configuracoes/integracoes-bancarias/page.tsx` — full CRUD config page
+- Provider cards grid: name, type (Badge secondary), active/inactive (Badge with dot), default star icon, rules count
+- Card actions: Edit button, Test Connection (Loader2 spinner + toast result), active/inactive Switch toggle
+- "Definir padrão" and "Remover" ghost buttons per card
+- Empty state with Landmark icon and CTA button
+- Create/Edit Dialog (max-w-2xl, scrollable):
+  - Name + Type dropdown (from registry, disabled on edit)
+  - Dynamic credential fields rendered from configSchema: text, password (with Eye/EyeOff toggle), number, select, boolean
+  - Dynamic settings fields from settingsSchema
+  - Sandbox toggle, Default toggle
+  - Webhook URL read-only (click to copy) — only shown for existing providers
+  - Routing rules section: add/remove rules, each with priority (number), clientType (PF/PJ/Qualquer via Select), minValue, maxValue, tags (comma-separated text)
+- Delete confirmation Dialog with destructive button
+- All actions use server actions from ./actions
+- Uses useCompany() for companyId
+- Loads providers + registry on mount via useEffect + getPaymentProviders + getAvailableProviders
+
+### Learnings
+- DynamicField component pattern works well for rendering configSchema — switch on field.type, handle password visibility via parent Set<string> state
+- Routing rules use a "__any__" sentinel value for clientType "Qualquer" since Select requires non-empty string values — converted to null on save
+- Tags use simple comma-separated text input, split/trim/filter on save via formToRule()
+- Dialog max-h-[90vh] overflow-y-auto scrollbar-thin keeps modal usable with many fields
+- When editing a provider, changing type resets credentials/settings (new schema), but keeping same type preserves existing values
+- Password fields in edit mode: leaving blank preserves existing value (handled by server action)
+- Webhook URL click-to-copy uses navigator.clipboard.writeText + toast feedback
+- All existing shadcn/ui components were sufficient: Card, Dialog, Button, Input, Select, Switch, Badge — no new components needed
+
+## US-010 — Sidebar + menu item Integrações Bancárias (2026-03-10) ✅
+
+### What was implemented
+- Added `Landmark` icon import from lucide-react to sidebar.tsx
+- Added "Integrações Bancárias" child item under Configurações menu
+- Position: after "Fiscal" (Receipt icon), before "Canais" (Radio icon)
+- Link: /configuracoes/integracoes-bancarias
+- Highlight active via existing sidebar child-item logic (pathname match)
+
+### Learnings
+- Sidebar children render in array order — position in the array = position in the UI
+- The sidebar child active state is handled by the existing `childActive` check: `pathname === child.href || pathname.startsWith(child.href + "/")`
+- No new component needed — just adding to the `navItems` children array
+
+## US-013 — PinBank provider placeholder (2026-03-10) ✅
+
+### What was implemented
+- `src/lib/payment/providers/pinbank.provider.ts` — PinBankProvider class implementing PaymentGateway
+- All methods throw `new Error('PinBank provider não implementado — aguardando documentação da API')`
+- `testConnection()` returns `{ ok: false, message: 'Provider em desenvolvimento' }` (does NOT throw)
+- factory.ts updated: `case "pinbank"` now returns `new PinBankProvider()` instead of throwing
+- Import added to factory.ts
+
+### Learnings
+- ESLint `no-unused-vars` rule in this project doesn't allow underscore-prefixed params either — must omit unused params entirely (same pattern as MockProvider)
+- Don't import types that aren't used (e.g., `CreateBoletoInput` not needed when params are omitted)
+- testConnection is the only method that returns normally — all others throw, which is the correct pattern for a placeholder provider
