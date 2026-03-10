@@ -141,7 +141,7 @@
       "title": "Server actions CRUD de Payment Providers",
       "description": "Como admin, quero gerenciar (criar, editar, deletar, testar) providers de pagamento via server actions, para que a tela de configuração funcione.",
       "priority": 8,
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "erp/src/app/(app)/configuracoes/integracoes-bancarias/actions.ts com server actions",
         "getPaymentProviders(companyId): lista providers da empresa com regras (credentials mascaradas — nunca retorna texto completo pro frontend)",
