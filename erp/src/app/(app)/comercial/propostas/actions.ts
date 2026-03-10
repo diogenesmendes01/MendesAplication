@@ -7,7 +7,7 @@ import { Prisma, type ProposalStatus, type BoletoStatus } from "@prisma/client";
 import { getSharedCompanyIds } from "@/lib/shared-clients";
 import { getCachedFiscalConfig } from "@/app/(app)/configuracoes/fiscal/actions";
 import { emitInvoiceForBoleto } from "@/lib/nfse-actions";
-import { resolveProvider, getProviderById } from "@/lib/payment/router";
+import { resolveProvider, getProviderById, previewRouting } from "@/lib/payment/router";
 import { getGateway } from "@/lib/payment/factory";
 import { decrypt } from "@/lib/encryption";
 import type { CreateBoletoInput, CreateBoletoResult, PaymentGateway } from "@/lib/payment/types";
@@ -101,6 +101,7 @@ export interface ProposalRow {
 
 export interface ProposalDetail extends ProposalRow {
   clientEmail: string | null;
+  clientType: string | null;
   items: ProposalItemRow[];
 }
 
@@ -389,7 +390,7 @@ export async function getProposalById(proposalId: string, companyId: string): Pr
     where: { id: proposalId, companyId },
     include: {
       client: {
-        select: { id: true, name: true, email: true },
+        select: { id: true, name: true, email: true, type: true },
       },
       items: {
         orderBy: { id: "asc" },
@@ -406,6 +407,7 @@ export async function getProposalById(proposalId: string, companyId: string): Pr
     clientId: proposal.clientId,
     clientName: proposal.client.name,
     clientEmail: proposal.client.email,
+    clientType: proposal.client.type,
     status: proposal.status,
     paymentConditions: proposal.paymentConditions,
     validity: proposal.validity?.toISOString() ?? null,
@@ -503,6 +505,70 @@ export interface BoletoRow {
   installmentNumber: number;
   status: BoletoStatus;
   createdAt: string;
+  providerName: string | null;
+  manualOverride: boolean;
+  gatewayData: {
+    url?: string | null;
+    line?: string | null;
+    barcode?: string | null;
+    qrCode?: string | null;
+    pdf?: string | null;
+    nossoNumero?: string | null;
+  } | null;
+}
+
+// ---------------------------------------------------------------------------
+// Provider Selection Types & Actions (US-011)
+// ---------------------------------------------------------------------------
+
+export interface ProviderOption {
+  id: string;
+  name: string;
+  provider: string;
+  isDefault: boolean;
+}
+
+export interface RoutingPreviewResult {
+  providerId: string;
+  providerName: string;
+  reason: string;
+}
+
+/**
+ * Get active providers for the company (for dropdown selection).
+ */
+export async function getProvidersForProposal(
+  companyId: string,
+): Promise<ProviderOption[]> {
+  await requireCompanyAccess(companyId);
+
+  const providers = await prisma.paymentProvider.findMany({
+    where: { companyId, isActive: true },
+    orderBy: [{ isDefault: "desc" }, { name: "asc" }],
+    select: { id: true, name: true, provider: true, isDefault: true },
+  });
+
+  return providers;
+}
+
+/**
+ * Preview which provider would be used for automatic routing.
+ * Wraps previewRouting for client-side consumption.
+ */
+export async function previewRoutingForProposal(
+  companyId: string,
+  clientType: string,
+  value: number,
+): Promise<RoutingPreviewResult | null> {
+  await requireCompanyAccess(companyId);
+
+  const routingType = clientType === "PJ" ? "PJ" : "PF";
+  const result = await previewRouting(companyId, {
+    clientType: routingType as "PF" | "PJ",
+    value,
+  });
+
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -735,6 +801,9 @@ export async function generateBoletosForProposal(
         installmentNumber: boleto.installmentNumber,
         status: boleto.status,
         createdAt: boleto.createdAt.toISOString(),
+        providerName,
+        manualOverride,
+        gatewayData,
       });
     }
   });
@@ -774,6 +843,11 @@ export async function listBoletosForProposal(
   const boletos = await prisma.boleto.findMany({
     where: { proposalId, companyId },
     orderBy: { installmentNumber: "asc" },
+    include: {
+      provider: {
+        select: { name: true },
+      },
+    },
   });
 
   return boletos.map((b) => ({
@@ -784,6 +858,9 @@ export async function listBoletosForProposal(
     installmentNumber: b.installmentNumber,
     status: b.status,
     createdAt: b.createdAt.toISOString(),
+    providerName: b.provider?.name ?? null,
+    manualOverride: b.manualOverride,
+    gatewayData: b.gatewayData as BoletoRow["gatewayData"],
   }));
 }
 

@@ -5,6 +5,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
+import Link from "next/link";
 import {
   ArrowLeft,
   FileText,
@@ -16,10 +17,17 @@ import {
   AlertCircle,
   Clock,
   Info,
+  Copy,
+  ExternalLink,
+  Download,
+  QrCode,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardContent,
@@ -43,6 +51,19 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useCompany } from "@/contexts/company-context";
 import { ProposalStepper } from "@/components/proposal-stepper";
 import {
@@ -51,9 +72,13 @@ import {
   generateBoletosForProposal,
   listProposalEvents,
   updateProposalStatus,
+  getProvidersForProposal,
+  previewRoutingForProposal,
   type ProposalDetail,
   type BoletoRow,
   type ProposalEventRow,
+  type ProviderOption,
+  type RoutingPreviewResult,
 } from "../actions";
 import {
   sendProposalEmail,
@@ -123,6 +148,121 @@ function boletoStatusColor(status: string) {
   }
 }
 
+async function copyToClipboard(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast.success("Copiado para a área de transferência");
+  } catch {
+    toast.error("Erro ao copiar");
+  }
+}
+
+// ---------------------------------------------------------------------------
+// BoletoGatewayInfo — expandable gateway data display (US-012)
+// ---------------------------------------------------------------------------
+
+function BoletoGatewayInfo({ boleto }: { boleto: BoletoRow }) {
+  const [expanded, setExpanded] = useState(false);
+  const gd = boleto.gatewayData;
+
+  if (!gd) {
+    return (
+      <span className="text-xs text-text-tertiary italic">Gerado localmente</span>
+    );
+  }
+
+  const hasAnyData = gd.url || gd.line || gd.qrCode || gd.pdf || gd.nossoNumero;
+  if (!hasAnyData) {
+    return (
+      <span className="text-xs text-text-tertiary italic">Gerado localmente</span>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="flex items-center gap-1 text-xs text-accent hover:text-accent/80 transition-colors"
+      >
+        {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+        {expanded ? "Ocultar detalhes" : "Ver detalhes do boleto"}
+      </button>
+
+      {expanded && (
+        <div className="rounded-lg border border-border-subtle bg-background-subtle p-3 space-y-2 text-sm animate-in fade-in slide-in-from-top-1 duration-200">
+          {gd.nossoNumero && (
+            <div className="flex items-center justify-between">
+              <span className="text-text-secondary">Nosso Número</span>
+              <span className="font-mono text-xs">{gd.nossoNumero}</span>
+            </div>
+          )}
+
+          {gd.line && (
+            <div className="space-y-1">
+              <span className="text-text-secondary text-xs">Linha Digitável</span>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 rounded bg-surface px-2 py-1 font-mono text-xs break-all">
+                  {gd.line}
+                </code>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0 shrink-0"
+                  onClick={() => copyToClipboard(gd.line!)}
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {gd.url && (
+            <div className="flex items-center justify-between">
+              <span className="text-text-secondary text-xs">URL do Boleto</span>
+              <a
+                href={gd.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 text-xs text-accent hover:underline"
+              >
+                Abrir <ExternalLink className="h-3 w-3" />
+              </a>
+            </div>
+          )}
+
+          {gd.pdf && (
+            <div className="flex items-center justify-between">
+              <span className="text-text-secondary text-xs">PDF</span>
+              <a
+                href={gd.pdf}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 text-xs text-accent hover:underline"
+              >
+                <Download className="h-3 w-3" /> Download
+              </a>
+            </div>
+          )}
+
+          {gd.qrCode && (
+            <div className="space-y-1">
+              <div className="flex items-center gap-1 text-text-secondary text-xs">
+                <QrCode className="h-3 w-3" /> QR Code
+              </div>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={gd.qrCode}
+                alt="QR Code do boleto"
+                className="h-32 w-32 rounded border border-border-subtle"
+              />
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
@@ -155,6 +295,12 @@ export default function ProposalDetailPage() {
   const [emittingNfse, setEmittingNfse] = useState(false);
   const [acceptingProposal, setAcceptingProposal] = useState(false);
 
+  // US-011: Provider selection state
+  const [providers, setProviders] = useState<ProviderOption[]>([]);
+  const [routingPreview, setRoutingPreview] = useState<RoutingPreviewResult | null>(null);
+  const [selectedProviderId, setSelectedProviderId] = useState<string>("__auto__");
+  const [loadingProviders, setLoadingProviders] = useState(false);
+
   // Load data
   const loadData = useCallback(async () => {
     if (!selectedCompanyId || !proposalId) return;
@@ -186,7 +332,37 @@ export default function ProposalDetailPage() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  // US-011: Load providers when generate dialog opens
+  const loadProviders = useCallback(async () => {
+    if (!selectedCompanyId || !proposal) return;
+    setLoadingProviders(true);
+    try {
+      const [providersList, preview] = await Promise.all([
+        getProvidersForProposal(selectedCompanyId),
+        previewRoutingForProposal(
+          selectedCompanyId,
+          proposal.clientType ?? "PF",
+          parseFloat(proposal.totalValue),
+        ),
+      ]);
+      setProviders(providersList);
+      setRoutingPreview(preview);
+      setSelectedProviderId("__auto__");
+    } catch (err) {
+      console.error("Failed to load providers:", err);
+      setProviders([]);
+      setRoutingPreview(null);
+    } finally {
+      setLoadingProviders(false);
+    }
+  }, [selectedCompanyId, proposal]);
+
   // Actions
+  function openGenerateDialog() {
+    setGenerateDialogOpen(true);
+    loadProviders();
+  }
+
   async function handleGenerateBoletos() {
     if (!selectedCompanyId || !proposalId) return;
     const numInstallments = parseInt(installments, 10);
@@ -194,9 +370,18 @@ export default function ProposalDetailPage() {
     if (numInstallments > 48) { toast.error("Número máximo de parcelas é 48"); return; }
     if (!firstDueDate) { toast.error("Data do primeiro vencimento é obrigatória"); return; }
 
+    // Resolve providerId: __auto__ means null (automatic routing)
+    const providerId = selectedProviderId === "__auto__" ? undefined : selectedProviderId;
+
     setGenerating(true);
     try {
-      const result = await generateBoletosForProposal({ proposalId, companyId: selectedCompanyId, installments: numInstallments, firstDueDate });
+      const result = await generateBoletosForProposal({
+        proposalId,
+        companyId: selectedCompanyId,
+        installments: numInstallments,
+        firstDueDate,
+        providerId,
+      });
       setBoletos(result.boletos);
       setGenerateDialogOpen(false);
       toast.success(`${result.boletos.length} boleto(s) gerado(s) com sucesso`);
@@ -319,6 +504,97 @@ export default function ProposalDetailPage() {
   
   const allBoletosComplete = hasBoletos && boletos.every((b) => b.status === "PAID" && issuedInvoiceMap[b.id]);
 
+  // US-011: Provider selector render helper
+  function renderProviderSelector() {
+    if (loadingProviders) {
+      return (
+        <div className="space-y-2">
+          <Label>Banco</Label>
+          <div className="text-sm text-text-tertiary">Carregando bancos...</div>
+        </div>
+      );
+    }
+
+    // 0 providers: show alert
+    if (providers.length === 0) {
+      return (
+        <div className="rounded-lg border border-warning/30 bg-warning-subtle p-3 space-y-2">
+          <div className="flex items-center gap-2 text-sm text-warning font-medium">
+            <AlertCircle className="h-4 w-4" />
+            Nenhum banco configurado
+          </div>
+          <p className="text-xs text-text-secondary">
+            Configure um banco em{" "}
+            <Link
+              href="/configuracoes/integracoes-bancarias"
+              className="text-accent hover:underline"
+            >
+              Configurações → Integrações Bancárias
+            </Link>{" "}
+            para gerar boletos reais. Um mock será usado como fallback.
+          </p>
+        </div>
+      );
+    }
+
+    // 1 provider: show badge, no dropdown
+    if (providers.length === 1) {
+      return (
+        <div className="space-y-2">
+          <Label>Banco</Label>
+          <div className="flex items-center gap-2">
+            <Badge variant="secondary">{providers[0].name}</Badge>
+            {providers[0].isDefault && (
+              <span className="text-xs text-text-tertiary">(padrão)</span>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // Multiple providers: dropdown
+    const autoLabel = routingPreview
+      ? `⚡ Automático (${routingPreview.providerName})`
+      : "⚡ Automático";
+
+    return (
+      <div className="space-y-2">
+        <Label htmlFor="provider-select">Banco</Label>
+        <Select
+          value={selectedProviderId}
+          onValueChange={setSelectedProviderId}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="Selecione o banco" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__auto__">{autoLabel}</SelectItem>
+            {providers.map((p) => (
+              <SelectItem key={p.id} value={p.id}>
+                {p.name}
+                {p.isDefault ? " ★" : ""}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {selectedProviderId === "__auto__" && routingPreview && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <p className="text-xs text-text-tertiary cursor-help">
+                  ℹ️ {routingPreview.reason}
+                </p>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>O roteamento automático escolheu <strong>{routingPreview.providerName}</strong> baseado nas regras configuradas.</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-1 duration-300">
       {/* Header */}
@@ -390,7 +666,7 @@ export default function ProposalDetailPage() {
 
         {/* ACCEPTED, no boletos → Generate */}
         {canGenerateBoletos && (
-          <Button onClick={() => setGenerateDialogOpen(true)}>
+          <Button onClick={openGenerateDialog}>
             <FileText className="mr-2 h-4 w-4" />
             Gerar Boletos
           </Button>
@@ -538,7 +814,7 @@ export default function ProposalDetailPage() {
         </Card>
       </div>
 
-      {/* ── Boletos section ── */}
+      {/* ── Boletos section (US-012: enhanced with gateway data) ── */}
       {boletos.length > 0 && (
         <Card>
           <CardHeader>
@@ -557,7 +833,8 @@ export default function ProposalDetailPage() {
                   <TableHead className="text-right">Valor</TableHead>
                   <TableHead>Vencimento</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Referência</TableHead>
+                  <TableHead>Banco</TableHead>
+                  <TableHead>Detalhes</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -571,7 +848,27 @@ export default function ProposalDetailPage() {
                         {boletoStatusLabel(boleto.status)}
                       </span>
                     </TableCell>
-                    <TableCell className="text-xs text-text-tertiary" style={{ fontVariantNumeric: "tabular-nums" }}>{boleto.bankReference || "—"}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1.5">
+                        {boleto.providerName ? (
+                          <Badge variant="secondary" className="text-xs">
+                            {boleto.providerName}
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-xs">
+                            Local
+                          </Badge>
+                        )}
+                        {boleto.manualOverride && (
+                          <Badge variant="outline" className="text-xs border-warning/50 text-warning">
+                            Manual
+                          </Badge>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <BoletoGatewayInfo boleto={boleto} />
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -617,7 +914,7 @@ export default function ProposalDetailPage() {
 
       {/* ══════════════ Dialogs ══════════════ */}
 
-      {/* Generate Boletos */}
+      {/* Generate Boletos (US-011: with provider selector) */}
       <Dialog open={generateDialogOpen} onOpenChange={setGenerateDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -627,6 +924,9 @@ export default function ProposalDetailPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
+            {/* US-011: Provider selector */}
+            {renderProviderSelector()}
+
             <div className="space-y-2">
               <Label htmlFor="installments">Número de Parcelas</Label>
               <Input id="installments" type="number" min="1" max="48" value={installments} onChange={(e) => setInstallments(e.target.value)} />
