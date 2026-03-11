@@ -29,21 +29,39 @@ export function getGateway(
   switch (providerType) {
     case "mock":
       return new MockProvider();
-    case "pagarme":
+
+    case "pagarme": {
+      // Bug #17 fix: Validate required credential fields before instantiation
+      const apiKey = decryptedCredentials.apiKey;
+      if (!apiKey || typeof apiKey !== "string") {
+        throw new Error(
+          "Pagar.me: campo 'apiKey' é obrigatório e deve ser uma string válida"
+        );
+      }
       return new PagarmeProvider(
-        { apiKey: decryptedCredentials.apiKey as string },
+        { apiKey },
         metadata
           ? {
-              defaultInstructions: metadata.defaultInstructions as
-                | string
-                | undefined,
-              daysToExpire: metadata.daysToExpire as number | undefined,
+              defaultInstructions:
+                typeof metadata.defaultInstructions === "string"
+                  ? metadata.defaultInstructions
+                  : undefined,
+              daysToExpire:
+                typeof metadata.daysToExpire === "number"
+                  ? metadata.daysToExpire
+                  : undefined,
             }
           : null,
         webhookSecret
       );
+    }
+
     case "pinbank":
-      return new PinBankProvider();
+      // Bug #9 fix: Throw explicit "not implemented" instead of silently failing
+      throw new Error(
+        "PinBank provider não está implementado. Aguardando documentação da API."
+      );
+
     default:
       throw new Error(`Provider not found: ${providerType}`);
   }

@@ -258,12 +258,15 @@ model AccountReceivable {
   status      PaymentStatus @default(PENDING)
   paidAt      DateTime?
   companyId   String
+  boletoId    String?
   createdAt   DateTime      @default(now())
 
   client  Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  boleto  Boleto? @relation(fields: [boletoId], references: [id], onDelete: SetNull)
 
   @@index([companyId, status, dueDate])
+  @@index([boletoId])
   @@map("accounts_receivable")
 }
 
@@ -646,11 +649,12 @@ model Boleto {
   gatewayData       Json?
   manualOverride    Boolean      @default(false)
 
-  proposal Proposal  @relation(fields: [proposalId], references: [id], onDelete: Cascade)
-  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  provider PaymentProvider? @relation(fields: [providerId], references: [id], onDelete: SetNull)
-  tickets  Ticket[]  @relation("TicketBoleto")
-  invoices Invoice[]
+  proposal    Proposal  @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  provider    PaymentProvider? @relation(fields: [providerId], references: [id], onDelete: SetNull)
+  tickets     Ticket[]  @relation("TicketBoleto")
+  invoices    Invoice[]
+  receivables AccountReceivable[]
 
   @@map("boletos")
 }

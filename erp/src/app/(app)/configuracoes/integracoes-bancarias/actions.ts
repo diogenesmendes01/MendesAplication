@@ -137,7 +137,10 @@ export async function getPaymentProviders(
       credentials: maskCredentials(decryptedCredentials, p.provider),
       settings,
       webhookUrl: p.webhookUrl,
-      webhookSecret: p.webhookSecret,
+      // Bug #8 fix: Mask webhookSecret to prevent exposure
+      webhookSecret: p.webhookSecret
+        ? (p.webhookSecret.length > 4 ? `****${p.webhookSecret.slice(-4)}` : "****")
+        : null,
       sandbox: p.sandbox,
       isDefault: p.isDefault,
       isActive: p.isActive,
@@ -182,8 +185,9 @@ export async function savePaymentProvider(
   const credentialsToEncrypt: Record<string, string> = { ...data.credentials };
 
   // On edit: if credential field is empty, keep existing value
+  let existing: Awaited<ReturnType<typeof prisma.paymentProvider.findFirst>> = null;
   if (data.id) {
-    const existing = await prisma.paymentProvider.findFirst({
+    existing = await prisma.paymentProvider.findFirst({
       where: { id: data.id, companyId },
     });
 
@@ -200,9 +204,10 @@ export async function savePaymentProvider(
       // existing credentials corrupted — proceed with new values
     }
 
-    // For each credential field: if the new value is empty, keep the old one
+    // Bug #2 fix (server-side): if the new value looks masked (starts with ****),
+    // keep the existing value instead
     for (const [key, value] of Object.entries(credentialsToEncrypt)) {
-      if (!value && existingCredentials[key]) {
+      if ((!value || value.startsWith("****")) && existingCredentials[key]) {
         credentialsToEncrypt[key] = existingCredentials[key];
       }
     }
@@ -228,13 +233,13 @@ export async function savePaymentProvider(
     const webhookUpdate: { webhookUrl?: string; webhookSecret?: string } = {};
     if (providerChanged) {
       const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://boletoapi.com";
-      webhookUpdate.webhookUrl = `${baseUrl}/api/webhooks/payment/${data.provider}`;
+      webhookUpdate.webhookUrl = `${baseUrl}/api/webhooks/payment/${data.id}`;
       webhookUpdate.webhookSecret = crypto.randomUUID();
     }
 
     // Update
     const result = await prisma.paymentProvider.update({
-      where: { id: data.id },
+      where: { id: data.id, companyId },
       data: {
         name: data.name,
         provider: data.provider,
@@ -268,7 +273,6 @@ export async function savePaymentProvider(
   } else {
     // Create
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://boletoapi.com";
-    const webhookUrl = `${baseUrl}/api/webhooks/payment/${data.provider}`;
     const webhookSecret = crypto.randomUUID();
 
     const result = await prisma.paymentProvider.create({
@@ -277,13 +281,19 @@ export async function savePaymentProvider(
         name: data.name,
         provider: data.provider,
         credentials: encryptedCredentials,
-        webhookUrl,
         webhookSecret,
         sandbox: data.sandbox,
         isDefault: data.isDefault,
         isActive: true,
         metadata,
       },
+    });
+
+    // Bug #14 fix: Include provider ID in webhook URL for unique routing
+    const webhookUrlWithId = `${baseUrl}/api/webhooks/payment/${result.id}`;
+    await prisma.paymentProvider.update({
+      where: { id: result.id, companyId },
+      data: { webhookUrl: webhookUrlWithId },
     });
 
     await logAuditEvent({
@@ -296,7 +306,7 @@ export async function savePaymentProvider(
         provider: data.provider,
         sandbox: data.sandbox,
         isDefault: data.isDefault,
-        webhookUrl,
+        webhookUrl: webhookUrlWithId,
       } as unknown as Prisma.InputJsonValue,
       companyId,
     });
@@ -324,7 +334,7 @@ export async function deletePaymentProvider(
   }
 
   await prisma.paymentProvider.delete({
-    where: { id },
+    where: { id, companyId },
   });
 
   await logAuditEvent({
@@ -491,7 +501,7 @@ export async function toggleProviderActive(
   const newIsActive = !provider.isActive;
 
   await prisma.paymentProvider.update({
-    where: { id },
+    where: { id, companyId },
     data: { isActive: newIsActive },
   });
 
@@ -536,7 +546,7 @@ export async function setDefaultProvider(
       data: { isDefault: false },
     }),
     prisma.paymentProvider.update({
-      where: { id },
+      where: { id, companyId },
       data: { isDefault: true },
     }),
   ]);

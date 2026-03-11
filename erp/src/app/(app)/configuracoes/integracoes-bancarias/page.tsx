@@ -327,7 +327,16 @@ export default function IntegracoesBancariasPage() {
     setEditingProvider(provider);
     setFormName(provider.name);
     setFormType(provider.provider);
-    setFormCredentials({ ...provider.credentials });
+    // Bug #2 fix: Clear password fields to "" to avoid masked values overwriting real credentials
+    const def = registry.find((r) => r.id === provider.provider);
+    const passwordKeys = new Set(
+      def?.configSchema.filter((f) => f.type === "password").map((f) => f.key) ?? [],
+    );
+    const cleanedCredentials: Record<string, string> = {};
+    for (const [key, value] of Object.entries(provider.credentials)) {
+      cleanedCredentials[key] = passwordKeys.has(key) ? "" : value;
+    }
+    setFormCredentials(cleanedCredentials);
     setFormSettings({ ...provider.settings });
     setFormSandbox(provider.sandbox);
     setFormIsDefault(provider.isDefault);
@@ -396,14 +405,12 @@ export default function IntegracoesBancariasPage() {
       };
       const { id: providerId } = await savePaymentProvider(selectedCompanyId, input);
 
-      // Save routing rules
-      if (formRules.length > 0) {
-        await saveRoutingRules(
-          selectedCompanyId,
-          providerId,
-          formRules.map(formToRule),
-        );
-      }
+      // Bug #13 fix: Always save routing rules (even empty array to delete old ones)
+      await saveRoutingRules(
+        selectedCompanyId,
+        providerId,
+        formRules.map(formToRule),
+      );
 
       toast.success(editingProvider ? "Banco atualizado" : "Banco adicionado");
       setDialogOpen(false);

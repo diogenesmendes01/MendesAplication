@@ -342,7 +342,7 @@ export default function ProposalDetailPage() {
         previewRoutingForProposal(
           selectedCompanyId,
           proposal.clientType ?? "PF",
-          parseFloat(proposal.totalValue),
+          parseFloat(proposal.totalValue) / Math.max(1, parseInt(installments, 10) || 1),
         ),
       ]);
       setProviders(providersList);
@@ -355,7 +355,7 @@ export default function ProposalDetailPage() {
     } finally {
       setLoadingProviders(false);
     }
-  }, [selectedCompanyId, proposal]);
+  }, [selectedCompanyId, proposal, installments]);
 
   // Actions
   function openGenerateDialog() {

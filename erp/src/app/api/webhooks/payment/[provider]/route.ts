@@ -19,20 +19,22 @@ const WEBHOOK_TO_BOLETO_STATUS: Record<WebhookEvent["type"], BoletoStatus> = {
 
 // ---------------------------------------------------------------------------
 // POST /api/webhooks/payment/[provider]
+// Bug #14: [provider] param is now the provider ID (not type) for unique routing
 // ---------------------------------------------------------------------------
 
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ provider: string }> }
 ) {
-  const { provider: providerType } = await params;
+  const { provider: providerParam } = await params;
 
-  // 1. Read raw body (needed for signature validation)
+  // Bug #11 fix: Return 500 on body read failure to force provider retry
   let rawBody: string;
   try {
     rawBody = await request.text();
-  } catch {
-    return NextResponse.json({ received: true }, { status: 200 });
+  } catch (err) {
+    console.error("[webhook] Failed to read request body:", err);
+    return NextResponse.json({ error: "body_read_failed" }, { status: 500 });
   }
 
   // 2. Extract headers as plain object
@@ -41,16 +43,27 @@ export async function POST(
     headers[key.toLowerCase()] = value;
   });
 
-  // 3. Find active PaymentProviders of this type
-  const providers = await prisma.paymentProvider.findMany({
-    where: {
-      provider: providerType,
-      isActive: true,
-    },
+  // Bug #14: Try to find provider by ID first (new URL format), then fall back to type lookup
+  let providers: Awaited<ReturnType<typeof prisma.paymentProvider.findMany>>;
+
+  const providerById = await prisma.paymentProvider.findFirst({
+    where: { id: providerParam, isActive: true },
   });
 
+  if (providerById) {
+    providers = [providerById];
+  } else {
+    // Legacy fallback: providerParam is a provider type
+    providers = await prisma.paymentProvider.findMany({
+      where: {
+        provider: providerParam,
+        isActive: true,
+      },
+    });
+  }
+
   if (providers.length === 0) {
-    console.warn(`[webhook] No active providers found for type: ${providerType}`);
+    console.warn(`[webhook] No active providers found for: ${providerParam}`);
     // Return 200 to avoid infinite retries from the bank
     return NextResponse.json({ received: true, error: "no_providers" }, { status: 200 });
   }
@@ -90,7 +103,7 @@ export async function POST(
   }
 
   if (!matchedProvider || !gateway) {
-    console.warn(`[webhook] Signature validation failed for all ${providerType} providers`);
+    console.warn(`[webhook] Signature validation failed for all providers (param: ${providerParam})`);
     return NextResponse.json(
       { error: "invalid_signature" },
       { status: 401 }
@@ -134,7 +147,7 @@ export async function POST(
       entity: "Webhook",
       entityId: event.gatewayId,
       dataAfter: {
-        providerType,
+        providerParam,
         providerId: matchedProvider.id,
         eventType: event.type,
         status: "boleto_not_found",
@@ -144,61 +157,94 @@ export async function POST(
     return NextResponse.json({ received: true, boleto: "not_found" }, { status: 200 });
   }
 
-  // 7. Map event type to BoletoStatus
+  // Bug #12 fix: Early return if event type is not in our status map
   const newBoletoStatus = WEBHOOK_TO_BOLETO_STATUS[event.type];
+  if (!newBoletoStatus) {
+    console.warn(`[webhook] Unknown event type: ${event.type}, skipping`);
+    return NextResponse.json({ received: true, skipped: "unknown_event_type" }, { status: 200 });
+  }
+
   const previousStatus = boleto.status;
 
-  // 8. Update boleto status
-  await prisma.boleto.update({
-    where: { id: boleto.id },
-    data: {
-      status: newBoletoStatus,
-    },
-  });
+  // Bug #3 fix: Idempotency — skip if already in target status
+  if (boleto.status === newBoletoStatus) {
+    console.log(`[webhook] Boleto ${boleto.id} already in status ${newBoletoStatus}, skipping`);
+    return NextResponse.json({ received: true, skipped: "already_in_status" }, { status: 200 });
+  }
 
-  // 9. If paid: find and update matching AccountReceivable
+  // Bug #3 fix: Wrap boleto + receivable updates in a transaction
+  // Bug #4 fix: Use boletoId FK for direct join instead of heuristic matching
   let updatedReceivableId: string | null = null;
 
-  if (newBoletoStatus === BoletoStatus.PAID && boleto.proposal) {
-    const boletoValue = Number(boleto.value);
-    const tolerance = 0.01; // R$ 0.01 tolerance for Decimal comparison
-    const dueDateWindow = 15; // days tolerance for due date matching
-
-    const dueDateMin = new Date(boleto.dueDate);
-    dueDateMin.setDate(dueDateMin.getDate() - dueDateWindow);
-    const dueDateMax = new Date(boleto.dueDate);
-    dueDateMax.setDate(dueDateMax.getDate() + dueDateWindow);
-
-    const receivable = await prisma.accountReceivable.findFirst({
-      where: {
-        companyId: boleto.companyId,
-        clientId: boleto.proposal.clientId,
-        status: PaymentStatus.PENDING,
-        value: {
-          gte: boletoValue - tolerance,
-          lte: boletoValue + tolerance,
-        },
-        dueDate: {
-          gte: dueDateMin,
-          lte: dueDateMax,
-        },
-      },
-      orderBy: {
-        dueDate: "asc",
-      },
+  await prisma.$transaction(async (tx) => {
+    // Update boleto status
+    await tx.boleto.update({
+      where: { id: boleto.id },
+      data: { status: newBoletoStatus },
     });
 
-    if (receivable) {
-      await prisma.accountReceivable.update({
-        where: { id: receivable.id },
-        data: {
-          status: PaymentStatus.PAID,
-          paidAt: event.paidAt ?? new Date(),
+    // If paid: find and update matching AccountReceivable via boletoId FK
+    if (newBoletoStatus === BoletoStatus.PAID && boleto.proposal) {
+      // Bug #4 fix: Direct lookup via boletoId FK — no heuristic matching
+      const receivable = await tx.accountReceivable.findFirst({
+        where: {
+          boletoId: boleto.id,
+          companyId: boleto.companyId,
+          status: PaymentStatus.PENDING,
         },
       });
-      updatedReceivableId = receivable.id;
+
+      if (receivable) {
+        await tx.accountReceivable.update({
+          where: { id: receivable.id },
+          data: {
+            status: PaymentStatus.PAID,
+            paidAt: event.paidAt ?? new Date(),
+          },
+        });
+        updatedReceivableId = receivable.id;
+      } else {
+        // Fallback: try heuristic match for legacy receivables without boletoId
+        const boletoValue = Number(boleto.value);
+        const tolerance = 0.01;
+        const dueDateWindow = 15;
+        const dueDateMin = new Date(boleto.dueDate);
+        dueDateMin.setDate(dueDateMin.getDate() - dueDateWindow);
+        const dueDateMax = new Date(boleto.dueDate);
+        dueDateMax.setDate(dueDateMax.getDate() + dueDateWindow);
+
+        const legacyReceivable = await tx.accountReceivable.findFirst({
+          where: {
+            companyId: boleto.companyId,
+            clientId: boleto.proposal.clientId,
+            boletoId: null, // Only match unlinked receivables
+            status: PaymentStatus.PENDING,
+            value: {
+              gte: boletoValue - tolerance,
+              lte: boletoValue + tolerance,
+            },
+            dueDate: {
+              gte: dueDateMin,
+              lte: dueDateMax,
+            },
+          },
+          orderBy: { dueDate: "asc" },
+        });
+
+        if (legacyReceivable) {
+          await tx.accountReceivable.update({
+            where: { id: legacyReceivable.id },
+            data: {
+              status: PaymentStatus.PAID,
+              paidAt: event.paidAt ?? new Date(),
+              boletoId: boleto.id, // Link for future lookups
+            },
+          });
+          updatedReceivableId = legacyReceivable.id;
+        }
+      }
     }
-  }
+  });
 
   // 10. Log audit event
   await logAuditEvent({
@@ -210,7 +256,7 @@ export async function POST(
     dataAfter: {
       status: newBoletoStatus,
       webhookEvent: event.type,
-      providerType,
+      providerParam,
       providerId: matchedProvider.id,
       gatewayId: event.gatewayId,
       paidAt: event.paidAt?.toISOString() ?? null,

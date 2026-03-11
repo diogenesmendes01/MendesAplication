@@ -160,6 +160,23 @@ function validateProposalInput(
   }
 }
 
+/**
+ * Bug #5 fix: Safe month addition that clamps to last day of target month.
+ * Avoids JS Date pitfall where Jan 31 + 1 month = Mar 3.
+ */
+function addMonthsSafe(base: Date, months: number): Date {
+  const result = new Date(base);
+  const targetMonth = result.getMonth() + months;
+  result.setMonth(targetMonth);
+  // If the day overflowed (e.g., Jan 31 → Mar 3), clamp to last day of target month
+  const expectedMonth = ((base.getMonth() + months) % 12 + 12) % 12;
+  if (result.getMonth() !== expectedMonth) {
+    // Set to day 0 of next month = last day of expected month
+    result.setDate(0);
+  }
+  return result;
+}
+
 // ---------------------------------------------------------------------------
 // Server Actions
 // ---------------------------------------------------------------------------
@@ -553,7 +570,7 @@ export async function getProvidersForProposal(
 
 /**
  * Preview which provider would be used for automatic routing.
- * Wraps previewRouting for client-side consumption.
+ * Bug #7 fix: caller should pass the per-installment value, NOT the total.
  */
 export async function previewRoutingForProposal(
   companyId: string,
@@ -579,11 +596,13 @@ export async function previewRoutingForProposal(
  * Resolves the payment gateway for boleto generation.
  *
  * Flow:
- * 1. If providerId is given → getProviderById (manual override)
+ * 1. If providerId is given → getProviderById (manual override, must be active)
  * 2. If not → resolveProvider with routing rules
  * 3. If no providers configured → fallback to mock with console.warn
  *
- * Returns { gateway, providerId, manualOverride, providerName }
+ * Bug #6 fix: Only fall back to mock when no providers exist.
+ *             Propagate decrypt/factory errors instead of swallowing them.
+ * Bug #18 fix: getProviderById already filters isActive=true; explicit check added.
  */
 async function resolveGatewayForBoleto(
   companyId: string,
@@ -598,7 +617,11 @@ async function resolveGatewayForBoleto(
 }> {
   // Manual override: specific provider requested
   if (providerId) {
+    // Bug #18: getProviderById already checks isActive=true and throws if not found/inactive
     const provider = await getProviderById(companyId, providerId);
+    if (!provider.isActive) {
+      throw new Error(`Provider "${provider.name}" está inativo e não pode ser usado.`);
+    }
     const decryptedCredentials = JSON.parse(decrypt(provider.credentials)) as Record<string, unknown>;
     const metadata = provider.metadata as Record<string, unknown> | null;
     const gateway = getGateway(
@@ -616,23 +639,12 @@ async function resolveGatewayForBoleto(
   }
 
   // Automatic routing
-  try {
-    const provider = await resolveProvider(companyId, { clientType, value });
-    const decryptedCredentials = JSON.parse(decrypt(provider.credentials)) as Record<string, unknown>;
-    const metadata = provider.metadata as Record<string, unknown> | null;
-    const gateway = getGateway(
-      provider.provider,
-      decryptedCredentials,
-      metadata,
-      provider.webhookSecret ?? undefined,
-    );
-    return {
-      gateway,
-      providerId: provider.id,
-      manualOverride: false,
-      providerName: provider.name,
-    };
-  } catch {
+  // Bug #6: Check if ANY providers exist first. Only mock when truly none configured.
+  const providerCount = await prisma.paymentProvider.count({
+    where: { companyId, isActive: true },
+  });
+
+  if (providerCount === 0) {
     // No providers configured — fallback to mock
     console.warn(
       `[Payment] Nenhum provider configurado para empresa ${companyId}. Usando mock como fallback.`,
@@ -645,6 +657,23 @@ async function resolveGatewayForBoleto(
       providerName: "Mock (fallback)",
     };
   }
+
+  // Providers exist — errors should propagate, NOT fall back to mock
+  const provider = await resolveProvider(companyId, { clientType, value });
+  const decryptedCredentials = JSON.parse(decrypt(provider.credentials)) as Record<string, unknown>;
+  const metadata = provider.metadata as Record<string, unknown> | null;
+  const gateway = getGateway(
+    provider.provider,
+    decryptedCredentials,
+    metadata,
+    provider.webhookSecret ?? undefined,
+  );
+  return {
+    gateway,
+    providerId: provider.id,
+    manualOverride: false,
+    providerName: provider.name,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -666,47 +695,59 @@ export async function generateBoletosForProposal(
     throw new Error("Data do primeiro vencimento é obrigatória");
   }
 
-  const proposal = await prisma.proposal.findFirst({
-    where: { id: input.proposalId, companyId: input.companyId },
-    include: {
-      client: {
-        select: {
-          id: true,
-          name: true,
-          cpfCnpj: true,
-          email: true,
-          endereco: true,
-          type: true,
-        },
-      },
-      company: {
-        select: {
-          razaoSocial: true,
-          cnpj: true,
-        },
-      },
-      boletos: true,
-    },
-  });
-
-  if (!proposal) {
-    throw new Error("Proposta não encontrada");
-  }
-  if (proposal.status !== "ACCEPTED") {
-    throw new Error(
-      "Boletos só podem ser gerados para propostas aceitas. " +
-        `Status atual: ${proposal.status}.`
+  // Bug #10: Move duplicate check inside transaction with advisory lock
+  const proposal = await prisma.$transaction(async (tx) => {
+    // Advisory lock on proposalId to prevent race condition (double-click)
+    await tx.$queryRawUnsafe(
+      `SELECT pg_advisory_xact_lock(hashtext($1))`,
+      input.proposalId,
     );
-  }
-  if (proposal.boletos.length > 0) {
-    throw new Error("Esta proposta já possui boletos gerados");
-  }
+
+    const p = await tx.proposal.findFirst({
+      where: { id: input.proposalId, companyId: input.companyId },
+      include: {
+        client: {
+          select: {
+            id: true,
+            name: true,
+            cpfCnpj: true,
+            email: true,
+            endereco: true,
+            type: true,
+          },
+        },
+        company: {
+          select: {
+            razaoSocial: true,
+            cnpj: true,
+          },
+        },
+        boletos: true,
+      },
+    });
+
+    if (!p) {
+      throw new Error("Proposta não encontrada");
+    }
+    if (p.status !== "ACCEPTED") {
+      throw new Error(
+        "Boletos só podem ser gerados para propostas aceitas. " +
+          `Status atual: ${p.status}.`
+      );
+    }
+    if (p.boletos.length > 0) {
+      throw new Error("Esta proposta já possui boletos gerados");
+    }
+
+    return p;
+  });
 
   const totalValue = Number(proposal.totalValue);
   const installmentValue = Math.round((totalValue / input.installments) * 100) / 100;
   const firstDue = new Date(input.firstDueDate);
 
   // Resolve payment gateway once (same provider for all installments)
+  // Bug #7: Use installmentValue for routing (same as generation)
   const clientType = proposal.client.type as "PF" | "PJ";
   const { gateway, providerId, manualOverride, providerName } =
     await resolveGatewayForBoleto(
@@ -717,16 +758,15 @@ export async function generateBoletosForProposal(
     );
 
   const createdBoletos: BoletoRow[] = [];
+  const createdGatewayIds: string[] = []; // Bug #1: track for compensation
   let failedAtInstallment: number | null = null;
   let failureError: string | null = null;
 
-  // Process each installment individually — NO wrapping transaction around
-  // external API calls to prevent ghost boletos at the provider when DB
-  // rolls back.
+  // Bug #1: Process each installment — gateway call OUTSIDE transaction,
+  // then persist boleto+receivable atomically in DB.
   for (let i = 1; i <= input.installments; i++) {
-    // Calculate due date for this installment
-    const dueDate = new Date(firstDue);
-    dueDate.setMonth(dueDate.getMonth() + (i - 1));
+    // Bug #5: Safe month addition with clamping
+    const dueDate = addMonthsSafe(firstDue, i - 1);
 
     // Adjust last installment to handle rounding
     const value =
@@ -755,20 +795,30 @@ export async function generateBoletosForProposal(
       },
     };
 
-    // 1) Call external gateway FIRST (outside any transaction)
+    // Phase 1: Call external gateway FIRST (outside any transaction)
     let result: CreateBoletoResult;
     try {
       result = await gateway.createBoleto(boletoInput);
     } catch (err) {
-      // Gateway failed — stop processing but keep previously created boletos
-      // (they already exist at the provider)
       failedAtInstallment = i;
       failureError =
         err instanceof Error ? err.message : "Erro desconhecido no gateway";
+
+      // Bug #1: Compensate — cancel previously created boletos at the gateway
+      for (const gid of createdGatewayIds) {
+        try {
+          await gateway.cancelBoleto(gid);
+          console.log(`[Payment] Compensação: boleto ${gid} cancelado no gateway`);
+        } catch (cancelErr) {
+          console.error(`[Payment] Falha ao cancelar boleto órfão ${gid}:`, cancelErr);
+        }
+      }
       break;
     }
 
-    // 2) Gateway succeeded — persist boleto + receivable in DB
+    createdGatewayIds.push(result.gatewayId);
+
+    // Phase 2: Gateway succeeded — persist boleto + receivable atomically in DB
     const gatewayData = {
       url: result.url ?? null,
       line: result.line ?? null,
@@ -778,31 +828,38 @@ export async function generateBoletosForProposal(
       nossoNumero: result.nossoNumero ?? null,
     };
 
-    const boleto = await prisma.boleto.create({
-      data: {
-        proposalId: input.proposalId,
-        bankReference: result.gatewayId, // Backward compatibility
-        providerId,
-        gatewayId: result.gatewayId,
-        gatewayData: gatewayData as unknown as Prisma.InputJsonValue,
-        manualOverride,
-        value: new Prisma.Decimal(value),
-        dueDate,
-        installmentNumber: i,
-        status: "GENERATED",
-        companyId: input.companyId,
-      },
-    });
+    // Bug #1: Wrap DB writes in a mini-transaction for atomicity
+    const boleto = await prisma.$transaction(async (tx) => {
+      const b = await tx.boleto.create({
+        data: {
+          proposalId: input.proposalId,
+          bankReference: result.gatewayId,
+          providerId,
+          gatewayId: result.gatewayId,
+          gatewayData: gatewayData as unknown as Prisma.InputJsonValue,
+          manualOverride,
+          value: new Prisma.Decimal(value),
+          dueDate,
+          installmentNumber: i,
+          status: "GENERATED",
+          companyId: input.companyId,
+        },
+      });
 
-    await prisma.accountReceivable.create({
-      data: {
-        clientId: proposal.clientId,
-        description: `Boleto ${i}/${input.installments} - Proposta #${proposal.id.slice(-6)}`,
-        value: new Prisma.Decimal(value),
-        dueDate,
-        status: "PENDING",
-        companyId: input.companyId,
-      },
+      // Bug #4: Link receivable to boleto via FK
+      await tx.accountReceivable.create({
+        data: {
+          clientId: proposal.clientId,
+          description: `Boleto ${i}/${input.installments} - Proposta #${proposal.id.slice(-6)}`,
+          value: new Prisma.Decimal(value),
+          dueDate,
+          status: "PENDING",
+          companyId: input.companyId,
+          boletoId: b.id,
+        },
+      });
+
+      return b;
     });
 
     createdBoletos.push({

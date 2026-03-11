@@ -9,6 +9,9 @@ import type {
 
 const BASE_URL = "https://api.pagar.me/core/v5";
 
+// Bug #19: Default timeout for all API requests (15 seconds)
+const REQUEST_TIMEOUT_MS = 15_000;
+
 interface PagarmeCredentials {
   apiKey: string;
 }
@@ -58,6 +61,11 @@ export class PagarmeProvider implements PaymentGateway {
     body?: unknown
   ): Promise<T> {
     const url = `${BASE_URL}${path}`;
+
+    // Bug #19 fix: AbortController with 15s timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
     const options: RequestInit = {
       method,
       headers: {
@@ -65,34 +73,44 @@ export class PagarmeProvider implements PaymentGateway {
         "Content-Type": "application/json",
         Accept: "application/json",
       },
+      signal: controller.signal,
     };
 
     if (body && method !== "GET" && method !== "DELETE") {
       options.body = JSON.stringify(body);
     }
 
-    const res = await fetch(url, options);
+    try {
+      const res = await fetch(url, options);
 
-    if (!res.ok) {
-      let errorMessage: string;
-      try {
-        const errorBody = (await res.json()) as Record<string, unknown>;
-        const message =
-          (errorBody.message as string) ??
-          JSON.stringify(errorBody.errors ?? errorBody);
-        errorMessage = `Pagar.me API error (${res.status}): ${message}`;
-      } catch {
-        errorMessage = `Pagar.me API error (${res.status}): ${res.statusText}`;
+      if (!res.ok) {
+        let errorMessage: string;
+        try {
+          const errorBody = (await res.json()) as Record<string, unknown>;
+          const message =
+            (errorBody.message as string) ??
+            JSON.stringify(errorBody.errors ?? errorBody);
+          errorMessage = `Pagar.me API error (${res.status}): ${message}`;
+        } catch {
+          errorMessage = `Pagar.me API error (${res.status}): ${res.statusText}`;
+        }
+        throw new Error(errorMessage);
       }
-      throw new Error(errorMessage);
-    }
 
-    // DELETE may return 204 with no body
-    if (res.status === 204) {
-      return {} as T;
-    }
+      // DELETE may return 204 with no body
+      if (res.status === 204) {
+        return {} as T;
+      }
 
-    return res.json() as Promise<T>;
+      return res.json() as Promise<T>;
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        throw new Error(`Pagar.me API timeout (${REQUEST_TIMEOUT_MS}ms): ${method} ${path}`);
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeoutId);
+    }
   }
 
   // ──────────────────────────────────────────────
@@ -289,6 +307,7 @@ export class PagarmeProvider implements PaymentGateway {
     const charge = parsed.data;
     const gatewayId = charge?.id ?? "";
 
+    // Bug #16 fix: Map overpaid to boleto.paid but preserve overpaid flag in rawEvent
     const typeMap: Record<string, WebhookEvent["type"]> = {
       "charge.paid": "boleto.paid",
       "charge.canceled": "boleto.cancelled",
@@ -300,12 +319,15 @@ export class PagarmeProvider implements PaymentGateway {
     const mappedType: WebhookEvent["type"] =
       typeMap[eventType] ?? "boleto.failed";
 
+    // Bug #16 fix: Include overpaid flag in the raw event for downstream handling
+    const isOverpaid = eventType === "charge.overpaid";
+
     return {
       type: mappedType,
       gatewayId,
       paidAt: charge?.paid_at ? new Date(charge.paid_at) : undefined,
       paidAmount: charge?.paid_amount ?? undefined,
-      rawEvent: parsed,
+      rawEvent: { ...parsed, _isOverpaid: isOverpaid },
     };
   }
 
@@ -391,6 +413,7 @@ function mapPagarmeStatus(
     canceled: "cancelled",
     failed: "failed",
     expired: "expired",
+    // Bug #16 fix: Map overpaid distinctly (keep as "paid" but with flag)
     overpaid: "paid",
     underpaid: "pending",
     processing: "pending",
