@@ -2,7 +2,7 @@
 
 
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import Link from "next/link";
@@ -332,7 +332,10 @@ export default function ProposalDetailPage() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  // US-011: Load providers when generate dialog opens
+  // PR #35 fix: Debounce timer ref for installment preview recalculation
+  const previewDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // US-011: Load providers list (no dependency on installments)
   const loadProviders = useCallback(async () => {
     if (!selectedCompanyId || !proposal) return;
     setLoadingProviders(true);
@@ -355,7 +358,37 @@ export default function ProposalDetailPage() {
     } finally {
       setLoadingProviders(false);
     }
-  }, [selectedCompanyId, proposal, installments]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCompanyId, proposal]);
+
+  // PR #35 fix: Debounced preview recalculation when installments change
+  // Avoids recalculating on every keystroke (300ms debounce)
+  useEffect(() => {
+    if (!generateDialogOpen || !selectedCompanyId || !proposal) return;
+
+    if (previewDebounceRef.current) {
+      clearTimeout(previewDebounceRef.current);
+    }
+
+    previewDebounceRef.current = setTimeout(async () => {
+      try {
+        const preview = await previewRoutingForProposal(
+          selectedCompanyId,
+          proposal.clientType ?? "PF",
+          parseFloat(proposal.totalValue) / Math.max(1, parseInt(installments, 10) || 1),
+        );
+        setRoutingPreview(preview);
+      } catch (err) {
+        console.error("Failed to update routing preview:", err);
+      }
+    }, 300);
+
+    return () => {
+      if (previewDebounceRef.current) {
+        clearTimeout(previewDebounceRef.current);
+      }
+    };
+  }, [installments, generateDialogOpen, selectedCompanyId, proposal]);
 
   // Actions
   function openGenerateDialog() {

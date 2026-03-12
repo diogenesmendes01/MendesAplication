@@ -169,6 +169,8 @@ export async function getAvailableProviders(): Promise<ProviderDefinition[]> {
 
 // ---------------------------------------------------------------------------
 // savePaymentProvider — create or update provider
+// Bug #20 fix: default unsetting + create/update wrapped in $transaction
+// PR #35 fix: create provider uses placeholder webhookUrl then updates atomically
 // ---------------------------------------------------------------------------
 
 export async function savePaymentProvider(
@@ -215,21 +217,14 @@ export async function savePaymentProvider(
 
   const encryptedCredentials = encrypt(JSON.stringify(credentialsToEncrypt));
 
-  // If marking as default, unset other defaults first
-  if (data.isDefault) {
-    await prisma.paymentProvider.updateMany({
-      where: { companyId, isDefault: true, ...(data.id ? { NOT: { id: data.id } } : {}) },
-      data: { isDefault: false },
-    });
-  }
-
   const metadata = Object.keys(data.settings).length > 0
     ? (data.settings as Prisma.InputJsonValue)
     : Prisma.JsonNull;
 
   if (data.id) {
+    // ── UPDATE path ──
     // Check if provider type changed — regenerate webhook URL/secret if so
-    const providerChanged = data.provider !== existing.provider;
+    const providerChanged = data.provider !== existing!.provider;
     const webhookUpdate: { webhookUrl?: string; webhookSecret?: string } = {};
     if (providerChanged) {
       const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://boletoapi.com";
@@ -237,19 +232,29 @@ export async function savePaymentProvider(
       webhookUpdate.webhookSecret = crypto.randomUUID();
     }
 
-    // Update
-    const result = await prisma.paymentProvider.update({
-      where: { id: data.id, companyId },
-      data: {
-        name: data.name,
-        provider: data.provider,
-        credentials: encryptedCredentials,
-        sandbox: data.sandbox,
-        isDefault: data.isDefault,
-        isActive: true,
-        metadata,
-        ...webhookUpdate,
-      },
+    // Bug #20 fix: Wrap default unsetting + update in a single transaction
+    // to prevent race condition leaving 0 or 2 defaults
+    const result = await prisma.$transaction(async (tx) => {
+      if (data.isDefault) {
+        await tx.paymentProvider.updateMany({
+          where: { companyId, isDefault: true, NOT: { id: data.id } },
+          data: { isDefault: false },
+        });
+      }
+
+      return tx.paymentProvider.update({
+        where: { id: data.id!, companyId },
+        data: {
+          name: data.name,
+          provider: data.provider,
+          credentials: encryptedCredentials,
+          sandbox: data.sandbox,
+          isDefault: data.isDefault,
+          isActive: true,
+          metadata,
+          ...webhookUpdate,
+        },
+      });
     });
 
     await logAuditEvent({
@@ -271,29 +276,44 @@ export async function savePaymentProvider(
 
     return { id: result.id };
   } else {
-    // Create
+    // ── CREATE path ──
+    // PR #35 fix: Use a single transaction for create + webhookUrl update
+    // so the provider never exists without its webhook URL.
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://boletoapi.com";
     const webhookSecret = crypto.randomUUID();
 
-    const result = await prisma.paymentProvider.create({
-      data: {
-        companyId,
-        name: data.name,
-        provider: data.provider,
-        credentials: encryptedCredentials,
-        webhookSecret,
-        sandbox: data.sandbox,
-        isDefault: data.isDefault,
-        isActive: true,
-        metadata,
-      },
-    });
+    const result = await prisma.$transaction(async (tx) => {
+      // Bug #20 fix: Unset other defaults inside the same transaction
+      if (data.isDefault) {
+        await tx.paymentProvider.updateMany({
+          where: { companyId, isDefault: true },
+          data: { isDefault: false },
+        });
+      }
 
-    // Bug #14 fix: Include provider ID in webhook URL for unique routing
-    const webhookUrlWithId = `${baseUrl}/api/webhooks/payment/${result.id}`;
-    await prisma.paymentProvider.update({
-      where: { id: result.id, companyId },
-      data: { webhookUrl: webhookUrlWithId },
+      const created = await tx.paymentProvider.create({
+        data: {
+          companyId,
+          name: data.name,
+          provider: data.provider,
+          credentials: encryptedCredentials,
+          webhookSecret,
+          sandbox: data.sandbox,
+          isDefault: data.isDefault,
+          isActive: true,
+          metadata,
+        },
+      });
+
+      // Bug #14 fix: Include provider ID in webhook URL for unique routing
+      // PR #35 fix: Set webhookUrl atomically within the same transaction
+      const webhookUrlWithId = `${baseUrl}/api/webhooks/payment/${created.id}`;
+      await tx.paymentProvider.update({
+        where: { id: created.id, companyId },
+        data: { webhookUrl: webhookUrlWithId },
+      });
+
+      return { ...created, webhookUrl: webhookUrlWithId };
     });
 
     await logAuditEvent({
@@ -306,7 +326,7 @@ export async function savePaymentProvider(
         provider: data.provider,
         sandbox: data.sandbox,
         isDefault: data.isDefault,
-        webhookUrl: webhookUrlWithId,
+        webhookUrl: result.webhookUrl,
       } as unknown as Prisma.InputJsonValue,
       companyId,
     });
@@ -523,6 +543,7 @@ export async function toggleProviderActive(
 
 // ---------------------------------------------------------------------------
 // setDefaultProvider — mark as default (unmark others)
+// Already uses $transaction (Bug #20 was fixed here)
 // ---------------------------------------------------------------------------
 
 export async function setDefaultProvider(

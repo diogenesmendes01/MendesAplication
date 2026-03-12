@@ -172,6 +172,13 @@ export async function POST(
     return NextResponse.json({ received: true, skipped: "already_in_status" }, { status: 200 });
   }
 
+  // Bug #16 fix: Detect overpaid flag from rawEvent for downstream alerting
+  const rawEvent = event.rawEvent as Record<string, unknown> | undefined;
+  const isOverpaid = rawEvent?._isOverpaid === true;
+  const expectedAmount = Number(boleto.value);
+  const paidAmount = event.paidAmount ?? expectedAmount;
+  const overpaidDelta = isOverpaid ? paidAmount - expectedAmount : 0;
+
   // Bug #3 fix: Wrap boleto + receivable updates in a transaction
   // Bug #4 fix: Use boletoId FK for direct join instead of heuristic matching
   let updatedReceivableId: string | null = null;
@@ -246,6 +253,38 @@ export async function POST(
     }
   });
 
+  // Bug #16 fix: If overpaid, emit a prominent structured log + dedicated audit event
+  // so it never passes unnoticed. This enables monitoring/alerting tools to trigger
+  // refund workflows based on the OVERPAID audit action.
+  if (isOverpaid) {
+    console.warn(
+      `[webhook] ⚠️ OVERPAID BOLETO DETECTED | boletoId=${boleto.id} | ` +
+        `expected=${expectedAmount} | paid=${paidAmount} | delta=${overpaidDelta} | ` +
+        `gatewayId=${event.gatewayId} | providerId=${matchedProvider.id} | ` +
+        `companyId=${boleto.companyId} | receivableId=${updatedReceivableId ?? "none"}`
+    );
+
+    await logAuditEvent({
+      userId: "system",
+      action: "STATUS_CHANGE",
+      entity: "Boleto",
+      entityId: boleto.id,
+      dataAfter: {
+        alert: "OVERPAID",
+        expectedAmount,
+        paidAmount,
+        overpaidDelta,
+        gatewayId: event.gatewayId,
+        providerId: matchedProvider.id,
+        accountReceivableId: updatedReceivableId,
+        message: `Boleto pago a maior: esperado R$${(expectedAmount / 100).toFixed(2)}, ` +
+          `recebido R$${(paidAmount / 100).toFixed(2)}. Diferença: R$${(overpaidDelta / 100).toFixed(2)}. ` +
+          `Verificar necessidade de devolução.`,
+      },
+      companyId: boleto.companyId,
+    });
+  }
+
   // 10. Log audit event
   await logAuditEvent({
     userId: "system",
@@ -262,13 +301,15 @@ export async function POST(
       paidAt: event.paidAt?.toISOString() ?? null,
       paidAmount: event.paidAmount ?? null,
       accountReceivableId: updatedReceivableId,
+      ...(isOverpaid ? { overpaid: true, overpaidDelta } : {}),
     },
     companyId: boleto.companyId,
   });
 
   console.log(
     `[webhook] Boleto ${boleto.id} updated: ${previousStatus} → ${newBoletoStatus}` +
-      (updatedReceivableId ? ` | AR ${updatedReceivableId} → PAID` : "")
+      (updatedReceivableId ? ` | AR ${updatedReceivableId} → PAID` : "") +
+      (isOverpaid ? ` | ⚠️ OVERPAID by ${overpaidDelta}` : "")
   );
 
   return NextResponse.json({ received: true }, { status: 200 });
