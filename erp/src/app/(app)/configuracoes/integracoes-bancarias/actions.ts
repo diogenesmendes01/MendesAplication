@@ -227,7 +227,10 @@ export async function savePaymentProvider(
     const providerChanged = data.provider !== existing!.provider;
     const webhookUpdate: { webhookUrl?: string; webhookSecret?: string } = {};
     if (providerChanged) {
-      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://boletoapi.com";
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL;
+      if (!baseUrl) {
+        throw new Error("NEXT_PUBLIC_APP_URL não configurada. Impossível gerar webhook URL.");
+      }
       webhookUpdate.webhookUrl = `${baseUrl}/api/webhooks/payment/${data.id}`;
       webhookUpdate.webhookSecret = crypto.randomUUID();
     }
@@ -279,7 +282,10 @@ export async function savePaymentProvider(
     // ── CREATE path ──
     // PR #35 fix: Use a single transaction for create + webhookUrl update
     // so the provider never exists without its webhook URL.
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://boletoapi.com";
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL;
+    if (!baseUrl) {
+      throw new Error("NEXT_PUBLIC_APP_URL não configurada. Impossível gerar webhook URL.");
+    }
     const webhookSecret = crypto.randomUUID();
 
     const result = await prisma.$transaction(async (tx) => {
@@ -351,6 +357,13 @@ export async function deletePaymentProvider(
 
   if (!provider) {
     throw new Error("Provider não encontrado");
+  }
+
+  // Bug F fix: Block deletion of default provider
+  if (provider.isDefault) {
+    throw new Error(
+      "Não é possível deletar o provider padrão. Defina outro provider como padrão antes de deletar este."
+    );
   }
 
   await prisma.paymentProvider.delete({
@@ -519,6 +532,13 @@ export async function toggleProviderActive(
   }
 
   const newIsActive = !provider.isActive;
+
+  // Bug F fix: Block deactivation of default provider
+  if (provider.isDefault && !newIsActive) {
+    throw new Error(
+      "Não é possível desativar o provider padrão. Defina outro provider como padrão antes de desativar este."
+    );
+  }
 
   await prisma.paymentProvider.update({
     where: { id, companyId },

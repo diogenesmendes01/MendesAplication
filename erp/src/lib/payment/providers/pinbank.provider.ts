@@ -31,7 +31,7 @@ export class PinBankProvider implements PaymentGateway {
     throw new Error(NOT_IMPLEMENTED);
   }
 
-  parseWebhookEvent(): WebhookEvent {
+  parseWebhookEvent(): WebhookEvent | null {
     throw new Error(NOT_IMPLEMENTED);
   }
 

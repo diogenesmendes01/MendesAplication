@@ -69,7 +69,7 @@ export class MockProvider implements PaymentGateway {
     return true;
   }
 
-  parseWebhookEvent(body: string): WebhookEvent {
+  parseWebhookEvent(body: string): WebhookEvent | null {
     const parsed =
       typeof body === "string" ? JSON.parse(body) : (body as unknown);
     const event = parsed as Record<string, unknown>;

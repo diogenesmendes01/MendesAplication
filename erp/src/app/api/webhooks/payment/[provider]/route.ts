@@ -111,12 +111,17 @@ export async function POST(
   }
 
   // 5. Parse the webhook event
-  let event: WebhookEvent;
+  let event: WebhookEvent | null;
   try {
     event = gateway.parseWebhookEvent(rawBody);
   } catch (err) {
     console.error("[webhook] Failed to parse webhook event:", err);
     return NextResponse.json({ received: true, error: "parse_error" }, { status: 200 });
+  }
+
+  // Bug A fix: If provider returned null (unknown event type), acknowledge and skip
+  if (!event) {
+    return NextResponse.json({ received: true, skipped: "unknown_event_type" }, { status: 200 });
   }
 
   // 6. Find boleto by gatewayId
@@ -141,7 +146,8 @@ export async function POST(
       `[webhook] Boleto not found for gatewayId: ${event.gatewayId}, provider: ${matchedProvider.id}`
     );
     // Return 200 to avoid infinite retries
-    await logAuditEvent({
+    // Bug E fix: Fire-and-forget to prevent retry storm if audit log fails
+    logAuditEvent({
       userId: "system",
       action: "STATUS_CHANGE",
       entity: "Webhook",
@@ -153,7 +159,7 @@ export async function POST(
         status: "boleto_not_found",
       },
       companyId: matchedProvider.companyId,
-    });
+    }).catch(err => console.error("Audit log failed:", err));
     return NextResponse.json({ received: true, boleto: "not_found" }, { status: 200 });
   }
 
@@ -164,26 +170,41 @@ export async function POST(
     return NextResponse.json({ received: true, skipped: "unknown_event_type" }, { status: 200 });
   }
 
-  const previousStatus = boleto.status;
-
-  // Bug #3 fix: Idempotency — skip if already in target status
-  if (boleto.status === newBoletoStatus) {
-    console.log(`[webhook] Boleto ${boleto.id} already in status ${newBoletoStatus}, skipping`);
-    return NextResponse.json({ received: true, skipped: "already_in_status" }, { status: 200 });
-  }
-
   // Bug #16 fix: Detect overpaid flag from rawEvent for downstream alerting
   const rawEvent = event.rawEvent as Record<string, unknown> | undefined;
   const isOverpaid = rawEvent?._isOverpaid === true;
-  const expectedAmountCents = Math.round(Number(boleto.value) * 100);
-  const paidAmount = event.paidAmount ?? expectedAmountCents;
-  const overpaidDelta = isOverpaid ? paidAmount - expectedAmountCents : 0;
 
   // Bug #3 fix: Wrap boleto + receivable updates in a transaction
   // Bug #4 fix: Use boletoId FK for direct join instead of heuristic matching
+  // Bug G fix: Re-read boleto with SELECT FOR UPDATE inside transaction for serialization
   let updatedReceivableId: string | null = null;
+  let previousStatus: BoletoStatus = boleto.status as BoletoStatus;
+  let expectedAmountCents: number = 0;
+  let paidAmount: number = 0;
+  let overpaidDelta: number = 0;
 
-  await prisma.$transaction(async (tx) => {
+  const txResult = await prisma.$transaction(async (tx) => {
+    // Bug G fix: SELECT FOR UPDATE to prevent race condition between concurrent webhooks
+    const lockedBoleto = await tx.$queryRaw<Array<{ id: string; status: string; value: string }>>`
+      SELECT id, status, value FROM boletos WHERE id = ${boleto.id} FOR UPDATE
+    `;
+
+    if (!lockedBoleto[0]) {
+      return { skipped: true, reason: "not_found" } as const;
+    }
+
+    const currentStatus = lockedBoleto[0].status as BoletoStatus;
+
+    // Bug #3 fix: Idempotency — skip if already in target status (now inside lock)
+    if (currentStatus === newBoletoStatus) {
+      return { skipped: true, reason: "already_in_status" } as const;
+    }
+
+    previousStatus = currentStatus;
+    expectedAmountCents = Math.round(Number(lockedBoleto[0].value) * 100);
+    paidAmount = event.paidAmount ?? expectedAmountCents;
+    overpaidDelta = isOverpaid ? paidAmount - expectedAmountCents : 0;
+
     // Update boleto status
     await tx.boleto.update({
       where: { id: boleto.id },
@@ -251,7 +272,13 @@ export async function POST(
         }
       }
     }
+    return { skipped: false } as const;
   });
+
+  if (txResult.skipped) {
+    console.log(`[webhook] Boleto ${boleto.id} skipped: ${txResult.reason}`);
+    return NextResponse.json({ received: true, skipped: txResult.reason }, { status: 200 });
+  }
 
   // Bug #16 fix: If overpaid, emit a prominent structured log + dedicated audit event
   // so it never passes unnoticed. This enables monitoring/alerting tools to trigger
@@ -264,7 +291,7 @@ export async function POST(
         `companyId=${boleto.companyId} | receivableId=${updatedReceivableId ?? "none"}`
     );
 
-    await logAuditEvent({
+    logAuditEvent({
       userId: "system",
       action: "STATUS_CHANGE",
       entity: "Boleto",
@@ -282,11 +309,12 @@ export async function POST(
           `Verificar necessidade de devolução.`,
       },
       companyId: boleto.companyId,
-    });
+    }).catch(err => console.error("Audit log failed:", err));
   }
 
   // 10. Log audit event
-  await logAuditEvent({
+  // Bug E fix: Fire-and-forget to prevent retry storms
+  logAuditEvent({
     userId: "system",
     action: "STATUS_CHANGE",
     entity: "Boleto",
@@ -304,7 +332,7 @@ export async function POST(
       ...(isOverpaid ? { overpaid: true, overpaidDelta } : {}),
     },
     companyId: boleto.companyId,
-  });
+  }).catch(err => console.error("Audit log failed:", err));
 
   console.log(
     `[webhook] Boleto ${boleto.id} updated: ${previousStatus} → ${newBoletoStatus}` +

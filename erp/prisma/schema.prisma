@@ -656,6 +656,9 @@ model Boleto {
   invoices    Invoice[]
   receivables AccountReceivable[]
 
+  // Bug C fix: Add indexes for webhook lookups and status queries
+  @@index([gatewayId])
+  @@index([companyId, status])
   @@map("boletos")
 }
 

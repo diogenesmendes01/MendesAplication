@@ -30,7 +30,7 @@ export interface PaymentGateway {
   getBoletoStatus(gatewayId: string): Promise<BoletoStatusResult>;
   cancelBoleto(gatewayId: string): Promise<{ success: boolean }>;
   validateWebhook(headers: Record<string, string>, body: string): boolean;
-  parseWebhookEvent(body: string): WebhookEvent;
+  parseWebhookEvent(body: string): WebhookEvent | null;
   testConnection(): Promise<{ ok: boolean; message: string }>;
 }
 

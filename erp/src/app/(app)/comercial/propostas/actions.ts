@@ -813,6 +813,30 @@ export async function generateBoletosForProposal(
           console.error(`[Payment] Falha ao cancelar boleto órfão ${gid}:`, cancelErr);
         }
       }
+
+      // Bug B fix: Also clean up DB records (Boleto + AccountReceivable) for compensated boletos
+      if (createdBoletos.length > 0) {
+        const compensatedBoletoIds = createdBoletos.map(b => b.id);
+        try {
+          await prisma.$transaction(async (tx) => {
+            // Mark AccountReceivables as CANCELLED
+            await tx.accountReceivable.updateMany({
+              where: { boletoId: { in: compensatedBoletoIds } },
+              data: { status: "CANCELLED" },
+            });
+            // Mark Boletos as CANCELLED
+            await tx.boleto.updateMany({
+              where: { id: { in: compensatedBoletoIds } },
+              data: { status: "CANCELLED" },
+            });
+          });
+          console.log(`[Payment] Compensação DB: ${compensatedBoletoIds.length} boleto(s) e receivables marcados como CANCELLED`);
+        } catch (dbErr) {
+          console.error("[Payment] Falha ao compensar registros no DB:", dbErr);
+        }
+        // Clear createdBoletos to avoid returning phantom boletos
+        createdBoletos.length = 0;
+      }
       break;
     }
 

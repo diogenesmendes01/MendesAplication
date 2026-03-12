@@ -297,7 +297,7 @@ export class PagarmeProvider implements PaymentGateway {
     }
   }
 
-  parseWebhookEvent(body: string): WebhookEvent {
+  parseWebhookEvent(body: string): WebhookEvent | null {
     const parsed =
       typeof body === "string"
         ? (JSON.parse(body) as PagarmeWebhookPayload)
@@ -316,8 +316,14 @@ export class PagarmeProvider implements PaymentGateway {
       "charge.overpaid": "boleto.paid",
     };
 
-    const mappedType: WebhookEvent["type"] =
-      typeMap[eventType] ?? "boleto.failed";
+    // Bug A fix: Return null for unknown event types instead of falling back to boleto.failed
+    // Pagar.me sends charge.created, charge.pending etc. that are not actionable
+    const mappedType = typeMap[eventType] ?? null;
+
+    if (!mappedType) {
+      console.log(`[Pagar.me] Unknown webhook event type: ${eventType}, ignoring`);
+      return null;
+    }
 
     // Bug #16 fix: Include overpaid flag in the raw event for downstream handling
     const isOverpaid = eventType === "charge.overpaid";
