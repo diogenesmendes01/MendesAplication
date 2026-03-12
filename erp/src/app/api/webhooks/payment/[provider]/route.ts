@@ -175,9 +175,9 @@ export async function POST(
   // Bug #16 fix: Detect overpaid flag from rawEvent for downstream alerting
   const rawEvent = event.rawEvent as Record<string, unknown> | undefined;
   const isOverpaid = rawEvent?._isOverpaid === true;
-  const expectedAmount = Number(boleto.value);
-  const paidAmount = event.paidAmount ?? expectedAmount;
-  const overpaidDelta = isOverpaid ? paidAmount - expectedAmount : 0;
+  const expectedAmountCents = Math.round(Number(boleto.value) * 100);
+  const paidAmount = event.paidAmount ?? expectedAmountCents;
+  const overpaidDelta = isOverpaid ? paidAmount - expectedAmountCents : 0;
 
   // Bug #3 fix: Wrap boleto + receivable updates in a transaction
   // Bug #4 fix: Use boletoId FK for direct join instead of heuristic matching
@@ -259,7 +259,7 @@ export async function POST(
   if (isOverpaid) {
     console.warn(
       `[webhook] ⚠️ OVERPAID BOLETO DETECTED | boletoId=${boleto.id} | ` +
-        `expected=${expectedAmount} | paid=${paidAmount} | delta=${overpaidDelta} | ` +
+        `expected=${expectedAmountCents} | paid=${paidAmount} | delta=${overpaidDelta} | ` +
         `gatewayId=${event.gatewayId} | providerId=${matchedProvider.id} | ` +
         `companyId=${boleto.companyId} | receivableId=${updatedReceivableId ?? "none"}`
     );
@@ -271,13 +271,13 @@ export async function POST(
       entityId: boleto.id,
       dataAfter: {
         alert: "OVERPAID",
-        expectedAmount,
+        expectedAmountCents, // in centavos
         paidAmount,
         overpaidDelta,
         gatewayId: event.gatewayId,
         providerId: matchedProvider.id,
         accountReceivableId: updatedReceivableId,
-        message: `Boleto pago a maior: esperado R$${(expectedAmount / 100).toFixed(2)}, ` +
+        message: `Boleto pago a maior: esperado R$${(expectedAmountCents / 100).toFixed(2)}, ` +
           `recebido R$${(paidAmount / 100).toFixed(2)}. Diferença: R$${(overpaidDelta / 100).toFixed(2)}. ` +
           `Verificar necessidade de devolução.`,
       },
