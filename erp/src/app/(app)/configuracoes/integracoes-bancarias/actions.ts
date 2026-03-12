@@ -138,9 +138,16 @@ export async function getPaymentProviders(
       settings,
       webhookUrl: p.webhookUrl,
       // Bug #8 fix: Mask webhookSecret to prevent exposure
-      webhookSecret: p.webhookSecret
-        ? (p.webhookSecret.length > 4 ? `****${p.webhookSecret.slice(-4)}` : "****")
-        : null,
+      // Decrypt before masking (webhookSecret is stored encrypted)
+      webhookSecret: (() => {
+        if (!p.webhookSecret) return null;
+        try {
+          const ws = decrypt(p.webhookSecret);
+          return ws.length > 4 ? `****${ws.slice(-4)}` : "****";
+        } catch {
+          return "****";
+        }
+      })(),
       sandbox: p.sandbox,
       isDefault: p.isDefault,
       isActive: p.isActive,
@@ -232,7 +239,7 @@ export async function savePaymentProvider(
         throw new Error("NEXT_PUBLIC_APP_URL não configurada. Impossível gerar webhook URL.");
       }
       webhookUpdate.webhookUrl = `${baseUrl}/api/webhooks/payment/${data.id}`;
-      webhookUpdate.webhookSecret = crypto.randomUUID();
+      webhookUpdate.webhookSecret = encrypt(crypto.randomUUID());
     }
 
     // Bug #20 fix: Wrap default unsetting + update in a single transaction
@@ -286,7 +293,7 @@ export async function savePaymentProvider(
     if (!baseUrl) {
       throw new Error("NEXT_PUBLIC_APP_URL não configurada. Impossível gerar webhook URL.");
     }
-    const webhookSecret = crypto.randomUUID();
+    const webhookSecret = encrypt(crypto.randomUUID());
 
     const result = await prisma.$transaction(async (tx) => {
       // Bug #20 fix: Unset other defaults inside the same transaction
@@ -418,7 +425,7 @@ export async function testProviderConnection(
       provider.provider,
       decryptedCredentials,
       provider.metadata as Record<string, unknown> | null,
-      provider.webhookSecret ?? undefined,
+      provider.webhookSecret ? decrypt(provider.webhookSecret) : undefined,
     );
 
     const result = await gateway.testConnection();

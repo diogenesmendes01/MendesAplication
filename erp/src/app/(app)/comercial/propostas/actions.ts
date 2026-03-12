@@ -628,7 +628,7 @@ async function resolveGatewayForBoleto(
       provider.provider,
       decryptedCredentials,
       metadata,
-      provider.webhookSecret ?? undefined,
+      provider.webhookSecret ? decrypt(provider.webhookSecret) : undefined,
     );
     return {
       gateway,
@@ -666,7 +666,7 @@ async function resolveGatewayForBoleto(
     provider.provider,
     decryptedCredentials,
     metadata,
-    provider.webhookSecret ?? undefined,
+    provider.webhookSecret ? decrypt(provider.webhookSecret) : undefined,
   );
   return {
     gateway,

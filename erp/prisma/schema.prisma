@@ -859,6 +859,14 @@ model PaymentProvider {
   boletos  Boleto[]
 
   @@index([companyId, isActive])
+  // ⚠️ PARTIAL UNIQUE INDEX (not expressible in Prisma schema):
+  // Enforces at most one isDefault=true per company.
+  // Maintained via migration 20260311000001_fix_pr35_bugs:
+  //   CREATE UNIQUE INDEX "payment_providers_companyId_isDefault_unique"
+  //     ON "payment_providers" ("companyId") WHERE "isDefault" = true;
+  // DO NOT use @@unique([companyId, isDefault]) — that would also limit
+  // isDefault=false to one per company, which is incorrect.
+  // If regenerating migrations, re-add this partial index manually.
   @@map("payment_providers")
 }
 

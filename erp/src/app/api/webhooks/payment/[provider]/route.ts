@@ -85,7 +85,7 @@ export async function POST(
         prov.provider,
         decryptedCredentials,
         metadata,
-        prov.webhookSecret ?? undefined
+        prov.webhookSecret ? decrypt(prov.webhookSecret) : undefined
       );
 
       if (gw.validateWebhook(headers, rawBody)) {
