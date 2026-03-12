@@ -2,7 +2,6 @@ import type { PaymentGateway } from "./types";
 import { PROVIDER_REGISTRY } from "./registry";
 import { MockProvider } from "./providers/mock.provider";
 import { PagarmeProvider } from "./providers/pagarme.provider";
-import { PinBankProvider } from "./providers/pinbank.provider";
 
 /**
  * Instancia o gateway correto baseado no tipo do provider.
