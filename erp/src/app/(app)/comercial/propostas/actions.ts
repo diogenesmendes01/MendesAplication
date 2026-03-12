@@ -4,10 +4,13 @@ import { prisma } from "@/lib/prisma";
 import { requireCompanyAccess } from "@/lib/rbac";
 import { logAuditEvent } from "@/lib/audit";
 import { Prisma, type ProposalStatus, type BoletoStatus } from "@prisma/client";
-import { generateBoleto } from "@/lib/boleto";
 import { getSharedCompanyIds } from "@/lib/shared-clients";
 import { getCachedFiscalConfig } from "@/app/(app)/configuracoes/fiscal/actions";
 import { emitInvoiceForBoleto } from "@/lib/nfse-actions";
+import { resolveProvider, getProviderById, previewRouting } from "@/lib/payment/router";
+import { getGateway } from "@/lib/payment/factory";
+import { decrypt } from "@/lib/encryption";
+import type { CreateBoletoInput, CreateBoletoResult, PaymentGateway } from "@/lib/payment/types";
 
 // ---------------------------------------------------------------------------
 // Proposal Event Helper
@@ -98,6 +101,7 @@ export interface ProposalRow {
 
 export interface ProposalDetail extends ProposalRow {
   clientEmail: string | null;
+  clientType: string | null;
   items: ProposalItemRow[];
 }
 
@@ -154,6 +158,23 @@ function validateProposalInput(
       throw new Error(`Item ${i + 1}: preço unitário deve ser maior que zero`);
     }
   }
+}
+
+/**
+ * Bug #5 fix: Safe month addition that clamps to last day of target month.
+ * Avoids JS Date pitfall where Jan 31 + 1 month = Mar 3.
+ */
+function addMonthsSafe(base: Date, months: number): Date {
+  const result = new Date(base);
+  const targetMonth = result.getMonth() + months;
+  result.setMonth(targetMonth);
+  // If the day overflowed (e.g., Jan 31 → Mar 3), clamp to last day of target month
+  const expectedMonth = ((base.getMonth() + months) % 12 + 12) % 12;
+  if (result.getMonth() !== expectedMonth) {
+    // Set to day 0 of next month = last day of expected month
+    result.setDate(0);
+  }
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -386,7 +407,7 @@ export async function getProposalById(proposalId: string, companyId: string): Pr
     where: { id: proposalId, companyId },
     include: {
       client: {
-        select: { id: true, name: true, email: true },
+        select: { id: true, name: true, email: true, type: true },
       },
       items: {
         orderBy: { id: "asc" },
@@ -403,6 +424,7 @@ export async function getProposalById(proposalId: string, companyId: string): Pr
     clientId: proposal.clientId,
     clientName: proposal.client.name,
     clientEmail: proposal.client.email,
+    clientType: proposal.client.type,
     status: proposal.status,
     paymentConditions: proposal.paymentConditions,
     validity: proposal.validity?.toISOString() ?? null,
@@ -489,6 +511,7 @@ export interface GenerateBoletosInput {
   companyId: string;
   installments: number;
   firstDueDate: string;
+  providerId?: string | null;
 }
 
 export interface BoletoRow {
@@ -499,6 +522,158 @@ export interface BoletoRow {
   installmentNumber: number;
   status: BoletoStatus;
   createdAt: string;
+  providerName: string | null;
+  manualOverride: boolean;
+  gatewayData: {
+    url?: string | null;
+    line?: string | null;
+    barcode?: string | null;
+    qrCode?: string | null;
+    pdf?: string | null;
+    nossoNumero?: string | null;
+  } | null;
+}
+
+// ---------------------------------------------------------------------------
+// Provider Selection Types & Actions (US-011)
+// ---------------------------------------------------------------------------
+
+export interface ProviderOption {
+  id: string;
+  name: string;
+  provider: string;
+  isDefault: boolean;
+}
+
+export interface RoutingPreviewResult {
+  providerId: string;
+  providerName: string;
+  reason: string;
+}
+
+/**
+ * Get active providers for the company (for dropdown selection).
+ */
+export async function getProvidersForProposal(
+  companyId: string,
+): Promise<ProviderOption[]> {
+  await requireCompanyAccess(companyId);
+
+  const providers = await prisma.paymentProvider.findMany({
+    where: { companyId, isActive: true },
+    orderBy: [{ isDefault: "desc" }, { name: "asc" }],
+    select: { id: true, name: true, provider: true, isDefault: true },
+  });
+
+  return providers;
+}
+
+/**
+ * Preview which provider would be used for automatic routing.
+ * Bug #7 fix: caller should pass the per-installment value, NOT the total.
+ */
+export async function previewRoutingForProposal(
+  companyId: string,
+  clientType: string,
+  value: number,
+): Promise<RoutingPreviewResult | null> {
+  await requireCompanyAccess(companyId);
+
+  const routingType = clientType === "PJ" ? "PJ" : "PF";
+  const result = await previewRouting(companyId, {
+    clientType: routingType as "PF" | "PJ",
+    value,
+  });
+
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Payment Provider Resolution Helper
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolves the payment gateway for boleto generation.
+ *
+ * Flow:
+ * 1. If providerId is given → getProviderById (manual override, must be active)
+ * 2. If not → resolveProvider with routing rules
+ * 3. If no providers configured → fallback to mock with console.warn
+ *
+ * Bug #6 fix: Only fall back to mock when no providers exist.
+ *             Propagate decrypt/factory errors instead of swallowing them.
+ * Bug #18 fix: getProviderById already filters isActive=true; explicit check added.
+ */
+async function resolveGatewayForBoleto(
+  companyId: string,
+  clientType: "PF" | "PJ",
+  value: number,
+  providerId?: string | null,
+): Promise<{
+  gateway: PaymentGateway;
+  providerId: string | null;
+  manualOverride: boolean;
+  providerName: string;
+}> {
+  // Manual override: specific provider requested
+  if (providerId) {
+    // Bug #18: getProviderById already checks isActive=true and throws if not found/inactive
+    const provider = await getProviderById(companyId, providerId);
+    if (!provider.isActive) {
+      throw new Error(`Provider "${provider.name}" está inativo e não pode ser usado.`);
+    }
+    const decryptedCredentials = JSON.parse(decrypt(provider.credentials)) as Record<string, unknown>;
+    const metadata = provider.metadata as Record<string, unknown> | null;
+    const gateway = getGateway(
+      provider.provider,
+      decryptedCredentials,
+      metadata,
+      provider.webhookSecret ? decrypt(provider.webhookSecret) : undefined,
+    );
+    return {
+      gateway,
+      providerId: provider.id,
+      manualOverride: true,
+      providerName: provider.name,
+    };
+  }
+
+  // Automatic routing
+  // Bug #6: Check if ANY providers exist first. Only mock when truly none configured.
+  const providerCount = await prisma.paymentProvider.count({
+    where: { companyId, isActive: true },
+  });
+
+  if (providerCount === 0) {
+    // No providers configured — fallback to mock
+    console.warn(
+      `[Payment] Nenhum provider configurado para empresa ${companyId}. Usando mock como fallback.`,
+    );
+    const gateway = getGateway("mock", {});
+    return {
+      gateway,
+      providerId: null,
+      manualOverride: false,
+      providerName: "Mock (fallback)",
+    };
+  }
+
+  // Providers exist — errors should propagate, NOT fall back to mock
+  const provider = await resolveProvider(companyId, { clientType, value });
+  const decryptedCredentials = JSON.parse(decrypt(provider.credentials)) as Record<string, unknown>;
+  const metadata = provider.metadata as Record<string, unknown> | null;
+  const gateway = getGateway(
+    provider.provider,
+    decryptedCredentials,
+    metadata,
+    provider.webhookSecret ? decrypt(provider.webhookSecret) : undefined,
+  );
+  return {
+    gateway,
+    providerId: provider.id,
+    manualOverride: false,
+    providerName: provider.name,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -507,7 +682,7 @@ export interface BoletoRow {
 
 export async function generateBoletosForProposal(
   input: GenerateBoletosInput
-): Promise<{ boletos: BoletoRow[] }> {
+): Promise<{ boletos: BoletoRow[]; error?: string }> {
   const session = await requireCompanyAccess(input.companyId);
 
   if (!input.installments || input.installments < 1) {
@@ -520,83 +695,173 @@ export async function generateBoletosForProposal(
     throw new Error("Data do primeiro vencimento é obrigatória");
   }
 
-  const proposal = await prisma.proposal.findFirst({
-    where: { id: input.proposalId, companyId: input.companyId },
-    include: {
-      client: {
-        select: {
-          id: true,
-          name: true,
-          cpfCnpj: true,
-          email: true,
-          endereco: true,
-        },
-      },
-      company: {
-        select: {
-          razaoSocial: true,
-          cnpj: true,
-        },
-      },
-      boletos: true,
-    },
-  });
-
-  if (!proposal) {
-    throw new Error("Proposta não encontrada");
-  }
-  if (proposal.status !== "ACCEPTED") {
-    throw new Error(
-      "Boletos só podem ser gerados para propostas aceitas. " +
-        `Status atual: ${proposal.status}.`
+  // Bug #10: Move duplicate check inside transaction with advisory lock
+  const proposal = await prisma.$transaction(async (tx) => {
+    // Advisory lock on proposalId to prevent race condition (double-click)
+    await tx.$queryRawUnsafe(
+      `SELECT pg_advisory_xact_lock(hashtext($1))`,
+      input.proposalId,
     );
-  }
-  if (proposal.boletos.length > 0) {
-    throw new Error("Esta proposta já possui boletos gerados");
-  }
+
+    const p = await tx.proposal.findFirst({
+      where: { id: input.proposalId, companyId: input.companyId },
+      include: {
+        client: {
+          select: {
+            id: true,
+            name: true,
+            cpfCnpj: true,
+            email: true,
+            endereco: true,
+            type: true,
+          },
+        },
+        company: {
+          select: {
+            razaoSocial: true,
+            cnpj: true,
+          },
+        },
+        boletos: true,
+      },
+    });
+
+    if (!p) {
+      throw new Error("Proposta não encontrada");
+    }
+    if (p.status !== "ACCEPTED") {
+      throw new Error(
+        "Boletos só podem ser gerados para propostas aceitas. " +
+          `Status atual: ${p.status}.`
+      );
+    }
+    if (p.boletos.length > 0) {
+      throw new Error("Esta proposta já possui boletos gerados");
+    }
+
+    return p;
+  });
 
   const totalValue = Number(proposal.totalValue);
   const installmentValue = Math.round((totalValue / input.installments) * 100) / 100;
   const firstDue = new Date(input.firstDueDate);
 
+  // Resolve payment gateway once (same provider for all installments)
+  // Bug #7: Use installmentValue for routing (same as generation)
+  const clientType = proposal.client.type as "PF" | "PJ";
+  const { gateway, providerId, manualOverride, providerName } =
+    await resolveGatewayForBoleto(
+      input.companyId,
+      clientType,
+      installmentValue,
+      input.providerId,
+    );
+
   const createdBoletos: BoletoRow[] = [];
+  const createdGatewayIds: string[] = []; // Bug #1: track for compensation
+  let failedAtInstallment: number | null = null;
+  let failureError: string | null = null;
 
-  await prisma.$transaction(async (tx) => {
-    for (let i = 1; i <= input.installments; i++) {
-      // Calculate due date for this installment
-      const dueDate = new Date(firstDue);
-      dueDate.setMonth(dueDate.getMonth() + (i - 1));
+  // Bug #1: Process each installment — gateway call OUTSIDE transaction,
+  // then persist boleto+receivable atomically in DB.
+  for (let i = 1; i <= input.installments; i++) {
+    // Bug #5: Safe month addition with clamping
+    const dueDate = addMonthsSafe(firstDue, i - 1);
 
-      // Adjust last installment to handle rounding
-      const value =
-        i === input.installments
-          ? Math.round((totalValue - installmentValue * (input.installments - 1)) * 100) / 100
-          : installmentValue;
+    // Adjust last installment to handle rounding
+    const value =
+      i === input.installments
+        ? Math.round((totalValue - installmentValue * (input.installments - 1)) * 100) / 100
+        : installmentValue;
 
-      // Generate boleto via provider
-      const result = await generateBoleto({
-        clientData: {
-          name: proposal.client.name,
-          cpfCnpj: proposal.client.cpfCnpj,
-          email: proposal.client.email ?? "",
-          endereco: proposal.client.endereco,
-        },
-        companyData: {
-          razaoSocial: proposal.company.razaoSocial,
-          cnpj: proposal.company.cnpj,
-        },
-        value,
-        dueDate,
-        installmentNumber: i,
-        totalInstallments: input.installments,
+    // Build CreateBoletoInput for the new payment system
+    const documentType = clientType === "PF" ? "cpf" : "cnpj";
+    const boletoInput: CreateBoletoInput = {
+      customer: {
+        name: proposal.client.name,
+        document: proposal.client.cpfCnpj,
+        documentType,
+        email: proposal.client.email ?? undefined,
+      },
+      amount: Math.round(value * 100), // Convert R$ to centavos
+      dueDate,
+      installmentNumber: i,
+      totalInstallments: input.installments,
+      description: `Parcela ${i}/${input.installments} - Proposta #${input.proposalId.slice(-6)}`,
+      metadata: {
         proposalId: input.proposalId,
-      });
+        companyRazaoSocial: proposal.company.razaoSocial,
+        companyCnpj: proposal.company.cnpj,
+      },
+    };
 
-      // Create boleto record
-      const boleto = await tx.boleto.create({
+    // Phase 1: Call external gateway FIRST (outside any transaction)
+    let result: CreateBoletoResult;
+    try {
+      result = await gateway.createBoleto(boletoInput);
+    } catch (err) {
+      failedAtInstallment = i;
+      failureError =
+        err instanceof Error ? err.message : "Erro desconhecido no gateway";
+
+      // Bug #1: Compensate — cancel previously created boletos at the gateway
+      for (const gid of createdGatewayIds) {
+        try {
+          await gateway.cancelBoleto(gid);
+          console.log(`[Payment] Compensação: boleto ${gid} cancelado no gateway`);
+        } catch (cancelErr) {
+          console.error(`[Payment] Falha ao cancelar boleto órfão ${gid}:`, cancelErr);
+        }
+      }
+
+      // Bug B fix: Also clean up DB records (Boleto + AccountReceivable) for compensated boletos
+      if (createdBoletos.length > 0) {
+        const compensatedBoletoIds = createdBoletos.map(b => b.id);
+        try {
+          await prisma.$transaction(async (tx) => {
+            // Mark AccountReceivables as CANCELLED
+            await tx.accountReceivable.updateMany({
+              where: { boletoId: { in: compensatedBoletoIds } },
+              data: { status: "CANCELLED" },
+            });
+            // Mark Boletos as CANCELLED
+            await tx.boleto.updateMany({
+              where: { id: { in: compensatedBoletoIds } },
+              data: { status: "CANCELLED" },
+            });
+          });
+          console.log(`[Payment] Compensação DB: ${compensatedBoletoIds.length} boleto(s) e receivables marcados como CANCELLED`);
+        } catch (dbErr) {
+          console.error("[Payment] Falha ao compensar registros no DB:", dbErr);
+        }
+        // Clear createdBoletos to avoid returning phantom boletos
+        createdBoletos.length = 0;
+      }
+      break;
+    }
+
+    createdGatewayIds.push(result.gatewayId);
+
+    // Phase 2: Gateway succeeded — persist boleto + receivable atomically in DB
+    const gatewayData = {
+      url: result.url ?? null,
+      line: result.line ?? null,
+      barcode: result.barcode ?? null,
+      qrCode: result.qrCode ?? null,
+      pdf: result.pdf ?? null,
+      nossoNumero: result.nossoNumero ?? null,
+    };
+
+    // Bug #1: Wrap DB writes in a mini-transaction for atomicity
+    const boleto = await prisma.$transaction(async (tx) => {
+      const b = await tx.boleto.create({
         data: {
           proposalId: input.proposalId,
-          bankReference: result.bankReference,
+          bankReference: result.gatewayId,
+          providerId,
+          gatewayId: result.gatewayId,
+          gatewayData: gatewayData as unknown as Prisma.InputJsonValue,
+          manualOverride,
           value: new Prisma.Decimal(value),
           dueDate,
           installmentNumber: i,
@@ -605,7 +870,7 @@ export async function generateBoletosForProposal(
         },
       });
 
-      // Create corresponding account receivable entry
+      // Bug #4: Link receivable to boleto via FK
       await tx.accountReceivable.create({
         data: {
           clientId: proposal.clientId,
@@ -614,20 +879,40 @@ export async function generateBoletosForProposal(
           dueDate,
           status: "PENDING",
           companyId: input.companyId,
+          boletoId: b.id,
         },
       });
 
-      createdBoletos.push({
-        id: boleto.id,
-        bankReference: boleto.bankReference,
-        value: boleto.value.toString(),
-        dueDate: boleto.dueDate.toISOString(),
-        installmentNumber: boleto.installmentNumber,
-        status: boleto.status,
-        createdAt: boleto.createdAt.toISOString(),
-      });
-    }
-  });
+      return b;
+    });
+
+    createdBoletos.push({
+      id: boleto.id,
+      bankReference: boleto.bankReference,
+      value: boleto.value.toString(),
+      dueDate: boleto.dueDate.toISOString(),
+      installmentNumber: boleto.installmentNumber,
+      status: boleto.status,
+      createdAt: boleto.createdAt.toISOString(),
+      providerName,
+      manualOverride,
+      gatewayData,
+    });
+  }
+
+  // Build audit/event messages reflecting partial success if applicable
+  const isPartial = failedAtInstallment !== null && createdBoletos.length > 0;
+  const isFullFailure = failedAtInstallment !== null && createdBoletos.length === 0;
+
+  if (isFullFailure) {
+    throw new Error(
+      `Falha ao gerar boleto da parcela ${failedAtInstallment}/${input.installments}: ${failureError}`
+    );
+  }
+
+  const auditSuffix = isPartial
+    ? ` (parcial: falha na parcela ${failedAtInstallment})`
+    : "";
 
   await logAuditEvent({
     userId: session.userId,
@@ -639,18 +924,38 @@ export async function generateBoletosForProposal(
       installments: input.installments,
       totalValue: totalValue.toString(),
       boletoCount: createdBoletos.length,
+      providerName,
+      manualOverride,
+      ...(isPartial
+        ? {
+            partialFailure: true,
+            failedAtInstallment,
+            failureError,
+          }
+        : {}),
     } as unknown as Prisma.InputJsonValue,
     companyId: input.companyId,
   });
 
+  const eventMessage = isPartial
+    ? `${createdBoletos.length}/${input.installments} boleto(s) gerado(s) via ${providerName}. Falha na parcela ${failedAtInstallment}: ${failureError}.`
+    : `${createdBoletos.length} boleto(s) gerado(s) no valor total de R$ ${totalValue.toFixed(2)} via ${providerName}.`;
+
   await createProposalEvent(
     input.proposalId,
-    "BOLETO_GENERATED",
-    `${createdBoletos.length} boleto(s) gerado(s) no valor total de R$ ${totalValue.toFixed(2)}.`,
+    isPartial ? "BOLETO_PARTIAL" : "BOLETO_GENERATED",
+    eventMessage + auditSuffix,
     session.userId
   );
 
-  return { boletos: createdBoletos };
+  return {
+    boletos: createdBoletos,
+    ...(isPartial
+      ? {
+          error: `Parcela ${failedAtInstallment}/${input.installments} falhou: ${failureError}. ${createdBoletos.length} boleto(s) gerado(s) com sucesso.`,
+        }
+      : {}),
+  };
 }
 
 export async function listBoletosForProposal(
@@ -662,6 +967,11 @@ export async function listBoletosForProposal(
   const boletos = await prisma.boleto.findMany({
     where: { proposalId, companyId },
     orderBy: { installmentNumber: "asc" },
+    include: {
+      provider: {
+        select: { name: true },
+      },
+    },
   });
 
   return boletos.map((b) => ({
@@ -672,6 +982,9 @@ export async function listBoletosForProposal(
     installmentNumber: b.installmentNumber,
     status: b.status,
     createdAt: b.createdAt.toISOString(),
+    providerName: b.provider?.name ?? null,
+    manualOverride: b.manualOverride,
+    gatewayData: b.gatewayData as BoletoRow["gatewayData"],
   }));
 }
 

@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -404,19 +405,20 @@ export default function ContasReceberPage() {
               <TableHead className="text-right">Valor</TableHead>
               <TableHead>Vencimento</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead>Banco</TableHead>
               <TableHead className="text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center">
+                <TableCell colSpan={7} className="h-24 text-center">
                   Carregando...
                 </TableCell>
               </TableRow>
             ) : !receivables?.data.length ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center">
+                <TableCell colSpan={7} className="h-24 text-center">
                   Nenhuma conta a receber encontrada.
                 </TableCell>
               </TableRow>
@@ -439,6 +441,20 @@ export default function ContasReceberPage() {
                     >
                       {statusLabel(row.status)}
                     </span>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-1.5">
+                      {row.providerName ? (
+                        <Badge variant="secondary" className="text-xs">
+                          {row.providerName}
+                        </Badge>
+                      ) : null}
+                      {row.manualOverride && (
+                        <Badge variant="outline" className="text-xs border-warning/50 text-warning">
+                          Manual
+                        </Badge>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell className="text-right">
                     {row.status !== "PAID" && row.status !== "CANCELLED" && (

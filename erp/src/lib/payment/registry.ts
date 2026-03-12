@@ -1,0 +1,126 @@
+import type { ProviderDefinition } from "./types";
+
+/**
+ * Registro central de todos os providers disponíveis.
+ * O frontend consulta isso pra saber quais bancos existem e quais campos mostrar.
+ */
+export const PROVIDER_REGISTRY: Record<string, ProviderDefinition> = {
+  pagarme: {
+    id: "pagarme",
+    name: "Pagar.me",
+    configSchema: [
+      {
+        key: "apiKey",
+        label: "Secret Key",
+        type: "password",
+        required: true,
+        placeholder: "sk_live_...",
+        helpText:
+          "Encontre em Pagar.me Dashboard → Configurações → Chaves",
+        group: "credentials",
+      },
+    ],
+    settingsSchema: [
+      {
+        key: "defaultInstructions",
+        label: "Instruções do Boleto",
+        type: "text",
+        required: false,
+        placeholder: "Não receber após vencimento",
+        group: "settings",
+      },
+      {
+        key: "daysToExpire",
+        label: "Dias para expirar",
+        type: "number",
+        required: false,
+        placeholder: "5",
+        group: "settings",
+      },
+    ],
+  },
+  pinbank: {
+    id: "pinbank",
+    name: "PinBank",
+    configSchema: [
+      {
+        key: "apiKey",
+        label: "API Key",
+        type: "password",
+        required: true,
+        group: "credentials",
+      },
+      {
+        key: "convenio",
+        label: "Convênio",
+        type: "text",
+        required: true,
+        group: "credentials",
+      },
+      {
+        key: "carteira",
+        label: "Carteira",
+        type: "text",
+        required: true,
+        group: "credentials",
+      },
+      {
+        key: "cedente",
+        label: "Código Cedente",
+        type: "text",
+        required: true,
+        group: "credentials",
+      },
+      {
+        key: "agencia",
+        label: "Agência",
+        type: "text",
+        required: true,
+        group: "credentials",
+      },
+      {
+        key: "conta",
+        label: "Conta",
+        type: "text",
+        required: true,
+        group: "credentials",
+      },
+    ],
+    settingsSchema: [
+      {
+        key: "multa",
+        label: "Multa (%)",
+        type: "number",
+        required: false,
+        group: "settings",
+      },
+      {
+        key: "juros",
+        label: "Juros ao mês (%)",
+        type: "number",
+        required: false,
+        group: "settings",
+      },
+      {
+        key: "desconto",
+        label: "Desconto antecipação (%)",
+        type: "number",
+        required: false,
+        group: "settings",
+      },
+      {
+        key: "diasDesconto",
+        label: "Dias antecedência p/ desconto",
+        type: "number",
+        required: false,
+        group: "settings",
+      },
+    ],
+  },
+  mock: {
+    id: "mock",
+    name: "Mock (Teste)",
+    configSchema: [],
+    settingsSchema: [],
+  },
+};

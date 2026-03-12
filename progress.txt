@@ -146,3 +146,260 @@
 ### Learnings
 - When checking "flow complete", must verify ALL items are in terminal state, not just a subset — partial completion ≠ completion
 - Chart rendering and SQL range must be aligned: if chart always shows N monthly bars, SQL must always fetch N months regardless of KPI filter
+
+## US-001 — Schema & Migration: PaymentProvider, PaymentRoutingRule, Boleto changes (2026-03-10) ✅
+
+### What was implemented
+- `PaymentProvider` model: id, companyId, name, provider, credentials (String @db.Text for AES), webhookUrl, webhookSecret, sandbox, isDefault, isActive, metadata (Json?), timestamps
+- `PaymentRoutingRule` model: id, providerId, priority, clientType (ClientType?), minValue/maxValue (Decimal?), tags (String[]), isActive, createdAt
+- `Boleto` new fields: providerId (String?), gatewayId (String?), gatewayData (Json?), manualOverride (Boolean @default(false))
+- `Company` new relation: paymentProviders PaymentProvider[]
+- `Boleto` new relation: provider PaymentProvider? with onDelete: SetNull
+- Indexes: payment_providers(companyId, isActive), payment_routing_rules(providerId, priority)
+- Migration `20260310184916_add_payment_providers` applied to production DB
+- `npx prisma generate` and `npm run lint` pass cleanly
+
+### Learnings
+- `prisma migrate dev` requires shadow DB access; when shadow DB can't be created (Coolify internal network), create migration manually and use `prisma migrate deploy`
+- The DB is on Coolify Docker network (container `ho084w448cs8sg4csgwo8wko`, internal IP 10.0.1.10:5432); use SSH tunnel via `ssh -f -N -L 15432:10.0.1.10:5432 root@coolify.boletoapi.com`
+- `prisma migrate diff --from-schema-datasource --to-schema-datamodel --script` shows accumulated drift from all previous migrations — must manually extract only the relevant SQL for the new migration
+- @@map with snake_case maintained consistently: `payment_providers`, `payment_routing_rules`
+- credentials is String @db.Text (not Json) because it will be AES-encrypted as a string
+
+## US-002 — Payment types, registry e factory (2026-03-10) ✅
+
+### What was implemented
+- `src/lib/payment/types.ts` — All interfaces: ConfigField, ProviderDefinition, PaymentGateway, CreateBoletoInput, CreateBoletoResult, BoletoStatusResult, WebhookEvent
+- `src/lib/payment/registry.ts` — PROVIDER_REGISTRY with pagarme (1 credential + 2 settings), pinbank (6 credentials + 4 settings), mock (empty schemas)
+- `src/lib/payment/factory.ts` — getGateway(providerType, decryptedCredentials, metadata) validates against registry, throws "not implemented" for known providers (mock/pagarme/pinbank), throws "Provider not found" for unknown
+- `src/lib/payment/index.ts` — Barrel exports for all types and functions
+
+### Learnings
+- Factory uses switch/case for known providers that will be implemented in future stories (US-003, US-004, US-013) — keeps it type-safe and explicit
+- Using `type` imports in index.ts barrel for interfaces avoids runtime overhead — only re-exports types
+- Registry is a plain object (not a Map) — simpler, JSON-serializable, and easy for frontend to consume
+- ConfigField.group discriminates between 'credentials' (encrypted) and 'settings' (stored in metadata) — important for the UI rendering in US-009
+
+## US-003 — Mock Provider + migrar boleto.ts (2026-03-10) ✅
+
+### What was implemented
+- `src/lib/payment/providers/mock.provider.ts` — MockProvider implementing full PaymentGateway interface
+- createBoleto generates fake gatewayId (MOCK prefix + timestamp + random), fake URL/line/barcode/QR/PDF/nossoNumero with console.log matching original MockBoletoProvider style
+- getBoletoStatus always returns 'pending'
+- cancelBoleto always returns { success: true }
+- validateWebhook always returns true
+- parseWebhookEvent parses body JSON and returns generic boleto.paid event
+- testConnection returns { ok: true, message: 'Mock provider ativo' }
+- factory.ts updated: `case "mock"` now returns `new MockProvider()` instead of throwing
+
+### Learnings
+- The original MockBoletoProvider in boleto.ts used `value` as raw number (R$), the new CreateBoletoInput uses `amount` in centavos — mock provider follows new convention
+- cancelBoleto and validateWebhook don't need `gatewayId`/`headers`/`body` params used — omit unused params to satisfy lint (no-unused-vars)
+- parseWebhookEvent body param can be string or already-parsed object depending on caller — defensive parsing with typeof check
+- Keep boleto.ts untouched per instructions (will be refactored in US-007)
+
+## US-004 — Pagar.me Provider (2026-03-10) ✅
+
+### What was implemented
+- `src/lib/payment/providers/pagarme.provider.ts` — full PaymentGateway implementation for Pagar.me v5
+- createBoleto: searches customer by document (GET /customers?document=X), creates if not found (POST /customers), then creates order with boleto payment (POST /orders)
+- getBoletoStatus: GET /charges/{id} with status mapping (pending→pending, paid→paid, canceled→cancelled, etc.)
+- cancelBoleto: DELETE /charges/{id}
+- testConnection: GET /customers?size=1 — validates API key works
+- validateWebhook: HMAC-SHA1 of body with webhookSecret, compared against x-hub-signature header using timing-safe comparison
+- parseWebhookEvent: maps charge.paid→boleto.paid, charge.canceled→boleto.cancelled, charge.payment_failed→boleto.failed, charge.underpaid→boleto.failed, charge.overpaid→boleto.paid
+- factory.ts updated: `case "pagarme"` returns `new PagarmeProvider(credentials, metadata, webhookSecret)`
+- factory.ts signature extended with optional `webhookSecret` parameter
+
+### Learnings
+- Pagar.me Basic Auth uses apiKey as username with empty password: `base64(sk_xxx:)` — the colon after the key is critical
+- Pagar.me customer creation requires phones object even if dummy — API rejects without it
+- Pagar.me address uses line_1/line_2 format, not separate street/number fields
+- Pagar.me customer type is "individual" (not "PF") or "company" (not "PJ")
+- DELETE on charges may return 204 with no body — need to handle empty response
+- HMAC-SHA1 webhook validation: Pagar.me sends `sha1=<hex>` in x-hub-signature header
+- crypto.timingSafeEqual throws if buffers have different lengths — wrap in try/catch
+- Factory webhookSecret param added as 4th arg to support webhook validation in provider instances
+
+## US-005 — Router — motor de roteamento com regras (2026-03-10) ✅
+
+### What was implemented
+- `src/lib/payment/router.ts` — routing engine with 3 exported functions
+- `resolveProvider(companyId, context)`: fetches active rules ordered by priority ASC, evaluates clientType + minValue + maxValue + tags, returns first matching provider's full PaymentProvider record. Falls back to isDefault=true provider. Throws clear error if no default configured.
+- `getProviderById(companyId, providerId)`: validates provider exists, belongs to company, and is active. Throws if not found/inactive.
+- `previewRouting(companyId, context)`: returns `{providerId, providerName, reason}` without side effects, for frontend dropdown preview. Returns null if no provider available.
+- `matchesRule()` helper: null clientType = match any, null minValue = no min, null maxValue = no max, tags use AND logic (all rule tags must exist in context)
+- `buildReason()` helper: generates human-readable reason string for UI display
+- Updated `index.ts` barrel to export all 3 functions
+- Updated `prd.json`: US-005 passes=true
+
+### Learnings
+- Prisma `Decimal` fields from queries need `Number()` conversion for numeric comparison — same pattern as US-001 KPI aggregates
+- PaymentRoutingRule.tags is `String[]` in Prisma — can use `.every()` directly for AND-logic tag matching
+- `findMany` with nested `where` on relation (`provider: { companyId, isActive }`) works cleanly in Prisma for filtering rules by provider attributes
+- previewRouting returns null (not throws) when no provider available — cleaner for frontend to handle gracefully
+
+## US-006 — Webhook route + baixa automática no financeiro (2026-03-10) ✅
+
+### What was implemented
+- `src/app/api/webhooks/payment/[provider]/route.ts` — Next.js App Router POST handler
+- Identifies provider type from path param, finds all active PaymentProviders of that type
+- Decrypts credentials from each provider using `decrypt()` from encryption.ts, instantiates gateway via factory
+- Tries to validate webhook signature with each provider until one matches (supports multiple providers of same type)
+- Returns 401 if no provider validates the signature
+- Parses webhook event via `gateway.parseWebhookEvent(rawBody)`
+- Finds boleto by `gatewayId` + `providerId`
+- Updates boleto status: boleto.paid→PAID, boleto.cancelled→CANCELLED, boleto.expired→OVERDUE, boleto.failed→CANCELLED
+- If boleto paid: finds matching AccountReceivable by companyId + clientId (from proposal) + value (±R$0.01 tolerance) + dueDate (±15 days) + status PENDING, updates to PAID with paidAt
+- Creates AuditLog with userId "system" for all operations (including boleto not found)
+- Returns 200 OK to the bank even if boleto not found (avoids infinite retry loops)
+
+### Learnings
+- Next.js 15 App Router dynamic route params are now a Promise — must `await params` before destructuring
+- AccountReceivable doesn't have a direct FK to Boleto — matching is done by companyId + clientId (from boleto.proposal.clientId) + value with tolerance + dueDate window
+- Prisma Decimal fields accept plain numbers in `gte`/`lte` comparisons — no need for `new Prisma.Decimal()`
+- Webhook handlers should be defensive: always return 200 for parse errors and missing boletos to prevent infinite retries from payment providers
+- The `logAuditEvent` function is fire-and-forget (catches errors internally) — safe to use without try/catch
+- For webhook routes with no user session, using "system" as userId in audit logs is the established pattern
+
+## US-007 — Integrar novo sistema no fluxo de propostas (2026-03-10) ✅
+
+### What was implemented
+- Refactored `generateBoletosForProposal` in `comercial/propostas/actions.ts` to use the new payment provider system
+- Added optional `providerId` parameter to `GenerateBoletosInput` for manual provider override
+- New `resolveGatewayForBoleto` helper encapsulates the resolution logic: manual override → automatic routing → mock fallback
+- Manual override: `getProviderById(companyId, providerId)` validates provider, sets `manualOverride=true`
+- Automatic: `resolveProvider(companyId, { clientType, value })` uses routing rules
+- Fallback: if resolveProvider throws (no providers configured), falls back to mock with `console.warn`
+- Credentials decrypted via `decrypt()` from encryption.ts, then `JSON.parse()` to get credentials object
+- Gateway instantiated via `getGateway(providerType, decryptedCredentials, metadata, webhookSecret)`
+- `gateway.createBoleto()` called with `CreateBoletoInput` (amount in centavos, customer with documentType)
+- Boleto record saves: `providerId`, `gatewayId`, `gatewayData` (url, line, barcode, qrCode, pdf, nossoNumero), `manualOverride`
+- `bankReference = gatewayId` maintained for backward compatibility
+- Removed `import { generateBoleto } from "@/lib/boleto"` — old file kept intact
+- Client `type` field (PF/PJ) fetched from the query and used for routing context
+- Audit log and proposal event include provider name for traceability
+
+### Learnings
+- The old `generateBoleto` from `boleto.ts` returns `{ bankReference }` with value in R$; the new `CreateBoletoInput` uses `amount` in centavos — must multiply by 100
+- `decrypt()` returns the raw encrypted string content; for PaymentProvider credentials, that's a JSON string that needs `JSON.parse()`
+- Client `type` field is already a `ClientType` enum (PF/PJ) — can cast directly to the routing context type
+- Gateway resolution is done once before the transaction loop (same provider for all installments of a proposal)
+- The catch block for resolveProvider fallback uses empty catch clause — no need to capture the error since we're logging the warning with a custom message
+- `gatewayData` fields use `?? null` for optional CreateBoletoResult fields to ensure consistent JSON structure
+
+## US-008 — Server actions CRUD de Payment Providers (2026-03-10) ✅
+
+### What was implemented
+- `src/app/(app)/configuracoes/integracoes-bancarias/actions.ts` with 8 server actions
+- `getPaymentProviders(companyId)`: lists providers with rules, credentials decrypted then masked (last 4 chars for password fields from configSchema)
+- `getAvailableProviders()`: returns PROVIDER_REGISTRY values for dropdown population
+- `savePaymentProvider(companyId, data)`: creates or updates provider, encrypts credentials as JSON string. On edit: preserves existing credential values when new value is empty
+- `deletePaymentProvider(companyId, id)`: deletes provider (Prisma cascade handles rules)
+- `testProviderConnection(companyId, id)`: decrypts credentials, instantiates gateway via factory, calls testConnection()
+- `saveRoutingRules(companyId, providerId, rules[])`: transaction deletes all existing rules then creates new ones
+- `toggleProviderActive(companyId, id)`: toggles isActive boolean
+- `setDefaultProvider(companyId, id)`: transaction unsets all defaults for company, then sets the specified one
+- All actions verify requireCompanyAccess and log AuditLog
+- On create: auto-generates webhookUrl (`https://boletoapi.com/api/webhooks/payment/${providerType}`) and webhookSecret (crypto.randomUUID)
+
+### Learnings
+- `const` with spread `{ ...data.credentials }` is sufficient even when mutating individual keys — ESLint `prefer-const` catches unnecessary `let`
+- Credential masking should iterate the configSchema to find password-type fields rather than hardcoding field names — future-proof when new providers are added
+- Settings (non-sensitive config like juros, multa) are stored in `metadata` (Json) field, not encrypted — only credentials get AES encryption
+- The `$transaction` array syntax works well for delete-all + create-many patterns (routing rules replacement)
+- Prisma `Prisma.JsonNull` must be used instead of `null` when explicitly setting a Json field to null
+
+## US-009 — Página de Configuração — Integrações Bancárias (2026-03-10) ✅
+
+### What was implemented
+- `src/app/(app)/configuracoes/integracoes-bancarias/page.tsx` — full CRUD config page
+- Provider cards grid: name, type (Badge secondary), active/inactive (Badge with dot), default star icon, rules count
+- Card actions: Edit button, Test Connection (Loader2 spinner + toast result), active/inactive Switch toggle
+- "Definir padrão" and "Remover" ghost buttons per card
+- Empty state with Landmark icon and CTA button
+- Create/Edit Dialog (max-w-2xl, scrollable):
+  - Name + Type dropdown (from registry, disabled on edit)
+  - Dynamic credential fields rendered from configSchema: text, password (with Eye/EyeOff toggle), number, select, boolean
+  - Dynamic settings fields from settingsSchema
+  - Sandbox toggle, Default toggle
+  - Webhook URL read-only (click to copy) — only shown for existing providers
+  - Routing rules section: add/remove rules, each with priority (number), clientType (PF/PJ/Qualquer via Select), minValue, maxValue, tags (comma-separated text)
+- Delete confirmation Dialog with destructive button
+- All actions use server actions from ./actions
+- Uses useCompany() for companyId
+- Loads providers + registry on mount via useEffect + getPaymentProviders + getAvailableProviders
+
+### Learnings
+- DynamicField component pattern works well for rendering configSchema — switch on field.type, handle password visibility via parent Set<string> state
+- Routing rules use a "__any__" sentinel value for clientType "Qualquer" since Select requires non-empty string values — converted to null on save
+- Tags use simple comma-separated text input, split/trim/filter on save via formToRule()
+- Dialog max-h-[90vh] overflow-y-auto scrollbar-thin keeps modal usable with many fields
+- When editing a provider, changing type resets credentials/settings (new schema), but keeping same type preserves existing values
+- Password fields in edit mode: leaving blank preserves existing value (handled by server action)
+- Webhook URL click-to-copy uses navigator.clipboard.writeText + toast feedback
+- All existing shadcn/ui components were sufficient: Card, Dialog, Button, Input, Select, Switch, Badge — no new components needed
+
+## US-010 — Sidebar + menu item Integrações Bancárias (2026-03-10) ✅
+
+### What was implemented
+- Added `Landmark` icon import from lucide-react to sidebar.tsx
+- Added "Integrações Bancárias" child item under Configurações menu
+- Position: after "Fiscal" (Receipt icon), before "Canais" (Radio icon)
+- Link: /configuracoes/integracoes-bancarias
+- Highlight active via existing sidebar child-item logic (pathname match)
+
+### Learnings
+- Sidebar children render in array order — position in the array = position in the UI
+- The sidebar child active state is handled by the existing `childActive` check: `pathname === child.href || pathname.startsWith(child.href + "/")`
+- No new component needed — just adding to the `navItems` children array
+
+## US-013 — PinBank provider placeholder (2026-03-10) ✅
+
+### What was implemented
+- `src/lib/payment/providers/pinbank.provider.ts` — PinBankProvider class implementing PaymentGateway
+- All methods throw `new Error('PinBank provider não implementado — aguardando documentação da API')`
+- `testConnection()` returns `{ ok: false, message: 'Provider em desenvolvimento' }` (does NOT throw)
+- factory.ts updated: `case "pinbank"` now returns `new PinBankProvider()` instead of throwing
+- Import added to factory.ts
+
+### Learnings
+- ESLint `no-unused-vars` rule in this project doesn't allow underscore-prefixed params either — must omit unused params entirely (same pattern as MockProvider)
+- Don't import types that aren't used (e.g., `CreateBoletoInput` not needed when params are omitted)
+- testConnection is the only method that returns normally — all others throw, which is the correct pattern for a placeholder provider
+
+## US-011 — Seletor de banco na proposta (2026-03-10) ✅
+
+### What was implemented
+- Server actions `getProvidersForProposal(companyId)` and `previewRoutingForProposal(companyId, clientType, value)` in propostas/actions.ts
+- Provider selector in Generate Boletos dialog with 3 states:
+  - 0 providers: warning alert with link to Configurações → Integrações Bancárias
+  - 1 provider: badge display only (no dropdown needed)
+  - Multiple providers: dropdown with "⚡ Automático (BankName)" default + all active providers
+- previewRouting called on dialog open to show which bank auto-routing would select
+- Tooltip on auto mode explains which routing rule matched
+- selectedProviderId passed to generateBoletosForProposal (null = automatic)
+- ProposalDetail extended with `clientType` field for routing context
+
+### Learnings
+- previewRouting is a server function — needs a wrapper server action (`previewRoutingForProposal`) for client-side consumption
+- Loading providers on dialog open (not on page load) avoids unnecessary queries
+- Single provider case doesn't need dropdown — simpler UX with just a badge
+
+## US-012 — Exibir dados do gateway no boleto + badge no financeiro (2026-03-10) ✅
+
+### What was implemented
+- `BoletoGatewayInfo` expandable component in proposal detail: nosso número, linha digitável (with copy button), URL (clickable), PDF (download), QR code (image)
+- BoletoRow type extended with `providerName`, `manualOverride`, `gatewayData`
+- `listBoletosForProposal` now includes provider relation for provider name
+- Boletos table: new "Banco" column with provider badge + Manual badge
+- `gatewayData=null` shows "Gerado localmente" fallback
+- Financeiro/receber: ReceivableRow extended with `providerName` and `manualOverride`
+- listReceivables enriches data by batch-querying boletos matching (clientId + value + dueDate)
+- New "Banco" column in accounts receivable table with provider badge
+
+### Learnings
+- AccountReceivable has no FK to Boleto — matching by (clientId + value + dueDate) works because both are created in same transaction with identical values
+- The boleto OR query groups by proposal.clientId since boleto doesn't have direct clientId
+- navigator.clipboard.writeText needs to be wrapped in try/catch for security context failures
+- Expandable gateway info avoids table clutter — details shown on demand
