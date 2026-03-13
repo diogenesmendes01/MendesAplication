@@ -60,7 +60,7 @@ export async function listAdditionalContacts(
     orderBy: { name: "asc" },
   });
 
-  return contacts.map((c) => ({
+  return contacts.map((c: typeof contacts[number]) => ({
     id: c.id,
     name: c.name,
     role: c.role,
