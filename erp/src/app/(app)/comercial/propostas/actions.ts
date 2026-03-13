@@ -11,6 +11,7 @@ import { resolveProvider, getProviderById, previewRouting } from "@/lib/payment/
 import { getGateway } from "@/lib/payment/factory";
 import { decrypt } from "@/lib/encryption";
 import type { CreateBoletoInput, CreateBoletoResult, PaymentGateway } from "@/lib/payment/types";
+import { MAX_INSTALLMENTS } from "@/lib/payment/constants";
 
 // ---------------------------------------------------------------------------
 // Proposal Event Helper
@@ -688,8 +689,8 @@ export async function generateBoletosForProposal(
   if (!input.installments || input.installments < 1) {
     throw new Error("Número de parcelas deve ser pelo menos 1");
   }
-  if (input.installments > 48) {
-    throw new Error("Número máximo de parcelas é 48");
+  if (input.installments > MAX_INSTALLMENTS) {
+    throw new Error(`Número máximo de parcelas é ${MAX_INSTALLMENTS}`);
   }
   if (!input.firstDueDate) {
     throw new Error("Data do primeiro vencimento é obrigatória");

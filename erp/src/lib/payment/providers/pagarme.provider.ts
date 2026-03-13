@@ -6,6 +6,11 @@ import type {
   BoletoStatusResult,
   WebhookEvent,
 } from "../types";
+import {
+  PHONE_PLACEHOLDER,
+  PHONE_AREA_CODE_PLACEHOLDER,
+  PHONE_COUNTRY_CODE,
+} from "../constants";
 
 const BASE_URL = "https://api.pagar.me/core/v5";
 
@@ -161,9 +166,9 @@ export class PagarmeProvider implements PaymentGateway {
     // Pagar.me requires phones for customers
     payload.phones = {
       mobile_phone: {
-        country_code: "55",
-        area_code: "00",
-        number: "000000000",
+        country_code: PHONE_COUNTRY_CODE,
+        area_code: PHONE_AREA_CODE_PLACEHOLDER,
+        number: PHONE_PLACEHOLDER,
       },
     };
 
