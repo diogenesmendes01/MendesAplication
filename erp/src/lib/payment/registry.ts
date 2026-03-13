@@ -1,10 +1,10 @@
-import type { ProviderDefinition } from "./types";
+import type { ProviderDefinition, ProviderType } from "./types";
 
 /**
  * Registro central de todos os providers disponíveis.
  * O frontend consulta isso pra saber quais bancos existem e quais campos mostrar.
  */
-export const PROVIDER_REGISTRY: Record<string, ProviderDefinition> = {
+export const PROVIDER_REGISTRY: Record<ProviderType, ProviderDefinition> = {
   pagarme: {
     id: "pagarme",
     name: "Pagar.me",

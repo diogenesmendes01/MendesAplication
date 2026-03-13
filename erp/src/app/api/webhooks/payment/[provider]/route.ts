@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/encryption";
 import { getGateway } from "@/lib/payment/factory";
 import { logAuditEvent } from "@/lib/audit";
-import type { WebhookEvent } from "@/lib/payment/types";
+import type { WebhookEvent, ProviderType } from "@/lib/payment/types";
 import { BoletoStatus, PaymentStatus } from "@prisma/client";
 
 // ---------------------------------------------------------------------------
@@ -82,7 +82,7 @@ export async function POST(
       const metadata = prov.metadata as Record<string, unknown> | null;
 
       const gw = getGateway(
-        prov.provider,
+        prov.provider as ProviderType,
         decryptedCredentials,
         metadata,
         prov.webhookSecret ? decrypt(prov.webhookSecret) : undefined

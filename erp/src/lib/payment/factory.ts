@@ -1,4 +1,4 @@
-import type { PaymentGateway } from "./types";
+import type { PaymentGateway, ProviderType } from "./types";
 import { PROVIDER_REGISTRY } from "./registry";
 import { MockProvider } from "./providers/mock.provider";
 import { PagarmeProvider } from "./providers/pagarme.provider";
@@ -16,7 +16,7 @@ import { PagarmeProvider } from "./providers/pagarme.provider";
  * @throws Error se o provider ainda não estiver implementado
  */
 export function getGateway(
-  providerType: string,
+  providerType: ProviderType,
   decryptedCredentials: Record<string, unknown>,
   metadata?: Record<string, unknown> | null,
   webhookSecret?: string

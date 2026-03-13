@@ -10,7 +10,7 @@ import { emitInvoiceForBoleto } from "@/lib/nfse-actions";
 import { resolveProvider, getProviderById, previewRouting } from "@/lib/payment/router";
 import { getGateway } from "@/lib/payment/factory";
 import { decrypt } from "@/lib/encryption";
-import type { CreateBoletoInput, CreateBoletoResult, PaymentGateway } from "@/lib/payment/types";
+import type { CreateBoletoInput, CreateBoletoResult, PaymentGateway, ProviderType } from "@/lib/payment/types";
 
 // ---------------------------------------------------------------------------
 // Proposal Event Helper
@@ -625,7 +625,7 @@ async function resolveGatewayForBoleto(
     const decryptedCredentials = JSON.parse(decrypt(provider.credentials)) as Record<string, unknown>;
     const metadata = provider.metadata as Record<string, unknown> | null;
     const gateway = getGateway(
-      provider.provider,
+      provider.provider as ProviderType,
       decryptedCredentials,
       metadata,
       provider.webhookSecret ? decrypt(provider.webhookSecret) : undefined,
@@ -663,7 +663,7 @@ async function resolveGatewayForBoleto(
   const decryptedCredentials = JSON.parse(decrypt(provider.credentials)) as Record<string, unknown>;
   const metadata = provider.metadata as Record<string, unknown> | null;
   const gateway = getGateway(
-    provider.provider,
+    provider.provider as ProviderType,
     decryptedCredentials,
     metadata,
     provider.webhookSecret ? decrypt(provider.webhookSecret) : undefined,

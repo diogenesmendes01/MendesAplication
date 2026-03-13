@@ -1,4 +1,11 @@
 // ============================================================
+// Provider Types — single source of truth for valid provider IDs
+// ============================================================
+
+export const PROVIDER_TYPES = ["pagarme", "pinbank", "mock"] as const;
+export type ProviderType = (typeof PROVIDER_TYPES)[number];
+
+// ============================================================
 // Config Schema — cada provider define quais campos precisa
 // ============================================================
 
