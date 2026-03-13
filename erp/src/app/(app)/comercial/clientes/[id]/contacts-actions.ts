@@ -1,5 +1,7 @@
 "use server";
 
+import type { AdditionalContact } from "@prisma/client";
+
 import { prisma } from "@/lib/prisma";
 import { requireCompanyAccess } from "@/lib/rbac";
 import { requireSession } from "@/lib/session";
@@ -60,7 +62,7 @@ export async function listAdditionalContacts(
     orderBy: { name: "asc" },
   });
 
-  return contacts.map((c) => ({
+  return contacts.map((c: AdditionalContact) => ({
     id: c.id,
     name: c.name,
     role: c.role,
