@@ -1,10 +1,10 @@
 import type { ProviderDefinition } from "./types";
 
 /**
- * Registro central de todos os providers disponíveis.
- * O frontend consulta isso pra saber quais bancos existem e quais campos mostrar.
+ * Registry de providers disponíveis apenas em produção.
+ * Não inclui o provider mock.
  */
-export const PROVIDER_REGISTRY: Record<string, ProviderDefinition> = {
+export const PRODUCTION_PROVIDER_REGISTRY: Record<string, ProviderDefinition> = {
   pagarme: {
     id: "pagarme",
     name: "Pagar.me",
@@ -117,6 +117,14 @@ export const PROVIDER_REGISTRY: Record<string, ProviderDefinition> = {
       },
     ],
   },
+};
+
+/**
+ * Registry estendido com providers de desenvolvimento/teste.
+ * Inclui todos os providers de produção + mock.
+ */
+export const DEV_PROVIDER_REGISTRY: Record<string, ProviderDefinition> = {
+  ...PRODUCTION_PROVIDER_REGISTRY,
   mock: {
     id: "mock",
     name: "Mock (Teste)",
@@ -124,3 +132,14 @@ export const PROVIDER_REGISTRY: Record<string, ProviderDefinition> = {
     settingsSchema: [],
   },
 };
+
+/**
+ * Registro central de todos os providers disponíveis.
+ * Em produção: apenas pagarme e pinbank.
+ * Em dev/test: inclui mock.
+ * O frontend consulta isso pra saber quais bancos existem e quais campos mostrar.
+ */
+export const PROVIDER_REGISTRY: Record<string, ProviderDefinition> =
+  process.env.NODE_ENV === "production"
+    ? PRODUCTION_PROVIDER_REGISTRY
+    : DEV_PROVIDER_REGISTRY;
