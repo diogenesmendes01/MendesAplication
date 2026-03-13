@@ -6,7 +6,9 @@ export type {
   CreateBoletoResult,
   BoletoStatusResult,
   WebhookEvent,
+  ProviderType,
 } from "./types";
+export { PROVIDER_TYPES, isProviderType } from "./types";
 
 export { PROVIDER_REGISTRY } from "./registry";
 export { getGateway } from "./factory";

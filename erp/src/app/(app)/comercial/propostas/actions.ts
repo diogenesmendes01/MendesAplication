@@ -9,6 +9,7 @@ import { getCachedFiscalConfig } from "@/app/(app)/configuracoes/fiscal/actions"
 import { emitInvoiceForBoleto } from "@/lib/nfse-actions";
 import { resolveProvider, getProviderById, previewRouting } from "@/lib/payment/router";
 import { getGateway } from "@/lib/payment/factory";
+import { isProviderType } from "@/lib/payment/types";
 import { decrypt } from "@/lib/encryption";
 import type { CreateBoletoInput, CreateBoletoResult, PaymentGateway } from "@/lib/payment/types";
 import { MAX_INSTALLMENTS } from "@/lib/payment/constants";
@@ -625,6 +626,9 @@ async function resolveGatewayForBoleto(
     }
     const decryptedCredentials = JSON.parse(decrypt(provider.credentials)) as Record<string, unknown>;
     const metadata = provider.metadata as Record<string, unknown> | null;
+    if (!isProviderType(provider.provider)) {
+      throw new Error(`Provider inválido encontrado no banco: ${provider.provider}`);
+    }
     const gateway = getGateway(
       provider.provider,
       decryptedCredentials,
@@ -663,6 +667,9 @@ async function resolveGatewayForBoleto(
   const provider = await resolveProvider(companyId, { clientType, value });
   const decryptedCredentials = JSON.parse(decrypt(provider.credentials)) as Record<string, unknown>;
   const metadata = provider.metadata as Record<string, unknown> | null;
+  if (!isProviderType(provider.provider)) {
+    throw new Error(`Provider inválido encontrado no banco: ${provider.provider}`);
+  }
   const gateway = getGateway(
     provider.provider,
     decryptedCredentials,

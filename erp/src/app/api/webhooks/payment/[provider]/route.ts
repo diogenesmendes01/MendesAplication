@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/encryption";
 import { getGateway } from "@/lib/payment/factory";
+import { isProviderType } from "@/lib/payment/types";
 import { logAuditEvent } from "@/lib/audit";
 import type { WebhookEvent } from "@/lib/payment/types";
 import { BoletoStatus, PaymentStatus } from "@prisma/client";
@@ -85,6 +86,9 @@ export async function POST(
 
       const metadata = prov.metadata as Record<string, unknown> | null;
 
+      if (!isProviderType(prov.provider)) {
+        throw new Error(`Provider inválido encontrado no banco: ${prov.provider}`);
+      }
       const gw = getGateway(
         prov.provider,
         decryptedCredentials,

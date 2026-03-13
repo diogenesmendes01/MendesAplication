@@ -1,4 +1,22 @@
 // ============================================================
+// Provider Types — lista canônica dos providers suportados
+// ============================================================
+
+export const PROVIDER_TYPES = ["pagarme", "pinbank", "mock"] as const;
+export type ProviderType = (typeof PROVIDER_TYPES)[number];
+
+/**
+ * Type guard para narrowing em runtime: verifica se um valor lido do banco
+ * corresponde a um provider válido antes de passá-lo para getGateway().
+ *
+ * Elimina a necessidade de casts `as ProviderType` e garante fail-fast
+ * com mensagem clara para dados legados ou corrompidos.
+ */
+export function isProviderType(v: string): v is ProviderType {
+  return (PROVIDER_TYPES as readonly string[]).includes(v);
+}
+
+// ============================================================
 // Config Schema — cada provider define quais campos precisa
 // ============================================================
 
