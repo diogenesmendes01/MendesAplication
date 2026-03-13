@@ -134,7 +134,7 @@ export async function getPaymentProviders(
       name: p.name,
       provider: p.provider,
       providerLabel: providerDef?.name ?? p.provider,
-      credentials: maskCredentials(decryptedCredentials, p.provider),
+      credentials: maskCredentials(decryptedCredentials, p.provider as ProviderType),
       settings,
       webhookUrl: p.webhookUrl,
       // Bug #8 fix: Mask webhookSecret to prevent exposure
