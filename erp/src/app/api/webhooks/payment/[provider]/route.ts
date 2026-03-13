@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/encryption";
 import { getGateway } from "@/lib/payment/factory";
+import { isProviderType } from "@/lib/payment/types";
 import { logAuditEvent } from "@/lib/audit";
 import type { WebhookEvent, ProviderType } from "@/lib/payment/types";
 import { BoletoStatus, PaymentStatus } from "@prisma/client";
@@ -81,8 +82,12 @@ export async function POST(
 
       const metadata = prov.metadata as Record<string, unknown> | null;
 
+      if (!isProviderType(prov.provider)) {
+        console.error(`[webhook] Provider inválido no banco: ${prov.provider}, pulando`);
+        continue;
+      }
       const gw = getGateway(
-        prov.provider as ProviderType,
+        prov.provider,
         decryptedCredentials,
         metadata,
         prov.webhookSecret ? decrypt(prov.webhookSecret) : undefined

@@ -9,6 +9,7 @@ import { getCachedFiscalConfig } from "@/app/(app)/configuracoes/fiscal/actions"
 import { emitInvoiceForBoleto } from "@/lib/nfse-actions";
 import { resolveProvider, getProviderById, previewRouting } from "@/lib/payment/router";
 import { getGateway } from "@/lib/payment/factory";
+import { isProviderType } from "@/lib/payment/types";
 import { decrypt } from "@/lib/encryption";
 import type { CreateBoletoInput, CreateBoletoResult, PaymentGateway, ProviderType } from "@/lib/payment/types";
 
@@ -622,10 +623,13 @@ async function resolveGatewayForBoleto(
     if (!provider.isActive) {
       throw new Error(`Provider "${provider.name}" está inativo e não pode ser usado.`);
     }
+    if (!isProviderType(provider.provider)) {
+      throw new Error(`Provider inválido no banco: ${provider.provider}`);
+    }
     const decryptedCredentials = JSON.parse(decrypt(provider.credentials)) as Record<string, unknown>;
     const metadata = provider.metadata as Record<string, unknown> | null;
     const gateway = getGateway(
-      provider.provider as ProviderType,
+      provider.provider,
       decryptedCredentials,
       metadata,
       provider.webhookSecret ? decrypt(provider.webhookSecret) : undefined,
@@ -660,10 +664,13 @@ async function resolveGatewayForBoleto(
 
   // Providers exist — errors should propagate, NOT fall back to mock
   const provider = await resolveProvider(companyId, { clientType, value });
+  if (!isProviderType(provider.provider)) {
+    throw new Error(`Provider inválido no banco: ${provider.provider}`);
+  }
   const decryptedCredentials = JSON.parse(decrypt(provider.credentials)) as Record<string, unknown>;
   const metadata = provider.metadata as Record<string, unknown> | null;
   const gateway = getGateway(
-    provider.provider as ProviderType,
+    provider.provider,
     decryptedCredentials,
     metadata,
     provider.webhookSecret ? decrypt(provider.webhookSecret) : undefined,

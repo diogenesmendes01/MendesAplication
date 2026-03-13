@@ -5,6 +5,11 @@
 export const PROVIDER_TYPES = ["pagarme", "pinbank", "mock"] as const;
 export type ProviderType = (typeof PROVIDER_TYPES)[number];
 
+// Type guard: validates provider string from untrusted sources (DB reads, external input)
+export function isProviderType(v: string): v is ProviderType {
+  return (PROVIDER_TYPES as readonly string[]).includes(v);
+}
+
 // ============================================================
 // Config Schema — cada provider define quais campos precisa
 // ============================================================

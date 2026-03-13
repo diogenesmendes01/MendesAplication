@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { requireCompanyAccess } from "@/lib/rbac";
 import { logAuditEvent } from "@/lib/audit";
 import { encrypt, decrypt } from "@/lib/encryption";
-import { PROVIDER_REGISTRY, getGateway, PROVIDER_TYPES } from "@/lib/payment";
+import { PROVIDER_REGISTRY, getGateway, PROVIDER_TYPES, isProviderType } from "@/lib/payment";
 import type { ProviderDefinition, ProviderType } from "@/lib/payment";
 import { Prisma } from "@prisma/client";
 import type { ClientType } from "@prisma/client";
@@ -127,14 +127,17 @@ export async function getPaymentProviders(
       settings = p.metadata as Record<string, string>;
     }
 
-    const providerDef = PROVIDER_REGISTRY[p.provider as ProviderType];
+    if (!isProviderType(p.provider)) {
+      throw new Error(`Provider inválido no banco: ${p.provider}`);
+    }
+    const providerDef = PROVIDER_REGISTRY[p.provider];
 
     return {
       id: p.id,
       name: p.name,
       provider: p.provider,
       providerLabel: providerDef?.name ?? p.provider,
-      credentials: maskCredentials(decryptedCredentials, p.provider as ProviderType),
+      credentials: maskCredentials(decryptedCredentials, p.provider),
       settings,
       webhookUrl: p.webhookUrl,
       // Bug #8 fix: Mask webhookSecret to prevent exposure
@@ -189,6 +192,11 @@ export async function savePaymentProvider(
   // Validate provider type exists
   if (!(PROVIDER_TYPES as readonly string[]).includes(data.provider) || !PROVIDER_REGISTRY[data.provider as ProviderType]) {
     throw new Error(`Tipo de provider inválido: ${data.provider}`);
+  }
+
+  // Block mock provider in production — would emit fake boletos to real customers
+  if (data.provider === "mock" && process.env.NODE_ENV === "production") {
+    throw new Error("Provider mock não é permitido em produção");
   }
 
   const credentialsToEncrypt: Record<string, string> = { ...data.credentials };
@@ -421,8 +429,11 @@ export async function testProviderConnection(
   }
 
   try {
+    if (!isProviderType(provider.provider)) {
+      return { ok: false, message: `Provider inválido no banco: ${provider.provider}` };
+    }
     const gateway = getGateway(
-      provider.provider as ProviderType,
+      provider.provider,
       decryptedCredentials,
       provider.metadata as Record<string, unknown> | null,
       provider.webhookSecret ? decrypt(provider.webhookSecret) : undefined,
