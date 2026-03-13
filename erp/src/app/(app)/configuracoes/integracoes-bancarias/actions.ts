@@ -5,8 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { requireCompanyAccess } from "@/lib/rbac";
 import { logAuditEvent } from "@/lib/audit";
 import { encrypt, decrypt } from "@/lib/encryption";
-import { PROVIDER_REGISTRY, getGateway } from "@/lib/payment";
-import type { ProviderDefinition } from "@/lib/payment";
+import { PROVIDER_REGISTRY, getGateway, PROVIDER_TYPES } from "@/lib/payment";
+import type { ProviderDefinition, ProviderType } from "@/lib/payment";
 import { Prisma } from "@prisma/client";
 import type { ClientType } from "@prisma/client";
 
@@ -71,7 +71,7 @@ export interface SaveRoutingRuleInput {
  */
 function maskCredentials(
   credentials: Record<string, string>,
-  providerType: string,
+  providerType: ProviderType,
 ): Record<string, string> {
   const definition = PROVIDER_REGISTRY[providerType];
   if (!definition) return credentials;
@@ -127,7 +127,7 @@ export async function getPaymentProviders(
       settings = p.metadata as Record<string, string>;
     }
 
-    const providerDef = PROVIDER_REGISTRY[p.provider];
+    const providerDef = PROVIDER_REGISTRY[p.provider as ProviderType];
 
     return {
       id: p.id,
@@ -187,7 +187,7 @@ export async function savePaymentProvider(
   const session = await requireCompanyAccess(companyId);
 
   // Validate provider type exists
-  if (!PROVIDER_REGISTRY[data.provider]) {
+  if (!(PROVIDER_TYPES as readonly string[]).includes(data.provider) || !PROVIDER_REGISTRY[data.provider as ProviderType]) {
     throw new Error(`Tipo de provider inválido: ${data.provider}`);
   }
 
@@ -422,7 +422,7 @@ export async function testProviderConnection(
 
   try {
     const gateway = getGateway(
-      provider.provider,
+      provider.provider as ProviderType,
       decryptedCredentials,
       provider.metadata as Record<string, unknown> | null,
       provider.webhookSecret ? decrypt(provider.webhookSecret) : undefined,
