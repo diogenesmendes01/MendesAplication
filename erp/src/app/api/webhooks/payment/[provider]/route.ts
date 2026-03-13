@@ -4,7 +4,7 @@ import { decrypt } from "@/lib/encryption";
 import { getGateway } from "@/lib/payment/factory";
 import { isProviderType } from "@/lib/payment/types";
 import { logAuditEvent } from "@/lib/audit";
-import type { WebhookEvent, ProviderType } from "@/lib/payment/types";
+import type { WebhookEvent } from "@/lib/payment/types";
 import { BoletoStatus, PaymentStatus } from "@prisma/client";
 
 // ---------------------------------------------------------------------------

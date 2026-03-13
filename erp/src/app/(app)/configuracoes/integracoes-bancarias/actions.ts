@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { requireCompanyAccess } from "@/lib/rbac";
 import { logAuditEvent } from "@/lib/audit";
 import { encrypt, decrypt } from "@/lib/encryption";
-import { PROVIDER_REGISTRY, getGateway, PROVIDER_TYPES, isProviderType } from "@/lib/payment";
+import { PROVIDER_REGISTRY, getGateway, isProviderType } from "@/lib/payment";
 import type { ProviderDefinition, ProviderType } from "@/lib/payment";
 import { Prisma } from "@prisma/client";
 import type { ClientType } from "@prisma/client";
@@ -190,7 +190,7 @@ export async function savePaymentProvider(
   const session = await requireCompanyAccess(companyId);
 
   // Validate provider type exists
-  if (!(PROVIDER_TYPES as readonly string[]).includes(data.provider) || !PROVIDER_REGISTRY[data.provider as ProviderType]) {
+  if (!isProviderType(data.provider) || !PROVIDER_REGISTRY[data.provider]) {
     throw new Error(`Tipo de provider inválido: ${data.provider}`);
   }
 
