@@ -5,6 +5,10 @@ import { getGateway } from "@/lib/payment/factory";
 import { logAuditEvent } from "@/lib/audit";
 import type { WebhookEvent } from "@/lib/payment/types";
 import { BoletoStatus, PaymentStatus } from "@prisma/client";
+import {
+  RECEIVABLE_VALUE_TOLERANCE,
+  RECEIVABLE_DUE_DATE_WINDOW_DAYS,
+} from "@/lib/payment/constants";
 
 // ---------------------------------------------------------------------------
 // Status mapping: WebhookEvent.type → BoletoStatus
@@ -234,8 +238,8 @@ export async function POST(
       } else {
         // Fallback: try heuristic match for legacy receivables without boletoId
         const boletoValue = Number(boleto.value);
-        const tolerance = 0.01;
-        const dueDateWindow = 15;
+        const tolerance = RECEIVABLE_VALUE_TOLERANCE;
+        const dueDateWindow = RECEIVABLE_DUE_DATE_WINDOW_DAYS;
         const dueDateMin = new Date(boleto.dueDate);
         dueDateMin.setDate(dueDateMin.getDate() - dueDateWindow);
         const dueDateMax = new Date(boleto.dueDate);
