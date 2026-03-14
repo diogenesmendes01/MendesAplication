@@ -111,62 +111,66 @@ export async function getPaymentProviders(
     orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
   });
 
-  return providers.map((p) => {
-    let decryptedCredentials: Record<string, string> = {};
-    try {
-      decryptedCredentials = JSON.parse(decrypt(p.credentials)) as Record<
-        string,
-        string
-      >;
-    } catch {
-      // credentials might be empty or corrupted — return empty
-    }
+  return providers
+    .map((p) => {
+      let decryptedCredentials: Record<string, string> = {};
+      try {
+        decryptedCredentials = JSON.parse(decrypt(p.credentials)) as Record<
+          string,
+          string
+        >;
+      } catch {
+        // credentials might be empty or corrupted — return empty
+      }
 
-    let settings: Record<string, string> = {};
-    if (p.metadata && typeof p.metadata === "object") {
-      settings = p.metadata as Record<string, string>;
-    }
+      let settings: Record<string, string> = {};
+      if (p.metadata && typeof p.metadata === "object") {
+        settings = p.metadata as Record<string, string>;
+      }
 
-    if (!isProviderType(p.provider)) {
-      throw new Error(`Provider inválido no banco: ${p.provider}`);
-    }
-    const providerDef = PROVIDER_REGISTRY[p.provider];
+      if (!isProviderType(p.provider)) {
+        // Graceful degradation: skip invalid providers instead of crashing the entire listing
+        console.error(`[getPaymentProviders] Provider inválido ignorado: ${p.provider} (id: ${p.id})`);
+        return null;
+      }
+      const providerDef = PROVIDER_REGISTRY[p.provider];
 
-    return {
-      id: p.id,
-      name: p.name,
-      provider: p.provider,
-      providerLabel: providerDef?.name ?? p.provider,
-      credentials: maskCredentials(decryptedCredentials, p.provider),
-      settings,
-      webhookUrl: p.webhookUrl,
-      // Bug #8 fix: Mask webhookSecret to prevent exposure
-      // Decrypt before masking (webhookSecret is stored encrypted)
-      webhookSecret: (() => {
-        if (!p.webhookSecret) return null;
-        try {
-          const ws = decrypt(p.webhookSecret);
-          return ws.length > 4 ? `****${ws.slice(-4)}` : "****";
-        } catch {
-          return "****";
-        }
-      })(),
-      sandbox: p.sandbox,
-      isDefault: p.isDefault,
-      isActive: p.isActive,
-      createdAt: p.createdAt,
-      updatedAt: p.updatedAt,
-      rules: p.rules.map((r) => ({
-        id: r.id,
-        priority: r.priority,
-        clientType: r.clientType,
-        minValue: r.minValue !== null ? Number(r.minValue) : null,
-        maxValue: r.maxValue !== null ? Number(r.maxValue) : null,
-        tags: r.tags,
-        isActive: r.isActive,
-      })),
-    };
-  });
+      return {
+        id: p.id,
+        name: p.name,
+        provider: p.provider,
+        providerLabel: providerDef?.name ?? p.provider,
+        credentials: maskCredentials(decryptedCredentials, p.provider),
+        settings,
+        webhookUrl: p.webhookUrl,
+        // Bug #8 fix: Mask webhookSecret to prevent exposure
+        // Decrypt before masking (webhookSecret is stored encrypted)
+        webhookSecret: (() => {
+          if (!p.webhookSecret) return null;
+          try {
+            const ws = decrypt(p.webhookSecret);
+            return ws.length > 4 ? `****${ws.slice(-4)}` : "****";
+          } catch {
+            return "****";
+          }
+        })(),
+        sandbox: p.sandbox,
+        isDefault: p.isDefault,
+        isActive: p.isActive,
+        createdAt: p.createdAt,
+        updatedAt: p.updatedAt,
+        rules: p.rules.map((r) => ({
+          id: r.id,
+          priority: r.priority,
+          clientType: r.clientType,
+          minValue: r.minValue !== null ? Number(r.minValue) : null,
+          maxValue: r.maxValue !== null ? Number(r.maxValue) : null,
+          tags: r.tags,
+          isActive: r.isActive,
+        })),
+      };
+    })
+    .filter((p): p is PaymentProviderData => p !== null);
 }
 
 // ---------------------------------------------------------------------------
