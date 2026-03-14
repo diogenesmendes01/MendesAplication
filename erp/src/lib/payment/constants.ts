@@ -27,3 +27,9 @@ export const RECEIVABLE_DUE_DATE_WINDOW_DAYS = 15;
 export const PHONE_PLACEHOLDER = "000000000";
 export const PHONE_AREA_CODE_PLACEHOLDER = "00";
 export const PHONE_COUNTRY_CODE = "55";
+
+/**
+ * Fator de conversão entre a unidade monetária (reais) e centavos.
+ * Usado para converter valores reais ↔ centavos nas integrações de pagamento.
+ */
+export const CENTS_PER_UNIT = 100;

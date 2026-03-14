@@ -8,6 +8,7 @@ import { BoletoStatus, PaymentStatus } from "@prisma/client";
 import {
   RECEIVABLE_VALUE_TOLERANCE,
   RECEIVABLE_DUE_DATE_WINDOW_DAYS,
+  CENTS_PER_UNIT,
 } from "@/lib/payment/constants";
 
 // ---------------------------------------------------------------------------
@@ -205,7 +206,7 @@ export async function POST(
     }
 
     previousStatus = currentStatus;
-    expectedAmountCents = Math.round(Number(lockedBoleto[0].value) * 100);
+    expectedAmountCents = Math.round(Number(lockedBoleto[0].value) * CENTS_PER_UNIT);
     paidAmount = event.paidAmount ?? expectedAmountCents;
     overpaidDelta = isOverpaid ? paidAmount - expectedAmountCents : 0;
 
@@ -308,8 +309,8 @@ export async function POST(
         gatewayId: event.gatewayId,
         providerId: matchedProvider.id,
         accountReceivableId: updatedReceivableId,
-        message: `Boleto pago a maior: esperado R$${(expectedAmountCents / 100).toFixed(2)}, ` +
-          `recebido R$${(paidAmount / 100).toFixed(2)}. Diferença: R$${(overpaidDelta / 100).toFixed(2)}. ` +
+        message: `Boleto pago a maior: esperado R$${(expectedAmountCents / CENTS_PER_UNIT).toFixed(2)}, ` +
+          `recebido R$${(paidAmount / CENTS_PER_UNIT).toFixed(2)}. Diferença: R$${(overpaidDelta / CENTS_PER_UNIT).toFixed(2)}. ` +
           `Verificar necessidade de devolução.`,
       },
       companyId: boleto.companyId,
