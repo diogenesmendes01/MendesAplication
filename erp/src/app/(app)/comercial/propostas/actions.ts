@@ -11,7 +11,7 @@ import { resolveProvider, getProviderById, previewRouting } from "@/lib/payment/
 import { getGateway } from "@/lib/payment/factory";
 import { isProviderType } from "@/lib/payment/types";
 import { decrypt } from "@/lib/encryption";
-import type { CreateBoletoInput, CreateBoletoResult, PaymentGateway, ProviderType } from "@/lib/payment/types";
+import type { CreateBoletoInput, CreateBoletoResult, PaymentGateway } from "@/lib/payment/types";
 
 // ---------------------------------------------------------------------------
 // Proposal Event Helper
