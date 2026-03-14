@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { requireCompanyAccess } from "@/lib/rbac";
 import { logAuditEvent } from "@/lib/audit";
 import { encrypt, decrypt } from "@/lib/encryption";
-import { PROVIDER_REGISTRY, getGateway } from "@/lib/payment";
+import { PROVIDER_REGISTRY, getGateway, isProviderType } from "@/lib/payment";
 import type { ProviderDefinition } from "@/lib/payment";
 import { Prisma } from "@prisma/client";
 import type { ClientType } from "@prisma/client";
@@ -421,6 +421,9 @@ export async function testProviderConnection(
   }
 
   try {
+    if (!isProviderType(provider.provider)) {
+      return { ok: false, message: `Provider inválido encontrado no banco: ${provider.provider}` };
+    }
     const gateway = getGateway(
       provider.provider,
       decryptedCredentials,
