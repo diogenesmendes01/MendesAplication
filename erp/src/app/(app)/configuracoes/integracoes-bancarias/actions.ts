@@ -17,7 +17,7 @@ import type { ClientType } from "@prisma/client";
 export interface PaymentProviderData {
   id: string;
   name: string;
-  provider: string;
+  provider: ProviderType;
   providerLabel: string;
   credentials: Record<string, string>;
   settings: Record<string, string>;
