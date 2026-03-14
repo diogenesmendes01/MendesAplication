@@ -1,5 +1,7 @@
 "use server";
 
+import type { AdditionalContact } from "@prisma/client";
+
 import { prisma } from "@/lib/prisma";
 import type { AdditionalContact } from "@prisma/client";
 import { requireCompanyAccess } from "@/lib/rbac";
