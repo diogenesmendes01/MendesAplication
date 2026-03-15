@@ -3,6 +3,26 @@
 // ============================================================
 
 /**
+ * Provider types disponíveis apenas em produção.
+ */
+export const PRODUCTION_PROVIDER_TYPES = ["pagarme", "pinbank"] as const;
+
+/**
+ * Provider types disponíveis em desenvolvimento/teste (inclui mock).
+ */
+export const DEV_PROVIDER_TYPES = [...PRODUCTION_PROVIDER_TYPES, "mock"] as const;
+
+/**
+ * Provider types ativos no ambiente atual.
+ * Em produção: apenas pagarme e pinbank.
+ * Em dev/test: inclui mock.
+ */
+export const PROVIDER_TYPES =
+  process.env.NODE_ENV === "production"
+    ? PRODUCTION_PROVIDER_TYPES
+    : DEV_PROVIDER_TYPES;
+
+/**
  * Número máximo de parcelas permitido na geração de boletos.
  * Usado em: propostas/actions.ts → generateBoletosForProposal
  */
