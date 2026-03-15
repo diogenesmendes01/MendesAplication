@@ -139,7 +139,7 @@
       "title": "Simulador de resposta IA (dry-run)",
       "description": "Como admin, quero testar como a IA responderia a uma mensagem antes de ativar, para validar persona e configurações.",
       "priority": 8,
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "Nova tab ou seção 'Simulador' na página de config IA",
         "Interface de chat: input de mensagem + botão enviar + área de resposta",

@@ -8,6 +8,7 @@ import { encrypt, decrypt } from "@/lib/encryption";
 import { chatCompletion } from "@/lib/ai/provider";
 import { getTodaySpend, getUsageSummary, type UsageSummary } from "@/lib/ai/cost-tracker";
 import { suggestModel } from "@/lib/ai/model-suggester";
+import { runAgentDryRun, type DryRunResult } from "@/lib/ai/agent";
 import type { Prisma } from "@prisma/client";
 
 // ---------------------------------------------------------------------------
@@ -40,6 +41,14 @@ export interface ModelSuggestionData {
   estimatedDailyCostBrl: number;
 }
 
+export interface SimulationResult {
+  response: string;
+  inputTokens: number;
+  outputTokens: number;
+  estimatedCostBrl: number;
+  error?: string;
+}
+
 export type { UsageSummary };
 
 // ---------------------------------------------------------------------------
@@ -65,6 +74,31 @@ function maskApiKey(key: string | null | undefined): string {
     }
     return "****";
   }
+}
+
+// ---------------------------------------------------------------------------
+// Rate limiter for simulation (in-memory, per-company, max 10/min)
+// ---------------------------------------------------------------------------
+
+const simulationRateMap = new Map<string, number[]>();
+const SIMULATION_RATE_LIMIT = 10;
+const SIMULATION_RATE_WINDOW_MS = 60_000; // 1 minute
+
+function checkSimulationRateLimit(companyId: string): boolean {
+  const now = Date.now();
+  const timestamps = simulationRateMap.get(companyId) ?? [];
+
+  // Remove entries older than the window
+  const recent = timestamps.filter((ts) => now - ts < SIMULATION_RATE_WINDOW_MS);
+
+  if (recent.length >= SIMULATION_RATE_LIMIT) {
+    simulationRateMap.set(companyId, recent);
+    return false; // rate limited
+  }
+
+  recent.push(now);
+  simulationRateMap.set(companyId, recent);
+  return true; // allowed
 }
 
 // ---------------------------------------------------------------------------
@@ -333,4 +367,65 @@ export async function getSuggestedModel(
   dailyBudgetBrl: number,
 ): Promise<ModelSuggestionData> {
   return suggestModel(provider, dailyBudgetBrl);
+}
+
+/**
+ * Simulate an AI response in dry-run mode.
+ * Uses the real persona and knowledge base but does NOT send messages or save to DB.
+ * Rate limited to 10 simulations per minute per company.
+ */
+export async function simulateAiResponse(
+  companyId: string,
+  message: string,
+  channel: "WHATSAPP" | "EMAIL",
+): Promise<SimulationResult> {
+  await requireAdmin();
+  await requireCompanyAccess(companyId);
+
+  // Input validation
+  if (!message || message.trim().length === 0) {
+    return {
+      response: "",
+      inputTokens: 0,
+      outputTokens: 0,
+      estimatedCostBrl: 0,
+      error: "Mensagem não pode ser vazia",
+    };
+  }
+
+  if (message.length > 2000) {
+    return {
+      response: "",
+      inputTokens: 0,
+      outputTokens: 0,
+      estimatedCostBrl: 0,
+      error: "Mensagem muito longa (máximo 2000 caracteres)",
+    };
+  }
+
+  // Rate limit check
+  if (!checkSimulationRateLimit(companyId)) {
+    return {
+      response: "",
+      inputTokens: 0,
+      outputTokens: 0,
+      estimatedCostBrl: 0,
+      error: "Limite de simulações atingido (máx 10/min). Aguarde um momento.",
+    };
+  }
+
+  // Run the agent in dry-run mode
+  const result: DryRunResult = await runAgentDryRun(
+    companyId,
+    message.trim(),
+    channel,
+  );
+
+  return {
+    response: result.response,
+    inputTokens: result.inputTokens,
+    outputTokens: result.outputTokens,
+    estimatedCostBrl: result.estimatedCostBrl,
+    error: result.error,
+  };
 }

@@ -7,7 +7,7 @@ import { getToolsForChannel } from "./tools";
 import { executeTool } from "./tool-executor";
 import type { ToolContext } from "./tool-executor";
 import { decrypt } from "@/lib/encryption";
-import { getTodaySpend, logUsage } from "./cost-tracker";
+import { getTodaySpend, logUsage, MODEL_PRICING, BRL_USD_RATE } from "./cost-tracker";
 
 // ─── Result type ─────────────────────────────────────────────────────────────
 
@@ -15,6 +15,16 @@ export interface AgentResult {
   responded: boolean;
   escalated: boolean;
   iterations: number;
+  error?: string;
+}
+
+// ─── Dry-run result type ─────────────────────────────────────────────────────
+
+export interface DryRunResult {
+  response: string;
+  inputTokens: number;
+  outputTokens: number;
+  estimatedCostBrl: number;
   error?: string;
 }
 
@@ -101,6 +111,7 @@ export async function runAgent(
     companyId,
     clientId: ticket.clientId,
     contactPhone: contactPhone ? contactPhone.replace(/\D/g, "") : "",
+    dryRun: false,
   };
 
   // Load recent message history for prompt context
@@ -290,6 +301,212 @@ export async function runAgent(
     iterations: maxIterations,
     error: "max iterations reached",
   };
+}
+
+// ─── Dry-run agent function (simulation mode) ────────────────────────────────
+
+/**
+ * Runs the AI agent in dry-run mode for simulation purposes.
+ * - Does NOT require a real ticket — uses mock client context
+ * - Does NOT save TicketMessage records
+ * - Does NOT send real WhatsApp/email messages
+ * - Tools RESPOND / RESPOND_EMAIL return the message without side effects
+ * - Uses the real persona and knowledge base of the company
+ * - Returns the AI response, token usage, and estimated cost
+ */
+export async function runAgentDryRun(
+  companyId: string,
+  incomingMessage: string,
+  channel: "WHATSAPP" | "EMAIL" = "WHATSAPP"
+): Promise<DryRunResult> {
+  const startTime = Date.now();
+  const timeout = parseInt(process.env.AI_TIMEOUT || "30000", 10);
+
+  // Load AI config for the company
+  const aiConfig = await prisma.aiConfig.findUnique({
+    where: { companyId },
+  });
+
+  if (!aiConfig) {
+    return { response: "", inputTokens: 0, outputTokens: 0, estimatedCostBrl: 0, error: "AI not configured" };
+  }
+
+  // ── Build provider config ────────────────────────────────────────────────
+  let providerConfig: ProviderConfig;
+  if (aiConfig.apiKey) {
+    const decryptedApiKey = decrypt(aiConfig.apiKey);
+    providerConfig = {
+      provider: aiConfig.provider,
+      apiKey: decryptedApiKey,
+      model: aiConfig.model || undefined,
+      temperature: aiConfig.temperature,
+    };
+  } else {
+    providerConfig = getEnvProviderConfig();
+  }
+
+  const maxIterations = aiConfig.maxIterations || 5;
+
+  // ── Mock simulation context ──────────────────────────────────────────────
+  const mockClientName = "Cliente Simulação";
+
+  // Build tool context in dry-run mode (no real ticket)
+  const toolContext: ToolContext = {
+    ticketId: "simulation",
+    companyId,
+    clientId: "simulation",
+    contactPhone: "5511999999999",
+    dryRun: true,
+  };
+
+  // ── Choose persona based on channel ──────────────────────────────────────
+  const persona =
+    channel === "EMAIL" && aiConfig.emailPersona
+      ? aiConfig.emailPersona
+      : aiConfig.persona;
+
+  // ── Build system prompt per channel ──────────────────────────────────────
+  const historyContext = ""; // No history in simulation
+  const systemPrompt =
+    channel === "EMAIL"
+      ? buildEmailSystemPrompt(persona, mockClientName, historyContext, aiConfig.emailSignature)
+      : buildWhatsAppSystemPrompt(persona, mockClientName, historyContext);
+
+  // Initialize conversation messages
+  const messages: AiMessage[] = [
+    { role: "system", content: systemPrompt },
+    { role: "user", content: incomingMessage },
+  ];
+
+  // Resolve the effective model name for cost estimation
+  const effectiveModel =
+    providerConfig.model || aiConfig.model || aiConfig.provider;
+
+  // Get channel-specific tools
+  const tools = getToolsForChannel(channel);
+
+  // Track total usage across iterations
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
+  let finalResponse = "";
+
+  // ─── Agent loop (dry-run) ──────────────────────────────────────────────────
+
+  for (let iteration = 0; iteration < maxIterations; iteration++) {
+    if (Date.now() - startTime > timeout) {
+      return {
+        response: finalResponse || "(timeout)",
+        inputTokens: totalInputTokens,
+        outputTokens: totalOutputTokens,
+        estimatedCostBrl: estimateCostBrl(effectiveModel, totalInputTokens, totalOutputTokens),
+        error: "timeout",
+      };
+    }
+
+    try {
+      const response = await chatCompletion(messages, tools, providerConfig);
+
+      // Accumulate token usage (no DB write in dry-run)
+      if (response.usage) {
+        totalInputTokens += response.usage.inputTokens;
+        totalOutputTokens += response.usage.outputTokens;
+      }
+
+      // ── LLM returned tool calls ────────────────────────────────────────
+      if (response.tool_calls && response.tool_calls.length > 0) {
+        messages.push({
+          role: "assistant",
+          content: response.content || null,
+          tool_calls: response.tool_calls,
+        });
+
+        let shouldStop = false;
+
+        for (const toolCall of response.tool_calls) {
+          const toolName = toolCall.function.name;
+          let args: Record<string, unknown> = {};
+          try {
+            args = JSON.parse(toolCall.function.arguments);
+          } catch {
+            args = {};
+          }
+
+          const result = await executeTool(toolName, args, toolContext);
+
+          messages.push({
+            role: "tool",
+            content: result,
+            tool_call_id: toolCall.id,
+          });
+
+          // Capture the response from terminal tools
+          if (toolName === "RESPOND" || toolName === "RESPOND_EMAIL") {
+            const msg = (args.message as string) || "";
+            finalResponse = msg;
+            shouldStop = true;
+          } else if (toolName === "ESCALATE") {
+            finalResponse = `[Escalado] ${(args.reason as string) || "Sem motivo"}`;
+            shouldStop = true;
+          }
+        }
+
+        if (shouldStop) {
+          return {
+            response: finalResponse,
+            inputTokens: totalInputTokens,
+            outputTokens: totalOutputTokens,
+            estimatedCostBrl: estimateCostBrl(effectiveModel, totalInputTokens, totalOutputTokens),
+          };
+        }
+
+      // ── LLM returned text only ────────────────────────────────────────
+      } else if (response.content) {
+        finalResponse = response.content;
+        return {
+          response: finalResponse,
+          inputTokens: totalInputTokens,
+          outputTokens: totalOutputTokens,
+          estimatedCostBrl: estimateCostBrl(effectiveModel, totalInputTokens, totalOutputTokens),
+        };
+
+      // ── Empty response ────────────────────────────────────────────────
+      } else {
+        return {
+          response: "",
+          inputTokens: totalInputTokens,
+          outputTokens: totalOutputTokens,
+          estimatedCostBrl: estimateCostBrl(effectiveModel, totalInputTokens, totalOutputTokens),
+          error: "empty LLM response",
+        };
+      }
+    } catch (error) {
+      messages.push({
+        role: "user",
+        content: `Erro interno: ${error instanceof Error ? error.message : String(error)}. Tente uma abordagem diferente.`,
+      });
+    }
+  }
+
+  return {
+    response: finalResponse || "(max iterations reached)",
+    inputTokens: totalInputTokens,
+    outputTokens: totalOutputTokens,
+    estimatedCostBrl: estimateCostBrl(effectiveModel, totalInputTokens, totalOutputTokens),
+    error: "max iterations reached",
+  };
+}
+
+// ─── Cost estimation helper ──────────────────────────────────────────────────
+
+function estimateCostBrl(
+  model: string,
+  inputTokens: number,
+  outputTokens: number
+): number {
+  const pricing = MODEL_PRICING[model] ?? { input: 1.0, output: 3.0 };
+  const costUsd =
+    (inputTokens * pricing.input + outputTokens * pricing.output) / 1_000_000;
+  return costUsd * BRL_USD_RATE;
 }
 
 // ─── WhatsApp system prompt builder ──────────────────────────────────────────

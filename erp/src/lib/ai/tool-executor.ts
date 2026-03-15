@@ -12,6 +12,7 @@ export interface ToolContext {
   companyId: string;
   clientId: string;
   contactPhone: string; // Digits-only phone for WhatsApp replies
+  dryRun?: boolean;     // When true, tools return results without side effects
 }
 
 // ─── Main dispatcher ─────────────────────────────────────────────────────────
@@ -26,16 +27,22 @@ export async function executeTool(
       case "SEARCH_DOCUMENTS":
         return await executeSearchDocuments(args, context);
       case "GET_CLIENT_INFO":
+        if (context.dryRun) return executeDryRunGetClientInfo();
         return await executeGetClientInfo(context);
       case "GET_HISTORY":
+        if (context.dryRun) return executeDryRunGetHistory();
         return await executeGetHistory(args, context);
       case "RESPOND":
+        if (context.dryRun) return executeDryRunRespond(args);
         return await executeRespond(args, context);
       case "RESPOND_EMAIL":
+        if (context.dryRun) return executeDryRunRespondEmail(args);
         return await executeRespondEmail(args, context);
       case "ESCALATE":
+        if (context.dryRun) return executeDryRunEscalate(args);
         return await executeEscalate(args, context);
       case "CREATE_NOTE":
+        if (context.dryRun) return executeDryRunCreateNote(args);
         return await executeCreateNote(args, context);
       default:
         return `Ferramenta "${toolName}" nao disponivel.`;
@@ -63,6 +70,8 @@ async function executeSearchDocuments(
   const query = args.query as string;
   if (!query) return "Erro: query nao fornecida.";
 
+  // SEARCH_DOCUMENTS works the same in dry-run — it reads from the real
+  // knowledge base so the simulation accurately reflects actual behaviour.
   const results = await searchDocuments(query, context.companyId);
 
   if (results.length === 0) {
@@ -343,4 +352,52 @@ async function executeCreateNote(
   });
 
   return "Nota interna criada com sucesso.";
+}
+
+// ─── Dry-run tool implementations ────────────────────────────────────────────
+// These return simulated results without any side effects.
+
+function executeDryRunGetClientInfo(): string {
+  return [
+    "Nome: Cliente Simulação",
+    "Tipo: PF",
+    "CPF/CNPJ: ***.***.***-**",
+    "Email: simulacao@exemplo.com",
+    "Telefone: (11) 99999-9999",
+    "Endereco: Rua Exemplo, 123 - Campinas/SP",
+    "",
+    "Titulos pendentes: 0",
+    "Titulos vencidos: 0",
+    "",
+    "Tickets anteriores: nenhum",
+  ].join("\n");
+}
+
+function executeDryRunGetHistory(): string {
+  return "Nenhum historico de mensagens encontrado. (Modo simulação)";
+}
+
+function executeDryRunRespond(args: Record<string, unknown>): string {
+  const message = args.message as string;
+  if (!message) return "Erro: mensagem nao fornecida.";
+  return `[SIMULAÇÃO] Mensagem que seria enviada via WhatsApp: "${message}"`;
+}
+
+function executeDryRunRespondEmail(args: Record<string, unknown>): string {
+  const subject = args.subject as string;
+  const message = args.message as string;
+  if (!subject) return "Erro: assunto (subject) nao fornecido.";
+  if (!message) return "Erro: mensagem (message) nao fornecida.";
+  return `[SIMULAÇÃO] Email que seria enviado — Assunto: "${subject}" | Corpo: "${message}"`;
+}
+
+function executeDryRunEscalate(args: Record<string, unknown>): string {
+  const reason = (args.reason as string) || "Solicitacao de atendimento humano";
+  return `[SIMULAÇÃO] Ticket seria escalado para atendente humano. Motivo: ${reason}`;
+}
+
+function executeDryRunCreateNote(args: Record<string, unknown>): string {
+  const content = args.content as string;
+  if (!content) return "Erro: conteudo da nota nao fornecido.";
+  return `[SIMULAÇÃO] Nota interna que seria criada: "${content}"`;
 }

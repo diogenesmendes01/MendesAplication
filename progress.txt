@@ -172,3 +172,26 @@ model AiConfig {
 - ⏳ Para o placeholder dinâmico do emailPersona, truncar a persona do WhatsApp para evitar texto longo demais
 - ⏳ Tab Consumo usa carregamento sob demanda (botão "Carregar dados") para não fazer queries desnecessárias ao abrir a página
 - ⏳ suggestModel é chamado client-side via server action wrapper (getSuggestedModel) porque precisa rodar no servidor para acessar cost-tracker
+
+## US-008 — Simulador de resposta IA (dry-run) (2026-03-15)
+
+### O que foi feito
+- Nova função runAgentDryRun() em agent.ts: executa o agent loop completo sem ticket real, sem salvar no banco, sem enviar mensagens
+- DryRunResult retorna: response, inputTokens, outputTokens, estimatedCostBrl
+- ToolContext expandido com campo opcional dryRun: boolean
+- tool-executor.ts: 5 funções dry-run dedicadas (GET_CLIENT_INFO, GET_HISTORY, RESPOND, RESPOND_EMAIL, ESCALATE, CREATE_NOTE) que retornam resultados simulados sem side effects
+- SEARCH_DOCUMENTS funciona igual no dry-run — usa base de conhecimento real da empresa para simulação fiel
+- Nova server action simulateAiResponse(companyId, message, channel) com rate limit in-memory (10/min por empresa)
+- Validação de input: mensagem não vazia, máximo 2000 caracteres
+- estimateCostBrl() helper usa MODEL_PRICING e BRL_USD_RATE do cost-tracker
+- Nova tab "Simulador" na página /configuracoes/ai com: toggle de canal (WhatsApp/Email), textarea de input, botão enviar, área de resposta, stats de tokens e custo
+- TabsList expandido de 4 para 5 colunas (grid-cols-5)
+- Enter para enviar, Shift+Enter para nova linha
+- Estados visuais: empty state, loading state, resultado com resposta + stats
+- npm run lint passa sem erros
+
+### Lições
+- ⏳ O dry-run não precisa de ticket real — runAgentDryRun recebe só companyId, message e channel
+- ⏳ SEARCH_DOCUMENTS deve funcionar igual no dry-run para que a simulação reflita a resposta real da IA com a base de conhecimento da empresa
+- ⏳ Rate limit in-memory (Map<companyId, timestamps[]>) é suficiente para server actions em Next.js — se houver múltiplas instâncias, migrar para Redis
+- ⏳ O dryRun flag no ToolContext permite que o dispatcher roteie para funções sem side effects sem alterar a interface do executeTool
