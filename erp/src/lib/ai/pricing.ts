@@ -26,6 +26,10 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
   "qwen-max": { input: 1.6, output: 6.4 },
   "qwen-plus": { input: 0.5, output: 1.5 },
   "qwen-turbo": { input: 0.15, output: 0.3 },
+
+  // DeepSeek — source: https://api-docs.deepseek.com/quick_start/pricing (verified 2025-01)
+  "deepseek-chat":     { input: 0.27, output: 1.10 },
+  "deepseek-reasoner": { input: 0.55, output: 2.19 },
 };
 
 // Fallback pricing for unknown models

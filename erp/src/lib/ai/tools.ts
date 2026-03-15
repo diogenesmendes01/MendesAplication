@@ -1,5 +1,9 @@
 
 
+// NOTE: "use server" is intentionally omitted here.
+// This module only exports pure constant definitions (AiToolDefinition objects).
+// No server-side I/O, Prisma, or secrets are used, so it is safe to import
+// from both server and client contexts (e.g. for type inference).
 import type { AiToolDefinition } from "./provider";
 
 // ─── Tool Definitions ────────────────────────────────────────────────────────

@@ -166,12 +166,36 @@ export async function getAiConfig(companyId: string): Promise<AiConfigData> {
   };
 }
 
+const VALID_PROVIDERS = ["openai", "anthropic", "grok", "qwen", "deepseek"] as const;
+
 export async function updateAiConfig(
   companyId: string,
   data: AiConfigData,
 ): Promise<void> {
   const session = await requireAdmin();
   await requireCompanyAccess(companyId);
+
+  // Server-side validation — frontend HTML attributes are not a security boundary
+  if (
+    typeof data.temperature !== "number" ||
+    data.temperature < 0 ||
+    data.temperature > 1
+  ) {
+    throw new Error("temperature must be a number between 0 and 1");
+  }
+  if (
+    typeof data.maxIterations !== "number" ||
+    !Number.isInteger(data.maxIterations) ||
+    data.maxIterations < 1 ||
+    data.maxIterations > 10
+  ) {
+    throw new Error("maxIterations must be an integer between 1 and 10");
+  }
+  if (!VALID_PROVIDERS.includes(data.provider as typeof VALID_PROVIDERS[number])) {
+    throw new Error(
+      `provider must be one of: ${VALID_PROVIDERS.join(", ")}`,
+    );
+  }
 
   // Determine the apiKey to store:
   // - If the incoming apiKey is empty or looks masked (starts with ****), keep existing
@@ -366,6 +390,7 @@ export async function getSuggestedModel(
   provider: string,
   dailyBudgetBrl: number,
 ): Promise<ModelSuggestionData> {
+  await requireAdmin();
   return suggestModel(provider, dailyBudgetBrl);
 }
 

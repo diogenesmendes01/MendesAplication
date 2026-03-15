@@ -1,5 +1,7 @@
 
 
+"use server";
+
 // ─── Interfaces ───────────────────────────────────────────────────────────────
 
 export interface AiToolCall {
