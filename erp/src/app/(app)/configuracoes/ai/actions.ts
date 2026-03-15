@@ -391,6 +391,7 @@ export async function getAiUsageSummary(
 export async function getTodaySpendAction(
   companyId: string,
 ): Promise<number> {
+  await requireAdmin();
   await requireCompanyAccess(companyId);
 
   return getTodaySpend(companyId);

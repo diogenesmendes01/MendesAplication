@@ -65,6 +65,7 @@ const PROVIDERS = [
   { value: "anthropic", label: "Anthropic" },
   { value: "grok", label: "Grok (xAI)" },
   { value: "qwen", label: "Qwen (Alibaba)" },
+  { value: "deepseek", label: "DeepSeek" },
 ] as const;
 
 const DEFAULT_CONFIG: AiConfigData = {

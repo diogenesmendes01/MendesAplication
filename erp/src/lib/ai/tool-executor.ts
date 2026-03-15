@@ -266,9 +266,10 @@ async function executeRespondEmail(
     return "Erro: ticket nao encontrado.";
   }
 
+  const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const recipientEmail = ticket.contact?.email || ticket.client.email;
 
-  if (!recipientEmail) {
+  if (!recipientEmail || !EMAIL_REGEX.test(recipientEmail)) {
     return "Erro: nao foi possivel encontrar o email do contato ou cliente vinculado ao ticket. Use ESCALATE para encaminhar a um atendente humano que podera obter o email.";
   }
 
