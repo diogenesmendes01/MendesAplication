@@ -129,3 +129,24 @@ model AiConfig {
 - ⏳ O EmailOutboundJobData espera messageId, ticketId, companyId, to, subject, content, attachmentIds — criar TicketMessage ANTES de enfileirar para ter o messageId
 - ⏳ A resolução de email do destinatário segue a cadeia: ticket.contact.email → ticket.client.email → erro com sugestão de ESCALATE
 - ⏳ ALL_TOOLS ainda exportado para backward compat mas não usado mais no agent loop — getToolsForChannel() é o padrão agora
+
+## US-006 — Encriptação da API key + server actions de config (2026-03-15)
+
+### O que foi feito
+- getAiConfig atualizado para retornar todos os campos novos (provider, apiKey mascarada, model, whatsappEnabled, emailEnabled, emailPersona, emailSignature, dailySpendLimitBrl, temperature)
+- apiKey é mascarada no retorno: decrypt → últimos 4 chars visíveis, resto **** (mesmo padrão de payment-providers)
+- updateAiConfig aceita todos os novos campos; apiKey é encriptada via encrypt() antes de salvar
+- Se apiKey vier vazia ou mascarada (começa com ****) no update, mantém a existente no banco (não sobrescreve)
+- Nova action testAiConnection(companyId): descriptografa apiKey, faz chatCompletion com message 'Hi' e maxTokens 5, retorna { ok, error? }
+- Nova action listAvailableModels(companyId): para OpenAI faz GET /v1/models com apiKey (filtra modelos gpt-*), para outros retorna lista hardcoded
+- Nova action getAiUsageSummary(companyId, days): delega para getUsageSummary do cost-tracker
+- Todas as actions verificam requireCompanyAccess e requireAdmin (exceto getAiConfig que só exige requireCompanyAccess para leitura)
+- Audit log em updateAiConfig com apiKey redacted no payload
+- apiKey no create usa null como fallback (não undefined) para compatibilidade com Prisma
+- npm run lint passa sem erros
+
+### Lições
+- ⏳ A mascaração de apiKey precisa descriptografar primeiro (valor no banco é ciphertext) — decrypt antes de slice(-4)
+- ⏳ Prisma upsert: campo no update não pode ser undefined se quiser "não alterar" — simplesmente omitir o campo do objeto update
+- ⏳ O type UsageSummary precisa ser importado com `type` do cost-tracker para reexportar no actions
+- ⏳ Para OpenAI /v1/models, filtrar por prefixo gpt-* e excluir instruct/realtime/audio para lista limpa

@@ -101,7 +101,7 @@
       "title": "Encriptação da API key + server actions de config",
       "description": "Como admin, quero salvar a API key do provider de forma segura e configurar todos os parâmetros da IA da minha empresa.",
       "priority": 6,
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "Server actions em configuracoes/ai/actions.ts atualizadas para os novos campos",
         "getAiConfig retorna todos os campos novos — apiKey mascarada (últimos 4 chars visíveis, resto ****)",
