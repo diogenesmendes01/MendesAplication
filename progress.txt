@@ -72,3 +72,20 @@ model AiConfig {
 - ⏳ Anthropic retorna usage em data.usage.input_tokens/output_tokens; OpenAI-compat usa data.usage.prompt_tokens/completion_tokens
 - ⏳ O ChatCompletionOptions interno foi eliminado — ProviderConfig cobre tudo (provider, apiKey, model, temperature, maxTokens)
 - ⏳ embeddings.ts não foi tocado (usa AI_EMBEDDING_* separadamente, conforme spec)
+
+## US-003 — Cost tracker + model suggester (2026-03-15)
+
+### O que foi feito
+- Criado src/lib/ai/cost-tracker.ts com: logUsage(), getTodaySpend(), getUsageSummary()
+- Criado src/lib/ai/model-suggester.ts com: suggestModel()
+- Tabela MODEL_PRICING cobre 10 modelos: gpt-4o, gpt-4o-mini, claude-opus-4-20250514, claude-sonnet-4-20250514, claude-haiku-4-20250414, grok-2, grok-2-mini, qwen-max, qwen-plus, qwen-turbo
+- BRL_USD_RATE = 5.80 como constante nomeada exportada
+- getUsageSummary retorna breakdown por canal e por modelo usando groupBy do Prisma
+- suggestModel retorna ModelSuggestion { model, estimatedDailyCostBrl } — o modelo mais potente que cabe no orçamento
+- FALLBACK_PRICING para modelos desconhecidos (input: 1.0, output: 3.0 por 1M tokens)
+- npm run lint passa sem erros
+
+### Lições
+- ⏳ Prisma Decimal precisa ser instanciado com `new Decimal(value.toFixed(N))` para controlar precision
+- ⏳ groupBy do Prisma retorna _sum como Decimal | null — sempre usar Number() para converter
+- ⏳ MODEL_PRICING e BRL_USD_RATE exportados do cost-tracker para reuso no model-suggester (evita duplicação)

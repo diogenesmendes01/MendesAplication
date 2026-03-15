@@ -44,7 +44,7 @@
       "title": "Cost tracker + model suggester",
       "description": "Como sistema, quero rastrear custo de cada chamada IA e sugerir modelo baseado no orçamento diário do cliente.",
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "Novo arquivo src/lib/ai/cost-tracker.ts com: logUsage() que calcula costUsd e costBrl baseado em tabela de preços por modelo e salva no AiUsageLog",
         "getTodaySpend(companyId) retorna gasto acumulado do dia em BRL",
