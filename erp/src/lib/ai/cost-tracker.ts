@@ -50,14 +50,35 @@ export async function logUsage(params: LogUsageParams) {
   });
 }
 
+// ─── Timezone helper ─────────────────────────────────────────────────────────
+
+/**
+ * Returns the start of the current day in BRT (UTC-3).
+ *
+ * Cloud servers run in UTC by default. Without this adjustment, "today"
+ * for companies in São Paulo would start at 21:00 UTC of the previous
+ * calendar day — causing incorrect daily-spend calculations.
+ *
+ * Brazil does not currently observe DST (since 2019), so a fixed -3h
+ * offset is accurate. If DST is ever reinstated, switch to a timezone
+ * library (e.g. date-fns-tz) with "America/Sao_Paulo".
+ */
+function getStartOfDayBRT(): Date {
+  const BRT_OFFSET_MS = 3 * 60 * 60 * 1_000; // UTC-3
+  const nowMs = Date.now();
+  // Shift to BRT, truncate to day boundary, then shift back to UTC
+  const startOfDayMs =
+    Math.floor((nowMs - BRT_OFFSET_MS) / 86_400_000) * 86_400_000 + BRT_OFFSET_MS;
+  return new Date(startOfDayMs);
+}
+
 // ─── getTodaySpend ────────────────────────────────────────────────────────────
 
 /**
- * Returns the total BRL spent by a company today (since midnight local time).
+ * Returns the total BRL spent by a company today (since midnight BRT / UTC-3).
  */
 export async function getTodaySpend(companyId: string): Promise<number> {
-  const startOfDay = new Date();
-  startOfDay.setHours(0, 0, 0, 0);
+  const startOfDay = getStartOfDayBRT();
 
   const result = await prisma.aiUsageLog.aggregate({
     where: {
@@ -101,9 +122,9 @@ export async function getUsageSummary(
   companyId: string,
   days: number
 ): Promise<UsageSummary> {
-  const since = new Date();
-  since.setDate(since.getDate() - days);
-  since.setHours(0, 0, 0, 0);
+  // Anchor the window to midnight BRT so day boundaries align with Brazil time
+  const since = getStartOfDayBRT();
+  since.setTime(since.getTime() - (days - 1) * 86_400_000);
 
   const where = { companyId, createdAt: { gte: since } };
 
