@@ -21,15 +21,44 @@ vi.mock("@/lib/shared-clients", () => ({
 }));
 
 // Mock @prisma/client to avoid loading the real Prisma runtime in unit tests.
-// Prisma.Decimal is used inside createReceivable — we provide a lightweight stub.
+// Prisma.Decimal is used inside createReceivable — we provide a complete stub
+// covering arithmetic operations (add, mul, div, sub) and comparisons so that
+// any future action using Decimal arithmetic is not silently masked.
 vi.mock("@prisma/client", async () => {
   class DecimalStub {
-    private val: string;
+    private val: number;
     constructor(v: number | string) {
-      this.val = String(v);
+      this.val = Number(v);
     }
     toString() {
+      return String(this.val);
+    }
+    toNumber() {
       return this.val;
+    }
+    toFixed(decimals?: number) {
+      return this.val.toFixed(decimals);
+    }
+    add(other: DecimalStub | number | string) {
+      return new DecimalStub(this.val + Number(other instanceof DecimalStub ? other.toNumber() : other));
+    }
+    sub(other: DecimalStub | number | string) {
+      return new DecimalStub(this.val - Number(other instanceof DecimalStub ? other.toNumber() : other));
+    }
+    mul(other: DecimalStub | number | string) {
+      return new DecimalStub(this.val * Number(other instanceof DecimalStub ? other.toNumber() : other));
+    }
+    div(other: DecimalStub | number | string) {
+      return new DecimalStub(this.val / Number(other instanceof DecimalStub ? other.toNumber() : other));
+    }
+    equals(other: DecimalStub | number | string) {
+      return this.val === Number(other instanceof DecimalStub ? other.toNumber() : other);
+    }
+    greaterThan(other: DecimalStub | number | string) {
+      return this.val > Number(other instanceof DecimalStub ? other.toNumber() : other);
+    }
+    lessThan(other: DecimalStub | number | string) {
+      return this.val < Number(other instanceof DecimalStub ? other.toNumber() : other);
     }
   }
   return {
@@ -44,6 +73,7 @@ const mockCreate = vi.fn();
 const mockFindFirst = vi.fn();
 const mockUpdate = vi.fn();
 const mockClientFindFirst = vi.fn();
+const mockClientFindMany = vi.fn();
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
@@ -56,6 +86,7 @@ vi.mock("@/lib/prisma", () => ({
     },
     client: {
       findFirst: (...args: unknown[]) => mockClientFindFirst(...args),
+      findMany: (...args: unknown[]) => mockClientFindMany(...args),
     },
   },
 }));
@@ -238,6 +269,26 @@ describe("listReceivables", () => {
       listReceivables({ companyId: "foreign-company" })
     ).rejects.toThrow("Acesso negado");
   });
+
+  it("should propagate Prisma errors from findMany (DB failure)", async () => {
+    mockFindMany.mockRejectedValue(new Error("Connection timed out"));
+    const { listReceivables } = await import(
+      "@/app/(app)/financeiro/receber/actions"
+    );
+    await expect(listReceivables({ companyId: COMPANY_ID })).rejects.toThrow(
+      "Connection timed out"
+    );
+  });
+
+  it("should propagate Prisma errors from count (DB failure)", async () => {
+    mockCount.mockRejectedValue(new Error("Database is unavailable"));
+    const { listReceivables } = await import(
+      "@/app/(app)/financeiro/receber/actions"
+    );
+    await expect(listReceivables({ companyId: COMPANY_ID })).rejects.toThrow(
+      "Database is unavailable"
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -355,6 +406,30 @@ describe("createReceivable", () => {
       "@/app/(app)/financeiro/receber/actions"
     );
     await expect(createReceivable(validInput)).rejects.toThrow("Acesso negado");
+  });
+
+  it("should propagate Prisma errors from create (DB failure)", async () => {
+    mockCreate.mockRejectedValue(
+      new Error("Unique constraint failed on the fields: (`id`)")
+    );
+    const { createReceivable } = await import(
+      "@/app/(app)/financeiro/receber/actions"
+    );
+    await expect(createReceivable(validInput)).rejects.toThrow(
+      "Unique constraint failed"
+    );
+    expect(mockLogAuditEvent).not.toHaveBeenCalled();
+  });
+
+  it("should propagate Prisma errors from client lookup (DB failure)", async () => {
+    mockClientFindFirst.mockRejectedValue(new Error("Connection timed out"));
+    const { createReceivable } = await import(
+      "@/app/(app)/financeiro/receber/actions"
+    );
+    await expect(createReceivable(validInput)).rejects.toThrow(
+      "Connection timed out"
+    );
+    expect(mockCreate).not.toHaveBeenCalled();
   });
 });
 
@@ -477,5 +552,130 @@ describe("markReceivableAsPaid", () => {
     await expect(
       markReceivableAsPaid("rec-1", "foreign-company")
     ).rejects.toThrow("Acesso negado");
+  });
+
+  it("should propagate Prisma errors from update (DB failure)", async () => {
+    mockUpdate.mockRejectedValue(new Error("Record to update not found"));
+    const { markReceivableAsPaid } = await import(
+      "@/app/(app)/financeiro/receber/actions"
+    );
+    await expect(markReceivableAsPaid("rec-1", COMPANY_ID)).rejects.toThrow(
+      "Record to update not found"
+    );
+    expect(mockLogAuditEvent).not.toHaveBeenCalled();
+  });
+
+  it("should propagate Prisma errors from findFirst (DB failure)", async () => {
+    mockFindFirst.mockRejectedValue(new Error("Connection timed out"));
+    const { markReceivableAsPaid } = await import(
+      "@/app/(app)/financeiro/receber/actions"
+    );
+    await expect(markReceivableAsPaid("rec-1", COMPANY_ID)).rejects.toThrow(
+      "Connection timed out"
+    );
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: listClientsForSelect
+// ---------------------------------------------------------------------------
+
+describe("listClientsForSelect", () => {
+  const sharedIds = [COMPANY_ID, "company-shared-1"];
+  const clientList = [
+    { id: "client-1", name: "Empresa X" },
+    { id: "client-2", name: "Empresa Y" },
+  ];
+
+  beforeEach(() => {
+    vi.resetModules();
+    vi.clearAllMocks();
+    mockRequireCompanyAccess.mockResolvedValue(SESSION);
+    mockGetSharedCompanyIds.mockResolvedValue(sharedIds);
+    mockClientFindMany.mockResolvedValue(clientList);
+  });
+
+  it("should call requireCompanyAccess with the correct companyId", async () => {
+    const { listClientsForSelect } = await import(
+      "@/app/(app)/financeiro/receber/actions"
+    );
+    await listClientsForSelect(COMPANY_ID);
+    expect(mockRequireCompanyAccess).toHaveBeenCalledWith(COMPANY_ID);
+  });
+
+  it("should call getSharedCompanyIds to resolve shared company scope", async () => {
+    const { listClientsForSelect } = await import(
+      "@/app/(app)/financeiro/receber/actions"
+    );
+    await listClientsForSelect(COMPANY_ID);
+    expect(mockGetSharedCompanyIds).toHaveBeenCalledWith(COMPANY_ID);
+  });
+
+  it("should query clients scoped to all shared company IDs", async () => {
+    const { listClientsForSelect } = await import(
+      "@/app/(app)/financeiro/receber/actions"
+    );
+    await listClientsForSelect(COMPANY_ID);
+    expect(mockClientFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          companyId: expect.objectContaining({ in: sharedIds }),
+        }),
+      })
+    );
+  });
+
+  it("should return the list of clients", async () => {
+    const { listClientsForSelect } = await import(
+      "@/app/(app)/financeiro/receber/actions"
+    );
+    const result = await listClientsForSelect(COMPANY_ID);
+    expect(result).toEqual(clientList);
+    expect(result).toHaveLength(2);
+  });
+
+  it("should return empty list when no clients exist", async () => {
+    mockClientFindMany.mockResolvedValue([]);
+    const { listClientsForSelect } = await import(
+      "@/app/(app)/financeiro/receber/actions"
+    );
+    const result = await listClientsForSelect(COMPANY_ID);
+    expect(result).toEqual([]);
+  });
+
+  it("should throw (RBAC) when access is denied", async () => {
+    mockRequireCompanyAccess.mockRejectedValue(
+      new Error("Acesso negado. Você não tem permissão para acessar esta empresa.")
+    );
+    const { listClientsForSelect } = await import(
+      "@/app/(app)/financeiro/receber/actions"
+    );
+    await expect(listClientsForSelect("foreign-company")).rejects.toThrow(
+      "Acesso negado"
+    );
+  });
+
+  it("should propagate Prisma errors from client findMany (DB failure)", async () => {
+    mockClientFindMany.mockRejectedValue(new Error("Connection timed out"));
+    const { listClientsForSelect } = await import(
+      "@/app/(app)/financeiro/receber/actions"
+    );
+    await expect(listClientsForSelect(COMPANY_ID)).rejects.toThrow(
+      "Connection timed out"
+    );
+  });
+
+  it("should propagate errors from getSharedCompanyIds (service failure)", async () => {
+    mockGetSharedCompanyIds.mockRejectedValue(
+      new Error("Shared service unavailable")
+    );
+    const { listClientsForSelect } = await import(
+      "@/app/(app)/financeiro/receber/actions"
+    );
+    await expect(listClientsForSelect(COMPANY_ID)).rejects.toThrow(
+      "Shared service unavailable"
+    );
+    expect(mockClientFindMany).not.toHaveBeenCalled();
   });
 });
