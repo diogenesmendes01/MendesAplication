@@ -38,6 +38,8 @@ export interface ProviderConfig {
   maxTokens?: number;
 }
 
+import { DEFAULT_MODELS } from "./pricing";
+
 // ─── Provider constants ───────────────────────────────────────────────────────
 
 const PROVIDER_BASE_URLS: Record<string, string> = {
@@ -45,14 +47,6 @@ const PROVIDER_BASE_URLS: Record<string, string> = {
   deepseek: "https://api.deepseek.com",
   grok: "https://api.x.ai",
   qwen: "https://dashscope.aliyuncs.com/compatible-mode",
-};
-
-const DEFAULT_MODELS: Record<string, string> = {
-  openai: "gpt-4o",
-  deepseek: "deepseek-chat",
-  anthropic: "claude-sonnet-4-20250514",
-  grok: "grok-2",
-  qwen: "qwen-max",
 };
 
 // ─── Backward-compat helper ───────────────────────────────────────────────────

@@ -112,6 +112,7 @@ export async function runAgent(
     companyId,
     clientId: ticket.clientId,
     contactPhone: contactPhone ? contactPhone.replace(/\D/g, "") : "",
+    channel,
     dryRun: false,
   };
 
@@ -357,6 +358,7 @@ export async function runAgentDryRun(
     companyId,
     clientId: "simulation",
     contactPhone: "5511999999999",
+    channel,
     dryRun: true,
   };
 

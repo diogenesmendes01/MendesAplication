@@ -12,6 +12,7 @@ export interface ToolContext {
   companyId: string;
   clientId: string;
   contactPhone: string; // Digits-only phone for WhatsApp replies
+  channel?: "WHATSAPP" | "EMAIL"; // Originating channel — used for audit logs
   dryRun?: boolean;     // When true, tools return results without side effects
 }
 
@@ -321,7 +322,7 @@ async function executeEscalate(
       ticketId: context.ticketId,
       senderId: null,
       content: `[Escalacao AI] Motivo: ${reason}`,
-      channel: "WHATSAPP",
+      channel: context.channel ?? "WHATSAPP",
       direction: "OUTBOUND",
       origin: "SYSTEM",
       isInternal: true,
