@@ -8,9 +8,6 @@ import {
   BRL_USD_RATE,
 } from "@/lib/ai/pricing";
 
-// Re-export for backward compat (callers that imported from cost-tracker)
-export { MODEL_PRICING, BRL_USD_RATE } from "@/lib/ai/pricing";
-
 // ─── logUsage ─────────────────────────────────────────────────────────────────
 
 interface LogUsageParams {
