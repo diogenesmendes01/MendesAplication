@@ -78,6 +78,19 @@ function maskApiKey(key: string | null | undefined): string {
 
 // ---------------------------------------------------------------------------
 // Rate limiter for simulation (in-memory, per-company, max 10/min)
+//
+// ⚠️  KNOWN LIMITATION — IN-MEMORY ONLY:
+// This Map lives in the Node.js process heap. In serverless/edge deployments
+// (Vercel Functions, AWS Lambda) or multi-pod Kubernetes setups, each
+// instance has its own independent Map — so N replicas effectively allow
+// N × 10 requests/min, making this rate limiter useless for real protection.
+//
+// TODO: Replace with a Redis-backed counter when Redis/Upstash is available.
+//   Suggested key: `sim_rate:{companyId}` (INCR + EXPIRE 60s via pipeline).
+//   Reference: https://upstash.com/docs/redis/sdks/ts/commands/incr
+//
+// Until then, the conservative limit (10/min) reduces risk on single-instance
+// deployments and the real protection remains the requireAdmin() auth check.
 // ---------------------------------------------------------------------------
 
 const simulationRateMap = new Map<string, number[]>();
