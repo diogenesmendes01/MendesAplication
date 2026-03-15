@@ -87,6 +87,7 @@ model Company {
   baileysAuthStates  BaileysAuthState[]
   lidMappings        LidMapping[]
   aiConfig           AiConfig?
+  aiUsageLogs        AiUsageLog[]
   documents          Document[]
   fiscalConfig       FiscalConfig?
   paymentProviders   PaymentProvider[]
@@ -812,6 +813,7 @@ model AiUsageLog {
   createdAt    DateTime @default(now())
 
   aiConfig AiConfig @relation(fields: [aiConfigId], references: [id], onDelete: Cascade)
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([companyId, createdAt])
   @@index([aiConfigId, createdAt])
