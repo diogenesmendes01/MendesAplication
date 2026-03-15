@@ -10,7 +10,7 @@ import { decrypt } from "@/lib/encryption";
 import { getTodaySpend, logUsage } from "./cost-tracker";
 import { MODEL_PRICING, BRL_USD_RATE, DEFAULT_MODELS } from "./pricing";
 
-// ─── Result type ─────────────────────────────────────────────────────────────
+// ─── Result types ─────────────────────────────────────────────────────────────
 
 export interface AgentResult {
   responded: boolean;
@@ -19,14 +19,228 @@ export interface AgentResult {
   error?: string;
 }
 
-// ─── Dry-run result type ─────────────────────────────────────────────────────
-
 export interface DryRunResult {
   response: string;
   inputTokens: number;
   outputTokens: number;
   estimatedCostBrl: number;
   error?: string;
+}
+
+// ─── Internal loop result ────────────────────────────────────────────────────
+
+interface AgentLoopResult {
+  responded: boolean;
+  escalated: boolean;
+  iterations: number;
+  error?: string;
+  /** Final response text — only meaningful in dry-run mode */
+  finalResponse: string;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+}
+
+// ─── Core agent loop ──────────────────────────────────────────────────────────
+
+/**
+ * Shared agent loop used by both `runAgent` (production) and
+ * `runAgentDryRun` (simulation). Keeping the loop in one place ensures
+ * that bug fixes and feature changes automatically apply to both modes.
+ *
+ * @param dryRun   When true: accumulates tokens in memory, does NOT write DB.
+ *                 When false: logs usage to DB via `onUsage`.
+ * @param onUsage  Called after each LLM call with raw token counts.
+ *                 In production this persists to `ai_usage_logs`.
+ *                 In dry-run this accumulates totals locally.
+ */
+async function runAgentLoop(options: {
+  messages: AiMessage[];
+  tools: ReturnType<typeof getToolsForChannel>;
+  providerConfig: ProviderConfig;
+  toolContext: ToolContext;
+  maxIterations: number;
+  timeout: number;
+  startTime: number;
+  dryRun: boolean;
+  onUsage: (inputTokens: number, outputTokens: number) => Promise<void>;
+  /** Identifies the ticket or "simulation" — used only for logging */
+  contextId: string;
+}): Promise<AgentLoopResult> {
+  const {
+    messages,
+    tools,
+    providerConfig,
+    toolContext,
+    maxIterations,
+    timeout,
+    startTime,
+    dryRun,
+    onUsage,
+    contextId,
+  } = options;
+
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
+  let finalResponse = "";
+
+  for (let iteration = 0; iteration < maxIterations; iteration++) {
+    // ── Global timeout guard ───────────────────────────────────────────────
+    if (Date.now() - startTime > timeout) {
+      console.warn(
+        `[ai-agent] Timeout after ${iteration} iterations for context ${contextId}`
+      );
+      return {
+        responded: false,
+        escalated: false,
+        iterations: iteration,
+        error: "timeout",
+        finalResponse,
+        totalInputTokens,
+        totalOutputTokens,
+      };
+    }
+
+    try {
+      const response = await chatCompletion(messages, tools, providerConfig);
+
+      // ── Accumulate / persist usage ─────────────────────────────────────
+      if (response.usage) {
+        totalInputTokens += response.usage.inputTokens;
+        totalOutputTokens += response.usage.outputTokens;
+        await onUsage(response.usage.inputTokens, response.usage.outputTokens);
+      }
+
+      // ── LLM returned tool calls ────────────────────────────────────────
+      if (response.tool_calls && response.tool_calls.length > 0) {
+        messages.push({
+          role: "assistant",
+          content: response.content || null,
+          tool_calls: response.tool_calls,
+        });
+
+        let shouldStop = false;
+        let responded = false;
+        let escalated = false;
+
+        for (const toolCall of response.tool_calls) {
+          const toolName = toolCall.function.name;
+          let args: Record<string, unknown> = {};
+          try {
+            args = JSON.parse(toolCall.function.arguments);
+          } catch {
+            args = {};
+          }
+
+          if (!dryRun) {
+            console.log(
+              `[ai-agent] Executing tool ${toolName} for ${contextId} (iteration ${iteration + 1})`
+            );
+          }
+
+          const result = await executeTool(toolName, args, toolContext);
+
+          messages.push({
+            role: "tool",
+            content: result,
+            tool_call_id: toolCall.id,
+          });
+
+          if (toolName === "RESPOND" || toolName === "RESPOND_EMAIL") {
+            if (dryRun) {
+              finalResponse = (args.message as string) || "";
+            }
+            responded = true;
+            shouldStop = true;
+          } else if (toolName === "ESCALATE") {
+            if (dryRun) {
+              finalResponse = `[Escalado] ${(args.reason as string) || "Sem motivo"}`;
+            }
+            escalated = true;
+            shouldStop = true;
+          }
+        }
+
+        if (shouldStop) {
+          return {
+            responded,
+            escalated,
+            iterations: iteration + 1,
+            finalResponse,
+            totalInputTokens,
+            totalOutputTokens,
+          };
+        }
+
+      // ── LLM returned text only (no tool calls) ─────────────────────────
+      } else if (response.content) {
+        if (!dryRun) {
+          console.log(
+            `[ai-agent] Direct text response for ${contextId} (iteration ${iteration + 1})`
+          );
+          const respondTool =
+            toolContext.channel === "EMAIL" ? "RESPOND_EMAIL" : "RESPOND";
+          const respondArgs =
+            toolContext.channel === "EMAIL"
+              ? { subject: "Re: Atendimento", message: response.content }
+              : { message: response.content };
+          await executeTool(respondTool, respondArgs, toolContext);
+        }
+
+        finalResponse = response.content;
+        return {
+          responded: true,
+          escalated: false,
+          iterations: iteration + 1,
+          finalResponse,
+          totalInputTokens,
+          totalOutputTokens,
+        };
+
+      // ── Empty response ─────────────────────────────────────────────────
+      } else {
+        if (!dryRun) {
+          console.warn(
+            `[ai-agent] Empty response from LLM for ${contextId} (iteration ${iteration + 1})`
+          );
+        }
+        return {
+          responded: false,
+          escalated: false,
+          iterations: iteration + 1,
+          error: "empty LLM response",
+          finalResponse,
+          totalInputTokens,
+          totalOutputTokens,
+        };
+      }
+    } catch (error) {
+      console.error(
+        `[ai-agent] Error in iteration ${iteration + 1} for ${contextId}:`,
+        error
+      );
+      messages.push({
+        role: "user",
+        content: `Erro interno: ${error instanceof Error ? error.message : String(error)}. Tente uma abordagem diferente.`,
+      });
+    }
+  }
+
+  // Max iterations reached without terminal action
+  if (!options.dryRun) {
+    console.warn(
+      `[ai-agent] Max iterations (${maxIterations}) reached for ${contextId}`
+    );
+  }
+
+  return {
+    responded: false,
+    escalated: false,
+    iterations: maxIterations,
+    error: "max iterations reached",
+    finalResponse: finalResponse || "(max iterations reached)",
+    totalInputTokens,
+    totalOutputTokens,
+  };
 }
 
 // ─── Main agent function ─────────────────────────────────────────────────────
@@ -68,7 +282,6 @@ export async function runAgent(
   const maxIterations = aiConfig.maxIterations || 5;
 
   // ── Build provider config ────────────────────────────────────────────────
-  // Use per-company config if apiKey is set, otherwise fall back to env vars
   let providerConfig: ProviderConfig;
   if (aiConfig.apiKey) {
     const decryptedApiKey = decrypt(aiConfig.apiKey);
@@ -95,7 +308,6 @@ export async function runAgent(
     return { responded: false, escalated: false, iterations: 0, error: "Ticket not found" };
   }
 
-  // Determine contact phone for WhatsApp replies
   const contactPhone = ticket.contact?.whatsapp || ticket.client.telefone;
   if (channel === "WHATSAPP" && !contactPhone) {
     return {
@@ -106,7 +318,6 @@ export async function runAgent(
     };
   }
 
-  // Build tool context
   const toolContext: ToolContext = {
     ticketId,
     companyId,
@@ -137,171 +348,56 @@ export async function runAgent(
     })
     .join("\n");
 
-  // ── Choose persona based on channel ──────────────────────────────────────
   const persona =
     channel === "EMAIL" && aiConfig.emailPersona
       ? aiConfig.emailPersona
       : aiConfig.persona;
 
-  // ── Build system prompt per channel ──────────────────────────────────────
   const clientName = ticket.contact?.name || ticket.client.name;
   const systemPrompt =
     channel === "EMAIL"
       ? buildEmailSystemPrompt(persona, clientName, historyContext, aiConfig.emailSignature)
       : buildWhatsAppSystemPrompt(persona, clientName, historyContext);
 
-  // Initialize conversation messages
   const messages: AiMessage[] = [
     { role: "system", content: systemPrompt },
     { role: "user", content: incomingMessage },
   ];
 
-  // Resolve the effective model name for usage logging
   const effectiveModel =
     providerConfig.model || aiConfig.model || DEFAULT_MODELS[aiConfig.provider] || aiConfig.provider;
 
-  // ── Get channel-specific tools ─────────────────────────────────────────
   const tools = getToolsForChannel(channel);
 
-  // ─── Agent loop ────────────────────────────────────────────────────────────
-
-  for (let iteration = 0; iteration < maxIterations; iteration++) {
-    // Check global timeout
-    if (Date.now() - startTime > timeout) {
-      console.warn(
-        `[ai-agent] Timeout after ${iteration} iterations for ticket ${ticketId}`
-      );
-      return {
-        responded: false,
-        escalated: false,
-        iterations: iteration,
-        error: "timeout",
-      };
-    }
-
-    try {
-      const response = await chatCompletion(
-        messages,
-        tools,
-        providerConfig
-      );
-
-      // ── Log usage after each LLM call ──────────────────────────────────
-      if (response.usage) {
-        await logUsage({
-          aiConfigId: aiConfig.id,
-          companyId,
-          provider: providerConfig.provider,
-          model: effectiveModel,
-          channel,
-          inputTokens: response.usage.inputTokens,
-          outputTokens: response.usage.outputTokens,
-          ticketId,
-        });
-      }
-
-      // ── LLM returned tool calls ──────────────────────────────────────────
-      if (response.tool_calls && response.tool_calls.length > 0) {
-        // Add assistant message with tool calls to conversation
-        messages.push({
-          role: "assistant",
-          content: response.content || null,
-          tool_calls: response.tool_calls,
-        });
-
-        let shouldStop = false;
-        let responded = false;
-        let escalated = false;
-
-        for (const toolCall of response.tool_calls) {
-          const toolName = toolCall.function.name;
-          let args: Record<string, unknown> = {};
-          try {
-            args = JSON.parse(toolCall.function.arguments);
-          } catch {
-            args = {};
-          }
-
-          console.log(
-            `[ai-agent] Executing tool ${toolName} for ticket ${ticketId} (iteration ${iteration + 1})`
-          );
-
-          const result = await executeTool(toolName, args, toolContext);
-
-          // Add tool result to conversation
-          messages.push({
-            role: "tool",
-            content: result,
-            tool_call_id: toolCall.id,
-          });
-
-          // Check if this was a terminal action
-          if (toolName === "RESPOND" || toolName === "RESPOND_EMAIL") {
-            responded = true;
-            shouldStop = true;
-          } else if (toolName === "ESCALATE") {
-            escalated = true;
-            shouldStop = true;
-          }
-        }
-
-        if (shouldStop) {
-          return { responded, escalated, iterations: iteration + 1 };
-        }
-
-        // Continue loop — LLM used non-terminal tools, will decide next step
-
-      // ── LLM returned text only (no tool calls) ──────────────────────────
-      } else if (response.content) {
-        // Treat direct text response as a RESPOND action for the appropriate channel
-        console.log(
-          `[ai-agent] Direct text response for ticket ${ticketId} (iteration ${iteration + 1})`
-        );
-
-        const respondTool = channel === "EMAIL" ? "RESPOND_EMAIL" : "RESPOND";
-        const respondArgs =
-          channel === "EMAIL"
-            ? { subject: "Re: Atendimento", message: response.content }
-            : { message: response.content };
-
-        await executeTool(respondTool, respondArgs, toolContext);
-        return { responded: true, escalated: false, iterations: iteration + 1 };
-
-      // ── Empty response ───────────────────────────────────────────────────
-      } else {
-        console.warn(
-          `[ai-agent] Empty response from LLM for ticket ${ticketId} (iteration ${iteration + 1})`
-        );
-        return {
-          responded: false,
-          escalated: false,
-          iterations: iteration + 1,
-          error: "empty LLM response",
-        };
-      }
-    } catch (error) {
-      console.error(
-        `[ai-agent] Error in iteration ${iteration + 1} for ticket ${ticketId}:`,
-        error
-      );
-
-      // Add error context so LLM can try a different approach
-      messages.push({
-        role: "user",
-        content: `Erro interno: ${error instanceof Error ? error.message : String(error)}. Tente uma abordagem diferente.`,
+  const loopResult = await runAgentLoop({
+    messages,
+    tools,
+    providerConfig,
+    toolContext,
+    maxIterations,
+    timeout,
+    startTime,
+    dryRun: false,
+    contextId: ticketId,
+    onUsage: async (inputTokens, outputTokens) => {
+      await logUsage({
+        aiConfigId: aiConfig.id,
+        companyId,
+        provider: providerConfig.provider,
+        model: effectiveModel,
+        channel,
+        inputTokens,
+        outputTokens,
+        ticketId,
       });
-    }
-  }
+    },
+  });
 
-  // Max iterations reached without terminal action
-  console.warn(
-    `[ai-agent] Max iterations (${maxIterations}) reached for ticket ${ticketId}`
-  );
   return {
-    responded: false,
-    escalated: false,
-    iterations: maxIterations,
-    error: "max iterations reached",
+    responded: loopResult.responded,
+    escalated: loopResult.escalated,
+    iterations: loopResult.iterations,
+    error: loopResult.error,
   };
 }
 
@@ -324,7 +420,6 @@ export async function runAgentDryRun(
   const startTime = Date.now();
   const timeout = parseInt(process.env.AI_TIMEOUT || "30000", 10);
 
-  // Load AI config for the company
   const aiConfig = await prisma.aiConfig.findUnique({
     where: { companyId },
   });
@@ -333,7 +428,6 @@ export async function runAgentDryRun(
     return { response: "", inputTokens: 0, outputTokens: 0, estimatedCostBrl: 0, error: "AI not configured" };
   }
 
-  // ── Build provider config ────────────────────────────────────────────────
   let providerConfig: ProviderConfig;
   if (aiConfig.apiKey) {
     const decryptedApiKey = decrypt(aiConfig.apiKey);
@@ -349,10 +443,6 @@ export async function runAgentDryRun(
 
   const maxIterations = aiConfig.maxIterations || 5;
 
-  // ── Mock simulation context ──────────────────────────────────────────────
-  const mockClientName = "Cliente Simulação";
-
-  // Build tool context in dry-run mode (no real ticket)
   const toolContext: ToolContext = {
     ticketId: "simulation",
     companyId,
@@ -362,140 +452,51 @@ export async function runAgentDryRun(
     dryRun: true,
   };
 
-  // ── Choose persona based on channel ──────────────────────────────────────
   const persona =
     channel === "EMAIL" && aiConfig.emailPersona
       ? aiConfig.emailPersona
       : aiConfig.persona;
 
-  // ── Build system prompt per channel ──────────────────────────────────────
-  const historyContext = ""; // No history in simulation
+  const mockClientName = "Cliente Simulação";
   const systemPrompt =
     channel === "EMAIL"
-      ? buildEmailSystemPrompt(persona, mockClientName, historyContext, aiConfig.emailSignature)
-      : buildWhatsAppSystemPrompt(persona, mockClientName, historyContext);
+      ? buildEmailSystemPrompt(persona, mockClientName, "", aiConfig.emailSignature)
+      : buildWhatsAppSystemPrompt(persona, mockClientName, "");
 
-  // Initialize conversation messages
   const messages: AiMessage[] = [
     { role: "system", content: systemPrompt },
     { role: "user", content: incomingMessage },
   ];
 
-  // Resolve the effective model name for cost estimation
   const effectiveModel =
     providerConfig.model || aiConfig.model || DEFAULT_MODELS[aiConfig.provider] || aiConfig.provider;
 
-  // Get channel-specific tools
   const tools = getToolsForChannel(channel);
 
-  // Track total usage across iterations
-  let totalInputTokens = 0;
-  let totalOutputTokens = 0;
-  let finalResponse = "";
-
-  // ─── Agent loop (dry-run) ──────────────────────────────────────────────────
-
-  for (let iteration = 0; iteration < maxIterations; iteration++) {
-    if (Date.now() - startTime > timeout) {
-      return {
-        response: finalResponse || "(timeout)",
-        inputTokens: totalInputTokens,
-        outputTokens: totalOutputTokens,
-        estimatedCostBrl: estimateCostBrl(effectiveModel, totalInputTokens, totalOutputTokens),
-        error: "timeout",
-      };
-    }
-
-    try {
-      const response = await chatCompletion(messages, tools, providerConfig);
-
-      // Accumulate token usage (no DB write in dry-run)
-      if (response.usage) {
-        totalInputTokens += response.usage.inputTokens;
-        totalOutputTokens += response.usage.outputTokens;
-      }
-
-      // ── LLM returned tool calls ────────────────────────────────────────
-      if (response.tool_calls && response.tool_calls.length > 0) {
-        messages.push({
-          role: "assistant",
-          content: response.content || null,
-          tool_calls: response.tool_calls,
-        });
-
-        let shouldStop = false;
-
-        for (const toolCall of response.tool_calls) {
-          const toolName = toolCall.function.name;
-          let args: Record<string, unknown> = {};
-          try {
-            args = JSON.parse(toolCall.function.arguments);
-          } catch {
-            args = {};
-          }
-
-          const result = await executeTool(toolName, args, toolContext);
-
-          messages.push({
-            role: "tool",
-            content: result,
-            tool_call_id: toolCall.id,
-          });
-
-          // Capture the response from terminal tools
-          if (toolName === "RESPOND" || toolName === "RESPOND_EMAIL") {
-            const msg = (args.message as string) || "";
-            finalResponse = msg;
-            shouldStop = true;
-          } else if (toolName === "ESCALATE") {
-            finalResponse = `[Escalado] ${(args.reason as string) || "Sem motivo"}`;
-            shouldStop = true;
-          }
-        }
-
-        if (shouldStop) {
-          return {
-            response: finalResponse,
-            inputTokens: totalInputTokens,
-            outputTokens: totalOutputTokens,
-            estimatedCostBrl: estimateCostBrl(effectiveModel, totalInputTokens, totalOutputTokens),
-          };
-        }
-
-      // ── LLM returned text only ────────────────────────────────────────
-      } else if (response.content) {
-        finalResponse = response.content;
-        return {
-          response: finalResponse,
-          inputTokens: totalInputTokens,
-          outputTokens: totalOutputTokens,
-          estimatedCostBrl: estimateCostBrl(effectiveModel, totalInputTokens, totalOutputTokens),
-        };
-
-      // ── Empty response ────────────────────────────────────────────────
-      } else {
-        return {
-          response: "",
-          inputTokens: totalInputTokens,
-          outputTokens: totalOutputTokens,
-          estimatedCostBrl: estimateCostBrl(effectiveModel, totalInputTokens, totalOutputTokens),
-          error: "empty LLM response",
-        };
-      }
-    } catch (error) {
-      messages.push({
-        role: "user",
-        content: `Erro interno: ${error instanceof Error ? error.message : String(error)}. Tente uma abordagem diferente.`,
-      });
-    }
-  }
+  const loopResult = await runAgentLoop({
+    messages,
+    tools,
+    providerConfig,
+    toolContext,
+    maxIterations,
+    timeout,
+    startTime,
+    dryRun: true,
+    contextId: "simulation",
+    // No DB writes in dry-run — onUsage is a no-op (totals tracked inside the loop)
+    onUsage: async () => {},
+  });
 
   return {
-    response: finalResponse || "(max iterations reached)",
-    inputTokens: totalInputTokens,
-    outputTokens: totalOutputTokens,
-    estimatedCostBrl: estimateCostBrl(effectiveModel, totalInputTokens, totalOutputTokens),
-    error: "max iterations reached",
+    response: loopResult.finalResponse,
+    inputTokens: loopResult.totalInputTokens,
+    outputTokens: loopResult.totalOutputTokens,
+    estimatedCostBrl: estimateCostBrl(
+      effectiveModel,
+      loopResult.totalInputTokens,
+      loopResult.totalOutputTokens
+    ),
+    error: loopResult.error,
   };
 }
 
