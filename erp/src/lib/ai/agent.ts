@@ -3,7 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { chatCompletion, getEnvProviderConfig } from "./provider";
 import type { AiMessage, ProviderConfig } from "./provider";
-import { ALL_TOOLS } from "./tools";
+import { getToolsForChannel } from "./tools";
 import { executeTool } from "./tool-executor";
 import type { ToolContext } from "./tool-executor";
 import { decrypt } from "@/lib/encryption";
@@ -147,6 +147,9 @@ export async function runAgent(
   const effectiveModel =
     providerConfig.model || aiConfig.model || aiConfig.provider;
 
+  // ── Get channel-specific tools ─────────────────────────────────────────
+  const tools = getToolsForChannel(channel);
+
   // ─── Agent loop ────────────────────────────────────────────────────────────
 
   for (let iteration = 0; iteration < maxIterations; iteration++) {
@@ -166,7 +169,7 @@ export async function runAgent(
     try {
       const response = await chatCompletion(
         messages,
-        ALL_TOOLS,
+        tools,
         providerConfig
       );
 
@@ -237,12 +240,18 @@ export async function runAgent(
 
       // ── LLM returned text only (no tool calls) ──────────────────────────
       } else if (response.content) {
-        // Treat direct text response as a RESPOND action
+        // Treat direct text response as a RESPOND action for the appropriate channel
         console.log(
           `[ai-agent] Direct text response for ticket ${ticketId} (iteration ${iteration + 1})`
         );
 
-        await executeTool("RESPOND", { message: response.content }, toolContext);
+        const respondTool = channel === "EMAIL" ? "RESPOND_EMAIL" : "RESPOND";
+        const respondArgs =
+          channel === "EMAIL"
+            ? { subject: "Re: Atendimento", message: response.content }
+            : { message: response.content };
+
+        await executeTool(respondTool, respondArgs, toolContext);
         return { responded: true, escalated: false, iterations: iteration + 1 };
 
       // ── Empty response ───────────────────────────────────────────────────

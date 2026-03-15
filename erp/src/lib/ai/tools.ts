@@ -64,6 +64,26 @@ export const RESPOND: AiToolDefinition = {
   },
 };
 
+export const RESPOND_EMAIL: AiToolDefinition = {
+  name: "RESPOND_EMAIL",
+  description:
+    "Envia uma resposta ao cliente por email. Use quando o canal for email. A mensagem sera enviada por email e registrada no ticket.",
+  parameters: {
+    type: "object",
+    properties: {
+      subject: {
+        type: "string",
+        description: "Assunto do email de resposta",
+      },
+      message: {
+        type: "string",
+        description: "Corpo do email (pode usar HTML simples: <b>, <i>, <br>, <p>, <ul>, <li>)",
+      },
+    },
+    required: ["subject", "message"],
+  },
+};
+
 export const ESCALATE: AiToolDefinition = {
   name: "ESCALATE",
   description:
@@ -97,7 +117,7 @@ export const CREATE_NOTE: AiToolDefinition = {
   },
 };
 
-// ─── All Tools ───────────────────────────────────────────────────────────────
+// ─── All Tools (legacy — includes WhatsApp RESPOND) ─────────────────────────
 
 export const ALL_TOOLS: AiToolDefinition[] = [
   SEARCH_DOCUMENTS,
@@ -107,3 +127,32 @@ export const ALL_TOOLS: AiToolDefinition[] = [
   ESCALATE,
   CREATE_NOTE,
 ];
+
+// ─── Shared (non-terminal) tools ─────────────────────────────────────────────
+
+const SHARED_TOOLS: AiToolDefinition[] = [
+  SEARCH_DOCUMENTS,
+  GET_CLIENT_INFO,
+  GET_HISTORY,
+  ESCALATE,
+  CREATE_NOTE,
+];
+
+// ─── Channel-specific tool sets ──────────────────────────────────────────────
+
+export const WHATSAPP_TOOLS: AiToolDefinition[] = [
+  ...SHARED_TOOLS,
+  RESPOND,
+];
+
+export const EMAIL_TOOLS: AiToolDefinition[] = [
+  ...SHARED_TOOLS,
+  RESPOND_EMAIL,
+];
+
+/**
+ * Returns the appropriate tool set for a given channel.
+ */
+export function getToolsForChannel(channel: "WHATSAPP" | "EMAIL"): AiToolDefinition[] {
+  return channel === "EMAIL" ? EMAIL_TOOLS : WHATSAPP_TOOLS;
+}

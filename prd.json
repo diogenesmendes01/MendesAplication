@@ -82,7 +82,7 @@
       "title": "Nova tool RESPOND_EMAIL + enfileirar email inbound no ai-agent",
       "description": "Como sistema, quero que emails recebidos passem pelo agente IA e que o agente possa responder por email.",
       "priority": 5,
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "Nova tool RESPOND_EMAIL em tools.ts com params: subject (string) e message (string, suporta HTML simples)",
         "tool-executor.ts: novo case RESPOND_EMAIL que enfileira no emailOutboundQueue com subject, to (extraído do ticket/contact), content formatado",

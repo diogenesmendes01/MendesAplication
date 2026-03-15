@@ -109,3 +109,23 @@ model AiConfig {
 - ⏳ Decimal do Prisma precisa de Number() para comparação (dailySpendLimitBrl é Decimal no DB)
 - ⏳ O contact model do Prisma (AdditionalContact) tem campo email — útil para futura resolução de destinatário de email
 - ⏳ O default do channel param garante backward compat — callers existentes não precisam mudar
+
+## US-005 — Nova tool RESPOND_EMAIL + enfileirar email inbound no ai-agent (2026-03-15)
+
+### O que foi feito
+- Nova tool RESPOND_EMAIL adicionada em tools.ts com params: subject (string) e message (string, suporta HTML simples)
+- Criadas listas de tools por canal: WHATSAPP_TOOLS (com RESPOND) e EMAIL_TOOLS (com RESPOND_EMAIL) + helper getToolsForChannel()
+- tool-executor.ts: novo case RESPOND_EMAIL que resolve email do destinatário a partir de ticket.contact.email ou ticket.client.email, cria TicketMessage e enfileira no emailOutboundQueue
+- Se não houver email do contato/cliente, retorna erro orientando uso de ESCALATE
+- email-inbound.ts: após criar TicketMessage de INBOUND, enfileira no aiAgentQueue com channel='EMAIL' (análogo ao whatsapp-inbound)
+- agent.ts: usa getToolsForChannel(channel) em vez de ALL_TOOLS, garantindo que EMAIL recebe RESPOND_EMAIL e WhatsApp recebe RESPOND
+- agent.ts: fallback de texto direto (sem tool call) agora usa RESPOND_EMAIL para canal EMAIL com subject "Re: Atendimento"
+- ai-agent.ts worker já passava channel do job data para runAgent() (feito em US-004)
+- System prompts já diferenciavam ferramentas por canal (feito em US-004)
+- npm run lint passa sem erros
+
+### Lições
+- ⏳ O emailOutboundQueue precisa de import direto de @/lib/queue no tool-executor — não é injetado via contexto
+- ⏳ O EmailOutboundJobData espera messageId, ticketId, companyId, to, subject, content, attachmentIds — criar TicketMessage ANTES de enfileirar para ter o messageId
+- ⏳ A resolução de email do destinatário segue a cadeia: ticket.contact.email → ticket.client.email → erro com sugestão de ESCALATE
+- ⏳ ALL_TOOLS ainda exportado para backward compat mas não usado mais no agent loop — getToolsForChannel() é o padrão agora

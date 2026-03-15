@@ -3,6 +3,7 @@ import { ImapFlow } from "imapflow";
 import type { FetchMessageObject, MessageStructureObject } from "imapflow";
 import { prisma } from "@/lib/prisma";
 import { decryptConfig } from "@/lib/encryption";
+import { aiAgentQueue } from "@/lib/queue";
 import path from "path";
 import fs from "fs/promises";
 
@@ -391,6 +392,19 @@ async function processEmail(
   console.log(
     `[email-inbound] Message ${message.id} added to ticket ${ticketId} (${direction}/${origin}, from: ${senderAddress}, msgId: ${messageId ?? "none"})`
   );
+
+  // Enqueue AI agent job for inbound email messages with text content
+  if (direction === "INBOUND" && textContent) {
+    await aiAgentQueue.add("process-message", {
+      ticketId,
+      companyId,
+      messageContent: textContent,
+      channel: "EMAIL" as const,
+    });
+    console.log(
+      `[email-inbound] Enqueued ai-agent job for ticket ${ticketId} (channel: EMAIL)`
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------

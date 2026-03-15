@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { searchDocuments } from "./embeddings";
 import { sendTextMessage } from "@/lib/whatsapp-api";
+import { emailOutboundQueue } from "@/lib/queue";
 
 // ─── Context ─────────────────────────────────────────────────────────────────
 
@@ -30,6 +31,8 @@ export async function executeTool(
         return await executeGetHistory(args, context);
       case "RESPOND":
         return await executeRespond(args, context);
+      case "RESPOND_EMAIL":
+        return await executeRespondEmail(args, context);
       case "ESCALATE":
         return await executeEscalate(args, context);
       case "CREATE_NOTE":
@@ -227,6 +230,63 @@ async function executeRespond(
   });
 
   return `Mensagem enviada ao cliente com sucesso.`;
+}
+
+// ─── RESPOND_EMAIL ───────────────────────────────────────────────────────────
+
+async function executeRespondEmail(
+  args: Record<string, unknown>,
+  context: ToolContext
+): Promise<string> {
+  const subject = args.subject as string;
+  const message = args.message as string;
+  if (!subject) return "Erro: assunto (subject) nao fornecido.";
+  if (!message) return "Erro: mensagem (message) nao fornecida.";
+
+  // Resolve recipient email from ticket -> contact.email or client.email
+  const ticket = await prisma.ticket.findUnique({
+    where: { id: context.ticketId },
+    include: {
+      contact: { select: { email: true } },
+      client: { select: { email: true } },
+    },
+  });
+
+  if (!ticket) {
+    return "Erro: ticket nao encontrado.";
+  }
+
+  const recipientEmail = ticket.contact?.email || ticket.client.email;
+
+  if (!recipientEmail) {
+    return "Erro: nao foi possivel encontrar o email do contato ou cliente vinculado ao ticket. Use ESCALATE para encaminhar a um atendente humano que podera obter o email.";
+  }
+
+  // Create TicketMessage record first (email-outbound needs the messageId)
+  const ticketMessage = await prisma.ticketMessage.create({
+    data: {
+      ticketId: context.ticketId,
+      senderId: null,
+      content: message,
+      channel: "EMAIL",
+      direction: "OUTBOUND",
+      origin: "SYSTEM",
+      isAiGenerated: true,
+    },
+  });
+
+  // Enqueue for email outbound delivery
+  await emailOutboundQueue.add("send-email", {
+    messageId: ticketMessage.id,
+    ticketId: context.ticketId,
+    companyId: context.companyId,
+    to: recipientEmail,
+    subject,
+    content: message,
+    attachmentIds: [],
+  });
+
+  return `Email enfileirado para envio ao destinatario ${recipientEmail} com assunto "${subject}".`;
 }
 
 // ─── ESCALATE ────────────────────────────────────────────────────────────────
