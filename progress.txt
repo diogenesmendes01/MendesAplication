@@ -54,3 +54,21 @@ model AiConfig {
 - ⏳ O item do 1Password "MendesERP Database" usa campo "connection_string", não "DATABASE_URL"
 - ⏳ Para aplicar migration manual: ssh tunnel (porta 15432) + psql + INSERT em _prisma_migrations
 - ⏳ Float no Prisma mapeia para DOUBLE PRECISION no PostgreSQL (usado para temperature)
+
+## US-002 — Refatorar provider.ts multi-provider (2026-03-15)
+
+### O que foi feito
+- chatCompletion() agora recebe ProviderConfig como 3º parâmetro obrigatório (não lê mais process.env)
+- Retorno AiResponse inclui usage: { inputTokens, outputTokens } extraído da resposta da API (OpenAI-compat e Anthropic)
+- 5 providers suportados: openai, anthropic, deepseek, grok, qwen
+- Grok usa base URL https://api.x.ai (OpenAI-compatible)
+- Qwen usa base URL https://dashscope.aliyuncs.com/compatible-mode (OpenAI-compatible)
+- Default models adicionados: grok='grok-2', qwen='qwen-max'
+- Helper getEnvProviderConfig() criado para backward compat (lê AI_PROVIDER/AI_API_KEY/AI_MODEL)
+- agent.ts atualizado: usa apiKey do AiConfig se disponível, senão faz fallback para getEnvProviderConfig()
+- npm run lint passa sem erros
+
+### Lições
+- ⏳ Anthropic retorna usage em data.usage.input_tokens/output_tokens; OpenAI-compat usa data.usage.prompt_tokens/completion_tokens
+- ⏳ O ChatCompletionOptions interno foi eliminado — ProviderConfig cobre tudo (provider, apiKey, model, temperature, maxTokens)
+- ⏳ embeddings.ts não foi tocado (usa AI_EMBEDDING_* separadamente, conforme spec)

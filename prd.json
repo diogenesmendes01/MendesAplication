@@ -26,7 +26,7 @@
       "title": "Refatorar provider.ts para multi-provider com config como parâmetro",
       "description": "Como desenvolvedor, quero que chatCompletion() receba a config do provider como parâmetro em vez de ler env vars globais, e suporte Grok e Qwen.",
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "chatCompletion() recebe ProviderConfig { provider, apiKey, model?, temperature?, maxTokens? } como parâmetro obrigatório — NÃO lê mais process.env.AI_PROVIDER/AI_API_KEY/AI_MODEL",
         "Retorno inclui usage: { inputTokens: number; outputTokens: number } extraído da resposta da API",

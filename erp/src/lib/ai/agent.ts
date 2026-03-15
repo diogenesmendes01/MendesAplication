@@ -1,8 +1,8 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { chatCompletion } from "./provider";
-import type { AiMessage } from "./provider";
+import { chatCompletion, getEnvProviderConfig } from "./provider";
+import type { AiMessage, ProviderConfig } from "./provider";
 import { ALL_TOOLS } from "./tools";
 import { executeTool } from "./tool-executor";
 import type { ToolContext } from "./tool-executor";
@@ -36,6 +36,19 @@ export async function runAgent(
   }
 
   const maxIterations = aiConfig.maxIterations || 5;
+
+  // Build provider config — use per-company config if apiKey is set, otherwise fall back to env vars
+  let providerConfig: ProviderConfig;
+  if (aiConfig.apiKey) {
+    providerConfig = {
+      provider: aiConfig.provider,
+      apiKey: aiConfig.apiKey,
+      model: aiConfig.model || undefined,
+      temperature: aiConfig.temperature,
+    };
+  } else {
+    providerConfig = getEnvProviderConfig();
+  }
 
   // Load ticket with client and contact info
   const ticket = await prisma.ticket.findUnique({
@@ -121,7 +134,11 @@ export async function runAgent(
     }
 
     try {
-      const response = await chatCompletion(messages, ALL_TOOLS);
+      const response = await chatCompletion(
+        messages,
+        ALL_TOOLS,
+        providerConfig
+      );
 
       // ── LLM returned tool calls ──────────────────────────────────────────
       if (response.tool_calls && response.tool_calls.length > 0) {
