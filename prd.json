@@ -11,7 +11,7 @@
       "title": "Schema Prisma: novos campos AiConfig + tabela AiUsageLog",
       "description": "Como desenvolvedor, quero atualizar o schema do banco para suportar provider/API key por empresa, canais separados, limite de gasto e tracking de uso.",
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "AiConfig ganha campos: provider (String default 'openai'), apiKey (String? @db.Text), model (String?), whatsappEnabled (Boolean default true), emailEnabled (Boolean default false), emailPersona (String? @db.Text), emailSignature (String? @db.Text), dailySpendLimitBrl (Decimal? @db.Decimal(10,2)), temperature (Float default 0.7)",
         "Nova tabela AiUsageLog: id, aiConfigId, companyId, provider, model, channel (WHATSAPP|EMAIL), inputTokens, outputTokens, costUsd (Decimal 10,6), costBrl (Decimal 10,4), ticketId?, createdAt — com indexes em (companyId, createdAt) e (aiConfigId, createdAt)",

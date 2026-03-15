@@ -40,3 +40,17 @@ model AiConfig {
 - Mascarar segredos: últimos 4 chars visíveis (padrão de payment-providers US-008)
 - Migration: manual SQL se shadow DB não for acessível (padrão do projeto)
 - DB via SSH tunnel: `ssh -f -N -L 15432:10.0.1.10:5432 root@coolify.boletoapi.com`
+
+## US-001 — Schema Prisma AI Personalization (2026-03-15)
+
+### O que foi feito
+- Adicionados 9 campos novos ao AiConfig: provider, apiKey, model, whatsappEnabled, emailEnabled, emailPersona, emailSignature, dailySpendLimitBrl, temperature
+- Criada tabela AiUsageLog com indexes em (companyId, createdAt) e (aiConfigId, createdAt)
+- Relation usageLogs AiUsageLog[] adicionada ao AiConfig
+- Migration manual SQL aplicada no banco de produção via SSH tunnel
+- prisma validate, prisma generate e npm run lint passaram sem erros
+
+### Lições
+- ⏳ O item do 1Password "MendesERP Database" usa campo "connection_string", não "DATABASE_URL"
+- ⏳ Para aplicar migration manual: ssh tunnel (porta 15432) + psql + INSERT em _prisma_migrations
+- ⏳ Float no Prisma mapeia para DOUBLE PRECISION no PostgreSQL (usado para temperature)

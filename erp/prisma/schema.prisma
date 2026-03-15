@@ -763,18 +763,61 @@ model LidMapping {
 model AiConfig {
   id                 String   @id @default(cuid())
   companyId          String   @unique
+
+  // --- Existentes ---
   enabled            Boolean  @default(false)
   persona            String   @db.Text
   welcomeMessage     String?  @db.Text
   escalationKeywords String[]
   maxIterations      Int      @default(5)
+
+  // --- Provider ---
+  provider           String   @default("openai")
+  apiKey             String?  @db.Text
+  model              String?
+
+  // --- Canais ---
+  whatsappEnabled    Boolean  @default(true)
+  emailEnabled       Boolean  @default(false)
+  emailPersona       String?  @db.Text
+  emailSignature     String?  @db.Text
+
+  // --- Limites ---
+  dailySpendLimitBrl Decimal? @db.Decimal(10, 2)
+
+  // --- Temperatura ---
+  temperature        Float    @default(0.7)
+
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
-  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company   Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  usageLogs AiUsageLog[]
 
   @@map("ai_config")
 }
+
+model AiUsageLog {
+  id           String   @id @default(cuid())
+  aiConfigId   String
+  companyId    String
+  provider     String
+  model        String
+  channel      String
+  inputTokens  Int
+  outputTokens Int
+  costUsd      Decimal  @db.Decimal(10, 6)
+  costBrl      Decimal  @db.Decimal(10, 4)
+  ticketId     String?
+  createdAt    DateTime @default(now())
+
+  aiConfig AiConfig @relation(fields: [aiConfigId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, createdAt])
+  @@index([aiConfigId, createdAt])
+  @@map("ai_usage_logs")
+}
+
 
 model Document {
   id        String         @id @default(cuid())
