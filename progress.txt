@@ -89,3 +89,23 @@ model AiConfig {
 - ⏳ Prisma Decimal precisa ser instanciado com `new Decimal(value.toFixed(N))` para controlar precision
 - ⏳ groupBy do Prisma retorna _sum como Decimal | null — sempre usar Number() para converter
 - ⏳ MODEL_PRICING e BRL_USD_RATE exportados do cost-tracker para reuso no model-suggester (evita duplicação)
+
+## US-004 — Adaptar agent.ts para multi-canal + provider config (2026-03-15)
+
+### O que foi feito
+- runAgent() agora recebe parâmetro channel: 'WHATSAPP' | 'EMAIL' (default 'WHATSAPP' para backward compat)
+- Descriptografa apiKey via decrypt() de encryption.ts antes de montar ProviderConfig
+- Fallback para getEnvProviderConfig() quando empresa não tem apiKey configurada
+- Verifica whatsappEnabled/emailEnabled antes de processar — retorna error específico se desabilitado
+- Verifica dailySpendLimitBrl via getTodaySpend() — retorna 'daily_spend_limit_reached' sem chamar LLM
+- Usa emailPersona quando channel=EMAIL e emailPersona não é null, senão usa persona padrão
+- System prompts separados: buildWhatsAppSystemPrompt() (conciso, direto) e buildEmailSystemPrompt() (formal, inclui assinatura)
+- Cada chamada a chatCompletion() tem logUsage() logo após, registrando tokens no AiUsageLog
+- Terminal actions expandidas: RESPOND e RESPOND_EMAIL ambos param shouldStop=true
+- ai-agent.ts worker passa channel do job data para runAgent()
+- whatsapp-inbound.ts inclui channel: 'WHATSAPP' no job data do aiAgentQueue
+
+### Lições
+- ⏳ Decimal do Prisma precisa de Number() para comparação (dailySpendLimitBrl é Decimal no DB)
+- ⏳ O contact model do Prisma (AdditionalContact) tem campo email — útil para futura resolução de destinatário de email
+- ⏳ O default do channel param garante backward compat — callers existentes não precisam mudar

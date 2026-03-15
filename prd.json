@@ -61,7 +61,7 @@
       "title": "Adaptar agent.ts para multi-canal + provider config da empresa",
       "description": "Como sistema, quero que o agent carregue a config da empresa do banco (provider, API key, modelo) e use persona separada por canal.",
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "runAgent() recebe novo parâmetro channel: 'WHATSAPP' | 'EMAIL'",
         "Carrega AiConfig da empresa e descriptografa apiKey usando decrypt() de encryption.ts",
