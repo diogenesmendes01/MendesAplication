@@ -2,8 +2,14 @@
 // Provider Types — lista canônica dos providers suportados
 // ============================================================
 
-/** Providers de produção — únicos valores válidos para registros no banco. */
-export const PROVIDER_TYPES = ["pagarme", "pinbank"] as const;
+import { PRODUCTION_PROVIDER_TYPES } from "./constants";
+
+/**
+ * Providers de produção — fonte canônica derivada de PRODUCTION_PROVIDER_TYPES (constants.ts).
+ * Re-exportado como alias para retrocompatibilidade com imports existentes de types.ts.
+ * NÃO duplique a lista aqui — adicione novos providers apenas em constants.ts.
+ */
+export const PROVIDER_TYPES = PRODUCTION_PROVIDER_TYPES;
 
 /**
  * Provider de mock — usado exclusivamente como fallback interno em ambiente
@@ -12,7 +18,7 @@ export const PROVIDER_TYPES = ["pagarme", "pinbank"] as const;
  */
 export const MOCK_PROVIDER = "mock" as const;
 
-export type ProviderType = (typeof PROVIDER_TYPES)[number] | typeof MOCK_PROVIDER;
+export type ProviderType = (typeof PRODUCTION_PROVIDER_TYPES)[number] | typeof MOCK_PROVIDER;
 
 /**
  * Type guard para narrowing em runtime: verifica se um valor lido do banco
@@ -22,10 +28,10 @@ export type ProviderType = (typeof PROVIDER_TYPES)[number] | typeof MOCK_PROVIDE
  * com mensagem clara para dados legados ou corrompidos.
  *
  * Nota: "mock" é aceito pois pode ser usado como fallback interno (ver propostas/actions.ts).
- * Valores de DB deveriam constar apenas em PROVIDER_TYPES (produção).
+ * Valores de DB deveriam constar apenas em PRODUCTION_PROVIDER_TYPES (produção).
  */
 export function isProviderType(v: string): v is ProviderType {
-  return (PROVIDER_TYPES as readonly string[]).includes(v) || v === MOCK_PROVIDER;
+  return (PRODUCTION_PROVIDER_TYPES as readonly string[]).includes(v) || v === MOCK_PROVIDER;
 }
 
 // ============================================================
