@@ -6,7 +6,8 @@ import { requireAdmin } from "@/lib/session";
 import { logAuditEvent } from "@/lib/audit";
 import { encrypt, decrypt } from "@/lib/encryption";
 import { chatCompletion } from "@/lib/ai/provider";
-import { getUsageSummary, type UsageSummary } from "@/lib/ai/cost-tracker";
+import { getTodaySpend, getUsageSummary, type UsageSummary } from "@/lib/ai/cost-tracker";
+import { suggestModel } from "@/lib/ai/model-suggester";
 import type { Prisma } from "@prisma/client";
 
 // ---------------------------------------------------------------------------
@@ -33,6 +34,13 @@ export interface AiConfigData {
   // Temperature
   temperature: number;
 }
+
+export interface ModelSuggestionData {
+  model: string;
+  estimatedDailyCostBrl: number;
+}
+
+export type { UsageSummary };
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -139,8 +147,6 @@ export async function updateAiConfig(
     apiKeyToStore = encrypt(data.apiKey);
   }
 
-  // If apiKeyToStore is undefined, we need to preserve the existing value
-  // Build the update data without apiKey first, then conditionally add it
   const baseData = {
     enabled: data.enabled,
     persona: data.persona,
@@ -191,7 +197,6 @@ export async function updateAiConfig(
 
 /**
  * Test the AI connection for a company by making a minimal API call.
- * Decrypts the stored apiKey, sends a trivial prompt, and returns success/failure.
  */
 export async function testAiConnection(
   companyId: string,
@@ -234,8 +239,6 @@ export async function testAiConnection(
 
 /**
  * List available models for the company's configured provider.
- * For OpenAI: calls /v1/models with the stored apiKey.
- * For other providers: returns a hardcoded list.
  */
 export async function listAvailableModels(
   companyId: string,
@@ -256,7 +259,6 @@ export async function listAvailableModels(
 
   // For OpenAI: try to fetch from API
   if (!config?.apiKey) {
-    // No key stored — return a sensible default list
     return ["gpt-4o", "gpt-4o-mini"];
   }
 
@@ -301,7 +303,6 @@ export async function listAvailableModels(
 
 /**
  * Get AI usage summary for the frontend consumption tab.
- * Returns aggregated data for the last N days.
  */
 export async function getAiUsageSummary(
   companyId: string,
@@ -311,4 +312,25 @@ export async function getAiUsageSummary(
   await requireCompanyAccess(companyId);
 
   return getUsageSummary(companyId, days);
+}
+
+/**
+ * Get today's spend for the company (BRL).
+ */
+export async function getTodaySpendAction(
+  companyId: string,
+): Promise<number> {
+  await requireCompanyAccess(companyId);
+
+  return getTodaySpend(companyId);
+}
+
+/**
+ * Get model suggestion based on provider and daily budget.
+ */
+export async function getSuggestedModel(
+  provider: string,
+  dailyBudgetBrl: number,
+): Promise<ModelSuggestionData> {
+  return suggestModel(provider, dailyBudgetBrl);
 }

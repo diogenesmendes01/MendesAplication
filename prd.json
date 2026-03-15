@@ -121,7 +121,7 @@
       "title": "Frontend: refatorar /configuracoes/ai com tabs (Geral + WhatsApp + Email + Consumo)",
       "description": "Como admin, quero uma tela de configuração de IA completa com seleção de provider, modelo, limites e configurações separadas por canal.",
       "priority": 7,
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "Página reorganizada em tabs: Geral, WhatsApp, Email, Consumo",
         "Tab Geral: seletor de provider (OpenAI, Anthropic, Grok, Qwen), campo API key (password input), botão 'Testar Conexão' com feedback visual, seletor de modelo (dinâmico por provider via listAvailableModels), slider de temperatura (0.0-1.0), input de limite diário (R$), badge de sugestão de modelo baseado no orçamento",

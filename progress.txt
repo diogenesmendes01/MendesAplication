@@ -150,3 +150,25 @@ model AiConfig {
 - ⏳ Prisma upsert: campo no update não pode ser undefined se quiser "não alterar" — simplesmente omitir o campo do objeto update
 - ⏳ O type UsageSummary precisa ser importado com `type` do cost-tracker para reexportar no actions
 - ⏳ Para OpenAI /v1/models, filtrar por prefixo gpt-* e excluir instruct/realtime/audio para lista limpa
+
+## US-007 — Frontend: refatorar /configuracoes/ai com tabs (2026-03-15)
+
+### O que foi feito
+- Página /configuracoes/ai completamente refatorada com 4 tabs: Geral, WhatsApp, Email, Consumo
+- Tab Geral: seletor de provider (OpenAI, Anthropic, Grok, Qwen), campo API key (password input), botão 'Testar Conexão' com feedback visual (ícones e texto), seletor de modelo dinâmico via listAvailableModels, slider de temperatura (0.0-1.0), input de limite diário (R$), badge de sugestão de modelo baseado no orçamento
+- Tab WhatsApp: toggle whatsappEnabled, persona textarea, welcome message, escalation keywords com chips removíveis, max iterations
+- Tab Email: toggle emailEnabled, emailPersona textarea com placeholder herdado do WhatsApp, emailSignature textarea
+- Tab Consumo: gasto de hoje vs limite, total 30 dias, breakdown por canal e modelo em tabelas
+- Ao trocar provider, modelo é limpo e lista recarregada automaticamente
+- API key usa input type="password" — nunca visível em claro
+- Toggle de enabled movido para o header da página (mais acessível)
+- Componente Slider do shadcn/ui instalado via npx shadcn@latest add slider
+- Novas server actions adicionadas: getTodaySpendAction, getSuggestedModel
+- npm run lint passa sem erros
+
+### Lições
+- ⏳ Slider do shadcn/ui precisa ser instalado separadamente (não vem por padrão)
+- ⏳ O componente Tabs já estava instalado (US anteriores ou setup inicial)
+- ⏳ Para o placeholder dinâmico do emailPersona, truncar a persona do WhatsApp para evitar texto longo demais
+- ⏳ Tab Consumo usa carregamento sob demanda (botão "Carregar dados") para não fazer queries desnecessárias ao abrir a página
+- ⏳ suggestModel é chamado client-side via server action wrapper (getSuggestedModel) porque precisa rodar no servidor para acessar cost-tracker
