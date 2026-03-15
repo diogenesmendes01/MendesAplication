@@ -79,7 +79,7 @@ export async function runAgent(
       temperature: aiConfig.temperature,
     };
   } else {
-    providerConfig = getEnvProviderConfig();
+    providerConfig = await getEnvProviderConfig();
   }
 
   // Load ticket with client and contact info
@@ -344,7 +344,7 @@ export async function runAgentDryRun(
       temperature: aiConfig.temperature,
     };
   } else {
-    providerConfig = getEnvProviderConfig();
+    providerConfig = await getEnvProviderConfig();
   }
 
   const maxIterations = aiConfig.maxIterations || 5;

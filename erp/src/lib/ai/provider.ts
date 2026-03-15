@@ -57,7 +57,7 @@ const PROVIDER_BASE_URLS: Record<string, string> = {
  * Reads provider config from legacy environment variables.
  * Use when caller does not have per-company config available.
  */
-export function getEnvProviderConfig(): ProviderConfig {
+export async function getEnvProviderConfig(): Promise<ProviderConfig> {
   const provider = process.env.AI_PROVIDER || "openai";
   const apiKey = process.env.AI_API_KEY;
   if (!apiKey) {
