@@ -3,7 +3,6 @@
 import type { AdditionalContact } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
-import type { AdditionalContact } from "@prisma/client";
 import { requireCompanyAccess } from "@/lib/rbac";
 import { requireSession } from "@/lib/session";
 import { logAuditEvent } from "@/lib/audit";
