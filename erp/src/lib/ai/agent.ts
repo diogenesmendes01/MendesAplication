@@ -6,6 +6,8 @@ import type { AiMessage, ProviderConfig } from "./provider";
 import { ALL_TOOLS } from "./tools";
 import { executeTool } from "./tool-executor";
 import type { ToolContext } from "./tool-executor";
+import { decrypt } from "@/lib/encryption";
+import { getTodaySpend, logUsage } from "./cost-tracker";
 
 // ─── Result type ─────────────────────────────────────────────────────────────
 
@@ -21,7 +23,8 @@ export interface AgentResult {
 export async function runAgent(
   ticketId: string,
   companyId: string,
-  incomingMessage: string
+  incomingMessage: string,
+  channel: "WHATSAPP" | "EMAIL" = "WHATSAPP"
 ): Promise<AgentResult> {
   const startTime = Date.now();
   const timeout = parseInt(process.env.AI_TIMEOUT || "30000", 10);
@@ -35,14 +38,32 @@ export async function runAgent(
     return { responded: false, escalated: false, iterations: 0, error: "AI not enabled" };
   }
 
+  // ── Check if the channel is enabled ──────────────────────────────────────
+  if (channel === "WHATSAPP" && !aiConfig.whatsappEnabled) {
+    return { responded: false, escalated: false, iterations: 0, error: "whatsapp_channel_disabled" };
+  }
+  if (channel === "EMAIL" && !aiConfig.emailEnabled) {
+    return { responded: false, escalated: false, iterations: 0, error: "email_channel_disabled" };
+  }
+
+  // ── Check daily spend limit ──────────────────────────────────────────────
+  if (aiConfig.dailySpendLimitBrl) {
+    const todaySpend = await getTodaySpend(companyId);
+    if (todaySpend >= Number(aiConfig.dailySpendLimitBrl)) {
+      return { responded: false, escalated: false, iterations: 0, error: "daily_spend_limit_reached" };
+    }
+  }
+
   const maxIterations = aiConfig.maxIterations || 5;
 
-  // Build provider config — use per-company config if apiKey is set, otherwise fall back to env vars
+  // ── Build provider config ────────────────────────────────────────────────
+  // Use per-company config if apiKey is set, otherwise fall back to env vars
   let providerConfig: ProviderConfig;
   if (aiConfig.apiKey) {
+    const decryptedApiKey = decrypt(aiConfig.apiKey);
     providerConfig = {
       provider: aiConfig.provider,
-      apiKey: aiConfig.apiKey,
+      apiKey: decryptedApiKey,
       model: aiConfig.model || undefined,
       temperature: aiConfig.temperature,
     };
@@ -55,7 +76,7 @@ export async function runAgent(
     where: { id: ticketId },
     include: {
       client: { select: { id: true, name: true, telefone: true } },
-      contact: { select: { id: true, name: true, whatsapp: true } },
+      contact: { select: { id: true, name: true, whatsapp: true, email: true } },
     },
   });
 
@@ -65,7 +86,7 @@ export async function runAgent(
 
   // Determine contact phone for WhatsApp replies
   const contactPhone = ticket.contact?.whatsapp || ticket.client.telefone;
-  if (!contactPhone) {
+  if (channel === "WHATSAPP" && !contactPhone) {
     return {
       responded: false,
       escalated: false,
@@ -79,7 +100,7 @@ export async function runAgent(
     ticketId,
     companyId,
     clientId: ticket.clientId,
-    contactPhone: contactPhone.replace(/\D/g, ""),
+    contactPhone: contactPhone ? contactPhone.replace(/\D/g, "") : "",
   };
 
   // Load recent message history for prompt context
@@ -103,19 +124,28 @@ export async function runAgent(
     })
     .join("\n");
 
-  // Build system prompt
+  // ── Choose persona based on channel ──────────────────────────────────────
+  const persona =
+    channel === "EMAIL" && aiConfig.emailPersona
+      ? aiConfig.emailPersona
+      : aiConfig.persona;
+
+  // ── Build system prompt per channel ──────────────────────────────────────
   const clientName = ticket.contact?.name || ticket.client.name;
-  const systemPrompt = buildSystemPrompt(
-    aiConfig.persona,
-    clientName,
-    historyContext
-  );
+  const systemPrompt =
+    channel === "EMAIL"
+      ? buildEmailSystemPrompt(persona, clientName, historyContext, aiConfig.emailSignature)
+      : buildWhatsAppSystemPrompt(persona, clientName, historyContext);
 
   // Initialize conversation messages
   const messages: AiMessage[] = [
     { role: "system", content: systemPrompt },
     { role: "user", content: incomingMessage },
   ];
+
+  // Resolve the effective model name for usage logging
+  const effectiveModel =
+    providerConfig.model || aiConfig.model || aiConfig.provider;
 
   // ─── Agent loop ────────────────────────────────────────────────────────────
 
@@ -139,6 +169,20 @@ export async function runAgent(
         ALL_TOOLS,
         providerConfig
       );
+
+      // ── Log usage after each LLM call ──────────────────────────────────
+      if (response.usage) {
+        await logUsage({
+          aiConfigId: aiConfig.id,
+          companyId,
+          provider: providerConfig.provider,
+          model: effectiveModel,
+          channel,
+          inputTokens: response.usage.inputTokens,
+          outputTokens: response.usage.outputTokens,
+          ticketId,
+        });
+      }
 
       // ── LLM returned tool calls ──────────────────────────────────────────
       if (response.tool_calls && response.tool_calls.length > 0) {
@@ -176,7 +220,7 @@ export async function runAgent(
           });
 
           // Check if this was a terminal action
-          if (toolName === "RESPOND") {
+          if (toolName === "RESPOND" || toolName === "RESPOND_EMAIL") {
             responded = true;
             shouldStop = true;
           } else if (toolName === "ESCALATE") {
@@ -239,14 +283,14 @@ export async function runAgent(
   };
 }
 
-// ─── System prompt builder ───────────────────────────────────────────────────
+// ─── WhatsApp system prompt builder ──────────────────────────────────────────
 
-function buildSystemPrompt(
+function buildWhatsAppSystemPrompt(
   persona: string,
   clientName: string,
   historyContext: string
 ): string {
-  let prompt = `# Assistente de Atendimento - MendesERP
+  let prompt = `# Assistente de Atendimento - MendesERP (WhatsApp)
 
 ${persona}
 
@@ -267,8 +311,56 @@ ${persona}
 6. Responda SEMPRE em português brasileiro
 7. Se não conseguir resolver em 3 tentativas de busca, escale para humano
 8. Pode usar várias ferramentas em sequência antes de responder
+9. Mensagens WhatsApp devem ser curtas e diretas — evite parágrafos longos
 
 ## CONTEXTO ATUAL:
+- Canal: WhatsApp
+- Cliente: ${clientName}`;
+
+  if (historyContext) {
+    prompt += `\n\n## HISTÓRICO RECENTE:\n${historyContext}`;
+  }
+
+  return prompt;
+}
+
+// ─── Email system prompt builder ─────────────────────────────────────────────
+
+function buildEmailSystemPrompt(
+  persona: string,
+  clientName: string,
+  historyContext: string,
+  emailSignature: string | null
+): string {
+  let prompt = `# Assistente de Atendimento - MendesERP (Email)
+
+${persona}
+
+## SUAS FERRAMENTAS DISPONÍVEIS:
+- SEARCH_DOCUMENTS(query): Busca informações na base de conhecimento da empresa
+- GET_CLIENT_INFO(): Retorna dados do cliente vinculado ao ticket (financeiro, tickets anteriores)
+- GET_HISTORY(limit?): Retorna histórico de mensagens da conversa
+- RESPOND_EMAIL(subject, message): Envia resposta ao cliente por email (suporta HTML simples)
+- ESCALATE(reason): Escala para atendente humano
+- CREATE_NOTE(content): Cria nota interna no ticket
+
+## REGRAS:
+1. SEMPRE consulte a base de conhecimento antes de responder sobre valores, datas, produtos ou serviços
+2. NUNCA invente informações — se não souber, busque na base de conhecimento ou pergunte ao cliente
+3. Use RESPOND_EMAIL para enviar a resposta final ao cliente (inclua assunto e corpo)
+4. Use ESCALATE se o cliente pedir um humano ou se o problema for muito complexo
+5. Seja profissional e detalhado nas respostas por email
+6. Responda SEMPRE em português brasileiro
+7. Se não conseguir resolver em 3 tentativas de busca, escale para humano
+8. Pode usar várias ferramentas em sequência antes de responder
+9. Emails devem ter tom mais formal que WhatsApp — use saudação e despedida adequadas`;
+
+  if (emailSignature) {
+    prompt += `\n10. SEMPRE inclua a seguinte assinatura ao final do email:\n\n${emailSignature}`;
+  }
+
+  prompt += `\n\n## CONTEXTO ATUAL:
+- Canal: Email
 - Cliente: ${clientName}`;
 
   if (historyContext) {

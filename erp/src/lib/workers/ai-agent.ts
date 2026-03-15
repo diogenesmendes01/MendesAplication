@@ -10,6 +10,7 @@ interface AiAgentJobData {
   ticketId: string;
   companyId: string;
   messageContent: string;
+  channel?: "WHATSAPP" | "EMAIL";
 }
 
 // ---------------------------------------------------------------------------
@@ -17,7 +18,7 @@ interface AiAgentJobData {
 // ---------------------------------------------------------------------------
 
 export async function processAiAgent(job: Job<AiAgentJobData>) {
-  const { ticketId, companyId, messageContent } = job.data;
+  const { ticketId, companyId, messageContent, channel = "WHATSAPP" } = job.data;
 
   // 1. Check company-level AI config
   const aiConfig = await prisma.aiConfig.findUnique({
@@ -84,10 +85,10 @@ export async function processAiAgent(job: Job<AiAgentJobData>) {
 
   // 4. Run the AI agent loop
   console.log(
-    `[ai-agent] Running agent for ticket ${ticketId}, company ${companyId}`
+    `[ai-agent] Running agent for ticket ${ticketId}, company ${companyId}, channel ${channel}`
   );
 
-  const result = await runAgent(ticketId, companyId, messageContent);
+  const result = await runAgent(ticketId, companyId, messageContent, channel);
 
   console.log(
     `[ai-agent] Agent completed for ticket ${ticketId}: responded=${result.responded}, escalated=${result.escalated}, iterations=${result.iterations}${result.error ? `, error=${result.error}` : ""}`
