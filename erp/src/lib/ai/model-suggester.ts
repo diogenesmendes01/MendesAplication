@@ -1,6 +1,4 @@
-"use server";
-
-import { MODEL_PRICING, BRL_USD_RATE } from "@/lib/ai/cost-tracker";
+import { MODEL_PRICING, BRL_USD_RATE } from "@/lib/ai/pricing";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -35,10 +33,6 @@ const PROVIDER_MODELS: Record<string, string[]> = {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/**
- * Estimates the daily cost in BRL for a given model based on the
- * ESTIMATED_DAILY_INPUT_TOKENS and ESTIMATED_DAILY_OUTPUT_TOKENS constants.
- */
 function estimateDailyCostBrl(model: string): number {
   const pricing = MODEL_PRICING[model];
   if (!pricing) return Infinity;
@@ -57,9 +51,7 @@ function estimateDailyCostBrl(model: string): number {
  * Returns the most powerful model for a given provider that fits
  * within the daily budget (BRL).
  *
- * Models are tested in descending order of capability.
- * If no model fits, the cheapest model for the provider is returned
- * as a fallback (the user still gets a suggestion even if over budget).
+ * Pure function — no I/O, no DB access, no "use server" needed.
  */
 export function suggestModel(
   provider: string,

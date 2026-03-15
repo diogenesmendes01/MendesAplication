@@ -1,4 +1,4 @@
-"use server";
+
 
 import type { AiToolDefinition } from "./provider";
 

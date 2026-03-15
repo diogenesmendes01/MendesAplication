@@ -7,7 +7,8 @@ import { getToolsForChannel } from "./tools";
 import { executeTool } from "./tool-executor";
 import type { ToolContext } from "./tool-executor";
 import { decrypt } from "@/lib/encryption";
-import { getTodaySpend, logUsage, MODEL_PRICING, BRL_USD_RATE } from "./cost-tracker";
+import { getTodaySpend, logUsage } from "./cost-tracker";
+import { MODEL_PRICING, BRL_USD_RATE, DEFAULT_MODELS } from "./pricing";
 
 // ─── Result type ─────────────────────────────────────────────────────────────
 
@@ -156,7 +157,7 @@ export async function runAgent(
 
   // Resolve the effective model name for usage logging
   const effectiveModel =
-    providerConfig.model || aiConfig.model || aiConfig.provider;
+    providerConfig.model || aiConfig.model || DEFAULT_MODELS[aiConfig.provider] || aiConfig.provider;
 
   // ── Get channel-specific tools ─────────────────────────────────────────
   const tools = getToolsForChannel(channel);
@@ -380,7 +381,7 @@ export async function runAgentDryRun(
 
   // Resolve the effective model name for cost estimation
   const effectiveModel =
-    providerConfig.model || aiConfig.model || aiConfig.provider;
+    providerConfig.model || aiConfig.model || DEFAULT_MODELS[aiConfig.provider] || aiConfig.provider;
 
   // Get channel-specific tools
   const tools = getToolsForChannel(channel);
