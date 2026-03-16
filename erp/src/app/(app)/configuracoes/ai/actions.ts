@@ -215,6 +215,14 @@ export async function getAiConfig(companyId: string): Promise<AiConfigData> {
 
 const VALID_PROVIDERS = ["openai", "anthropic", "grok", "qwen", "deepseek"] as const;
 
+/**
+ * Pattern that identifies a masked API key returned by maskApiKey().
+ * Masked keys always start with four asterisks (e.g. "****ab12").
+ * Using a regex constant makes the intent explicit and avoids fragile
+ * string comparisons scattered across the codebase.
+ */
+const MASKED_API_KEY_PATTERN = /^\*{4}/;
+
 export async function updateAiConfig(
   companyId: string,
   data: AiConfigData,
@@ -251,10 +259,14 @@ export async function updateAiConfig(
   }
 
   // Determine the apiKey to store:
-  // - If the incoming apiKey is empty or looks masked (starts with ****), keep existing
-  // - Otherwise, encrypt the new value
+  // - If the incoming apiKey is empty or matches the masked pattern, keep existing
+  // - Otherwise, validate and encrypt the new value
   let apiKeyToStore: string | undefined;
-  if (data.apiKey && !data.apiKey.startsWith("****")) {
+  if (data.apiKey && !MASKED_API_KEY_PATTERN.test(data.apiKey)) {
+    // Validate minimum key length to surface accidental empty-like submissions
+    if (data.apiKey.trim().length < 8) {
+      throw new Error("apiKey too short — minimum 8 characters");
+    }
     apiKeyToStore = encrypt(data.apiKey);
   }
 

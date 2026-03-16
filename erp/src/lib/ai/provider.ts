@@ -2,6 +2,8 @@
 
 "use server";
 
+import { DEFAULT_MODELS } from "./pricing";
+
 // ─── Interfaces ───────────────────────────────────────────────────────────────
 
 export interface AiToolCall {
@@ -39,8 +41,6 @@ export interface ProviderConfig {
   temperature?: number;
   maxTokens?: number;
 }
-
-import { DEFAULT_MODELS } from "./pricing";
 
 // ─── Provider constants ───────────────────────────────────────────────────────
 
