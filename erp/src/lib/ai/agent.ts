@@ -277,12 +277,14 @@ export async function runAgent(
     if (todaySpend >= Number(aiConfig.dailySpendLimitBrl)) {
       return { responded: false, escalated: false, iterations: 0, error: "daily_spend_limit_reached" };
     }
-    // ⚠️ KNOWN LIMITATION — TOCTOU RACE:
+    // ⚠️ KNOWN LIMITATION — TOCTOU RACE (check-then-act, not atomic):
     // Under concurrent load, multiple requests may pass this check before any
-    // logUsage() call completes, causing the daily limit to be exceeded.
-    // Estimated overrun: up to (concurrency - 1) × avg_cost_per_call.
-    // TODO: Replace with Redis INCR+EXPIRE atomic counter (same pattern as
-    //       simulationRateMap TODO above). Until then, limit is best-effort.
+    // logUsage() call completes. In traffic bursts the daily limit can be
+    // exceeded by 2–10× depending on concurrency and avg cost per call.
+    // A post-logUsage heuristic re-check (see onUsage callback below) amortises
+    // the risk but does NOT eliminate it — the LLM call has already been made.
+    // TODO: Replace with Redis INCR+EXPIRE atomic counter (see simulationRateMap
+    //       TODO). Until then, the limit is best-effort / advisory only.
   }
 
   // ── Check escalation keywords (fast-path before LLM) ────────────────────
@@ -442,6 +444,22 @@ export async function runAgent(
         outputTokens,
         ticketId,
       });
+      // ── Heuristic post-logUsage overshoot detection ────────────────────
+      // After persisting the usage record, re-check the daily spend. If we
+      // exceeded the limit, log a warning so ops teams can detect race-condition
+      // overshoots in monitoring dashboards. This does NOT stop the current
+      // request (the LLM call is already complete) but helps quantify the
+      // TOCTOU exposure. See the KNOWN LIMITATION comment above.
+      if (aiConfig.dailySpendLimitBrl) {
+        const postCallSpend = await getTodaySpend(companyId);
+        if (postCallSpend > Number(aiConfig.dailySpendLimitBrl)) {
+          console.warn(
+            `[ai-agent] Daily spend overshoot for company ${companyId}: ` +
+            `${postCallSpend.toFixed(4)} BRL > limit ${aiConfig.dailySpendLimitBrl} BRL ` +
+            `(ticket: ${ticketId}). TOCTOU race detected — consider Redis atomic counter.`
+          );
+        }
+      }
     },
   });
 

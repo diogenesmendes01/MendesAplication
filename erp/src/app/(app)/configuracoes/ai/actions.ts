@@ -47,6 +47,12 @@ export interface SimulationResult {
   outputTokens: number;
   estimatedCostBrl: number;
   error?: string;
+  /**
+   * ⚠️ UI WARNING: simulations count against the real daily budget.
+   * This field is always populated so the frontend can display a
+   * persistent notice next to the simulation UI.
+   */
+  simulationWarning?: string;
 }
 
 export type { UsageSummary };
@@ -474,10 +480,12 @@ export async function getTodaySpendAction(
  * Get model suggestion based on provider and daily budget.
  */
 export async function getSuggestedModel(
+  companyId: string,
   provider: string,
   dailyBudgetBrl: number,
 ): Promise<ModelSuggestionData> {
   await requireAdmin();
+  await requireCompanyAccess(companyId);
   return suggestModel(provider, dailyBudgetBrl);
 }
 
@@ -571,5 +579,13 @@ export async function simulateAiResponse(
     outputTokens: result.outputTokens,
     estimatedCostBrl: result.estimatedCostBrl,
     error: userError,
+    // ⚠️ Always warn: simulation usage is persisted in AiUsageLog and counted
+    // against the company's real daily spend limit. This is intentional so
+    // admins testing the AI can see the cost impact — but it must be surfaced
+    // clearly in the UI to avoid confusion when the real agent stops responding.
+    simulationWarning:
+      "Atenção: esta simulação consome seu limite de gastos diário real. " +
+      "Cada teste é registrado em 'Consumo de IA'. " +
+      "Para testes frequentes, considere aumentar temporariamente o limite diário.",
   };
 }
