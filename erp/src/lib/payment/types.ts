@@ -28,7 +28,9 @@ export type ProviderType = (typeof PRODUCTION_PROVIDER_TYPES)[number] | typeof M
  * com mensagem clara para dados legados ou corrompidos.
  *
  * Nota: "mock" só é aceito fora de produção (NODE_ENV !== "production").
- * Valores de DB devem constar apenas em PRODUCTION_PROVIDER_TYPES.
+ * A rejeição final em produção é reforçada também via PROVIDER_REGISTRY
+ * (factory.ts), que não registra o mock quando NODE_ENV=production.
+ * Este type guard valida tanto a forma do valor quanto o ambiente de execução.
  */
 export function isProviderType(v: string): v is ProviderType {
   if ((PRODUCTION_PROVIDER_TYPES as readonly string[]).includes(v)) return true;

@@ -1,9 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { isProviderType, PROVIDER_TYPES, MOCK_PROVIDER } from "@/lib/payment/types";
+import { isProviderType, MOCK_PROVIDER } from "@/lib/payment/types";
+// PROVIDER_TYPES env-aware é exportado pelo barrel "@/lib/payment" (via constants.ts).
+// Não importar de "@/lib/payment/types" — esse módulo não exporta mais PROVIDER_TYPES
+// para evitar dual-source-of-truth (ver QA WARN D1).
+import { PRODUCTION_PROVIDER_TYPES } from "@/lib/payment/constants";
 
 describe("isProviderType()", () => {
   it("retorna true para cada provider de produção", () => {
-    for (const p of PROVIDER_TYPES) {
+    for (const p of PRODUCTION_PROVIDER_TYPES) {
       expect(isProviderType(p)).toBe(true);
     }
   });
@@ -33,14 +37,14 @@ describe("isProviderType()", () => {
   });
 });
 
-describe("PROVIDER_TYPES (array canônico de produção)", () => {
+describe("PRODUCTION_PROVIDER_TYPES (array canônico de produção — de constants.ts)", () => {
   it("não inclui mock (mock não deve ser persistido no banco em produção)", () => {
-    expect(PROVIDER_TYPES).not.toContain("mock");
+    expect(PRODUCTION_PROVIDER_TYPES).not.toContain("mock");
   });
 
   it("inclui pagarme e pinbank", () => {
-    expect(PROVIDER_TYPES).toContain("pagarme");
-    expect(PROVIDER_TYPES).toContain("pinbank");
+    expect(PRODUCTION_PROVIDER_TYPES).toContain("pagarme");
+    expect(PRODUCTION_PROVIDER_TYPES).toContain("pinbank");
   });
 });
 
