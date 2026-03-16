@@ -581,9 +581,10 @@ export async function runAgentDryRun(
     startTime,
     dryRun: true,
     contextId: "simulation",
-    // Log simulation token usage so it appears in Consumo de IA for visibility,
-    // but mark isSimulation=true so getTodaySpend() excludes it from the daily
-    // budget check — admin tests must not silently exhaust the company's limit.
+    // Log simulation token usage for internal/technical DB audit (isSimulation=true).
+    // NOT visible in the "Consumo de IA" tab — getUsageSummary() filters isSimulation: false.
+    // NOT counted against the daily budget — getTodaySpend() also filters isSimulation: false.
+    // Admin tests must not silently exhaust the company's limit.
     onUsage: async (inputTokens, outputTokens) => {
       if (aiConfig.id) {
         await logUsage({

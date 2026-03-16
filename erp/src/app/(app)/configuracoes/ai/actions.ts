@@ -593,11 +593,12 @@ export async function simulateAiResponse(
     outputTokens: result.outputTokens,
     estimatedCostBrl: result.estimatedCostBrl,
     error: userError,
-    // Informational: simulation usage is persisted in AiUsageLog for auditing
-    // (visible in Consumo de IA) but marked isSimulation=true and excluded from
-    // getTodaySpend() — simulations do NOT count against the daily budget limit.
+    // Informational: simulation usage is persisted in AiUsageLog (isSimulation=true)
+    // for internal/technical auditing, but is NOT visible in the "Consumo de IA" tab
+    // (getUsageSummary filters isSimulation: false) and does NOT count against the
+    // daily budget limit (getTodaySpend also filters isSimulation: false).
     simulationWarning:
-      "Esta simulação é registrada em 'Consumo de IA' para auditoria, " +
-      "mas não consome seu limite de gastos diário real.",
+      "Esta simulação é registrada internamente para auditoria técnica, " +
+      "mas NÃO aparece na tab 'Consumo de IA' nem consome seu limite de gastos diário.",
   };
 }
