@@ -812,7 +812,7 @@ export default function AiConfigPage() {
             </CardHeader>
             <CardContent>
               <Textarea
-                value={config.emailPersona}
+                value={config.emailPersona ?? ""}
                 onChange={(e) =>
                   setConfig((prev) => ({
                     ...prev,
@@ -840,7 +840,7 @@ export default function AiConfigPage() {
             </CardHeader>
             <CardContent>
               <Textarea
-                value={config.emailSignature}
+                value={config.emailSignature ?? ""}
                 onChange={(e) =>
                   setConfig((prev) => ({
                     ...prev,
