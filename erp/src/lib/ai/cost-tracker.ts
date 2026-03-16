@@ -18,6 +18,9 @@ interface LogUsageParams {
   inputTokens: number;
   outputTokens: number;
   ticketId?: string;
+  /** When true the record is excluded from getTodaySpend() so admin simulations
+   *  do not consume the company's real daily budget. */
+  isSimulation?: boolean;
 }
 
 /**
@@ -45,6 +48,7 @@ export async function logUsage(params: LogUsageParams) {
       costUsd: costUsd.toFixed(6),
       costBrl: costBrl.toFixed(4),
       ticketId: params.ticketId,
+      isSimulation: params.isSimulation ?? false,
     },
   });
 }
@@ -83,6 +87,9 @@ export async function getTodaySpend(companyId: string): Promise<number> {
     where: {
       companyId,
       createdAt: { gte: startOfDay },
+      // Exclude admin simulation records — they are logged for audit/UX but
+      // must not block real agent responses due to reaching the daily limit.
+      isSimulation: false,
     },
     _sum: { costBrl: true },
   });

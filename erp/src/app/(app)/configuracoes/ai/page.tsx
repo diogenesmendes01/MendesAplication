@@ -466,6 +466,12 @@ export default function AiConfigPage() {
                     Testar Conexão
                   </Button>
                 </div>
+                {/* Show opaque-key hint when the saved key has not been replaced */}
+                {config.apiKey && /^\*{4}/.test(config.apiKey) && (
+                  <p className="text-sm text-muted-foreground">
+                    🔑 Chave configurada (opaca até migração #107). Para alterar, digite uma nova chave.
+                  </p>
+                )}
                 {connectionStatus === "success" && (
                   <p className="text-sm text-green-600">
                     ✓ Conexão estabelecida com sucesso

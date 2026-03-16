@@ -810,6 +810,7 @@ model AiUsageLog {
   costUsd      Decimal  @db.Decimal(10, 6)
   costBrl      Decimal  @db.Decimal(10, 4)
   ticketId     String?
+  isSimulation Boolean  @default(false)
   createdAt    DateTime @default(now())
 
   aiConfig AiConfig @relation(fields: [aiConfigId], references: [id], onDelete: Cascade)

@@ -151,6 +151,16 @@ describe("cost-tracker", () => {
       const whereClause = mockAggregate.mock.calls[0][0].where;
       expect(whereClause.companyId).toBe("specific-company");
     });
+
+    it("excludes simulation records from the spend total (isSimulation: false)", async () => {
+      mockAggregate.mockResolvedValue({ _sum: { costBrl: 20 } });
+
+      const { getTodaySpend } = await import("@/lib/ai/cost-tracker");
+      await getTodaySpend("company-sim");
+
+      const whereClause = mockAggregate.mock.calls[0][0].where;
+      expect(whereClause.isSimulation).toBe(false);
+    });
   });
 
   // ── getUsageSummary ────────────────────────────────────────────────────────
