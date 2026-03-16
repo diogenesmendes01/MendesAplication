@@ -1,9 +1,8 @@
 /**
  * Unit tests for sanitizeEmailHtml.
- * Covers whitelist enforcement, attribute stripping, and bypass attempts
- * via malformed attributes containing `>`.
+ * Covers whitelist enforcement, attribute stripping, and security payloads.
  *
- * Imports from sanitize-utils (pure module, no "use server" side effects).
+ * Updated for #103: now uses `sanitize-html` package instead of regex.
  */
 import { describe, it, expect } from "vitest";
 import { sanitizeEmailHtml } from "@/lib/ai/sanitize-utils";
@@ -45,9 +44,21 @@ describe("sanitizeEmailHtml", () => {
     expect(result).toContain("</ul>");
   });
 
+  it("preserves <ol> ordered lists", () => {
+    const html = "<ol><li>primeiro</li><li>segundo</li></ol>";
+    const result = sanitizeEmailHtml(html);
+    expect(result).toContain("<ol>");
+    expect(result).toContain("</ol>");
+  });
+
+  it("preserves <a> tags with https href", () => {
+    const html = '<a href="https://example.com">link</a>';
+    expect(sanitizeEmailHtml(html)).toBe('<a href="https://example.com">link</a>');
+  });
+
   // --- Attribute stripping from allowed tags ---
 
-  it("strips simple class attribute from allowed tag: <b class='x'> → <b>", () => {
+  it("strips class attribute from allowed tag: <b class='x'> → <b>", () => {
     expect(sanitizeEmailHtml('<b class="x">texto</b>')).toBe("<b>texto</b>");
   });
 
@@ -71,15 +82,22 @@ describe("sanitizeEmailHtml", () => {
     expect(result).not.toContain("</script");
   });
 
-  it("removes <img> tags", () => {
-    const result = sanitizeEmailHtml('<img src="evil.jpg" />');
+  it("removes <img> tags (tracking pixel prevention)", () => {
+    const result = sanitizeEmailHtml('<img src="http://evil.com/pixel.gif" />');
     expect(result).not.toContain("<img");
+    expect(result).not.toContain("evil.com");
   });
 
-  it("removes <a href> tags", () => {
-    const result = sanitizeEmailHtml('<a href="http://evil.com">click</a>');
-    expect(result).not.toContain("<a");
-    expect(result).not.toContain("</a");
+  it("removes <img onerror> XSS payload", () => {
+    const result = sanitizeEmailHtml('<img onerror="alert(1)" src="x" />');
+    expect(result).not.toContain("<img");
+    expect(result).not.toContain("onerror");
+    expect(result).not.toContain("alert");
+  });
+
+  it("blocks <a href='javascript:'> XSS payload", () => {
+    const result = sanitizeEmailHtml('<a href="javascript:alert(1)">click</a>');
+    expect(result).not.toContain("javascript:");
     expect(result).toContain("click");
   });
 
@@ -89,32 +107,30 @@ describe("sanitizeEmailHtml", () => {
     expect(result).toContain("conteúdo");
   });
 
-  // --- Bypass attempts via attribute with embedded `>` ---
+  it("removes <iframe> tags", () => {
+    const result = sanitizeEmailHtml('<iframe src="http://evil.com"></iframe>');
+    expect(result).not.toContain("<iframe");
+    expect(result).not.toContain("evil.com");
+  });
 
-  it("handles attribute with > embedded: <b onclick='a>b'> → <b>", () => {
-    // This is the key bypass case documented in WARN-1.
+  // --- Bypass attempts ---
+
+  it("handles attribute with > embedded correctly (was KNOWN LIMITATION with regex)", () => {
     const result = sanitizeEmailHtml('<b onclick="a>b">texto</b>');
     expect(result).not.toContain("onclick");
-    expect(result).toContain("<b>");
-    expect(result).toContain("texto");
+    // sanitize-html properly parses the HTML — no leaked fragments
+    expect(result).toBe("<b>texto</b>");
   });
 
-  // WARN-4: documents exact (broken) output when attribute contains `>`.
-  // The regex [^>]* stops at the first `>` inside the attribute value, so the
-  // fragment `b">` leaks as visible text in the email body.
-  // Current output: `<b>b">texto</b>` — the `b">` fragment is visible noise.
-  // Expected output after TODO #103 (sanitize-html): `<b>texto</b>`.
-  // ⚠️ This test will FAIL when TODO #103 is resolved — update toBe() to "<b>texto</b>" then.
-  it("KNOWN LIMITATION: attribute with > leaks fragment into output until TODO #103 (sanitize-html)", () => {
-    const result = sanitizeEmailHtml('<b onclick="a>b">texto</b>');
-    // Documents the current broken output. Remove/update when TODO #103 is done.
-    expect(result).toBe('<b>b">texto</b>');
-  });
-
-  it("handles attribute with > in single quotes", () => {
-    const result = sanitizeEmailHtml("<b onmouseover='x>y'>texto</b>");
+  it("strips event handlers from allowed tags", () => {
+    const result = sanitizeEmailHtml('<b onmouseover="alert(1)">texto</b>');
     expect(result).not.toContain("onmouseover");
-    expect(result).toContain("<b>");
+    expect(result).toBe("<b>texto</b>");
+  });
+
+  it("removes data: URI in href", () => {
+    const result = sanitizeEmailHtml('<a href="data:text/html,<script>alert(1)</script>">click</a>');
+    expect(result).not.toContain("data:");
   });
 
   // --- Mixed / nested HTML ---
@@ -132,5 +148,19 @@ describe("sanitizeEmailHtml", () => {
 
   it("empty string returns empty string", () => {
     expect(sanitizeEmailHtml("")).toBe("");
+  });
+
+  // --- Security payloads (from Tech Lead recommendation) ---
+
+  it("removes tracking pixel <img src='http://evil.com/pixel'>", () => {
+    const result = sanitizeEmailHtml('<img src="http://evil.com/pixel" />');
+    expect(result).not.toContain("<img");
+    expect(result).not.toContain("evil.com");
+  });
+
+  it("removes <style> tags", () => {
+    const result = sanitizeEmailHtml("<style>body{background:red}</style><p>ok</p>");
+    expect(result).not.toContain("<style");
+    expect(result).toContain("<p>ok</p>");
   });
 });
