@@ -99,16 +99,12 @@ describe("sanitizeEmailHtml", () => {
     expect(result).toContain("texto");
   });
 
-  // WARN-4: documents exact (broken) output when attribute contains `>`.
-  // The regex [^>]* stops at the first `>` inside the attribute value, so the
-  // fragment `b">` leaks as visible text in the email body.
-  // Current output: `<b>b">texto</b>` — the `b">` fragment is visible noise.
-  // Expected output after TODO #103 (sanitize-html): `<b>texto</b>`.
-  // ⚠️ This test will FAIL when TODO #103 is resolved — update toBe() to "<b>texto</b>" then.
-  it("KNOWN LIMITATION: attribute with > leaks fragment into output until TODO #103 (sanitize-html)", () => {
+  it("attribute with > in double-quoted value is now fully stripped (WARN-2 resolved)", () => {
+    // Previously the regex [^>]* stopped at the `>` inside the attribute value,
+    // leaking `b">` as visible text. The updated TAG_REGEX handles quoted values
+    // correctly so the entire attribute is consumed and only <b>texto</b> remains.
     const result = sanitizeEmailHtml('<b onclick="a>b">texto</b>');
-    // Documents the current broken output. Remove/update when TODO #103 is done.
-    expect(result).toBe('<b>b">texto</b>');
+    expect(result).toBe("<b>texto</b>");
   });
 
   it("handles attribute with > in single quotes", () => {

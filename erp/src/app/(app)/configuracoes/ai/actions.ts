@@ -9,6 +9,7 @@ import { chatCompletion } from "@/lib/ai/provider";
 import { getTodaySpend, getUsageSummary, type UsageSummary } from "@/lib/ai/cost-tracker";
 import { suggestModel } from "@/lib/ai/model-suggester";
 import { runAgentDryRun, type DryRunResult } from "@/lib/ai/agent";
+import { checkRateLimit } from "@/lib/rate-limit";
 import type { Prisma } from "@prisma/client";
 
 // ---------------------------------------------------------------------------
@@ -78,77 +79,15 @@ function maskApiKey(key: string | null | undefined): string {
 }
 
 // ---------------------------------------------------------------------------
-// Rate limiter for testAiConnection (in-memory, per-company, max 5/min)
-//
-// ⚠️  KNOWN LIMITATION — IN-MEMORY ONLY (same as simulationRateMap above).
-// TODO: Replace with Redis-backed counter when available.
+// Rate limiters — Redis-backed via checkRateLimit() (with in-memory fallback).
+// Shared state across all Node.js instances / replicas (resolves WARN-1).
+// Keys are namespaced by prefix so limits are per-company per operation.
 // ---------------------------------------------------------------------------
-
-const testConnectionRateMap = new Map<string, number[]>();
 const TEST_CONN_RATE_LIMIT = 5;
 const TEST_CONN_RATE_WINDOW_MS = 60_000; // 1 minute
 
-function checkTestConnectionRateLimit(companyId: string): boolean {
-  const now = Date.now();
-  const timestamps = testConnectionRateMap.get(companyId) ?? [];
-  const recent = timestamps.filter((ts) => now - ts < TEST_CONN_RATE_WINDOW_MS);
-
-  // Prune stale key when all timestamps have expired to avoid unbounded memory growth
-  if (recent.length === 0 && testConnectionRateMap.has(companyId)) {
-    testConnectionRateMap.delete(companyId);
-  }
-
-  if (recent.length >= TEST_CONN_RATE_LIMIT) {
-    testConnectionRateMap.set(companyId, recent);
-    return false; // rate limited
-  }
-  recent.push(now);
-  testConnectionRateMap.set(companyId, recent);
-  return true; // allowed
-}
-
-// ---------------------------------------------------------------------------
-// Rate limiter for simulation (in-memory, per-company, max 10/min)
-//
-// ⚠️  KNOWN LIMITATION — IN-MEMORY ONLY:
-// This Map lives in the Node.js process heap. In serverless/edge deployments
-// (Vercel Functions, AWS Lambda) or multi-pod Kubernetes setups, each
-// instance has its own independent Map — so N replicas effectively allow
-// N × 10 requests/min, making this rate limiter useless for real protection.
-//
-// TODO: Replace with a Redis-backed counter when Redis/Upstash is available.
-//   Suggested key: `sim_rate:{companyId}` (INCR + EXPIRE 60s via pipeline).
-//   Reference: https://upstash.com/docs/redis/sdks/ts/commands/incr
-//
-// Until then, the conservative limit (10/min) reduces risk on single-instance
-// deployments and the real protection remains the requireAdmin() auth check.
-// ---------------------------------------------------------------------------
-
-const simulationRateMap = new Map<string, number[]>();
 const SIMULATION_RATE_LIMIT = 10;
 const SIMULATION_RATE_WINDOW_MS = 60_000; // 1 minute
-
-function checkSimulationRateLimit(companyId: string): boolean {
-  const now = Date.now();
-  const timestamps = simulationRateMap.get(companyId) ?? [];
-
-  // Remove entries older than the window
-  const recent = timestamps.filter((ts) => now - ts < SIMULATION_RATE_WINDOW_MS);
-
-  // Prune stale key when all timestamps have expired to avoid unbounded memory growth
-  if (recent.length === 0 && simulationRateMap.has(companyId)) {
-    simulationRateMap.delete(companyId);
-  }
-
-  if (recent.length >= SIMULATION_RATE_LIMIT) {
-    simulationRateMap.set(companyId, recent);
-    return false; // rate limited
-  }
-
-  recent.push(now);
-  simulationRateMap.set(companyId, recent);
-  return true; // allowed
-}
 
 // ---------------------------------------------------------------------------
 // Hardcoded model lists for providers that don't have a list endpoint
@@ -358,7 +297,13 @@ export async function testAiConnection(
   await requireAdmin();
   await requireCompanyAccess(companyId);
 
-  if (!checkTestConnectionRateLimit(companyId)) {
+  const testConnRL = await checkRateLimit(
+    companyId,
+    TEST_CONN_RATE_LIMIT,
+    TEST_CONN_RATE_WINDOW_MS,
+    "ai_test_conn"
+  );
+  if (!testConnRL.allowed) {
     return { ok: false, error: "Limite de testes atingido (máx 5/min). Aguarde um momento." };
   }
 
@@ -582,8 +527,14 @@ export async function simulateAiResponse(
     };
   }
 
-  // Rate limit check
-  if (!checkSimulationRateLimit(companyId)) {
+  // Rate limit check — Redis-backed, shared across all instances (resolves WARN-1)
+  const simRL = await checkRateLimit(
+    companyId,
+    SIMULATION_RATE_LIMIT,
+    SIMULATION_RATE_WINDOW_MS,
+    "ai_simulation"
+  );
+  if (!simRL.allowed) {
     return {
       response: "",
       inputTokens: 0,

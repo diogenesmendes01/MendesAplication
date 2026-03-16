@@ -9,13 +9,26 @@
 // necessary in the future, add <a> with href-only attribute filtering and
 // replace this regex-based approach with the `sanitize-html` package (TODO #103).
 //
-// ⚠️ KNOWN LIMITATION — Regex edge case: the pattern `[^>]*` used to strip
-// attributes stops at the first `>` character, even when `>` appears inside
-// an attribute value (e.g. `<p class="a>b">`). This can cause incomplete
-// sanitization when receiving malformed HTML via email. Acceptable tradeoff
-// for current volume; switch to `sanitize-html` (TODO #103) before high-volume
-// production rollout.
+// The attribute-stripping regex below handles quoted attribute values
+// (double-quoted, single-quoted, and unquoted) so that `>` characters embedded
+// inside attribute values (e.g. `onclick="a>b"`) no longer cause the regex to
+// stop early and leak a fragment into the output.
+// This resolves the bypass documented in QA WARN-2.
 const ALLOWED_EMAIL_TAGS = new Set(["b", "i", "br", "p", "ul", "li", "strong", "em"]);
+
+// Regex that handles quoted attribute values to prevent `>` inside attribute
+// values from breaking the tag match. Supports:
+//   - Double-quoted values: attr="val>ue"
+//   - Single-quoted values: attr='val>ue'
+//   - Unquoted values:      attr=value
+//   - Boolean attributes:   disabled
+//   - Multiple attributes:  <b id="x" class="y" data-z="w">
+//
+// Pattern: each attribute is preceded by mandatory whitespace (\s+),
+// then the attribute name ([^"'>\/\s]+), then an optional =value pair.
+// The whole group repeats (*) to consume all attributes one by one.
+const TAG_REGEX =
+  /<([a-zA-Z]+)(?:\s+[^"'>\/\s]+(?:=(?:"[^"]*"|'[^']*'|[^>\s]*))?)*\s*\/?>|<\/([a-zA-Z]+)>/gi;
 
 // Solução segura: strip TUDO e reinsere somente as tags permitidas via whitelist,
 // sem depender de regex para preservar qualquer tag com atributos.
@@ -23,7 +36,7 @@ export function sanitizeEmailHtml(input: string): string {
   // Tira todos os atributos de todas as tags primeiro; grupos separados para open/close
   // evitam ambiguidade de captura que permitia bypass via atributos malformados.
   const noAttrs = input.replace(
-    /<([a-zA-Z]+)[^>]*\/?>|<\/([a-zA-Z]+)>/gi,
+    TAG_REGEX,
     (match, openTag, closeTag) => {
       const tag = (openTag || closeTag).toLowerCase();
       if (!ALLOWED_EMAIL_TAGS.has(tag)) return "";
