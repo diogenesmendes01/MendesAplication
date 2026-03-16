@@ -249,6 +249,24 @@ export async function updateAiConfig(
     throw new Error("dailySpendLimitBrl must be a positive number or null");
   }
 
+  // Validate free-text fields to prevent oversized system prompts
+  // that could exceed provider token limits (~4 000–8 000 token system prompt ceiling)
+  if (!data.persona || data.persona.trim().length === 0) {
+    throw new Error("persona cannot be empty");
+  }
+  if (data.persona.length > 5000) {
+    throw new Error("persona too long (max 5000 characters)");
+  }
+  if (data.welcomeMessage && data.welcomeMessage.length > 1000) {
+    throw new Error("welcomeMessage too long (max 1000 characters)");
+  }
+  if (data.emailPersona && data.emailPersona.length > 5000) {
+    throw new Error("emailPersona too long (max 5000 characters)");
+  }
+  if (data.emailSignature && data.emailSignature.length > 1000) {
+    throw new Error("emailSignature too long (max 1000 characters)");
+  }
+
   // Determine the apiKey to store:
   // - If the incoming apiKey is empty or matches the masked pattern, keep existing
   // - Otherwise, validate and encrypt the new value
