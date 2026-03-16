@@ -28,8 +28,8 @@ export interface AiConfigData {
   // Channels
   whatsappEnabled: boolean;
   emailEnabled: boolean;
-  emailPersona: string;
-  emailSignature: string;
+  emailPersona: string | null;
+  emailSignature: string | null;
   // Limits
   dailySpendLimitBrl: number | null;
   // Temperature

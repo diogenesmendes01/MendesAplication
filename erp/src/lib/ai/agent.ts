@@ -337,6 +337,7 @@ export async function runAgent(
       temperature: aiConfig.temperature,
     };
   } else {
+    console.warn(`[ai-agent] No apiKey for company ${companyId}, falling back to global env — usage costs unattributed`);
     providerConfig = await getEnvProviderConfig();
   }
 
@@ -524,6 +525,7 @@ export async function runAgentDryRun(
       temperature: aiConfig.temperature,
     };
   } else {
+    console.warn(`[ai-agent] No apiKey for company ${companyId}, falling back to global env — usage costs unattributed`);
     providerConfig = await getEnvProviderConfig();
   }
 
