@@ -480,6 +480,17 @@ export async function runAgentDryRun(
     return { response: "", inputTokens: 0, outputTokens: 0, estimatedCostBrl: 0, error: "AI not configured" };
   }
 
+  // ── Guard: respect aiConfig.enabled and channel flags even in dry-run ──────
+  if (!aiConfig.enabled) {
+    return { response: "", inputTokens: 0, outputTokens: 0, estimatedCostBrl: 0, error: "AI not enabled" };
+  }
+  if (channel === "EMAIL" && !aiConfig.emailEnabled) {
+    return { response: "", inputTokens: 0, outputTokens: 0, estimatedCostBrl: 0, error: "email_channel_disabled" };
+  }
+  if (channel === "WHATSAPP" && !aiConfig.whatsappEnabled) {
+    return { response: "", inputTokens: 0, outputTokens: 0, estimatedCostBrl: 0, error: "whatsapp_channel_disabled" };
+  }
+
   let providerConfig: ProviderConfig;
   if (aiConfig.apiKey) {
     let decryptedApiKey: string;

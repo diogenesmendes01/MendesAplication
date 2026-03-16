@@ -239,4 +239,37 @@ describe("runAgentDryRun", () => {
 
     expect(result.response).toBe("Resposta por email");
   });
+
+  // ── WARN #1 fix: aiConfig.enabled and channel guards must apply in dry-run ──
+
+  it("returns error when aiConfig.enabled is false", async () => {
+    mockFindUnique.mockResolvedValue({ ...mockAiConfig, enabled: false });
+
+    const { runAgentDryRun } = await import("@/lib/ai/agent");
+    const result = await runAgentDryRun("company-1", "Olá", "WHATSAPP");
+
+    expect(result.error).toBe("AI not enabled");
+    expect(result.response).toBe("");
+    expect(result.estimatedCostBrl).toBe(0);
+  });
+
+  it("returns error when emailEnabled is false and channel is EMAIL", async () => {
+    mockFindUnique.mockResolvedValue({ ...mockAiConfig, emailEnabled: false });
+
+    const { runAgentDryRun } = await import("@/lib/ai/agent");
+    const result = await runAgentDryRun("company-1", "Email test", "EMAIL");
+
+    expect(result.error).toBe("email_channel_disabled");
+    expect(result.response).toBe("");
+  });
+
+  it("returns error when whatsappEnabled is false and channel is WHATSAPP", async () => {
+    mockFindUnique.mockResolvedValue({ ...mockAiConfig, whatsappEnabled: false });
+
+    const { runAgentDryRun } = await import("@/lib/ai/agent");
+    const result = await runAgentDryRun("company-1", "Oi", "WHATSAPP");
+
+    expect(result.error).toBe("whatsapp_channel_disabled");
+    expect(result.response).toBe("");
+  });
 });
