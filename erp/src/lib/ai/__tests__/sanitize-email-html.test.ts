@@ -1,35 +1,12 @@
 /**
- * Unit tests for sanitizeEmailHtml (WARN-1 fix).
+ * Unit tests for sanitizeEmailHtml.
  * Covers whitelist enforcement, attribute stripping, and bypass attempts
  * via malformed attributes containing `>`.
+ *
+ * Imports from sanitize-utils (pure module, no "use server" side effects).
  */
 import { describe, it, expect } from "vitest";
-
-// ─── Mocks (required by tool-executor module-level side effects) ─────────────
-
-vi.mock("@/lib/prisma", () => ({
-  prisma: {
-    ticket: { findUnique: vi.fn() },
-    ticketMessage: { create: vi.fn(), findMany: vi.fn().mockResolvedValue([]) },
-    client: { findUnique: vi.fn() },
-    aiDocument: { findMany: vi.fn().mockResolvedValue([]) },
-  },
-}));
-
-vi.mock("@/lib/whatsapp-api", () => ({
-  sendTextMessage: vi.fn(),
-}));
-
-vi.mock("@/lib/queue", () => ({
-  emailOutboundQueue: { add: vi.fn() },
-}));
-
-vi.mock("@/lib/ai/embeddings", () => ({
-  searchDocuments: vi.fn().mockResolvedValue([]),
-}));
-
-import { vi } from "vitest";
-import { sanitizeEmailHtml } from "@/lib/ai/tool-executor";
+import { sanitizeEmailHtml } from "@/lib/ai/sanitize-utils";
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 

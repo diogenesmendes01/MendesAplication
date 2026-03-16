@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { searchDocuments } from "./embeddings";
 import { sendTextMessage } from "@/lib/whatsapp-api";
 import { emailOutboundQueue } from "@/lib/queue";
+import { sanitizeEmailHtml } from "./sanitize-utils";
 
 // ─── Context ─────────────────────────────────────────────────────────────────
 
@@ -252,28 +253,6 @@ async function executeRespond(
 // TODO(#103): Replace with `sanitize-html` package for production-grade
 // sanitization once the dependency is approved and added.
 //
-const ALLOWED_EMAIL_TAGS = new Set(["b", "i", "br", "p", "ul", "li", "strong", "em"]);
-
-// Solução segura: strip TUDO e reinsere somente as tags permitidas via whitelist,
-// sem depender de regex para preservar qualquer tag com atributos.
-export function sanitizeEmailHtml(input: string): string {
-  // Tira todos os atributos de todas as tags primeiro; grupos separados para open/close
-  // evitam ambiguidade de captura que permitia bypass via atributos malformados.
-  const noAttrs = input.replace(
-    /<([a-zA-Z]+)[^>]*\/?>|<\/([a-zA-Z]+)>/gi,
-    (match, openTag, closeTag) => {
-      const tag = (openTag || closeTag).toLowerCase();
-      if (!ALLOWED_EMAIL_TAGS.has(tag)) return "";
-      return closeTag
-        ? `</${tag}>`
-        : match.trimEnd().endsWith("/>")
-          ? `<${tag} />`
-          : `<${tag}>`;
-    }
-  );
-  return noAttrs;
-}
-
 // ─── RESPOND_EMAIL ───────────────────────────────────────────────────────────
 
 async function executeRespondEmail(
