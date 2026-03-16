@@ -368,8 +368,15 @@ export async function testAiConnection(
     );
     return { ok: true };
   } catch (err) {
-    // Log full error server-side (may contain raw API key hints, rate-limit details, etc.)
-    console.error("[testAiConnection] provider error:", err);
+    // Sanitize before logging — provider errors may contain partial API keys
+    // (e.g. "Incorrect API key provided: sk-proj-abc...") which would appear in log aggregators
+    const safeErr =
+      err instanceof Error
+        ? err.message
+            .replace(/sk-[^\s"]+/g, "sk-[REDACTED]")
+            .replace(/[a-zA-Z0-9]{32,}/g, "[REDACTED]")
+        : String(err);
+    console.error("[testAiConnection] provider error:", safeErr);
 
     // Map common provider error patterns to safe, generic messages for the frontend.
     // Raw provider messages can expose partial API keys ("sk-proj-xxx...") or internal details.

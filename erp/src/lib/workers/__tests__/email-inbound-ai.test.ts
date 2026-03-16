@@ -132,9 +132,7 @@ beforeEach(() => {
 // ─── Tests ─────────────────────────────────────────────────────────────────
 
 describe("email-inbound — AI agent enqueuing block", () => {
-  it("happy-path: enfileira job de IA para email INBOUND quando emailEnabled=true", async () => {
-    mockAiConfigFindUnique.mockResolvedValue({ enabled: true, emailEnabled: true });
-
+  it("happy-path: enfileira job de IA para email INBOUND com payload correto", async () => {
     const { processEmail } = await import("../email-inbound");
     await processEmail(mockImapClient, buildMsg(), mockChannel, /* isSent */ false);
 
@@ -147,15 +145,20 @@ describe("email-inbound — AI agent enqueuing block", () => {
         channel: "EMAIL",
       })
     );
+    // email-inbound.ts não deve mais consultar aiConfig (evita double DB query)
+    expect(mockAiConfigFindUnique).not.toHaveBeenCalled();
   });
 
-  it("skip emailEnabled=false: NÃO enfileira quando aiConfig.emailEnabled é false", async () => {
-    mockAiConfigFindUnique.mockResolvedValue({ enabled: true, emailEnabled: false });
-
+  it("enfileira sempre para INBOUND: o guard emailEnabled é responsabilidade do runAgent", async () => {
+    // email-inbound.ts não faz mais pré-checagem de aiConfig — enfileira incondicionalmente.
+    // O guard de enabled/emailEnabled é feito dentro de runAgent (single DB query, sem double-fetch).
     const { processEmail } = await import("../email-inbound");
     await processEmail(mockImapClient, buildMsg(), mockChannel, /* isSent */ false);
 
-    expect(mockAiAgentQueueAdd).not.toHaveBeenCalled();
+    // Deve enfileirar — runAgent rejeitará internamente se emailEnabled=false
+    expect(mockAiAgentQueueAdd).toHaveBeenCalledOnce();
+    // email-inbound.ts não deve mais consultar aiConfig diretamente
+    expect(mockAiConfigFindUnique).not.toHaveBeenCalled();
   });
 
   it("skip outbound: NÃO enfileira para mensagens OUTBOUND (isSent=true)", async () => {

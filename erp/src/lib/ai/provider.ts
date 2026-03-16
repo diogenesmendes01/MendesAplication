@@ -142,9 +142,11 @@ async function openaiCompatibleCompletion(
     });
 
     if (!res.ok) {
-      const errorBody = await res.text();
+      // Do not propagate raw error body — it may contain partial API keys
+      // (e.g. OpenAI 401: "Incorrect API key provided: sk-proj-abc...")
+      await res.text(); // consume body to avoid connection leaks
       throw new Error(
-        `${config.provider} API error ${res.status}: ${errorBody}`
+        `${config.provider} API error ${res.status}: [provider error body redacted]`
       );
     }
 
@@ -291,8 +293,9 @@ async function anthropicCompletion(
     });
 
     if (!res.ok) {
-      const errorBody = await res.text();
-      throw new Error(`Anthropic API error ${res.status}: ${errorBody}`);
+      // Do not propagate raw error body — it may contain partial API keys
+      await res.text(); // consume body to avoid connection leaks
+      throw new Error(`Anthropic API error ${res.status}: [provider error body redacted]`);
     }
 
     const data = await res.json();

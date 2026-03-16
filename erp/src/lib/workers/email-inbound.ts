@@ -393,25 +393,20 @@ export async function processEmail(
     `[email-inbound] Message ${message.id} added to ticket ${ticketId} (${direction}/${origin}, from: ${senderAddress}, msgId: ${messageId ?? "none"})`
   );
 
-  // Enqueue AI agent job for inbound email messages with text content
-  // Only enqueue if company has AI enabled for email channel
+  // Enqueue AI agent job for inbound email messages with text content.
+  // NOTE: We enqueue unconditionally here — runAgent handles enabled/emailEnabled
+  // checks internally (with a single aiConfig DB query), avoiding a redundant
+  // pre-queue lookup that would double the DB load on high email volumes.
   if (direction === "INBOUND" && textContent) {
-    const aiConfig = await prisma.aiConfig.findUnique({
-      where: { companyId },
-      select: { enabled: true, emailEnabled: true },
+    await aiAgentQueue.add("process-message", {
+      ticketId,
+      companyId,
+      messageContent: textContent,
+      channel: "EMAIL" as const,
     });
-
-    if (aiConfig?.enabled && aiConfig?.emailEnabled) {
-      await aiAgentQueue.add("process-message", {
-        ticketId,
-        companyId,
-        messageContent: textContent,
-        channel: "EMAIL" as const,
-      });
-      console.log(
-        `[email-inbound] Enqueued ai-agent job for ticket ${ticketId} (channel: EMAIL)`
-      );
-    }
+    console.log(
+      `[email-inbound] Enqueued ai-agent job for ticket ${ticketId} (channel: EMAIL)`
+    );
   }
 }
 
