@@ -1,7 +1,6 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { Decimal } from "@prisma/client/runtime/library";
 import {
   MODEL_PRICING,
   FALLBACK_PRICING,
@@ -43,8 +42,8 @@ export async function logUsage(params: LogUsageParams) {
       channel: params.channel,
       inputTokens: params.inputTokens,
       outputTokens: params.outputTokens,
-      costUsd: new Decimal(costUsd.toFixed(6)),
-      costBrl: new Decimal(costBrl.toFixed(4)),
+      costUsd: costUsd.toFixed(6),
+      costBrl: costBrl.toFixed(4),
       ticketId: params.ticketId,
     },
   });

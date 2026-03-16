@@ -65,7 +65,7 @@ export type { UsageSummary };
  * in unnecessary decrypt operations and silently returns "" for null keys,
  * which can mask unconfigured keys in the frontend.
  *
- * TODO(#104): Refactor updateAiConfig to persist apiKeyHint = plaintext.slice(-4)
+ * TODO(#107): Refactor updateAiConfig to persist apiKeyHint = plaintext.slice(-4)
  * in a new AiConfig.apiKeyHint column, then return `****${record.apiKeyHint}`
  * here without decrypting. Requires migration — see linked issue.
  */

@@ -2,7 +2,7 @@
  * Unit tests for AI config server actions (WARN #5 fix).
  * Covers: testAiConnection — the critical path exercised most in production.
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -125,7 +125,7 @@ describe("testAiConnection", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("returns ok:false with error message when chatCompletion throws", async () => {
+  it("returns ok:false with mapped pt-BR message when chatCompletion throws invalid key error", async () => {
     mockChatCompletion.mockRejectedValue(new Error("Invalid API key"));
 
     const { testAiConnection } = await import(
@@ -134,7 +134,8 @@ describe("testAiConnection", () => {
     const result = await testAiConnection("company-1");
 
     expect(result.ok).toBe(false);
-    expect(result.error).toContain("Invalid API key");
+    // The action maps raw provider errors to safe pt-BR messages for the frontend
+    expect(result.error).toMatch(/api key inválida|sem permissão/i);
   });
 
   it("returns ok:false when decrypt fails", async () => {
@@ -169,5 +170,130 @@ describe("testAiConnection", () => {
         maxTokens: 5,
       })
     );
+  });
+});
+
+// ─── listAvailableModels ──────────────────────────────────────────────────────
+
+describe("listAvailableModels", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockDecrypt.mockImplementation((v: string) => `decrypted:${v}`);
+    mockRequireAdmin.mockResolvedValue(undefined);
+    mockRequireCompanyAccess.mockResolvedValue(undefined);
+    mockFindUnique.mockResolvedValue(baseConfig);
+    vi.stubGlobal("fetch", vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("returns HARDCODED_MODELS for anthropic provider (no HTTP call)", async () => {
+    mockFindUnique.mockResolvedValue({ ...baseConfig, provider: "anthropic" });
+    const { listAvailableModels } = await import(
+      "@/app/(app)/configuracoes/ai/actions"
+    );
+    const result = await listAvailableModels("company-models-1");
+
+    expect(result).toContain("claude-sonnet-4-20250514");
+    expect(result.length).toBeGreaterThan(0);
+    expect(vi.mocked(global.fetch)).not.toHaveBeenCalled();
+  });
+
+  it("returns HARDCODED_MODELS for deepseek provider", async () => {
+    mockFindUnique.mockResolvedValue({ ...baseConfig, provider: "deepseek" });
+    const { listAvailableModels } = await import(
+      "@/app/(app)/configuracoes/ai/actions"
+    );
+    const result = await listAvailableModels("company-models-2");
+
+    expect(result).toContain("deepseek-chat");
+    expect(result).toContain("deepseek-reasoner");
+  });
+
+  it("returns fallback list when openai apiKey is not configured", async () => {
+    mockFindUnique.mockResolvedValue({ ...baseConfig, provider: "openai", apiKey: null });
+    const { listAvailableModels } = await import(
+      "@/app/(app)/configuracoes/ai/actions"
+    );
+    const result = await listAvailableModels("company-models-3");
+
+    expect(result).toEqual(["gpt-4o", "gpt-4o-mini"]);
+    expect(vi.mocked(global.fetch)).not.toHaveBeenCalled();
+  });
+
+  it("returns fallback list when decrypt fails", async () => {
+    mockDecrypt.mockImplementation(() => {
+      throw new Error("decrypt error");
+    });
+    const { listAvailableModels } = await import(
+      "@/app/(app)/configuracoes/ai/actions"
+    );
+    const result = await listAvailableModels("company-models-4");
+
+    expect(result).toEqual(["gpt-4o", "gpt-4o-mini"]);
+  });
+
+  it("returns filtered gpt- model list from OpenAI API on success", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            data: [
+              { id: "gpt-4o" },
+              { id: "gpt-4o-mini" },
+              { id: "gpt-4-turbo" },
+              { id: "gpt-3.5-turbo-instruct" }, // filtered: contains "instruct"
+              { id: "gpt-4-realtime-preview" },  // filtered: contains "realtime"
+              { id: "gpt-4-audio-preview" },      // filtered: contains "audio"
+              { id: "davinci-002" },              // filtered: no gpt- prefix
+            ],
+          }),
+      }),
+    );
+
+    const { listAvailableModels } = await import(
+      "@/app/(app)/configuracoes/ai/actions"
+    );
+    const result = await listAvailableModels("company-models-5");
+
+    expect(result).toContain("gpt-4o");
+    expect(result).toContain("gpt-4o-mini");
+    expect(result).toContain("gpt-4-turbo");
+    expect(result).not.toContain("gpt-3.5-turbo-instruct");
+    expect(result).not.toContain("gpt-4-realtime-preview");
+    expect(result).not.toContain("gpt-4-audio-preview");
+    expect(result).not.toContain("davinci-002");
+  });
+
+  it("returns fallback list when OpenAI API returns non-ok response (401)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: false, status: 401 }),
+    );
+    const { listAvailableModels } = await import(
+      "@/app/(app)/configuracoes/ai/actions"
+    );
+    const result = await listAvailableModels("company-models-6");
+
+    expect(result).toEqual(["gpt-4o", "gpt-4o-mini"]);
+  });
+
+  it("returns fallback list on fetch abort (AbortController timeout)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockRejectedValue(
+        new DOMException("The operation was aborted.", "AbortError"),
+      ),
+    );
+    const { listAvailableModels } = await import(
+      "@/app/(app)/configuracoes/ai/actions"
+    );
+    const result = await listAvailableModels("company-models-7");
+
+    expect(result).toEqual(["gpt-4o", "gpt-4o-mini"]);
   });
 });
