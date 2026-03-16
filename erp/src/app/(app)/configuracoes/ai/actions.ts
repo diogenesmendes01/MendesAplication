@@ -78,76 +78,23 @@ function maskApiKey(key: string | null | undefined, hint?: string | null): strin
 }
 
 // ---------------------------------------------------------------------------
-// Rate limiter for testAiConnection (in-memory, per-company, max 5/min)
-//
-// ⚠️  KNOWN LIMITATION — IN-MEMORY ONLY (same as simulationRateMap above).
-// TODO: Replace with Redis-backed counter when available.
+// Rate limiters — uses RateLimiter interface (currently in-memory).
+// See: https://github.com/diogenesmendes01/MendesAplication/issues/124
+// Swap to Redis-backed implementation when available via createRateLimiter().
 // ---------------------------------------------------------------------------
 
-const testConnectionRateMap = new Map<string, number[]>();
-const TEST_CONN_RATE_LIMIT = 5;
-const TEST_CONN_RATE_WINDOW_MS = 60_000; // 1 minute
+import { createRateLimiter } from "@/lib/rate-limiter";
+
+const testConnectionLimiter = createRateLimiter({ limit: 5, windowMs: 60_000 });
 
 function checkTestConnectionRateLimit(companyId: string): boolean {
-  const now = Date.now();
-  const timestamps = testConnectionRateMap.get(companyId) ?? [];
-  const recent = timestamps.filter((ts) => now - ts < TEST_CONN_RATE_WINDOW_MS);
-
-  // Prune stale key when all timestamps have expired to avoid unbounded memory growth
-  if (recent.length === 0 && testConnectionRateMap.has(companyId)) {
-    testConnectionRateMap.delete(companyId);
-  }
-
-  if (recent.length >= TEST_CONN_RATE_LIMIT) {
-    testConnectionRateMap.set(companyId, recent);
-    return false; // rate limited
-  }
-  recent.push(now);
-  testConnectionRateMap.set(companyId, recent);
-  return true; // allowed
+  return testConnectionLimiter.check(companyId).allowed;
 }
 
-// ---------------------------------------------------------------------------
-// Rate limiter for simulation (in-memory, per-company, max 10/min)
-//
-// ⚠️  KNOWN LIMITATION — IN-MEMORY ONLY:
-// This Map lives in the Node.js process heap. In serverless/edge deployments
-// (Vercel Functions, AWS Lambda) or multi-pod Kubernetes setups, each
-// instance has its own independent Map — so N replicas effectively allow
-// N × 10 requests/min, making this rate limiter useless for real protection.
-//
-// TODO: Replace with a Redis-backed counter when Redis/Upstash is available.
-//   Suggested key: `sim_rate:{companyId}` (INCR + EXPIRE 60s via pipeline).
-//   Reference: https://upstash.com/docs/redis/sdks/ts/commands/incr
-//
-// Until then, the conservative limit (10/min) reduces risk on single-instance
-// deployments and the real protection remains the requireAdmin() auth check.
-// ---------------------------------------------------------------------------
-
-const simulationRateMap = new Map<string, number[]>();
-const SIMULATION_RATE_LIMIT = 10;
-const SIMULATION_RATE_WINDOW_MS = 60_000; // 1 minute
+const simulationLimiter = createRateLimiter({ limit: 10, windowMs: 60_000 });
 
 function checkSimulationRateLimit(companyId: string): boolean {
-  const now = Date.now();
-  const timestamps = simulationRateMap.get(companyId) ?? [];
-
-  // Remove entries older than the window
-  const recent = timestamps.filter((ts) => now - ts < SIMULATION_RATE_WINDOW_MS);
-
-  // Prune stale key when all timestamps have expired to avoid unbounded memory growth
-  if (recent.length === 0 && simulationRateMap.has(companyId)) {
-    simulationRateMap.delete(companyId);
-  }
-
-  if (recent.length >= SIMULATION_RATE_LIMIT) {
-    simulationRateMap.set(companyId, recent);
-    return false; // rate limited
-  }
-
-  recent.push(now);
-  simulationRateMap.set(companyId, recent);
-  return true; // allowed
+  return simulationLimiter.check(companyId).allowed;
 }
 
 // ---------------------------------------------------------------------------
