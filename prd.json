@@ -1,102 +1,156 @@
 {
   "project": "erp",
-  "feature": "dashboard-ux-sprint2",
-  "branchName": "feat/dashboard-ux-sprint2",
+  "feature": "ai-personalization",
+  "branchName": "feat/ai-personalization",
   "createdBy": "Vex",
-  "createdAt": "2026-03-10",
+  "createdAt": "2026-03-15",
+  "specFile": "dev/specs/ai-personalization.md",
   "userStories": [
     {
       "id": "US-001",
-      "title": "KPI Card component + dashboard server actions",
-      "description": "Como gestor, quero ver KPIs (receita, despesas, saldo, tickets abertos) no dashboard com dados reais do banco.",
+      "title": "Schema Prisma: novos campos AiConfig + tabela AiUsageLog",
+      "description": "Como desenvolvedor, quero atualizar o schema do banco para suportar provider/API key por empresa, canais separados, limite de gasto e tracking de uso.",
       "priority": 1,
       "passes": true,
       "acceptanceCriteria": [
-        "Componente kpi-card.tsx criado: ícone 40x40 bg sutil + número hero 28px bold tabular-nums + label + badge variação",
-        "Server action getDashboardKPIs(companyId) retorna receita/despesas/saldo/tickets do mês atual vs anterior",
-        "Dados vêm do Prisma, ZERO mocks",
-        "countUp animation no número ao carregar",
-        "Lint passa sem erros"
+        "AiConfig ganha campos: provider (String default 'openai'), apiKey (String? @db.Text), model (String?), whatsappEnabled (Boolean default true), emailEnabled (Boolean default false), emailPersona (String? @db.Text), emailSignature (String? @db.Text), dailySpendLimitBrl (Decimal? @db.Decimal(10,2)), temperature (Float default 0.7)",
+        "Nova tabela AiUsageLog: id, aiConfigId, companyId, provider, model, channel (WHATSAPP|EMAIL), inputTokens, outputTokens, costUsd (Decimal 10,6), costBrl (Decimal 10,4), ticketId?, createdAt — com indexes em (companyId, createdAt) e (aiConfigId, createdAt)",
+        "AiConfig tem relation usageLogs para AiUsageLog[]",
+        "Migration gerada e aplicável (prisma migrate dev ou manual SQL)",
+        "prisma generate e npm run lint passam sem erros"
       ],
-      "notes": "Referência visual: HTML preview (Row 1 do dashboard). Usar tokens de cor da Fase 1+2. Se tabela vazia → valores zerados, não dados fake."
+      "notes": "Usar mesmo padrão de migration manual do projeto (ver progress.txt US-001 de payment-providers). A API key será encriptada na camada de aplicação, não no banco — o campo é String @db.Text para armazenar o valor cifrado."
     },
     {
       "id": "US-002",
-      "title": "Empty state component",
-      "description": "Como usuário, quero ver um estado vazio elegante quando não há dados numa listagem.",
+      "title": "Refatorar provider.ts para multi-provider com config como parâmetro",
+      "description": "Como desenvolvedor, quero que chatCompletion() receba a config do provider como parâmetro em vez de ler env vars globais, e suporte Grok e Qwen.",
       "priority": 2,
       "passes": true,
       "acceptanceCriteria": [
-        "Componente empty-state.tsx criado: ícone 48px Lucide stroke 1.5 text-tertiary + título 16px medium + descrição 14px secondary + botão de ação opcional",
-        "Reutilizável em qualquer listagem",
-        "Lint passa sem erros"
+        "chatCompletion() recebe ProviderConfig { provider, apiKey, model?, temperature?, maxTokens? } como parâmetro obrigatório — NÃO lê mais process.env.AI_PROVIDER/AI_API_KEY/AI_MODEL",
+        "Retorno inclui usage: { inputTokens: number; outputTokens: number } extraído da resposta da API",
+        "Suporta 5 providers: openai, anthropic, deepseek, grok, qwen",
+        "Grok usa base URL https://api.x.ai (formato OpenAI-compatible)",
+        "Qwen usa base URL https://dashscope.aliyuncs.com/compatible-mode (formato OpenAI-compatible)",
+        "Default models atualizados: grok='grok-2', qwen='qwen-max'",
+        "Todos os callers de chatCompletion atualizados para passar config",
+        "npm run lint passa sem erros"
       ],
-      "notes": "Ver PRD seção 6.7"
+      "notes": "O embeddings.ts NÃO muda — continua usando env vars separadas (AI_EMBEDDING_*) porque embeddings são infra do ERP, não do cliente. Manter backward compat: se algum caller precisa do env antigo, criar helper getEnvProviderConfig() que lê os envs."
     },
     {
       "id": "US-003",
-      "title": "Card Atenção Necessária (alertas unificados)",
-      "description": "Como gestor, quero ver um card no topo do dashboard que agrega alertas de todos os módulos para agir proativamente.",
+      "title": "Cost tracker + model suggester",
+      "description": "Como sistema, quero rastrear custo de cada chamada IA e sugerir modelo baseado no orçamento diário do cliente.",
       "priority": 3,
       "passes": true,
       "acceptanceCriteria": [
-        "Server action getUnifiedAlerts(companyId) agrega: tickets SLA violado/risco, boletos vencidos, propostas sem resposta >7 dias",
-        "Componente attention-card.tsx renderiza os alertas com ícone colorido + link direto pro item",
-        "Card aparece SOMENTE quando há alertas, desaparece quando zerado",
-        "Dados reais do Prisma, ZERO mocks",
-        "Lint passa sem erros"
+        "Novo arquivo src/lib/ai/cost-tracker.ts com: logUsage() que calcula costUsd e costBrl baseado em tabela de preços por modelo e salva no AiUsageLog",
+        "getTodaySpend(companyId) retorna gasto acumulado do dia em BRL",
+        "getUsageSummary(companyId, days) retorna dados agregados para o frontend (total tokens, custo, breakdown por canal e modelo)",
+        "Novo arquivo src/lib/ai/model-suggester.ts com: suggestModel(provider, dailyBudgetBrl) retorna o modelo mais potente que cabe no orçamento",
+        "Tabela de preços cobre: gpt-4o, gpt-4o-mini, claude-opus-4-20250514, claude-sonnet-4-20250514, claude-haiku-4-20250414, grok-2, grok-2-mini, qwen-max, qwen-plus, qwen-turbo",
+        "Câmbio BRL/USD hardcoded (5.80) com constante nomeada e comentário para atualização futura",
+        "npm run lint passa sem erros"
       ],
-      "notes": "Ver PRD UX Problema 5. Posicionar acima dos KPIs no dashboard."
+      "notes": "A tabela de preços é uma constante no código — fácil de atualizar. Não precisa de API de câmbio agora."
     },
     {
       "id": "US-004",
-      "title": "Dashboard layout completo com gráfico e listas",
-      "description": "Como gestor, quero o dashboard com gráfico de receita×despesas, próximos vencimentos, propostas recentes e tickets com SLA.",
+      "title": "Adaptar agent.ts para multi-canal + provider config da empresa",
+      "description": "Como sistema, quero que o agent carregue a config da empresa do banco (provider, API key, modelo) e use persona separada por canal.",
       "priority": 4,
       "passes": true,
       "acceptanceCriteria": [
-        "Grid responsivo: Row1=KPIs, Row2=Gráfico(2/3)+Vencimentos(1/3), Row3=Propostas(1/2)+Tickets(1/2)",
-        "Gráfico de barras com Recharts: receita #6366F1, despesas #F59E0B, grid #F0ECE8, tooltip card branco shadow-md",
-        "Server actions para: getRevenueExpenseChart, getUpcomingPayables, getRecentProposals, getSlaTickets",
-        "Todos com dados reais do Prisma, ZERO mocks",
-        "Empty state quando listagem vazia",
-        "Page fade-in animation",
-        "Lint passa sem erros"
+        "runAgent() recebe novo parâmetro channel: 'WHATSAPP' | 'EMAIL'",
+        "Carrega AiConfig da empresa e descriptografa apiKey usando decrypt() de encryption.ts",
+        "Monta ProviderConfig a partir dos campos do AiConfig (provider, apiKey, model, temperature)",
+        "Verifica se o canal está habilitado (whatsappEnabled / emailEnabled) antes de processar",
+        "Verifica limite diário via getTodaySpend() antes de chamar o LLM",
+        "Se limite atingido, retorna error: 'daily_spend_limit_reached' sem chamar o LLM",
+        "Usa emailPersona quando channel=EMAIL e emailPersona não é null — senão usa persona padrão",
+        "Cada chamada a chatCompletion() passa o ProviderConfig carregado",
+        "Após cada chamada, registra uso via logUsage() com tokens da resposta",
+        "System prompt diferente por canal: buildWhatsAppSystemPrompt() e buildEmailSystemPrompt() (email inclui assinatura)",
+        "npm run lint passa sem erros"
       ],
-      "notes": "Seguir o HTML de referência fielmente. Recharts já deve estar instalado — se não, instalar."
+      "notes": "O fallback para env vars globais é aceitável quando a empresa não tem apiKey configurada (ex: período de transição). Nesse caso, usar getEnvProviderConfig()."
     },
     {
       "id": "US-005",
-      "title": "Proposal stepper visual",
-      "description": "Como usuário do comercial, quero ver um stepper no topo da proposta mostrando em qual etapa ela está.",
+      "title": "Nova tool RESPOND_EMAIL + enfileirar email inbound no ai-agent",
+      "description": "Como sistema, quero que emails recebidos passem pelo agente IA e que o agente possa responder por email.",
       "priority": 5,
       "passes": true,
       "acceptanceCriteria": [
-        "Componente proposal-stepper.tsx: [Criada]→[Enviada]→[Aceita]→[Boleto]→[Pago]→[NFS-e]",
-        "Etapa concluída: ✓ verde, atual: ● accent, futura: ○ cinza",
-        "Integrado na página de detalhe da proposta (topo)",
-        "Status derivado dos dados reais da proposta + boletos + notas fiscais",
-        "Lint passa sem erros"
+        "Nova tool RESPOND_EMAIL em tools.ts com params: subject (string) e message (string, suporta HTML simples)",
+        "tool-executor.ts: novo case RESPOND_EMAIL que enfileira no emailOutboundQueue com subject, to (extraído do ticket/contact), content formatado",
+        "O to do email é resolvido a partir do ticket: contact.email ou client.email",
+        "Se não houver email do contato/cliente, retorna erro e sugere ESCALATE",
+        "email-inbound.ts: após criar TicketMessage de INBOUND, enfileira no aiAgentQueue com channel='EMAIL' (análogo ao que whatsapp-inbound já faz)",
+        "ai-agent worker (ai-agent.ts): passa channel do job data para runAgent()",
+        "Quando channel=EMAIL, as tools disponíveis incluem RESPOND_EMAIL em vez de RESPOND",
+        "System prompt de email instrui o agente a usar RESPOND_EMAIL",
+        "npm run lint passa sem erros"
       ],
-      "notes": "Ver PRD UX Sprint 2, item 2a. O stepper deve calcular o estado correto a partir do status da proposta e seus boletos."
+      "notes": "A tool RESPOND continua existindo para WhatsApp. O agente recebe tools diferentes dependendo do canal. O email outbound usa o mesmo worker/queue existente (emailOutboundQueue) — só precisa do enfileiramento correto."
     },
     {
       "id": "US-006",
-      "title": "Contextual actions por estado na proposta",
-      "description": "Como usuário, quero ver apenas a ação disponível no momento na proposta, não todos os botões sempre.",
+      "title": "Encriptação da API key + server actions de config",
+      "description": "Como admin, quero salvar a API key do provider de forma segura e configurar todos os parâmetros da IA da minha empresa.",
       "priority": 6,
       "passes": true,
       "acceptanceCriteria": [
-        "DRAFT → botão 'Enviar Proposta por E-mail'",
-        "SENT → 'Registrar Aceite' + 'Reenviar E-mail'",
-        "ACCEPTED → 'Gerar Boletos'",
-        "Boleto GENERATED → 'Enviar Boleto por E-mail'",
-        "Boleto SENT → info 'Aguardando pagamento' + 'Reenviar'",
-        "Boleto PAID → 'Emitir NFS-e'",
-        "Botões que não se aplicam ao estado atual ficam OCULTOS (não disabled)",
-        "Lint passa sem erros"
+        "Server actions em configuracoes/ai/actions.ts atualizadas para os novos campos",
+        "getAiConfig retorna todos os campos novos — apiKey mascarada (últimos 4 chars visíveis, resto ****)",
+        "updateAiConfig aceita todos os novos campos — apiKey é encriptada via encrypt() antes de salvar",
+        "Se apiKey vier vazia no update, mantém a existente (não sobrescreve com vazio)",
+        "Nova action testAiConnection(companyId): descriptografa apiKey, faz chamada mínima ao provider (message: 'Hi', max_tokens: 5), retorna { ok: boolean, error?: string }",
+        "Nova action listAvailableModels(companyId): para OpenAI chama /v1/models com a apiKey; para outros retorna lista hardcoded",
+        "Nova action getAiUsageSummary(companyId, days): retorna dados do cost-tracker para o frontend",
+        "Todas as actions verificam requireCompanyAccess e requireAdmin",
+        "Audit log em toda alteração",
+        "npm run lint passa sem erros"
       ],
-      "notes": "Ver PRD UX Sprint 2, item 2b. Esconder, não desabilitar. A página de detalhe da proposta já existe — adaptar."
+      "notes": "Usar mesmo padrão de encrypt/decrypt de encryption.ts que já é usado para credenciais de canais de email e payment providers. A mascaração da apiKey segue o mesmo padrão do US-008 de payment-providers (últimos 4 chars)."
+    },
+    {
+      "id": "US-007",
+      "title": "Frontend: refatorar /configuracoes/ai com tabs (Geral + WhatsApp + Email + Consumo)",
+      "description": "Como admin, quero uma tela de configuração de IA completa com seleção de provider, modelo, limites e configurações separadas por canal.",
+      "priority": 7,
+      "passes": true,
+      "acceptanceCriteria": [
+        "Página reorganizada em tabs: Geral, WhatsApp, Email, Consumo",
+        "Tab Geral: seletor de provider (OpenAI, Anthropic, Grok, Qwen), campo API key (password input), botão 'Testar Conexão' com feedback visual, seletor de modelo (dinâmico por provider via listAvailableModels), slider de temperatura (0.0-1.0), input de limite diário (R$), badge de sugestão de modelo baseado no orçamento",
+        "Tab WhatsApp: toggle whatsappEnabled, persona textarea (existente), welcome message (existente), escalation keywords (existente), max iterations (existente)",
+        "Tab Email: toggle emailEnabled, emailPersona textarea (herda do WhatsApp se vazio — mostrar placeholder), emailSignature textarea",
+        "Tab Consumo: exibir gasto de hoje vs limite, total dos últimos 30 dias, breakdown por canal",
+        "Ao trocar provider, limpar modelo selecionado e recarregar lista",
+        "API key nunca exibida em claro — só mascarada",
+        "npm run lint passa sem erros"
+      ],
+      "notes": "Usar componente Tabs do shadcn/ui. Tab de consumo pode ser simples nessa primeira versão (tabela, sem gráficos). O simulador será implementado em US-008 separado."
+    },
+    {
+      "id": "US-008",
+      "title": "Simulador de resposta IA (dry-run)",
+      "description": "Como admin, quero testar como a IA responderia a uma mensagem antes de ativar, para validar persona e configurações.",
+      "priority": 8,
+      "passes": true,
+      "acceptanceCriteria": [
+        "Nova tab ou seção 'Simulador' na página de config IA",
+        "Interface de chat: input de mensagem + botão enviar + área de resposta",
+        "Toggle para simular canal: WhatsApp ou Email",
+        "Nova server action simulateAiResponse(companyId, message, channel): roda runAgent em modo dry-run (não salva no banco, não envia mensagem real)",
+        "Modo dry-run: runAgent recebe flag dryRun=true — tools RESPOND e RESPOND_EMAIL retornam a mensagem sem enviar, TicketMessage não é criado",
+        "Após simulação, mostra: resposta da IA, tokens usados (input + output), custo estimado (R$)",
+        "Rate limit: máx 10 simulações/min por empresa (verificar no server action)",
+        "npm run lint passa sem erros"
+      ],
+      "notes": "O dry-run precisa de um ticket fake ou de adaptar o agent para funcionar sem ticketId real. Sugestão: criar contexto de simulação com dados mock do cliente (nome genérico, sem dados financeiros). O importante é que a IA use a persona e base de conhecimento reais da empresa."
     }
   ]
 }

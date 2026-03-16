@@ -1,405 +1,197 @@
-# Progress — Dashboard UX Sprint 2
-
-## US-001 — KPI Cards (2026-03-10) ✅
-
-### What was implemented
-- `src/components/kpi-card.tsx` — reusable KPI card with countUp animation (ease-out cubic)
-- KPI data integrated into `src/app/(app)/dashboard/actions.ts` via getDashboardData
-- Dashboard page uses 4 KPI cards: Receita, Despesas, Saldo, Tickets Abertos
-- Hero number fixed to 28px per PRD spec
-
-### Learnings
-- `Prisma.Decimal` from aggregates needs explicit conversion to `number` via `Number(val)`
-- Existing dashboard had placeholder data generators — replaced with real Prisma queries
-- The remote branch had a comprehensive commit (4fa18b8) with Fase 3 + UX Sprint 2 changes — always pull before working
-- `tabular-nums` via `fontVariantNumeric` CSS ensures numbers align during countUp animation
-- AccountReceivable.paidAt and AccountPayable.paidAt are the correct fields for "paid in period" queries
-- Tickets: OPEN, IN_PROGRESS, WAITING_CLIENT are "open" statuses; RESOLVED and CLOSED are terminal
-- KPICard supports both `previousValue` (auto-computes variation) and `badgeOverride` (custom badge text/variant)
-- The `cn()` utility from `@/lib/utils` is used for conditional class merging
-
-## US-002 — Empty State Component (2026-03-10) ✅
-
-### What was implemented
-- Refactored `src/components/empty-state.tsx` to accept `LucideIcon` type instead of `ReactNode` for the icon prop
-- Component now internally enforces: 48px size, strokeWidth 1.5, text-tertiary color
-- Title: 16px font-medium, Description: 14px text-secondary
-- Added `"use client"` directive (needed for onAction callback)
-- Optional action button supports both href (link) and onAction (callback)
-- Updated all 4 EmptyState usages in dashboard/page.tsx to pass icon components directly
-
-### Learnings
-- Using `LucideIcon` type (from `lucide-react`) instead of `ReactNode` gives type safety and lets the component control rendering (size, stroke, color)
-- Passing icon as component reference (`icon={Calendar}`) instead of JSX (`icon={<Calendar />}`) enables the wrapper to apply consistent styles
-- Previous version relied on callers to set correct size/stroke — now enforced centrally for design consistency
-
-## US-003 — Attention Card / Unified Alerts (2026-03-10) ✅
-
-### What was implemented
-- `src/components/attention-card.tsx` — renders unified alerts with severity-colored dots, module labels [SAC/Financeiro/Fiscal/Comercial], and direct links
-- Server action `getDashboardAlerts()` in `actions.ts` aggregates: SLA breached tickets, SLA at-risk tickets, overdue boletos, pending NFS-e >24h, proposals without response >7 days
-- Card positioned above KPIs in dashboard, only visible when alerts exist (double-guarded: component returns null + conditional render in page)
-- Alerts sorted by severity: critical first (SLA_BREACH, BOLETO_VENCIDO), then warnings (SLA_RISK, NFSE_FAILED, PROPOSTA_SEM_RESPOSTA)
-
-### Learnings
-- The Fase 3 commit (4fa18b8) already included both the server action and component — US-003 was pre-implemented as part of the comprehensive dashboard redesign
-- `getDashboardAlerts` runs independently from `getDashboardData` (separate `useCallback` + `useEffect`) so alerts load without waiting for period-filtered data
-- The `DashboardAlert` type with `AlertType` union provides type safety for alert categorization
-- Module labels in the component are derived from `alert.type` mapping, not stored in the alert data — keeps the server action focused on data
-
-## US-004 — Dashboard Layout Completo (2026-03-10) ✅
-
-### What was implemented
-- Dashboard layout already complete from Fase 3 commit: Row1=KPIs(4), Row2=Chart(2/3)+Payables(1/3), Row3=Proposals(1/2)+Tickets(1/2)
-- Added 4 standalone server actions: `getRevenueExpenseChart`, `getUpcomingPayables`, `getRecentProposals`, `getSlaTickets`
-- These provide independent access to each dashboard section (AC requirement)
-- Main `getDashboardData` still bundles all queries efficiently for initial page load
-- Recharts bar chart with receita=#6366F1, despesas=#F59E0B, grid=border-subtle(#F0ECE8), tooltip white shadow-md
-- Empty states present for all sections (chart, payables, proposals, tickets)
-- Page fade-in + staggered slide animations via animate-in utility classes
-- All data from real Prisma queries, zero mocks
-
-### Learnings
-- Fase 3 commit (4fa18b8) was comprehensive — included full dashboard layout, chart, lists, and all server actions bundled in getDashboardData
-- The AC for named server actions was about having them as separate exports, not replacing the bundled call
-- Adding standalone actions provides future flexibility (independent refresh, lazy loading) while keeping the efficient bundled load
-- `charts.tsx` uses `next/dynamic` with `ssr: false` for all Recharts components — avoids SSR issues
-- The lazy chart approach means Recharts bundle is only loaded when dashboard renders, not on every page
-
-## US-005 — Proposal Stepper Visual (2026-03-10) ✅
-
-### What was implemented
-- `src/components/proposal-stepper.tsx` — already existed from Fase 3 commit (4fa18b8)
-- Steps: [Criada]→[Enviada]→[Aceita]→[Boleto]→[Pago]→[NFS-e]
-- Completed step: ✓ green (border-success bg-success), Current: ● accent with shadow, Future: ○ grey
-- Integrated in proposal detail page `[id]/page.tsx` inside a Card at the top
-- Status derived from real data: proposalStatus, hasBoletos, hasBoletoPaid, hasNfseIssued
-- Connector lines between steps turn green when step is completed
-- Handles edge cases: CANCELLED/REJECTED/EXPIRED only marks "Criada" as completed
-- Logic: DRAFT→level 1, SENT→level 2, ACCEPTED→level 3, hasBoletos→level 4, hasBoletoPaid→level 5, hasNfseIssued→level 6
-
-### Learnings
-- The Fase 3 commit (4fa18b8) was very comprehensive — included stepper, contextual actions, and the full detail page redesign
-- Always check existing code before implementing — the component was already complete and passing lint
-- The stepper uses `resolveSteps()` pure function for testability — maps proposal state to step statuses
-- `cn()` utility from `@/lib/utils` handles conditional Tailwind classes cleanly
-
-## US-006 — Contextual Actions por Estado (2026-03-10) ✅
-
-### What was implemented
-- Contextual actions already fully implemented in the Fase 3 commit (4fa18b8)
-- The `[id]/page.tsx` proposal detail page has a "Próxima ação" section with state-conditional rendering
-- All 6 states covered: DRAFT (send email), SENT (accept + resend), ACCEPTED (generate boletos), GENERATED (send boleto email), SENT boleto (waiting + resend), PAID (emit NFS-e)
-- Terminal states (CANCELLED/REJECTED/EXPIRED) show info message
-- Completed state (NFS-e issued) shows success message
-- All buttons use conditional rendering (`{condition && (...)}`) — HIDDEN, not disabled
-
-### Learnings
-- The Fase 3 commit (4fa18b8) continues to be the comprehensive commit that pre-implemented most Sprint 2 features
-- Pattern: always validate existing code against ACs before writing new code — saves time and avoids duplicate implementation
-- The contextual actions section uses a clean pattern: "Próxima ação" label + state-conditional blocks, making it easy to audit which states show which buttons
-- Edge cases handled well: `canGenerateBoletos` guards against re-generating, `allBoletosPaid` vs `hasBoletoPaid` distinguishes partial from full payment
-
-## PR #34 Code Review Bug Fixes (2026-03-10) ✅
-
-### What was fixed (13 bugs total)
-- **BUG 1** (BLOCKER): Verified already correct — no change needed
-- **BUG 2** (Critical): Dashboard now filters by selectedCompanyId from CompanyContext
-- **BUG 3** (Critical): Stepper checks per-boleto ISSUED invoice via `listInvoicesForBoletos()` — no longer marks "complete" after 1 partial NFS-e
-- **BUG 4** (High): "Enviar Boleto" button rendered per-boleto based on individual GENERATED status
-- **BUG 5** (High): Unified per-boleto action block replaces separate conditional blocks
-- **BUG 6** (Medium): KPI labels dynamic via `periodSuffix()` — maps period to "do dia/da semana/do mês/do ano/do período"
-- **BUG 7** (Medium): Chart date range respects period filter via `getChartDateRange()` helper
-- **BUG 8** (Medium): `loadAlerts` useCallback depends on `selectedCompanyId`, reloads on company change
-- **BUG 9** (Medium): Idempotency guard checks `status: "ISSUED"` only — PENDING/CANCELLED invoices cleaned up before re-emit
-- **BUG 10** (Low): `useCountUp` stores previous target via `useRef`, animates from previous→new value
-- **BUG 11** (Low): `window.location.href` replaced with `router.push()` in proposal table rows
-- **BUG 12** (Low): `<a>` replaced with Next.js `<Link>` in AttentionCard
-- **BUG 13** (Medium): KPICard accepts `invertColors` prop — expenses card shows red for increases, green for decreases
-
-### New exports added
-- `listInvoicesForBoletos(boletoIds, companyId)` in `nfse-actions.ts` — returns `Record<string, boolean>` for per-boleto ISSUED status
-
-### Learnings
-- Per-boleto NFS-e tracking requires querying Invoice table directly (not ProposalEvent), since events don't track which boleto the NFS-e belongs to
-- `useRef` for storing previous animation target must update in the cleanup function of `useEffect`, not in the main body — avoids stale values
-- Dashboard `resolveCompanyIds` now accepts optional `selectedCompanyId` parameter — when provided, validates access and returns single-element array
-- For expense-type KPIs, color inversion is a UI concern (not data) — handled via `invertColors` prop rather than changing the data model
-- Advisory lock idempotency guards should match on terminal status (ISSUED) only — intermediate states (PENDING/CANCELLED) are transient and should not block retries
-
-## PR #34 Re-Review Bug Fixes (2026-03-10) ✅
-
-### What was fixed (4 bugs from re-review)
-
-- **BUG A** (High): Replaced `allPaidHaveNfse` with `allBoletosComplete` in proposal detail page and stepper. New logic: `boletos.every((b) => b.status === "PAID" && issuedInvoiceMap[b.id])` — requires ALL boletos paid with NFS-e, not just the paid subset. Updated stepper prop, per-boleto action guard, and "Fluxo concluído" block.
-- **BUG B** (Medium): Simplified `getChartDateRange()` — chart always shows monthly bars, so day/week/month all use 6 months of SQL data, year uses 12. Removed unnecessary day/week-specific ranges that returned too-short windows.
-- **BUG C** (Low): Chart subtitle now dynamic: `{period === "year" ? "Últimos 12 meses" : "Últimos 6 meses"}` instead of hardcoded "Últimos 6 meses".
-- **BUG D** (Low/Security): `listInvoicesForBoletos` in `nfse-actions.ts` now uses `requireCompanyAccess(companyId)` instead of `requireSession()`, enforcing proper RBAC tenant isolation. Removed unused `requireSession` import.
-
-### Files changed
-- `erp/src/app/(app)/comercial/propostas/[id]/page.tsx` — BUG A
-- `erp/src/components/proposal-stepper.tsx` — BUG A (prop rename)
-- `erp/src/app/(app)/dashboard/actions.ts` — BUG B
-- `erp/src/app/(app)/dashboard/page.tsx` — BUG C
-- `erp/src/lib/nfse-actions.ts` — BUG D
-
-### Learnings
-- When checking "flow complete", must verify ALL items are in terminal state, not just a subset — partial completion ≠ completion
-- Chart rendering and SQL range must be aligned: if chart always shows N monthly bars, SQL must always fetch N months regardless of KPI filter
-
-## US-001 — Schema & Migration: PaymentProvider, PaymentRoutingRule, Boleto changes (2026-03-10) ✅
-
-### What was implemented
-- `PaymentProvider` model: id, companyId, name, provider, credentials (String @db.Text for AES), webhookUrl, webhookSecret, sandbox, isDefault, isActive, metadata (Json?), timestamps
-- `PaymentRoutingRule` model: id, providerId, priority, clientType (ClientType?), minValue/maxValue (Decimal?), tags (String[]), isActive, createdAt
-- `Boleto` new fields: providerId (String?), gatewayId (String?), gatewayData (Json?), manualOverride (Boolean @default(false))
-- `Company` new relation: paymentProviders PaymentProvider[]
-- `Boleto` new relation: provider PaymentProvider? with onDelete: SetNull
-- Indexes: payment_providers(companyId, isActive), payment_routing_rules(providerId, priority)
-- Migration `20260310184916_add_payment_providers` applied to production DB
-- `npx prisma generate` and `npm run lint` pass cleanly
-
-### Learnings
-- `prisma migrate dev` requires shadow DB access; when shadow DB can't be created (Coolify internal network), create migration manually and use `prisma migrate deploy`
-- The DB is on Coolify Docker network (container `ho084w448cs8sg4csgwo8wko`, internal IP 10.0.1.10:5432); use SSH tunnel via `ssh -f -N -L 15432:10.0.1.10:5432 root@coolify.boletoapi.com`
-- `prisma migrate diff --from-schema-datasource --to-schema-datamodel --script` shows accumulated drift from all previous migrations — must manually extract only the relevant SQL for the new migration
-- @@map with snake_case maintained consistently: `payment_providers`, `payment_routing_rules`
-- credentials is String @db.Text (not Json) because it will be AES-encrypted as a string
-
-## US-002 — Payment types, registry e factory (2026-03-10) ✅
-
-### What was implemented
-- `src/lib/payment/types.ts` — All interfaces: ConfigField, ProviderDefinition, PaymentGateway, CreateBoletoInput, CreateBoletoResult, BoletoStatusResult, WebhookEvent
-- `src/lib/payment/registry.ts` — PROVIDER_REGISTRY with pagarme (1 credential + 2 settings), pinbank (6 credentials + 4 settings), mock (empty schemas)
-- `src/lib/payment/factory.ts` — getGateway(providerType, decryptedCredentials, metadata) validates against registry, throws "not implemented" for known providers (mock/pagarme/pinbank), throws "Provider not found" for unknown
-- `src/lib/payment/index.ts` — Barrel exports for all types and functions
-
-### Learnings
-- Factory uses switch/case for known providers that will be implemented in future stories (US-003, US-004, US-013) — keeps it type-safe and explicit
-- Using `type` imports in index.ts barrel for interfaces avoids runtime overhead — only re-exports types
-- Registry is a plain object (not a Map) — simpler, JSON-serializable, and easy for frontend to consume
-- ConfigField.group discriminates between 'credentials' (encrypted) and 'settings' (stored in metadata) — important for the UI rendering in US-009
-
-## US-003 — Mock Provider + migrar boleto.ts (2026-03-10) ✅
-
-### What was implemented
-- `src/lib/payment/providers/mock.provider.ts` — MockProvider implementing full PaymentGateway interface
-- createBoleto generates fake gatewayId (MOCK prefix + timestamp + random), fake URL/line/barcode/QR/PDF/nossoNumero with console.log matching original MockBoletoProvider style
-- getBoletoStatus always returns 'pending'
-- cancelBoleto always returns { success: true }
-- validateWebhook always returns true
-- parseWebhookEvent parses body JSON and returns generic boleto.paid event
-- testConnection returns { ok: true, message: 'Mock provider ativo' }
-- factory.ts updated: `case "mock"` now returns `new MockProvider()` instead of throwing
-
-### Learnings
-- The original MockBoletoProvider in boleto.ts used `value` as raw number (R$), the new CreateBoletoInput uses `amount` in centavos — mock provider follows new convention
-- cancelBoleto and validateWebhook don't need `gatewayId`/`headers`/`body` params used — omit unused params to satisfy lint (no-unused-vars)
-- parseWebhookEvent body param can be string or already-parsed object depending on caller — defensive parsing with typeof check
-- Keep boleto.ts untouched per instructions (will be refactored in US-007)
-
-## US-004 — Pagar.me Provider (2026-03-10) ✅
-
-### What was implemented
-- `src/lib/payment/providers/pagarme.provider.ts` — full PaymentGateway implementation for Pagar.me v5
-- createBoleto: searches customer by document (GET /customers?document=X), creates if not found (POST /customers), then creates order with boleto payment (POST /orders)
-- getBoletoStatus: GET /charges/{id} with status mapping (pending→pending, paid→paid, canceled→cancelled, etc.)
-- cancelBoleto: DELETE /charges/{id}
-- testConnection: GET /customers?size=1 — validates API key works
-- validateWebhook: HMAC-SHA1 of body with webhookSecret, compared against x-hub-signature header using timing-safe comparison
-- parseWebhookEvent: maps charge.paid→boleto.paid, charge.canceled→boleto.cancelled, charge.payment_failed→boleto.failed, charge.underpaid→boleto.failed, charge.overpaid→boleto.paid
-- factory.ts updated: `case "pagarme"` returns `new PagarmeProvider(credentials, metadata, webhookSecret)`
-- factory.ts signature extended with optional `webhookSecret` parameter
-
-### Learnings
-- Pagar.me Basic Auth uses apiKey as username with empty password: `base64(sk_xxx:)` — the colon after the key is critical
-- Pagar.me customer creation requires phones object even if dummy — API rejects without it
-- Pagar.me address uses line_1/line_2 format, not separate street/number fields
-- Pagar.me customer type is "individual" (not "PF") or "company" (not "PJ")
-- DELETE on charges may return 204 with no body — need to handle empty response
-- HMAC-SHA1 webhook validation: Pagar.me sends `sha1=<hex>` in x-hub-signature header
-- crypto.timingSafeEqual throws if buffers have different lengths — wrap in try/catch
-- Factory webhookSecret param added as 4th arg to support webhook validation in provider instances
-
-## US-005 — Router — motor de roteamento com regras (2026-03-10) ✅
-
-### What was implemented
-- `src/lib/payment/router.ts` — routing engine with 3 exported functions
-- `resolveProvider(companyId, context)`: fetches active rules ordered by priority ASC, evaluates clientType + minValue + maxValue + tags, returns first matching provider's full PaymentProvider record. Falls back to isDefault=true provider. Throws clear error if no default configured.
-- `getProviderById(companyId, providerId)`: validates provider exists, belongs to company, and is active. Throws if not found/inactive.
-- `previewRouting(companyId, context)`: returns `{providerId, providerName, reason}` without side effects, for frontend dropdown preview. Returns null if no provider available.
-- `matchesRule()` helper: null clientType = match any, null minValue = no min, null maxValue = no max, tags use AND logic (all rule tags must exist in context)
-- `buildReason()` helper: generates human-readable reason string for UI display
-- Updated `index.ts` barrel to export all 3 functions
-- Updated `prd.json`: US-005 passes=true
-
-### Learnings
-- Prisma `Decimal` fields from queries need `Number()` conversion for numeric comparison — same pattern as US-001 KPI aggregates
-- PaymentRoutingRule.tags is `String[]` in Prisma — can use `.every()` directly for AND-logic tag matching
-- `findMany` with nested `where` on relation (`provider: { companyId, isActive }`) works cleanly in Prisma for filtering rules by provider attributes
-- previewRouting returns null (not throws) when no provider available — cleaner for frontend to handle gracefully
-
-## US-006 — Webhook route + baixa automática no financeiro (2026-03-10) ✅
-
-### What was implemented
-- `src/app/api/webhooks/payment/[provider]/route.ts` — Next.js App Router POST handler
-- Identifies provider type from path param, finds all active PaymentProviders of that type
-- Decrypts credentials from each provider using `decrypt()` from encryption.ts, instantiates gateway via factory
-- Tries to validate webhook signature with each provider until one matches (supports multiple providers of same type)
-- Returns 401 if no provider validates the signature
-- Parses webhook event via `gateway.parseWebhookEvent(rawBody)`
-- Finds boleto by `gatewayId` + `providerId`
-- Updates boleto status: boleto.paid→PAID, boleto.cancelled→CANCELLED, boleto.expired→OVERDUE, boleto.failed→CANCELLED
-- If boleto paid: finds matching AccountReceivable by companyId + clientId (from proposal) + value (±R$0.01 tolerance) + dueDate (±15 days) + status PENDING, updates to PAID with paidAt
-- Creates AuditLog with userId "system" for all operations (including boleto not found)
-- Returns 200 OK to the bank even if boleto not found (avoids infinite retry loops)
-
-### Learnings
-- Next.js 15 App Router dynamic route params are now a Promise — must `await params` before destructuring
-- AccountReceivable doesn't have a direct FK to Boleto — matching is done by companyId + clientId (from boleto.proposal.clientId) + value with tolerance + dueDate window
-- Prisma Decimal fields accept plain numbers in `gte`/`lte` comparisons — no need for `new Prisma.Decimal()`
-- Webhook handlers should be defensive: always return 200 for parse errors and missing boletos to prevent infinite retries from payment providers
-- The `logAuditEvent` function is fire-and-forget (catches errors internally) — safe to use without try/catch
-- For webhook routes with no user session, using "system" as userId in audit logs is the established pattern
-
-## US-007 — Integrar novo sistema no fluxo de propostas (2026-03-10) ✅
-
-### What was implemented
-- Refactored `generateBoletosForProposal` in `comercial/propostas/actions.ts` to use the new payment provider system
-- Added optional `providerId` parameter to `GenerateBoletosInput` for manual provider override
-- New `resolveGatewayForBoleto` helper encapsulates the resolution logic: manual override → automatic routing → mock fallback
-- Manual override: `getProviderById(companyId, providerId)` validates provider, sets `manualOverride=true`
-- Automatic: `resolveProvider(companyId, { clientType, value })` uses routing rules
-- Fallback: if resolveProvider throws (no providers configured), falls back to mock with `console.warn`
-- Credentials decrypted via `decrypt()` from encryption.ts, then `JSON.parse()` to get credentials object
-- Gateway instantiated via `getGateway(providerType, decryptedCredentials, metadata, webhookSecret)`
-- `gateway.createBoleto()` called with `CreateBoletoInput` (amount in centavos, customer with documentType)
-- Boleto record saves: `providerId`, `gatewayId`, `gatewayData` (url, line, barcode, qrCode, pdf, nossoNumero), `manualOverride`
-- `bankReference = gatewayId` maintained for backward compatibility
-- Removed `import { generateBoleto } from "@/lib/boleto"` — old file kept intact
-- Client `type` field (PF/PJ) fetched from the query and used for routing context
-- Audit log and proposal event include provider name for traceability
-
-### Learnings
-- The old `generateBoleto` from `boleto.ts` returns `{ bankReference }` with value in R$; the new `CreateBoletoInput` uses `amount` in centavos — must multiply by 100
-- `decrypt()` returns the raw encrypted string content; for PaymentProvider credentials, that's a JSON string that needs `JSON.parse()`
-- Client `type` field is already a `ClientType` enum (PF/PJ) — can cast directly to the routing context type
-- Gateway resolution is done once before the transaction loop (same provider for all installments of a proposal)
-- The catch block for resolveProvider fallback uses empty catch clause — no need to capture the error since we're logging the warning with a custom message
-- `gatewayData` fields use `?? null` for optional CreateBoletoResult fields to ensure consistent JSON structure
-
-## US-008 — Server actions CRUD de Payment Providers (2026-03-10) ✅
-
-### What was implemented
-- `src/app/(app)/configuracoes/integracoes-bancarias/actions.ts` with 8 server actions
-- `getPaymentProviders(companyId)`: lists providers with rules, credentials decrypted then masked (last 4 chars for password fields from configSchema)
-- `getAvailableProviders()`: returns PROVIDER_REGISTRY values for dropdown population
-- `savePaymentProvider(companyId, data)`: creates or updates provider, encrypts credentials as JSON string. On edit: preserves existing credential values when new value is empty
-- `deletePaymentProvider(companyId, id)`: deletes provider (Prisma cascade handles rules)
-- `testProviderConnection(companyId, id)`: decrypts credentials, instantiates gateway via factory, calls testConnection()
-- `saveRoutingRules(companyId, providerId, rules[])`: transaction deletes all existing rules then creates new ones
-- `toggleProviderActive(companyId, id)`: toggles isActive boolean
-- `setDefaultProvider(companyId, id)`: transaction unsets all defaults for company, then sets the specified one
-- All actions verify requireCompanyAccess and log AuditLog
-- On create: auto-generates webhookUrl (`https://boletoapi.com/api/webhooks/payment/${providerType}`) and webhookSecret (crypto.randomUUID)
-
-### Learnings
-- `const` with spread `{ ...data.credentials }` is sufficient even when mutating individual keys — ESLint `prefer-const` catches unnecessary `let`
-- Credential masking should iterate the configSchema to find password-type fields rather than hardcoding field names — future-proof when new providers are added
-- Settings (non-sensitive config like juros, multa) are stored in `metadata` (Json) field, not encrypted — only credentials get AES encryption
-- The `$transaction` array syntax works well for delete-all + create-many patterns (routing rules replacement)
-- Prisma `Prisma.JsonNull` must be used instead of `null` when explicitly setting a Json field to null
-
-## US-009 — Página de Configuração — Integrações Bancárias (2026-03-10) ✅
-
-### What was implemented
-- `src/app/(app)/configuracoes/integracoes-bancarias/page.tsx` — full CRUD config page
-- Provider cards grid: name, type (Badge secondary), active/inactive (Badge with dot), default star icon, rules count
-- Card actions: Edit button, Test Connection (Loader2 spinner + toast result), active/inactive Switch toggle
-- "Definir padrão" and "Remover" ghost buttons per card
-- Empty state with Landmark icon and CTA button
-- Create/Edit Dialog (max-w-2xl, scrollable):
-  - Name + Type dropdown (from registry, disabled on edit)
-  - Dynamic credential fields rendered from configSchema: text, password (with Eye/EyeOff toggle), number, select, boolean
-  - Dynamic settings fields from settingsSchema
-  - Sandbox toggle, Default toggle
-  - Webhook URL read-only (click to copy) — only shown for existing providers
-  - Routing rules section: add/remove rules, each with priority (number), clientType (PF/PJ/Qualquer via Select), minValue, maxValue, tags (comma-separated text)
-- Delete confirmation Dialog with destructive button
-- All actions use server actions from ./actions
-- Uses useCompany() for companyId
-- Loads providers + registry on mount via useEffect + getPaymentProviders + getAvailableProviders
-
-### Learnings
-- DynamicField component pattern works well for rendering configSchema — switch on field.type, handle password visibility via parent Set<string> state
-- Routing rules use a "__any__" sentinel value for clientType "Qualquer" since Select requires non-empty string values — converted to null on save
-- Tags use simple comma-separated text input, split/trim/filter on save via formToRule()
-- Dialog max-h-[90vh] overflow-y-auto scrollbar-thin keeps modal usable with many fields
-- When editing a provider, changing type resets credentials/settings (new schema), but keeping same type preserves existing values
-- Password fields in edit mode: leaving blank preserves existing value (handled by server action)
-- Webhook URL click-to-copy uses navigator.clipboard.writeText + toast feedback
-- All existing shadcn/ui components were sufficient: Card, Dialog, Button, Input, Select, Switch, Badge — no new components needed
-
-## US-010 — Sidebar + menu item Integrações Bancárias (2026-03-10) ✅
-
-### What was implemented
-- Added `Landmark` icon import from lucide-react to sidebar.tsx
-- Added "Integrações Bancárias" child item under Configurações menu
-- Position: after "Fiscal" (Receipt icon), before "Canais" (Radio icon)
-- Link: /configuracoes/integracoes-bancarias
-- Highlight active via existing sidebar child-item logic (pathname match)
-
-### Learnings
-- Sidebar children render in array order — position in the array = position in the UI
-- The sidebar child active state is handled by the existing `childActive` check: `pathname === child.href || pathname.startsWith(child.href + "/")`
-- No new component needed — just adding to the `navItems` children array
-
-## US-013 — PinBank provider placeholder (2026-03-10) ✅
-
-### What was implemented
-- `src/lib/payment/providers/pinbank.provider.ts` — PinBankProvider class implementing PaymentGateway
-- All methods throw `new Error('PinBank provider não implementado — aguardando documentação da API')`
-- `testConnection()` returns `{ ok: false, message: 'Provider em desenvolvimento' }` (does NOT throw)
-- factory.ts updated: `case "pinbank"` now returns `new PinBankProvider()` instead of throwing
-- Import added to factory.ts
-
-### Learnings
-- ESLint `no-unused-vars` rule in this project doesn't allow underscore-prefixed params either — must omit unused params entirely (same pattern as MockProvider)
-- Don't import types that aren't used (e.g., `CreateBoletoInput` not needed when params are omitted)
-- testConnection is the only method that returns normally — all others throw, which is the correct pattern for a placeholder provider
-
-## US-011 — Seletor de banco na proposta (2026-03-10) ✅
-
-### What was implemented
-- Server actions `getProvidersForProposal(companyId)` and `previewRoutingForProposal(companyId, clientType, value)` in propostas/actions.ts
-- Provider selector in Generate Boletos dialog with 3 states:
-  - 0 providers: warning alert with link to Configurações → Integrações Bancárias
-  - 1 provider: badge display only (no dropdown needed)
-  - Multiple providers: dropdown with "⚡ Automático (BankName)" default + all active providers
-- previewRouting called on dialog open to show which bank auto-routing would select
-- Tooltip on auto mode explains which routing rule matched
-- selectedProviderId passed to generateBoletosForProposal (null = automatic)
-- ProposalDetail extended with `clientType` field for routing context
-
-### Learnings
-- previewRouting is a server function — needs a wrapper server action (`previewRoutingForProposal`) for client-side consumption
-- Loading providers on dialog open (not on page load) avoids unnecessary queries
-- Single provider case doesn't need dropdown — simpler UX with just a badge
-
-## US-012 — Exibir dados do gateway no boleto + badge no financeiro (2026-03-10) ✅
-
-### What was implemented
-- `BoletoGatewayInfo` expandable component in proposal detail: nosso número, linha digitável (with copy button), URL (clickable), PDF (download), QR code (image)
-- BoletoRow type extended with `providerName`, `manualOverride`, `gatewayData`
-- `listBoletosForProposal` now includes provider relation for provider name
-- Boletos table: new "Banco" column with provider badge + Manual badge
-- `gatewayData=null` shows "Gerado localmente" fallback
-- Financeiro/receber: ReceivableRow extended with `providerName` and `manualOverride`
-- listReceivables enriches data by batch-querying boletos matching (clientId + value + dueDate)
-- New "Banco" column in accounts receivable table with provider badge
-
-### Learnings
-- AccountReceivable has no FK to Boleto — matching by (clientId + value + dueDate) works because both are created in same transaction with identical values
-- The boleto OR query groups by proposal.clientId since boleto doesn't have direct clientId
-- navigator.clipboard.writeText needs to be wrapped in try/catch for security context failures
-- Expandable gateway info avoids table clutter — details shown on demand
+# Progress — AI Personalization
+
+> Feature: Personalização da IA — resposta automática multi-provider para WhatsApp e Email
+> Branch: feat/ai-personalization
+> Spec: dev/specs/ai-personalization.md
+
+## Contexto Inicial
+
+### O que já existe no código
+- `src/lib/ai/provider.ts` — suporta OpenAI, DeepSeek, Anthropic. Lê config de env vars globais (AI_PROVIDER, AI_API_KEY, AI_MODEL)
+- `src/lib/ai/agent.ts` — agent loop com tools, funciona só para WhatsApp
+- `src/lib/ai/tools.ts` — 6 tools: SEARCH_DOCUMENTS, GET_CLIENT_INFO, GET_HISTORY, RESPOND, ESCALATE, CREATE_NOTE
+- `src/lib/ai/tool-executor.ts` — executa as tools, RESPOND envia via WhatsApp
+- `src/lib/ai/embeddings.ts` — RAG com embeddings OpenAI (provider separado via AI_EMBEDDING_*)
+- `src/lib/workers/ai-agent.ts` — BullMQ worker que checa AiConfig e roda o agent
+- `src/lib/workers/whatsapp-inbound.ts` — enfileira no aiAgentQueue após criar TicketMessage
+- `src/lib/workers/email-inbound.ts` — NÃO enfileira no aiAgentQueue (precisa adicionar)
+- `src/app/(app)/configuracoes/ai/` — página de config com: toggle, persona, welcome message, keywords, max iterations
+- `src/lib/encryption.ts` — encrypt/decrypt AES já existente (usado por canais de email e payment providers)
+
+### Schema atual (AiConfig)
+```prisma
+model AiConfig {
+  id                 String   @id @default(cuid())
+  companyId          String   @unique
+  enabled            Boolean  @default(false)
+  persona            String   @db.Text
+  welcomeMessage     String?  @db.Text
+  escalationKeywords String[]
+  maxIterations      Int      @default(5)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  company Company @relation(...)
+}
+```
+
+### Padrões a seguir
+- encrypt/decrypt: mesmo de `src/lib/encryption.ts` (AES-256-GCM)
+- Server actions: requireCompanyAccess + requireAdmin + logAuditEvent
+- Mascarar segredos: últimos 4 chars visíveis (padrão de payment-providers US-008)
+- Migration: manual SQL se shadow DB não for acessível (padrão do projeto)
+- DB via SSH tunnel: `ssh -f -N -L 15432:10.0.1.10:5432 root@coolify.boletoapi.com`
+
+## US-001 — Schema Prisma AI Personalization (2026-03-15)
+
+### O que foi feito
+- Adicionados 9 campos novos ao AiConfig: provider, apiKey, model, whatsappEnabled, emailEnabled, emailPersona, emailSignature, dailySpendLimitBrl, temperature
+- Criada tabela AiUsageLog com indexes em (companyId, createdAt) e (aiConfigId, createdAt)
+- Relation usageLogs AiUsageLog[] adicionada ao AiConfig
+- Migration manual SQL aplicada no banco de produção via SSH tunnel
+- prisma validate, prisma generate e npm run lint passaram sem erros
+
+### Lições
+- ⏳ O item do 1Password "MendesERP Database" usa campo "connection_string", não "DATABASE_URL"
+- ⏳ Para aplicar migration manual: ssh tunnel (porta 15432) + psql + INSERT em _prisma_migrations
+- ⏳ Float no Prisma mapeia para DOUBLE PRECISION no PostgreSQL (usado para temperature)
+
+## US-002 — Refatorar provider.ts multi-provider (2026-03-15)
+
+### O que foi feito
+- chatCompletion() agora recebe ProviderConfig como 3º parâmetro obrigatório (não lê mais process.env)
+- Retorno AiResponse inclui usage: { inputTokens, outputTokens } extraído da resposta da API (OpenAI-compat e Anthropic)
+- 5 providers suportados: openai, anthropic, deepseek, grok, qwen
+- Grok usa base URL https://api.x.ai (OpenAI-compatible)
+- Qwen usa base URL https://dashscope.aliyuncs.com/compatible-mode (OpenAI-compatible)
+- Default models adicionados: grok='grok-2', qwen='qwen-max'
+- Helper getEnvProviderConfig() criado para backward compat (lê AI_PROVIDER/AI_API_KEY/AI_MODEL)
+- agent.ts atualizado: usa apiKey do AiConfig se disponível, senão faz fallback para getEnvProviderConfig()
+- npm run lint passa sem erros
+
+### Lições
+- ⏳ Anthropic retorna usage em data.usage.input_tokens/output_tokens; OpenAI-compat usa data.usage.prompt_tokens/completion_tokens
+- ⏳ O ChatCompletionOptions interno foi eliminado — ProviderConfig cobre tudo (provider, apiKey, model, temperature, maxTokens)
+- ⏳ embeddings.ts não foi tocado (usa AI_EMBEDDING_* separadamente, conforme spec)
+
+## US-003 — Cost tracker + model suggester (2026-03-15)
+
+### O que foi feito
+- Criado src/lib/ai/cost-tracker.ts com: logUsage(), getTodaySpend(), getUsageSummary()
+- Criado src/lib/ai/model-suggester.ts com: suggestModel()
+- Tabela MODEL_PRICING cobre 10 modelos: gpt-4o, gpt-4o-mini, claude-opus-4-20250514, claude-sonnet-4-20250514, claude-haiku-4-20250414, grok-2, grok-2-mini, qwen-max, qwen-plus, qwen-turbo
+- BRL_USD_RATE = 5.80 como constante nomeada exportada
+- getUsageSummary retorna breakdown por canal e por modelo usando groupBy do Prisma
+- suggestModel retorna ModelSuggestion { model, estimatedDailyCostBrl } — o modelo mais potente que cabe no orçamento
+- FALLBACK_PRICING para modelos desconhecidos (input: 1.0, output: 3.0 por 1M tokens)
+- npm run lint passa sem erros
+
+### Lições
+- ⏳ Prisma Decimal precisa ser instanciado com `new Decimal(value.toFixed(N))` para controlar precision
+- ⏳ groupBy do Prisma retorna _sum como Decimal | null — sempre usar Number() para converter
+- ⏳ MODEL_PRICING e BRL_USD_RATE exportados do cost-tracker para reuso no model-suggester (evita duplicação)
+
+## US-004 — Adaptar agent.ts para multi-canal + provider config (2026-03-15)
+
+### O que foi feito
+- runAgent() agora recebe parâmetro channel: 'WHATSAPP' | 'EMAIL' (default 'WHATSAPP' para backward compat)
+- Descriptografa apiKey via decrypt() de encryption.ts antes de montar ProviderConfig
+- Fallback para getEnvProviderConfig() quando empresa não tem apiKey configurada
+- Verifica whatsappEnabled/emailEnabled antes de processar — retorna error específico se desabilitado
+- Verifica dailySpendLimitBrl via getTodaySpend() — retorna 'daily_spend_limit_reached' sem chamar LLM
+- Usa emailPersona quando channel=EMAIL e emailPersona não é null, senão usa persona padrão
+- System prompts separados: buildWhatsAppSystemPrompt() (conciso, direto) e buildEmailSystemPrompt() (formal, inclui assinatura)
+- Cada chamada a chatCompletion() tem logUsage() logo após, registrando tokens no AiUsageLog
+- Terminal actions expandidas: RESPOND e RESPOND_EMAIL ambos param shouldStop=true
+- ai-agent.ts worker passa channel do job data para runAgent()
+- whatsapp-inbound.ts inclui channel: 'WHATSAPP' no job data do aiAgentQueue
+
+### Lições
+- ⏳ Decimal do Prisma precisa de Number() para comparação (dailySpendLimitBrl é Decimal no DB)
+- ⏳ O contact model do Prisma (AdditionalContact) tem campo email — útil para futura resolução de destinatário de email
+- ⏳ O default do channel param garante backward compat — callers existentes não precisam mudar
+
+## US-005 — Nova tool RESPOND_EMAIL + enfileirar email inbound no ai-agent (2026-03-15)
+
+### O que foi feito
+- Nova tool RESPOND_EMAIL adicionada em tools.ts com params: subject (string) e message (string, suporta HTML simples)
+- Criadas listas de tools por canal: WHATSAPP_TOOLS (com RESPOND) e EMAIL_TOOLS (com RESPOND_EMAIL) + helper getToolsForChannel()
+- tool-executor.ts: novo case RESPOND_EMAIL que resolve email do destinatário a partir de ticket.contact.email ou ticket.client.email, cria TicketMessage e enfileira no emailOutboundQueue
+- Se não houver email do contato/cliente, retorna erro orientando uso de ESCALATE
+- email-inbound.ts: após criar TicketMessage de INBOUND, enfileira no aiAgentQueue com channel='EMAIL' (análogo ao whatsapp-inbound)
+- agent.ts: usa getToolsForChannel(channel) em vez de ALL_TOOLS, garantindo que EMAIL recebe RESPOND_EMAIL e WhatsApp recebe RESPOND
+- agent.ts: fallback de texto direto (sem tool call) agora usa RESPOND_EMAIL para canal EMAIL com subject "Re: Atendimento"
+- ai-agent.ts worker já passava channel do job data para runAgent() (feito em US-004)
+- System prompts já diferenciavam ferramentas por canal (feito em US-004)
+- npm run lint passa sem erros
+
+### Lições
+- ⏳ O emailOutboundQueue precisa de import direto de @/lib/queue no tool-executor — não é injetado via contexto
+- ⏳ O EmailOutboundJobData espera messageId, ticketId, companyId, to, subject, content, attachmentIds — criar TicketMessage ANTES de enfileirar para ter o messageId
+- ⏳ A resolução de email do destinatário segue a cadeia: ticket.contact.email → ticket.client.email → erro com sugestão de ESCALATE
+- ⏳ ALL_TOOLS ainda exportado para backward compat mas não usado mais no agent loop — getToolsForChannel() é o padrão agora
+
+## US-006 — Encriptação da API key + server actions de config (2026-03-15)
+
+### O que foi feito
+- getAiConfig atualizado para retornar todos os campos novos (provider, apiKey mascarada, model, whatsappEnabled, emailEnabled, emailPersona, emailSignature, dailySpendLimitBrl, temperature)
+- apiKey é mascarada no retorno: decrypt → últimos 4 chars visíveis, resto **** (mesmo padrão de payment-providers)
+- updateAiConfig aceita todos os novos campos; apiKey é encriptada via encrypt() antes de salvar
+- Se apiKey vier vazia ou mascarada (começa com ****) no update, mantém a existente no banco (não sobrescreve)
+- Nova action testAiConnection(companyId): descriptografa apiKey, faz chatCompletion com message 'Hi' e maxTokens 5, retorna { ok, error? }
+- Nova action listAvailableModels(companyId): para OpenAI faz GET /v1/models com apiKey (filtra modelos gpt-*), para outros retorna lista hardcoded
+- Nova action getAiUsageSummary(companyId, days): delega para getUsageSummary do cost-tracker
+- Todas as actions verificam requireCompanyAccess e requireAdmin (exceto getAiConfig que só exige requireCompanyAccess para leitura)
+- Audit log em updateAiConfig com apiKey redacted no payload
+- apiKey no create usa null como fallback (não undefined) para compatibilidade com Prisma
+- npm run lint passa sem erros
+
+### Lições
+- ⏳ A mascaração de apiKey precisa descriptografar primeiro (valor no banco é ciphertext) — decrypt antes de slice(-4)
+- ⏳ Prisma upsert: campo no update não pode ser undefined se quiser "não alterar" — simplesmente omitir o campo do objeto update
+- ⏳ O type UsageSummary precisa ser importado com `type` do cost-tracker para reexportar no actions
+- ⏳ Para OpenAI /v1/models, filtrar por prefixo gpt-* e excluir instruct/realtime/audio para lista limpa
+
+## US-007 — Frontend: refatorar /configuracoes/ai com tabs (2026-03-15)
+
+### O que foi feito
+- Página /configuracoes/ai completamente refatorada com 4 tabs: Geral, WhatsApp, Email, Consumo
+- Tab Geral: seletor de provider (OpenAI, Anthropic, Grok, Qwen), campo API key (password input), botão 'Testar Conexão' com feedback visual (ícones e texto), seletor de modelo dinâmico via listAvailableModels, slider de temperatura (0.0-1.0), input de limite diário (R$), badge de sugestão de modelo baseado no orçamento
+- Tab WhatsApp: toggle whatsappEnabled, persona textarea, welcome message, escalation keywords com chips removíveis, max iterations
+- Tab Email: toggle emailEnabled, emailPersona textarea com placeholder herdado do WhatsApp, emailSignature textarea
+- Tab Consumo: gasto de hoje vs limite, total 30 dias, breakdown por canal e modelo em tabelas
+- Ao trocar provider, modelo é limpo e lista recarregada automaticamente
+- API key usa input type="password" — nunca visível em claro
+- Toggle de enabled movido para o header da página (mais acessível)
+- Componente Slider do shadcn/ui instalado via npx shadcn@latest add slider
+- Novas server actions adicionadas: getTodaySpendAction, getSuggestedModel
+- npm run lint passa sem erros
+
+### Lições
+- ⏳ Slider do shadcn/ui precisa ser instalado separadamente (não vem por padrão)
+- ⏳ O componente Tabs já estava instalado (US anteriores ou setup inicial)
+- ⏳ Para o placeholder dinâmico do emailPersona, truncar a persona do WhatsApp para evitar texto longo demais
+- ⏳ Tab Consumo usa carregamento sob demanda (botão "Carregar dados") para não fazer queries desnecessárias ao abrir a página
+- ⏳ suggestModel é chamado client-side via server action wrapper (getSuggestedModel) porque precisa rodar no servidor para acessar cost-tracker
+
+## US-008 — Simulador de resposta IA (dry-run) (2026-03-15)
+
+### O que foi feito
+- Nova função runAgentDryRun() em agent.ts: executa o agent loop completo sem ticket real, sem salvar no banco, sem enviar mensagens
+- DryRunResult retorna: response, inputTokens, outputTokens, estimatedCostBrl
+- ToolContext expandido com campo opcional dryRun: boolean
+- tool-executor.ts: 5 funções dry-run dedicadas (GET_CLIENT_INFO, GET_HISTORY, RESPOND, RESPOND_EMAIL, ESCALATE, CREATE_NOTE) que retornam resultados simulados sem side effects
+- SEARCH_DOCUMENTS funciona igual no dry-run — usa base de conhecimento real da empresa para simulação fiel
+- Nova server action simulateAiResponse(companyId, message, channel) com rate limit in-memory (10/min por empresa)
+- Validação de input: mensagem não vazia, máximo 2000 caracteres
+- estimateCostBrl() helper usa MODEL_PRICING e BRL_USD_RATE do cost-tracker
+- Nova tab "Simulador" na página /configuracoes/ai com: toggle de canal (WhatsApp/Email), textarea de input, botão enviar, área de resposta, stats de tokens e custo
+- TabsList expandido de 4 para 5 colunas (grid-cols-5)
+- Enter para enviar, Shift+Enter para nova linha
+- Estados visuais: empty state, loading state, resultado com resposta + stats
+- npm run lint passa sem erros
+
+### Lições
+- ⏳ O dry-run não precisa de ticket real — runAgentDryRun recebe só companyId, message e channel
+- ⏳ SEARCH_DOCUMENTS deve funcionar igual no dry-run para que a simulação reflita a resposta real da IA com a base de conhecimento da empresa
+- ⏳ Rate limit in-memory (Map<companyId, timestamps[]>) é suficiente para server actions em Next.js — se houver múltiplas instâncias, migrar para Redis
+- ⏳ O dryRun flag no ToolContext permite que o dispatcher roteie para funções sem side effects sem alterar a interface do executeTool

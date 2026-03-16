@@ -536,6 +536,7 @@ export async function processWhatsAppInbound(job: Job<any>) {
       ticketId,
       companyId,
       messageContent: content,
+      channel: "WHATSAPP" as const,
     });
     console.log(
       `[whatsapp-inbound] Enqueued ai-agent job for ticket ${ticketId}`

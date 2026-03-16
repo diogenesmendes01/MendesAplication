@@ -1,4 +1,8 @@
+
+
 "use server";
+
+import { DEFAULT_MODELS } from "./pricing";
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
 
@@ -27,60 +31,77 @@ export interface AiToolDefinition {
 export interface AiResponse {
   content?: string | null;
   tool_calls?: AiToolCall[];
+  usage?: { inputTokens: number; outputTokens: number };
 }
 
-interface ChatCompletionOptions {
+export interface ProviderConfig {
+  provider: string; // openai | anthropic | deepseek | grok | qwen
+  apiKey: string;
   model?: string;
   temperature?: number;
   maxTokens?: number;
+}
+
+// ─── Provider constants ───────────────────────────────────────────────────────
+
+const PROVIDER_BASE_URLS: Record<string, string> = {
+  openai: "https://api.openai.com",
+  deepseek: "https://api.deepseek.com",
+  grok: "https://api.x.ai",
+  qwen: "https://dashscope.aliyuncs.com/compatible-mode",
+};
+
+// ─── Backward-compat helper ───────────────────────────────────────────────────
+
+/**
+ * Reads provider config from legacy environment variables.
+ * Use when caller does not have per-company config available.
+ */
+export async function getEnvProviderConfig(): Promise<ProviderConfig> {
+  const provider = process.env.AI_PROVIDER || "openai";
+  const apiKey = process.env.AI_API_KEY;
+  if (!apiKey) {
+    throw new Error("AI_API_KEY environment variable is not set");
+  }
+  return {
+    provider,
+    apiKey,
+    model: process.env.AI_MODEL || undefined,
+  };
 }
 
 // ─── Main entry point ─────────────────────────────────────────────────────────
 
 export async function chatCompletion(
   messages: AiMessage[],
-  tools?: AiToolDefinition[],
-  options?: ChatCompletionOptions
+  tools: AiToolDefinition[] | undefined,
+  config: ProviderConfig
 ): Promise<AiResponse> {
-  const provider = process.env.AI_PROVIDER || "openai";
   const timeout = parseInt(process.env.AI_TIMEOUT || "30000", 10);
 
-  switch (provider) {
-    case "openai":
-    case "deepseek":
-      return openaiCompatibleCompletion(provider, messages, tools, options, timeout);
-    case "anthropic":
-      return anthropicCompletion(messages, tools, options, timeout);
-    default:
-      throw new Error(`Provedor AI nao suportado: ${provider}`);
+  if (["openai", "deepseek", "grok", "qwen"].includes(config.provider)) {
+    return openaiCompatibleCompletion(config, messages, tools, timeout);
   }
+
+  if (config.provider === "anthropic") {
+    return anthropicCompletion(config, messages, tools, timeout);
+  }
+
+  throw new Error(`Provedor AI nao suportado: ${config.provider}`);
 }
 
-// ─── OpenAI / DeepSeek (Chat Completions API) ─────────────────────────────────
-
-const OPENAI_BASE_URLS: Record<string, string> = {
-  openai: "https://api.openai.com",
-  deepseek: "https://api.deepseek.com",
-};
-
-const DEFAULT_MODELS: Record<string, string> = {
-  openai: "gpt-4o",
-  deepseek: "deepseek-chat",
-  anthropic: "claude-sonnet-4-20250514",
-};
+// ─── OpenAI / DeepSeek / Grok / Qwen (Chat Completions API) ──────────────────
 
 async function openaiCompatibleCompletion(
-  provider: string,
+  config: ProviderConfig,
   messages: AiMessage[],
   tools?: AiToolDefinition[],
-  options?: ChatCompletionOptions,
   timeout = 30000
 ): Promise<AiResponse> {
-  const apiKey = process.env.AI_API_KEY;
-  if (!apiKey) throw new Error(`AI_API_KEY nao configurada para provider ${provider}`);
-
-  const baseUrl = OPENAI_BASE_URLS[provider] || OPENAI_BASE_URLS.openai;
-  const model = options?.model || process.env.AI_MODEL || DEFAULT_MODELS[provider];
+  const baseUrl =
+    PROVIDER_BASE_URLS[config.provider] || PROVIDER_BASE_URLS.openai;
+  const model =
+    config.model || DEFAULT_MODELS[config.provider] || DEFAULT_MODELS.openai;
 
   const body: Record<string, unknown> = {
     model,
@@ -95,12 +116,16 @@ async function openaiCompatibleCompletion(
   if (tools && tools.length > 0) {
     body.tools = tools.map((t) => ({
       type: "function",
-      function: { name: t.name, description: t.description, parameters: t.parameters },
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters,
+      },
     }));
   }
 
-  if (options?.temperature !== undefined) body.temperature = options.temperature;
-  if (options?.maxTokens) body.max_tokens = options.maxTokens;
+  if (config.temperature !== undefined) body.temperature = config.temperature;
+  if (config.maxTokens) body.max_tokens = config.maxTokens;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
@@ -110,29 +135,43 @@ async function openaiCompatibleCompletion(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${config.apiKey}`,
       },
       body: JSON.stringify(body),
       signal: controller.signal,
     });
 
     if (!res.ok) {
-      const errorBody = await res.text();
-      throw new Error(`${provider} API error ${res.status}: ${errorBody}`);
+      // Do not propagate raw error body — it may contain partial API keys
+      // (e.g. OpenAI 401: "Incorrect API key provided: sk-proj-abc...")
+      await res.text(); // consume body to avoid connection leaks
+      throw new Error(
+        `${config.provider} API error ${res.status}: [provider error body redacted]`
+      );
     }
 
     const data = await res.json();
     const choice = data.choices?.[0];
-    if (!choice) throw new Error(`${provider} API retornou resposta vazia`);
+    if (!choice) {
+      throw new Error(`${config.provider} API retornou resposta vazia`);
+    }
 
     const msg = choice.message;
     return {
       content: msg.content || null,
-      tool_calls: msg.tool_calls?.map((tc: Record<string, unknown>) => ({
-        id: tc.id as string,
-        type: "function" as const,
-        function: tc.function as { name: string; arguments: string },
-      })),
+      tool_calls: msg.tool_calls?.map(
+        (tc: Record<string, unknown>) => ({
+          id: tc.id as string,
+          type: "function" as const,
+          function: tc.function as { name: string; arguments: string },
+        })
+      ),
+      usage: data.usage
+        ? {
+            inputTokens: data.usage.prompt_tokens ?? 0,
+            outputTokens: data.usage.completion_tokens ?? 0,
+          }
+        : undefined,
     };
   } finally {
     clearTimeout(timer);
@@ -157,15 +196,13 @@ interface AnthropicMessage {
 }
 
 async function anthropicCompletion(
+  config: ProviderConfig,
   messages: AiMessage[],
   tools?: AiToolDefinition[],
-  options?: ChatCompletionOptions,
   timeout = 30000
 ): Promise<AiResponse> {
-  const apiKey = process.env.AI_API_KEY;
-  if (!apiKey) throw new Error("AI_API_KEY nao configurada para provider anthropic");
-
-  const model = options?.model || process.env.AI_MODEL || DEFAULT_MODELS.anthropic;
+  const model =
+    config.model || DEFAULT_MODELS.anthropic;
 
   // Extract system message (Anthropic uses a separate `system` param)
   let systemPrompt: string | undefined;
@@ -180,43 +217,45 @@ async function anthropicCompletion(
   }
 
   // Convert messages to Anthropic format
-  const anthropicMessages: AnthropicMessage[] = conversationMessages.map((m) => {
-    if (m.role === "assistant" && m.tool_calls && m.tool_calls.length > 0) {
-      // Assistant message with tool calls → tool_use content blocks
-      const content: AnthropicContent[] = [];
-      if (m.content) {
-        content.push({ type: "text", text: m.content });
+  const anthropicMessages: AnthropicMessage[] = conversationMessages.map(
+    (m) => {
+      if (m.role === "assistant" && m.tool_calls && m.tool_calls.length > 0) {
+        // Assistant message with tool calls → tool_use content blocks
+        const content: AnthropicContent[] = [];
+        if (m.content) {
+          content.push({ type: "text", text: m.content });
+        }
+        for (const tc of m.tool_calls) {
+          content.push({
+            type: "tool_use",
+            id: tc.id,
+            name: tc.function.name,
+            input: JSON.parse(tc.function.arguments),
+          });
+        }
+        return { role: "assistant", content };
       }
-      for (const tc of m.tool_calls) {
-        content.push({
-          type: "tool_use",
-          id: tc.id,
-          name: tc.function.name,
-          input: JSON.parse(tc.function.arguments),
-        });
-      }
-      return { role: "assistant", content };
-    }
 
-    if (m.role === "tool") {
-      // Tool result → tool_result content block
+      if (m.role === "tool") {
+        // Tool result → tool_result content block
+        return {
+          role: "user" as const,
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: m.tool_call_id || "",
+              content: m.content || "",
+            },
+          ],
+        };
+      }
+
       return {
-        role: "user" as const,
-        content: [
-          {
-            type: "tool_result",
-            tool_use_id: m.tool_call_id || "",
-            content: m.content || "",
-          },
-        ],
+        role: m.role as "user" | "assistant",
+        content: m.content || "",
       };
     }
-
-    return {
-      role: m.role as "user" | "assistant",
-      content: m.content || "",
-    };
-  });
+  );
 
   // Merge consecutive user messages (Anthropic requires alternating roles)
   const mergedMessages = mergeConsecutiveUserMessages(anthropicMessages);
@@ -224,11 +263,11 @@ async function anthropicCompletion(
   const body: Record<string, unknown> = {
     model,
     messages: mergedMessages,
-    max_tokens: options?.maxTokens || 4096,
+    max_tokens: config.maxTokens || 4096,
   };
 
   if (systemPrompt) body.system = systemPrompt;
-  if (options?.temperature !== undefined) body.temperature = options.temperature;
+  if (config.temperature !== undefined) body.temperature = config.temperature;
 
   if (tools && tools.length > 0) {
     body.tools = tools.map((t) => ({
@@ -246,7 +285,7 @@ async function anthropicCompletion(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": apiKey,
+        "x-api-key": config.apiKey,
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify(body),
@@ -254,8 +293,9 @@ async function anthropicCompletion(
     });
 
     if (!res.ok) {
-      const errorBody = await res.text();
-      throw new Error(`Anthropic API error ${res.status}: ${errorBody}`);
+      // Do not propagate raw error body — it may contain partial API keys
+      await res.text(); // consume body to avoid connection leaks
+      throw new Error(`Anthropic API error ${res.status}: [provider error body redacted]`);
     }
 
     const data = await res.json();
@@ -267,6 +307,7 @@ async function anthropicCompletion(
 
 function parseAnthropicResponse(data: {
   content: AnthropicContent[];
+  usage?: { input_tokens?: number; output_tokens?: number };
 }): AiResponse {
   let textContent: string | null = null;
   const toolCalls: AiToolCall[] = [];
@@ -289,6 +330,12 @@ function parseAnthropicResponse(data: {
   return {
     content: textContent,
     tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
+    usage: data.usage
+      ? {
+          inputTokens: data.usage.input_tokens ?? 0,
+          outputTokens: data.usage.output_tokens ?? 0,
+        }
+      : undefined,
   };
 }
 

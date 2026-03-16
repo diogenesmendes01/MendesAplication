@@ -1,6 +1,7 @@
 import { Job } from "bullmq";
 import { prisma } from "@/lib/prisma";
-import { chunkText, generateEmbedding } from "@/lib/ai/embeddings";
+import { chunkText } from "@/lib/ai/embedding-utils";
+import { generateEmbedding } from "@/lib/ai/embeddings";
 import fs from "fs/promises";
 import { PDFParse } from "pdf-parse";
 

@@ -3,6 +3,8 @@
 import { prisma } from "@/lib/prisma";
 import { searchDocuments } from "./embeddings";
 import { sendTextMessage } from "@/lib/whatsapp-api";
+import { emailOutboundQueue } from "@/lib/queue";
+import { sanitizeEmailHtml } from "./sanitize-utils";
 
 // ─── Context ─────────────────────────────────────────────────────────────────
 
@@ -11,6 +13,8 @@ export interface ToolContext {
   companyId: string;
   clientId: string;
   contactPhone: string; // Digits-only phone for WhatsApp replies
+  channel?: "WHATSAPP" | "EMAIL"; // Originating channel — used for audit logs
+  dryRun?: boolean;     // When true, tools return results without side effects
 }
 
 // ─── Main dispatcher ─────────────────────────────────────────────────────────
@@ -25,14 +29,22 @@ export async function executeTool(
       case "SEARCH_DOCUMENTS":
         return await executeSearchDocuments(args, context);
       case "GET_CLIENT_INFO":
+        if (context.dryRun) return executeDryRunGetClientInfo();
         return await executeGetClientInfo(context);
       case "GET_HISTORY":
+        if (context.dryRun) return executeDryRunGetHistory();
         return await executeGetHistory(args, context);
       case "RESPOND":
+        if (context.dryRun) return executeDryRunRespond(args);
         return await executeRespond(args, context);
+      case "RESPOND_EMAIL":
+        if (context.dryRun) return executeDryRunRespondEmail(args);
+        return await executeRespondEmail(args, context);
       case "ESCALATE":
+        if (context.dryRun) return executeDryRunEscalate(args);
         return await executeEscalate(args, context);
       case "CREATE_NOTE":
+        if (context.dryRun) return executeDryRunCreateNote(args);
         return await executeCreateNote(args, context);
       default:
         return `Ferramenta "${toolName}" nao disponivel.`;
@@ -60,6 +72,8 @@ async function executeSearchDocuments(
   const query = args.query as string;
   if (!query) return "Erro: query nao fornecida.";
 
+  // SEARCH_DOCUMENTS works the same in dry-run — it reads from the real
+  // knowledge base so the simulation accurately reflects actual behaviour.
   const results = await searchDocuments(query, context.companyId);
 
   if (results.length === 0) {
@@ -219,7 +233,7 @@ async function executeRespond(
       ticketId: context.ticketId,
       senderId: null,
       content: message,
-      channel: "WHATSAPP",
+      channel: context.channel ?? "WHATSAPP",
       direction: "OUTBOUND",
       origin: "SYSTEM",
       isAiGenerated: true,
@@ -227,6 +241,80 @@ async function executeRespond(
   });
 
   return `Mensagem enviada ao cliente com sucesso.`;
+}
+
+// ─── HTML Sanitizer ───────────────────────────────────────────────────────────
+//
+// Strips all HTML tags except a small allow-list, and removes all attributes
+// from allowed tags to prevent prompt-injection attacks where inbound email
+// content could cause the LLM to emit malicious HTML (tracking pixels,
+// phishing links, arbitrary scripts) in outgoing replies.
+//
+// TODO(#103): Replace with `sanitize-html` package for production-grade
+// sanitization once the dependency is approved and added.
+//
+// ─── RESPOND_EMAIL ───────────────────────────────────────────────────────────
+
+async function executeRespondEmail(
+  args: Record<string, unknown>,
+  context: ToolContext
+): Promise<string> {
+  // Strip CRLF to prevent SMTP header injection via LLM-generated subject
+  const subject = (args.subject as string)?.replace(/[\r\n]+/g, " ").trim();
+  const rawMessage = args.message as string;
+  if (!subject) return "Erro: assunto (subject) nao fornecido.";
+  if (!rawMessage) return "Erro: mensagem (message) nao fornecida.";
+
+  // Sanitize LLM-generated HTML before dispatch to prevent prompt-injection
+  // from inbound email content influencing outgoing email markup.
+  // See: https://github.com/diogenesmendes01/MendesAplication/issues/103
+  const message = sanitizeEmailHtml(rawMessage);
+
+  // Resolve recipient email from ticket -> contact.email or client.email
+  const ticket = await prisma.ticket.findUnique({
+    where: { id: context.ticketId },
+    include: {
+      contact: { select: { email: true } },
+      client: { select: { email: true } },
+    },
+  });
+
+  if (!ticket) {
+    return "Erro: ticket nao encontrado.";
+  }
+
+  const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const recipientEmail = ticket.contact?.email ?? ticket.client?.email ?? null;
+
+  if (!recipientEmail || !EMAIL_REGEX.test(recipientEmail)) {
+    return "Erro: nao foi possivel encontrar o email do contato ou cliente vinculado ao ticket. Use ESCALATE para encaminhar a um atendente humano que podera obter o email.";
+  }
+
+  // Create TicketMessage record first (email-outbound needs the messageId)
+  const ticketMessage = await prisma.ticketMessage.create({
+    data: {
+      ticketId: context.ticketId,
+      senderId: null,
+      content: message,
+      channel: "EMAIL",
+      direction: "OUTBOUND",
+      origin: "SYSTEM",
+      isAiGenerated: true,
+    },
+  });
+
+  // Enqueue for email outbound delivery
+  await emailOutboundQueue.add("send-email", {
+    messageId: ticketMessage.id,
+    ticketId: context.ticketId,
+    companyId: context.companyId,
+    to: recipientEmail,
+    subject,
+    content: message,
+    attachmentIds: [],
+  });
+
+  return `Email enfileirado para envio ao destinatario ${recipientEmail} com assunto "${subject}".`;
 }
 
 // ─── ESCALATE ────────────────────────────────────────────────────────────────
@@ -252,7 +340,7 @@ async function executeEscalate(
       ticketId: context.ticketId,
       senderId: null,
       content: `[Escalacao AI] Motivo: ${reason}`,
-      channel: "WHATSAPP",
+      channel: context.channel ?? "WHATSAPP",
       direction: "OUTBOUND",
       origin: "SYSTEM",
       isInternal: true,
@@ -283,4 +371,53 @@ async function executeCreateNote(
   });
 
   return "Nota interna criada com sucesso.";
+}
+
+// ─── Dry-run tool implementations ────────────────────────────────────────────
+// These return simulated results without any side effects.
+
+function executeDryRunGetClientInfo(): string {
+  return [
+    "Nome: Cliente Simulação",
+    "Tipo: PF",
+    "CPF/CNPJ: ***.***.***-**",
+    "Email: simulacao@exemplo.com",
+    "Telefone: (11) 99999-9999",
+    "Endereco: Rua Exemplo, 123 - Campinas/SP",
+    "",
+    "Titulos pendentes: 0",
+    "Titulos vencidos: 0",
+    "",
+    "Tickets anteriores: nenhum",
+  ].join("\n");
+}
+
+function executeDryRunGetHistory(): string {
+  return "Nenhum historico de mensagens encontrado. (Modo simulação)";
+}
+
+function executeDryRunRespond(args: Record<string, unknown>): string {
+  const message = args.message as string;
+  if (!message) return "Erro: mensagem nao fornecida.";
+  return `[SIMULAÇÃO] Mensagem que seria enviada via WhatsApp: "${message}"`;
+}
+
+function executeDryRunRespondEmail(args: Record<string, unknown>): string {
+  // Strip CRLF to prevent SMTP header injection via LLM-generated subject (consistency with real path)
+  const subject = (args.subject as string)?.replace(/[\r\n]+/g, " ").trim();
+  const message = args.message as string;
+  if (!subject) return "Erro: assunto (subject) nao fornecido.";
+  if (!message) return "Erro: mensagem (message) nao fornecida.";
+  return `[SIMULAÇÃO] Email que seria enviado — Assunto: "${subject}" | Corpo: "${message}"`;
+}
+
+function executeDryRunEscalate(args: Record<string, unknown>): string {
+  const reason = (args.reason as string) || "Solicitacao de atendimento humano";
+  return `[SIMULAÇÃO] Ticket seria escalado para atendente humano. Motivo: ${reason}`;
+}
+
+function executeDryRunCreateNote(args: Record<string, unknown>): string {
+  const content = args.content as string;
+  if (!content) return "Erro: conteudo da nota nao fornecido.";
+  return `[SIMULAÇÃO] Nota interna que seria criada: "${content}"`;
 }
