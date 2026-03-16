@@ -10,6 +10,7 @@ import { decrypt } from "@/lib/encryption";
 import { getTodaySpend, logUsage } from "./cost-tracker";
 import { MODEL_PRICING, DEFAULT_MODELS } from "./pricing";
 import { getBrlUsdRateSync } from "./exchange-rate";
+import { logger } from "@/lib/logger";
 
 // ─── Result types ─────────────────────────────────────────────────────────────
 
@@ -87,9 +88,7 @@ async function runAgentLoop(options: {
   for (let iteration = 0; iteration < maxIterations; iteration++) {
     // ── Global timeout guard ───────────────────────────────────────────────
     if (Date.now() - startTime > timeout) {
-      console.warn(
-        `[ai-agent] Timeout after ${iteration} iterations for context ${contextId}`
-      );
+      logger.warn({ iteration, contextId }, "Agent timeout");
       return {
         responded: false,
         escalated: false,
@@ -133,9 +132,7 @@ async function runAgentLoop(options: {
           }
 
           if (!dryRun) {
-            console.log(
-              `[ai-agent] Executing tool ${toolName} for ${contextId} (iteration ${iteration + 1})`
-            );
+            logger.info({ tool: toolName, contextId, iteration: iteration + 1 }, "Executing tool");
           }
 
           const result = await executeTool(toolName, args, toolContext);
@@ -175,9 +172,7 @@ async function runAgentLoop(options: {
       // ── LLM returned text only (no tool calls) ─────────────────────────
       } else if (response.content) {
         if (!dryRun) {
-          console.log(
-            `[ai-agent] Direct text response for ${contextId} (iteration ${iteration + 1})`
-          );
+          logger.info({ contextId, iteration: iteration + 1 }, "Direct text response from LLM");
           const respondTool =
             toolContext.channel === "EMAIL" ? "RESPOND_EMAIL" : "RESPOND";
           const respondArgs =
@@ -200,9 +195,7 @@ async function runAgentLoop(options: {
       // ── Empty response ─────────────────────────────────────────────────
       } else {
         if (!dryRun) {
-          console.warn(
-            `[ai-agent] Empty response from LLM for ${contextId} (iteration ${iteration + 1})`
-          );
+          logger.warn({ contextId, iteration: iteration + 1 }, "Empty response from LLM");
         }
         return {
           responded: false,
@@ -215,10 +208,7 @@ async function runAgentLoop(options: {
         };
       }
     } catch (error) {
-      console.error(
-        `[ai-agent] Error in iteration ${iteration + 1} for ${contextId}:`,
-        error
-      );
+      logger.error({ contextId, iteration: iteration + 1, error }, "Error in agent iteration");
       messages.push({
         role: "user",
         content: `Erro interno ao processar a solicitação. Tente uma abordagem diferente.`,
@@ -228,9 +218,7 @@ async function runAgentLoop(options: {
 
   // Max iterations reached without terminal action
   if (!options.dryRun) {
-    console.warn(
-      `[ai-agent] Max iterations (${maxIterations}) reached for ${contextId}`
-    );
+    logger.warn({ maxIterations, contextId }, "Max iterations reached");
   }
 
   return {
@@ -297,9 +285,7 @@ export async function runAgent(
     );
 
     if (matchedKeyword) {
-      console.log(
-        `[runAgent] Escalation keyword "${matchedKeyword}" detected in ticket ${ticketId}, escalating without LLM`
-      );
+      logger.info({ ticketId, keyword: matchedKeyword }, "Escalation keyword detected, escalating without LLM");
 
       await prisma.ticket.update({
         where: { id: ticketId },
@@ -338,7 +324,7 @@ export async function runAgent(
       temperature: aiConfig.temperature,
     };
   } else {
-    console.warn(`[ai-agent] No apiKey for company ${companyId}, falling back to global env — usage costs unattributed`);
+    logger.warn({ companyId }, "No apiKey for company, falling back to global env — usage costs unattributed");
     providerConfig = await getEnvProviderConfig();
   }
 
@@ -455,11 +441,7 @@ export async function runAgent(
       if (aiConfig.dailySpendLimitBrl) {
         const postCallSpend = await getTodaySpend(companyId);
         if (postCallSpend > Number(aiConfig.dailySpendLimitBrl)) {
-          console.warn(
-            `[ai-agent] Daily spend overshoot for company ${companyId}: ` +
-            `${postCallSpend.toFixed(4)} BRL > limit ${aiConfig.dailySpendLimitBrl} BRL ` +
-            `(ticket: ${ticketId}). TOCTOU race detected — consider Redis atomic counter.`
-          );
+          logger.warn({ companyId, spend: postCallSpend, limit: Number(aiConfig.dailySpendLimitBrl), ticketId }, "Daily spend overshoot — TOCTOU race detected");
         }
       }
     },
@@ -522,10 +504,7 @@ export async function runAgentDryRun(
     );
 
     if (matchedKeyword) {
-      console.log(
-        `[runAgentDryRun] Escalation keyword "${matchedKeyword}" detected — ` +
-        `simulation would escalate without calling LLM`
-      );
+      logger.info({ keyword: matchedKeyword }, "Dry-run: escalation keyword detected, would escalate without LLM");
       return {
         response: `[Simulação] Seria escalado automaticamente — palavra-chave detectada: "${matchedKeyword}"`,
         inputTokens: 0,
@@ -550,7 +529,7 @@ export async function runAgentDryRun(
       temperature: aiConfig.temperature,
     };
   } else {
-    console.warn(`[ai-agent] No apiKey for company ${companyId}, falling back to global env — usage costs unattributed`);
+    logger.warn({ companyId }, "No apiKey for company, falling back to global env — usage costs unattributed");
     providerConfig = await getEnvProviderConfig();
   }
 
