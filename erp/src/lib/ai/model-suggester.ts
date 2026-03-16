@@ -1,4 +1,5 @@
-import { MODEL_PRICING, BRL_USD_RATE } from "@/lib/ai/pricing";
+import { MODEL_PRICING } from "@/lib/ai/pricing";
+import { getBrlUsdRateSync } from "@/lib/ai/exchange-rate";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -43,7 +44,7 @@ function estimateDailyCostBrl(model: string): number {
       ESTIMATED_DAILY_OUTPUT_TOKENS * pricing.output) /
     1_000_000;
 
-  return costUsd * BRL_USD_RATE;
+  return costUsd * getBrlUsdRateSync();
 }
 
 // ─── suggestModel ─────────────────────────────────────────────────────────────

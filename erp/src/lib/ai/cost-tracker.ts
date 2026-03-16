@@ -4,8 +4,8 @@ import { prisma } from "@/lib/prisma";
 import {
   MODEL_PRICING,
   FALLBACK_PRICING,
-  BRL_USD_RATE,
 } from "@/lib/ai/pricing";
+import { getBrlUsdRate } from "@/lib/ai/exchange-rate";
 
 // ─── logUsage ─────────────────────────────────────────────────────────────────
 
@@ -25,6 +25,7 @@ interface LogUsageParams {
 
 /**
  * Calculates cost and persists a usage record in AiUsageLog.
+ * Uses dynamic BRL/USD exchange rate from AwesomeAPI (24h cache).
  */
 export async function logUsage(params: LogUsageParams) {
   const pricing = MODEL_PRICING[params.model] ?? FALLBACK_PRICING;
@@ -34,7 +35,8 @@ export async function logUsage(params: LogUsageParams) {
       params.outputTokens * pricing.output) /
     1_000_000;
 
-  const costBrl = costUsd * BRL_USD_RATE;
+  const brlUsdRate = await getBrlUsdRate();
+  const costBrl = costUsd * brlUsdRate;
 
   await prisma.aiUsageLog.create({
     data: {

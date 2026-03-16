@@ -36,11 +36,16 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
 export const FALLBACK_PRICING: ModelPricing = { input: 1.0, output: 3.0 };
 
 /**
- * BRL/USD exchange rate.
- * Configurable via BRL_USD_RATE env var so ops can update it on deploy
- * without a code change. Defaults to 5.8 as a safe fallback.
- * TODO: Replace with a real-time exchange rate API in the future
- * (e.g., BrasilAPI, AwesomeAPI — update at least 1x/day).
+ * BRL/USD exchange rate (synchronous fallback).
+ *
+ * For async consumers (cost-tracker, agent), prefer getBrlUsdRate() from
+ * exchange-rate.ts which fetches the real-time rate from AwesomeAPI.
+ *
+ * This sync constant is kept for backwards compatibility and as fallback
+ * when the API is unreachable.
+ *
+ * Configurable via BRL_USD_RATE env var.
+ * See: https://github.com/diogenesmendes01/MendesAplication/issues/125
  */
 const _brlUsdRate = parseFloat(process.env.BRL_USD_RATE ?? "5.8");
 export const BRL_USD_RATE =
