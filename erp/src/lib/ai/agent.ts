@@ -279,6 +279,38 @@ export async function runAgent(
     }
   }
 
+  // ── Check escalation keywords (fast-path before LLM) ────────────────────
+  // Moved here from ai-agent worker to avoid a redundant aiConfig DB query.
+  if (aiConfig.escalationKeywords && aiConfig.escalationKeywords.length > 0) {
+    const lowerContent = incomingMessage.toLowerCase();
+    const matchedKeyword = aiConfig.escalationKeywords.find((keyword) =>
+      lowerContent.includes(keyword.toLowerCase())
+    );
+
+    if (matchedKeyword) {
+      console.log(
+        `[runAgent] Escalation keyword "${matchedKeyword}" detected in ticket ${ticketId}, escalating without LLM`
+      );
+
+      await prisma.ticket.update({
+        where: { id: ticketId },
+        data: { aiEnabled: false, status: "OPEN" },
+      });
+
+      await prisma.ticketMessage.create({
+        data: {
+          ticketId,
+          senderId: null,
+          content: `[AI Agent] Escalado automaticamente — palavra-chave detectada: "${matchedKeyword}"`,
+          isInternal: true,
+          isAiGenerated: true,
+        },
+      });
+
+      return { responded: false, escalated: true, iterations: 0 };
+    }
+  }
+
   const maxIterations = aiConfig.maxIterations || 5;
 
   // ── Build provider config ────────────────────────────────────────────────
