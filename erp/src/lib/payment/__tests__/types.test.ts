@@ -1,9 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { isProviderType, PROVIDER_TYPES, MOCK_PROVIDER } from "@/lib/payment/types";
+import { isProviderType, MOCK_PROVIDER } from "@/lib/payment/types";
+import {
+  PROVIDER_TYPES,
+  PRODUCTION_PROVIDER_TYPES,
+} from "@/lib/payment/constants";
 
 describe("isProviderType()", () => {
   it("retorna true para cada provider de produção", () => {
-    for (const p of PROVIDER_TYPES) {
+    for (const p of PRODUCTION_PROVIDER_TYPES) {
       expect(isProviderType(p)).toBe(true);
     }
   });
@@ -33,14 +37,25 @@ describe("isProviderType()", () => {
   });
 });
 
-describe("PROVIDER_TYPES (array canônico de produção)", () => {
-  it("não inclui mock (mock não deve ser persistido no banco em produção)", () => {
-    expect(PROVIDER_TYPES).not.toContain("mock");
-  });
-
-  it("inclui pagarme e pinbank", () => {
+describe("PROVIDER_TYPES (from constants.ts — environment-aware)", () => {
+  it("inclui pagarme e pinbank em qualquer ambiente", () => {
     expect(PROVIDER_TYPES).toContain("pagarme");
     expect(PROVIDER_TYPES).toContain("pinbank");
+  });
+
+  it("PRODUCTION_PROVIDER_TYPES não inclui mock", () => {
+    expect(PRODUCTION_PROVIDER_TYPES).not.toContain("mock");
+  });
+
+  it("PRODUCTION_PROVIDER_TYPES inclui pagarme e pinbank", () => {
+    expect(PRODUCTION_PROVIDER_TYPES).toContain("pagarme");
+    expect(PRODUCTION_PROVIDER_TYPES).toContain("pinbank");
+  });
+
+  // In test environment, PROVIDER_TYPES should include mock (DEV_PROVIDER_TYPES)
+  it("em ambiente de teste, PROVIDER_TYPES inclui mock", () => {
+    expect(process.env.NODE_ENV).not.toBe("production");
+    expect(PROVIDER_TYPES).toContain("mock");
   });
 });
 
