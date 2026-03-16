@@ -157,7 +157,7 @@ async function fetchAndProcessMailbox(
 // Email processing
 // ---------------------------------------------------------------------------
 
-async function processEmail(
+export async function processEmail(
   client: ImapFlow,
   msg: FetchMessageObject,
   channel: ChannelRecord,
