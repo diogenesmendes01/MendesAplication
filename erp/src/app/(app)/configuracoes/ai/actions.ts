@@ -503,6 +503,18 @@ export async function simulateAiResponse(
     };
   }
 
+  // Runtime validation for channel (TypeScript-only types aren't enforced at HTTP boundaries)
+  const VALID_CHANNELS = ["WHATSAPP", "EMAIL"] as const;
+  if (!VALID_CHANNELS.includes(channel as (typeof VALID_CHANNELS)[number])) {
+    return {
+      response: "",
+      inputTokens: 0,
+      outputTokens: 0,
+      estimatedCostBrl: 0,
+      error: "Canal inválido",
+    };
+  }
+
   // Rate limit check
   if (!checkSimulationRateLimit(companyId)) {
     return {

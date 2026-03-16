@@ -191,7 +191,7 @@ describe("runAgentDryRun", () => {
     expect(result.inputTokens).toBe(80);
   });
 
-  it("does NOT call logUsage in dry-run mode", async () => {
+  it("calls logUsage in dry-run mode so tokens are tracked in Consumo and against the daily limit", async () => {
     const { logUsage } = await import("@/lib/ai/cost-tracker");
     mockChatCompletion.mockResolvedValue({
       content: "Oi",
@@ -202,7 +202,15 @@ describe("runAgentDryRun", () => {
     const { runAgentDryRun } = await import("@/lib/ai/agent");
     await runAgentDryRun("company-1", "Oi", "WHATSAPP");
 
-    expect(logUsage).not.toHaveBeenCalled();
+    expect(logUsage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        aiConfigId: expect.any(String),
+        companyId: "company-1",
+        channel: "WHATSAPP",
+        inputTokens: 50,
+        outputTokens: 20,
+      }),
+    );
   });
 
   it("returns estimatedCostBrl > 0 when tokens are consumed", async () => {

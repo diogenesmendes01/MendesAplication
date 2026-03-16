@@ -561,8 +561,20 @@ export async function runAgentDryRun(
     startTime,
     dryRun: true,
     contextId: "simulation",
-    // No DB writes in dry-run — onUsage is a no-op (totals tracked inside the loop)
-    onUsage: async () => {},
+    // Log simulation token usage so it appears in Consumo and counts against the daily limit
+    onUsage: async (inputTokens, outputTokens) => {
+      if (aiConfig.id) {
+        await logUsage({
+          aiConfigId: aiConfig.id,
+          companyId,
+          provider: providerConfig.provider,
+          model: effectiveModel,
+          channel,
+          inputTokens,
+          outputTokens,
+        });
+      }
+    },
   });
 
   return {
