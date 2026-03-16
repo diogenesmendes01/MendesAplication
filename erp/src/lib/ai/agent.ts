@@ -8,7 +8,8 @@ import { executeTool } from "./tool-executor";
 import type { ToolContext } from "./tool-executor";
 import { decrypt } from "@/lib/encryption";
 import { getTodaySpend, logUsage } from "./cost-tracker";
-import { MODEL_PRICING, BRL_USD_RATE, DEFAULT_MODELS } from "./pricing";
+import { MODEL_PRICING, DEFAULT_MODELS } from "./pricing";
+import { getBrlUsdRateSync } from "./exchange-rate";
 
 // ─── Result types ─────────────────────────────────────────────────────────────
 
@@ -648,7 +649,7 @@ function estimateCostBrl(
   const pricing = MODEL_PRICING[model] ?? { input: 1.0, output: 3.0 };
   const costUsd =
     (inputTokens * pricing.input + outputTokens * pricing.output) / 1_000_000;
-  return costUsd * BRL_USD_RATE;
+  return costUsd * getBrlUsdRateSync();
 }
 
 // ─── WhatsApp system prompt builder ──────────────────────────────────────────
