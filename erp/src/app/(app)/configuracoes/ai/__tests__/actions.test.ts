@@ -44,6 +44,7 @@ vi.mock("@/lib/prisma", () => ({
     aiUsageLog: {
       groupBy: vi.fn().mockResolvedValue([]),
       findMany: vi.fn().mockResolvedValue([]),
+      aggregate: vi.fn().mockResolvedValue({ _sum: { costBrl: 0, tokens: 0 } }),
     },
   },
 }));
@@ -441,5 +442,79 @@ describe("updateAiConfig", () => {
     await expect(
       updateAiConfig("company-1", { ...validData, apiKey: "short" })
     ).rejects.toThrow(/apiKey too short/i);
+  });
+});
+
+// ─── getAiUsageSummary — days bounds (WARN-3 coverage) ───────────────────────
+
+describe("getAiUsageSummary — days validation", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.restoreAllMocks();
+    mockRequireAdmin.mockResolvedValue(undefined);
+    mockRequireCompanyAccess.mockResolvedValue(undefined);
+  });
+
+  it("throws when days = 0 (below minimum)", async () => {
+    const { getAiUsageSummary } = await import(
+      "@/app/(app)/configuracoes/ai/actions"
+    );
+    await expect(
+      getAiUsageSummary("company-1", 0)
+    ).rejects.toThrow(/days must be an integer between 1 and 365/i);
+  });
+
+  it("throws when days = -1 (negative)", async () => {
+    const { getAiUsageSummary } = await import(
+      "@/app/(app)/configuracoes/ai/actions"
+    );
+    await expect(
+      getAiUsageSummary("company-1", -1)
+    ).rejects.toThrow(/days must be an integer between 1 and 365/i);
+  });
+
+  it("throws when days = 366 (above maximum)", async () => {
+    const { getAiUsageSummary } = await import(
+      "@/app/(app)/configuracoes/ai/actions"
+    );
+    await expect(
+      getAiUsageSummary("company-1", 366)
+    ).rejects.toThrow(/days must be an integer between 1 and 365/i);
+  });
+
+  it("throws when days = NaN", async () => {
+    const { getAiUsageSummary } = await import(
+      "@/app/(app)/configuracoes/ai/actions"
+    );
+    await expect(
+      getAiUsageSummary("company-1", NaN)
+    ).rejects.toThrow(/days must be an integer between 1 and 365/i);
+  });
+
+  it("throws when days is a float (1.5 — not integer)", async () => {
+    const { getAiUsageSummary } = await import(
+      "@/app/(app)/configuracoes/ai/actions"
+    );
+    await expect(
+      getAiUsageSummary("company-1", 1.5)
+    ).rejects.toThrow(/days must be an integer between 1 and 365/i);
+  });
+
+  it("accepts days = 1 (minimum valid)", async () => {
+    const { getAiUsageSummary } = await import(
+      "@/app/(app)/configuracoes/ai/actions"
+    );
+    await expect(
+      getAiUsageSummary("company-1", 1)
+    ).resolves.not.toThrow();
+  });
+
+  it("accepts days = 365 (maximum valid)", async () => {
+    const { getAiUsageSummary } = await import(
+      "@/app/(app)/configuracoes/ai/actions"
+    );
+    await expect(
+      getAiUsageSummary("company-1", 365)
+    ).resolves.not.toThrow();
   });
 });
