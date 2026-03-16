@@ -233,7 +233,7 @@ async function executeRespond(
       ticketId: context.ticketId,
       senderId: null,
       content: message,
-      channel: "WHATSAPP",
+      channel: context.channel ?? "WHATSAPP",
       direction: "OUTBOUND",
       origin: "SYSTEM",
       isAiGenerated: true,

@@ -521,11 +521,31 @@ export async function simulateAiResponse(
     channel,
   );
 
+  // Map internal error codes to safe user-facing messages (avoid leaking
+  // implementation details to the browser — mirrors the pattern in testAiConnection)
+  let userError: string | undefined;
+  if (result.error) {
+    const errorMap: Record<string, string> = {
+      "api_key_decrypt_failed": "Erro ao acessar a configuração de API key.",
+      "email_channel_disabled": "Canal Email está desabilitado nas configurações.",
+      "whatsapp_channel_disabled": "Canal WhatsApp está desabilitado nas configurações.",
+      "AI not enabled": "A IA está desabilitada. Habilite nas configurações gerais.",
+      "daily_spend_limit_reached": "Limite de gasto diário atingido.",
+      "max iterations reached": "Limite de iterações atingido sem resposta.",
+      "timeout": "Tempo limite de resposta atingido.",
+    };
+    userError =
+      errorMap[result.error] ??
+      (result.error.startsWith("no_default_model_for_provider:")
+        ? "Nenhum modelo padrão configurado para o provider selecionado."
+        : "Erro ao simular resposta. Verifique as configurações da IA.");
+  }
+
   return {
     response: result.response,
     inputTokens: result.inputTokens,
     outputTokens: result.outputTokens,
     estimatedCostBrl: result.estimatedCostBrl,
-    error: result.error,
+    error: userError,
   };
 }
