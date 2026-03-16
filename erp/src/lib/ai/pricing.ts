@@ -36,11 +36,13 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
 export const FALLBACK_PRICING: ModelPricing = { input: 1.0, output: 3.0 };
 
 /**
- * BRL/USD exchange rate — hardcoded for now.
+ * BRL/USD exchange rate.
+ * Configurable via BRL_USD_RATE env var so ops can update it on deploy
+ * without a code change. Defaults to 5.8 as a safe fallback.
  * TODO: Replace with a real-time exchange rate API in the future
  * (e.g., BrasilAPI, AwesomeAPI — update at least 1x/day).
  */
-export const BRL_USD_RATE = 5.8;
+export const BRL_USD_RATE = parseFloat(process.env.BRL_USD_RATE ?? "5.8");
 
 /**
  * Default model names per provider — used as fallback for usage logging

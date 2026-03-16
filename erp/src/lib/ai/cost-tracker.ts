@@ -132,7 +132,9 @@ export async function getUsageSummary(
   const since = getStartOfDayBRT();
   since.setTime(since.getTime() - (days - 1) * 86_400_000);
 
-  const where = { companyId, createdAt: { gte: since } };
+  // Exclude simulation records so admin dry-runs don't inflate the
+  // consumption totals displayed in the dashboard's Consumo tab.
+  const where = { companyId, createdAt: { gte: since }, isSimulation: false };
 
   // Overall totals
   const totals = await prisma.aiUsageLog.aggregate({
