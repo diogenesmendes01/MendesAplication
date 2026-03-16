@@ -1,5 +1,12 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { isProviderType, PROVIDER_TYPES, MOCK_PROVIDER } from "@/lib/payment/types";
+
+// isProviderType() lê process.env.NODE_ENV em call-time (não em module-load time),
+// por isso vi.stubEnv() é suficiente — não precisamos de vi.resetModules() aqui.
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 describe("isProviderType()", () => {
   it("retorna true para cada provider de produção", () => {
@@ -30,6 +37,42 @@ describe("isProviderType()", () => {
   it("retorna false para null/undefined convertidos em string", () => {
     expect(isProviderType("null")).toBe(false);
     expect(isProviderType("undefined")).toBe(false);
+  });
+});
+
+describe("isProviderType() — env-aware: NODE_ENV=production", () => {
+  it("aceita provider de produção (pagarme) → true", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    expect(isProviderType("pagarme")).toBe(true);
+  });
+
+  it("rejeita 'mock' em produção → false (guard de segurança)", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    expect(isProviderType("mock")).toBe(false);
+  });
+
+  it("rejeita valor inválido em produção → false", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    expect(isProviderType("invalid")).toBe(false);
+  });
+});
+
+describe("isProviderType() — env-aware: NODE_ENV=development", () => {
+  it("aceita 'mock' em desenvolvimento → true", () => {
+    vi.stubEnv("NODE_ENV", "development");
+    expect(isProviderType("mock")).toBe(true);
+  });
+
+  it("aceita provider de produção (pagarme) em desenvolvimento → true", () => {
+    vi.stubEnv("NODE_ENV", "development");
+    expect(isProviderType("pagarme")).toBe(true);
+  });
+});
+
+describe("isProviderType() — env-aware: NODE_ENV=test", () => {
+  it("aceita 'mock' em ambiente de test → true", () => {
+    vi.stubEnv("NODE_ENV", "test");
+    expect(isProviderType("mock")).toBe(true);
   });
 });
 
