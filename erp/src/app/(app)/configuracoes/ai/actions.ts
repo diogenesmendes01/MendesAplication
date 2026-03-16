@@ -92,6 +92,12 @@ function checkTestConnectionRateLimit(companyId: string): boolean {
   const now = Date.now();
   const timestamps = testConnectionRateMap.get(companyId) ?? [];
   const recent = timestamps.filter((ts) => now - ts < TEST_CONN_RATE_WINDOW_MS);
+
+  // Prune stale key when all timestamps have expired to avoid unbounded memory growth
+  if (recent.length === 0 && testConnectionRateMap.has(companyId)) {
+    testConnectionRateMap.delete(companyId);
+  }
+
   if (recent.length >= TEST_CONN_RATE_LIMIT) {
     testConnectionRateMap.set(companyId, recent);
     return false; // rate limited
@@ -128,6 +134,11 @@ function checkSimulationRateLimit(companyId: string): boolean {
 
   // Remove entries older than the window
   const recent = timestamps.filter((ts) => now - ts < SIMULATION_RATE_WINDOW_MS);
+
+  // Prune stale key when all timestamps have expired to avoid unbounded memory growth
+  if (recent.length === 0 && simulationRateMap.has(companyId)) {
+    simulationRateMap.delete(companyId);
+  }
 
   if (recent.length >= SIMULATION_RATE_LIMIT) {
     simulationRateMap.set(companyId, recent);
