@@ -255,7 +255,7 @@ export async function updateAiConfig(
   }
   if (
     data.dailySpendLimitBrl !== null &&
-    (typeof data.dailySpendLimitBrl !== "number" || data.dailySpendLimitBrl <= 0)
+    (typeof data.dailySpendLimitBrl !== "number" || !Number.isFinite(data.dailySpendLimitBrl) || data.dailySpendLimitBrl <= 0)
   ) {
     throw new Error("dailySpendLimitBrl must be a positive number or null");
   }
@@ -485,6 +485,10 @@ export async function getAiUsageSummary(
 ): Promise<UsageSummary> {
   await requireAdmin();
   await requireCompanyAccess(companyId);
+
+  if (!Number.isInteger(days) || days < 1 || days > 365) {
+    throw new Error("days must be an integer between 1 and 365");
+  }
 
   return getUsageSummary(companyId, days);
 }

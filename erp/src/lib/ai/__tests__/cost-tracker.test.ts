@@ -196,6 +196,14 @@ describe("cost-tracker", () => {
       expect(summary.byModel).toEqual([]);
     });
 
+    it("excludes simulation records from summary (isSimulation: false in where)", async () => {
+      const { getUsageSummary } = await import("@/lib/ai/cost-tracker");
+      await getUsageSummary("company-1", 7);
+      const aggregateCall = mockAggregate.mock.calls[0][0] as Record<string, unknown>;
+      const whereClause = aggregateCall.where as Record<string, unknown>;
+      expect(whereClause.isSimulation).toBe(false);
+    });
+
     it("maps channel breakdown correctly", async () => {
       mockGroupBy
         .mockResolvedValueOnce([
