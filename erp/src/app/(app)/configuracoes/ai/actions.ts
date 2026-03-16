@@ -278,6 +278,17 @@ export async function updateAiConfig(
     throw new Error("emailSignature too long (max 1000 characters)");
   }
 
+  // Validate escalationKeywords to prevent oversized system prompts and heavy DB writes
+  if (!Array.isArray(data.escalationKeywords)) {
+    throw new Error("escalationKeywords must be an array");
+  }
+  if (data.escalationKeywords.length > 50) {
+    throw new Error("escalationKeywords: máximo 50 palavras-chave");
+  }
+  if (data.escalationKeywords.some((kw) => typeof kw !== "string" || kw.length > 200)) {
+    throw new Error("escalationKeywords: cada item deve ser string com máximo 200 caracteres");
+  }
+
   // Determine the apiKey to store:
   // - If the incoming apiKey is empty or matches the masked pattern, keep existing
   // - Otherwise, validate and encrypt the new value
