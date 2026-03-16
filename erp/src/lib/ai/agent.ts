@@ -277,6 +277,12 @@ export async function runAgent(
     if (todaySpend >= Number(aiConfig.dailySpendLimitBrl)) {
       return { responded: false, escalated: false, iterations: 0, error: "daily_spend_limit_reached" };
     }
+    // ⚠️ KNOWN LIMITATION — TOCTOU RACE:
+    // Under concurrent load, multiple requests may pass this check before any
+    // logUsage() call completes, causing the daily limit to be exceeded.
+    // Estimated overrun: up to (concurrency - 1) × avg_cost_per_call.
+    // TODO: Replace with Redis INCR+EXPIRE atomic counter (same pattern as
+    //       simulationRateMap TODO above). Until then, limit is best-effort.
   }
 
   // ── Check escalation keywords (fast-path before LLM) ────────────────────
