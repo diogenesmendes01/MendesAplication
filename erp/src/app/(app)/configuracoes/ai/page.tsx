@@ -172,7 +172,7 @@ export default function AiConfigPage() {
   // ── Load suggestion when budget or provider changes ───────────────────────
   useEffect(() => {
     if (config.dailySpendLimitBrl && config.dailySpendLimitBrl > 0) {
-      getSuggestedModel(config.provider, config.dailySpendLimitBrl).then(
+      getSuggestedModel(selectedCompanyId, config.provider, config.dailySpendLimitBrl).then(
         setSuggestion,
       );
     } else {
