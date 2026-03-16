@@ -242,6 +242,31 @@ async function executeRespond(
   return `Mensagem enviada ao cliente com sucesso.`;
 }
 
+// ─── HTML Sanitizer ───────────────────────────────────────────────────────────
+//
+// Strips all HTML tags except a small allow-list, and removes all attributes
+// from allowed tags to prevent prompt-injection attacks where inbound email
+// content could cause the LLM to emit malicious HTML (tracking pixels,
+// phishing links, arbitrary scripts) in outgoing replies.
+//
+// TODO(#103): Replace with `sanitize-html` package for production-grade
+// sanitization once the dependency is approved and added.
+//
+const ALLOWED_EMAIL_TAGS = new Set(["b", "i", "br", "p", "ul", "li", "strong", "em"]);
+
+function sanitizeEmailHtml(input: string): string {
+  // Replace HTML tags: keep allowed ones (strip attributes), remove the rest.
+  return input.replace(/<\/?([a-zA-Z]+)(?:\s[^>]*)?\/?>/g, (match, rawTag: string) => {
+    const tag = rawTag.toLowerCase();
+    if (!ALLOWED_EMAIL_TAGS.has(tag)) return ""; // strip disallowed tag entirely
+    const isClosing = match.startsWith("</");
+    const isSelfClosing = match.trimEnd().endsWith("/>");
+    if (isClosing) return `</${tag}>`;
+    if (isSelfClosing) return `<${tag} />`;
+    return `<${tag}>`;
+  });
+}
+
 // ─── RESPOND_EMAIL ───────────────────────────────────────────────────────────
 
 async function executeRespondEmail(
@@ -249,9 +274,14 @@ async function executeRespondEmail(
   context: ToolContext
 ): Promise<string> {
   const subject = args.subject as string;
-  const message = args.message as string;
+  const rawMessage = args.message as string;
   if (!subject) return "Erro: assunto (subject) nao fornecido.";
-  if (!message) return "Erro: mensagem (message) nao fornecida.";
+  if (!rawMessage) return "Erro: mensagem (message) nao fornecida.";
+
+  // Sanitize LLM-generated HTML before dispatch to prevent prompt-injection
+  // from inbound email content influencing outgoing email markup.
+  // See: https://github.com/diogenesmendes01/MendesAplication/issues/103
+  const message = sanitizeEmailHtml(rawMessage);
 
   // Resolve recipient email from ticket -> contact.email or client.email
   const ticket = await prisma.ticket.findUnique({

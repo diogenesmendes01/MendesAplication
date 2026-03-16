@@ -58,6 +58,16 @@ export type { UsageSummary };
 /**
  * Mask a secret string: show only the last 4 chars, replace the rest with ****.
  * Returns empty string for null/undefined/empty input.
+ *
+ * ⚠️  KNOWN LIMITATION — DECRYPT-ON-READ:
+ * This function decrypts the full API key on every call to getAiConfig()
+ * (including polling from Settings tabs and the Consumo tab). This results
+ * in unnecessary decrypt operations and silently returns "" for null keys,
+ * which can mask unconfigured keys in the frontend.
+ *
+ * TODO(#104): Refactor updateAiConfig to persist apiKeyHint = plaintext.slice(-4)
+ * in a new AiConfig.apiKeyHint column, then return `****${record.apiKeyHint}`
+ * here without decrypting. Requires migration — see linked issue.
  */
 function maskApiKey(key: string | null | undefined): string {
   if (!key) return "";
