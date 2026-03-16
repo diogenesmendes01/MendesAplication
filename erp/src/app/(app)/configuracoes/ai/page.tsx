@@ -171,14 +171,14 @@ export default function AiConfigPage() {
 
   // ── Load suggestion when budget or provider changes ───────────────────────
   useEffect(() => {
-    if (config.dailySpendLimitBrl && config.dailySpendLimitBrl > 0) {
+    if (selectedCompanyId && config.dailySpendLimitBrl && config.dailySpendLimitBrl > 0) {
       getSuggestedModel(selectedCompanyId, config.provider, config.dailySpendLimitBrl).then(
         setSuggestion,
       );
     } else {
       setSuggestion(null);
     }
-  }, [config.provider, config.dailySpendLimitBrl]);
+  }, [selectedCompanyId, config.provider, config.dailySpendLimitBrl]);
 
   // ── Provider change handler ───────────────────────────────────────────────
   function handleProviderChange(provider: string) {
