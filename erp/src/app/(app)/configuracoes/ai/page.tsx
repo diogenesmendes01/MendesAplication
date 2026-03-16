@@ -1105,8 +1105,12 @@ export default function AiConfigPage() {
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Enter para enviar · Shift+Enter para nova linha · Máx 10
-                  simulações/min
+                  Enter para enviar · Shift+Enter para nova linha · Máx 10 simulações/min
+                  {config.dailySpendLimitBrl && (
+                    <span className="text-amber-600 font-medium">
+                      {' · '}⚠️ Simulações consomem o limite diário (R${config.dailySpendLimitBrl.toFixed(2)}/dia)
+                    </span>
+                  )}
                 </p>
               </div>
 

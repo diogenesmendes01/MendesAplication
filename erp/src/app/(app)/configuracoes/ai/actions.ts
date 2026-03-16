@@ -75,21 +75,12 @@ export type { UsageSummary };
  * in a new AiConfig.apiKeyHint column, then return `****${record.apiKeyHint}`
  * here without decrypting. Requires migration — see linked issue.
  */
+// Returns "****" when no plaintext hint available — avoids decrypt-on-read
+// and the incorrect masking of ciphertext chars.
+// TODO(#107): Add apiKeyHint column to AiConfig and populate on save.
 function maskApiKey(key: string | null | undefined): string {
   if (!key) return "";
-  try {
-    const decrypted = decrypt(key);
-    if (decrypted.length > 4) {
-      return `****${decrypted.slice(-4)}`;
-    }
-    return "****";
-  } catch {
-    // If decryption fails (e.g., not encrypted yet), mask the raw value
-    if (key.length > 4) {
-      return `****${key.slice(-4)}`;
-    }
-    return "****";
-  }
+  return "****"; // Always opaque until apiKeyHint migration is done
 }
 
 // ---------------------------------------------------------------------------
