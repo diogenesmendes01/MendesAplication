@@ -42,7 +42,9 @@ export const FALLBACK_PRICING: ModelPricing = { input: 1.0, output: 3.0 };
  * TODO: Replace with a real-time exchange rate API in the future
  * (e.g., BrasilAPI, AwesomeAPI — update at least 1x/day).
  */
-export const BRL_USD_RATE = parseFloat(process.env.BRL_USD_RATE ?? "5.8");
+const _brlUsdRate = parseFloat(process.env.BRL_USD_RATE ?? "5.8");
+export const BRL_USD_RATE =
+  Number.isFinite(_brlUsdRate) && _brlUsdRate > 0 ? _brlUsdRate : 5.8;
 
 /**
  * Default model names per provider — used as fallback for usage logging

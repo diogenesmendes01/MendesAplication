@@ -209,6 +209,7 @@ describe("runAgentDryRun", () => {
         channel: "WHATSAPP",
         inputTokens: 50,
         outputTokens: 20,
+        isSimulation: true, // contrato crítico: simulações não devem consumir limite diário real
       }),
     );
   });
