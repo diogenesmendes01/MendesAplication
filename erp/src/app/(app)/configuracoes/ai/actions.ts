@@ -68,13 +68,13 @@ export type { UsageSummary };
  * The function intentionally does NOT decrypt the stored ciphertext —
  * it simply signals "a key is configured" without exposing any key material.
  *
- * TODO(#107): Add an `apiKeyHint` column to AiConfig (last-4 chars of
- * plaintext, stored on save) so we can return `****${record.apiKeyHint}`
- * here without ever decrypting. Requires a DB migration.
+ * When apiKeyHint is available (last 4 chars stored on save),
+ * returns `****${hint}` for user-friendly identification.
  */
-function maskApiKey(key: string | null | undefined): string {
+function maskApiKey(key: string | null | undefined, hint?: string | null): string {
   if (!key) return "";
-  return "****"; // Always opaque until apiKeyHint migration is done (#107)
+  if (hint) return `****${hint}`;
+  return "****";
 }
 
 // ---------------------------------------------------------------------------
@@ -202,7 +202,7 @@ export async function getAiConfig(companyId: string): Promise<AiConfigData> {
     escalationKeywords: config.escalationKeywords,
     maxIterations: config.maxIterations,
     provider: config.provider,
-    apiKey: maskApiKey(config.apiKey),
+    apiKey: maskApiKey(config.apiKey, (config as unknown as { apiKeyHint?: string }).apiKeyHint),
     model: config.model ?? "",
     whatsappEnabled: config.whatsappEnabled,
     emailEnabled: config.emailEnabled,
@@ -282,12 +282,14 @@ export async function updateAiConfig(
   // - If the incoming apiKey is empty or matches the masked pattern, keep existing
   // - Otherwise, validate and encrypt the new value
   let apiKeyToStore: string | undefined;
+  let apiKeyHintToStore: string | undefined;
   if (data.apiKey && !MASKED_API_KEY_PATTERN.test(data.apiKey)) {
     // Validate minimum key length to surface accidental empty-like submissions
     if (data.apiKey.trim().length < 8) {
       throw new Error("apiKey too short — minimum 8 characters");
     }
     apiKeyToStore = encrypt(data.apiKey);
+    apiKeyHintToStore = data.apiKey.trim().slice(-4);
   }
 
   const baseData = {
@@ -310,10 +312,11 @@ export async function updateAiConfig(
     companyId,
     ...baseData,
     apiKey: apiKeyToStore ?? null,
+    ...(apiKeyHintToStore !== undefined && { apiKeyHint: apiKeyHintToStore }),
   };
 
   const updateData = apiKeyToStore !== undefined
-    ? { ...baseData, apiKey: apiKeyToStore }
+    ? { ...baseData, apiKey: apiKeyToStore, apiKeyHint: apiKeyHintToStore }
     : baseData;
 
   await prisma.aiConfig.upsert({
