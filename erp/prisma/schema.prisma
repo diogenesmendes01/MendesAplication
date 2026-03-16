@@ -818,7 +818,7 @@ model AiUsageLog {
 
   @@index([companyId, createdAt])
   @@index([aiConfigId, createdAt])
-  @@index([isSimulation])
+  @@index([companyId, isSimulation, createdAt])
   @@map("ai_usage_logs")
 }
 
