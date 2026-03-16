@@ -804,7 +804,7 @@ model AiUsageLog {
   companyId    String
   provider     String
   model        String
-  channel      String
+  channel      String   // TODO: migrar para Enum (WHATSAPP | EMAIL) — constraint de tipo só existe em TypeScript; futura migration deve adicionar CHECK constraint ou converter para Prisma Enum
   inputTokens  Int
   outputTokens Int
   costUsd      Decimal  @db.Decimal(10, 6)
