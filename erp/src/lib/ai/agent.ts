@@ -316,7 +316,12 @@ export async function runAgent(
   // ── Build provider config ────────────────────────────────────────────────
   let providerConfig: ProviderConfig;
   if (aiConfig.apiKey) {
-    const decryptedApiKey = decrypt(aiConfig.apiKey);
+    let decryptedApiKey: string;
+    try {
+      decryptedApiKey = decrypt(aiConfig.apiKey);
+    } catch {
+      return { responded: false, escalated: false, iterations: 0, error: "api_key_decrypt_failed" };
+    }
     providerConfig = {
       provider: aiConfig.provider,
       apiKey: decryptedApiKey,
@@ -462,7 +467,12 @@ export async function runAgentDryRun(
 
   let providerConfig: ProviderConfig;
   if (aiConfig.apiKey) {
-    const decryptedApiKey = decrypt(aiConfig.apiKey);
+    let decryptedApiKey: string;
+    try {
+      decryptedApiKey = decrypt(aiConfig.apiKey);
+    } catch {
+      return { response: "", inputTokens: 0, outputTokens: 0, estimatedCostBrl: 0, error: "api_key_decrypt_failed" };
+    }
     providerConfig = {
       provider: aiConfig.provider,
       apiKey: decryptedApiKey,

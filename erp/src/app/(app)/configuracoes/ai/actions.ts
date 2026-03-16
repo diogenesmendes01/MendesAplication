@@ -209,6 +209,12 @@ export async function updateAiConfig(
       `provider must be one of: ${VALID_PROVIDERS.join(", ")}`,
     );
   }
+  if (
+    data.dailySpendLimitBrl !== null &&
+    (typeof data.dailySpendLimitBrl !== "number" || data.dailySpendLimitBrl <= 0)
+  ) {
+    throw new Error("dailySpendLimitBrl must be a positive number or null");
+  }
 
   // Determine the apiKey to store:
   // - If the incoming apiKey is empty or looks masked (starts with ****), keep existing
