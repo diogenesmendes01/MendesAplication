@@ -377,6 +377,7 @@ export async function testAiConnection(
  */
 export async function listAvailableModels(
   companyId: string,
+  providerOverride?: string,
 ): Promise<string[]> {
   await requireAdmin();
   await requireCompanyAccess(companyId);
@@ -385,7 +386,10 @@ export async function listAvailableModels(
     where: { companyId },
   });
 
-  const provider = config?.provider ?? "openai";
+  // Use providerOverride (current UI state) if provided, otherwise fall back to
+  // the persisted config. This ensures the model list reflects the provider
+  // the admin has selected in the form — even before saving.
+  const provider = providerOverride ?? config?.provider ?? "openai";
 
   // For non-OpenAI providers, return hardcoded list
   if (provider !== "openai") {

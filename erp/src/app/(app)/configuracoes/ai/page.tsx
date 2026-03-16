@@ -154,14 +154,14 @@ export default function AiConfigPage() {
     if (!selectedCompanyId) return;
     setLoadingModels(true);
     try {
-      const list = await listAvailableModels(selectedCompanyId);
+      const list = await listAvailableModels(selectedCompanyId, config.provider);
       setModels(list);
     } catch {
       setModels([]);
     } finally {
       setLoadingModels(false);
     }
-  }, [selectedCompanyId]);
+  }, [selectedCompanyId, config.provider]);
 
   useEffect(() => {
     if (!loading && selectedCompanyId) {
@@ -1112,11 +1112,9 @@ export default function AiConfigPage() {
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Enter para enviar · Shift+Enter para nova linha · Máx 10 simulações/min
-                  {config.dailySpendLimitBrl && (
-                    <span className="text-amber-600 font-medium">
-                      {' · '}⚠️ Simulações consomem o limite diário (R${config.dailySpendLimitBrl.toFixed(2)}/dia)
-                    </span>
-                  )}
+                  <span className="text-green-700 font-medium">
+                    {' · '}✅ Simulações não consomem o limite diário real
+                  </span>
                 </p>
               </div>
 
@@ -1143,6 +1141,11 @@ export default function AiConfigPage() {
                     ) : (
                       <p className="text-sm text-muted-foreground italic">
                         Nenhuma resposta gerada
+                      </p>
+                    )}
+                    {simResult.simulationWarning && (
+                      <p className="text-xs text-muted-foreground mt-2 border border-green-200 bg-green-50 rounded px-2 py-1">
+                        ℹ️ {simResult.simulationWarning}
                       </p>
                     )}
                   </div>
