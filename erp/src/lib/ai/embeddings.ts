@@ -74,7 +74,7 @@ export async function generateEmbedding(text: string): Promise<number[]> {
  * Uses a rough heuristic of ~4 characters per token.
  * Tries to split on paragraph/sentence boundaries when possible.
  */
-export async function chunkText(text: string, maxTokens?: number): Promise<string[]> {
+export function chunkText(text: string, maxTokens?: number): string[] {
   const tokenLimit = maxTokens || RAG_CHUNK_SIZE;
   const maxChars = tokenLimit * 4; // rough: ~4 chars per token
 
@@ -130,7 +130,7 @@ export async function chunkText(text: string, maxTokens?: number): Promise<strin
  * Calculates cosine similarity between two vectors.
  * Returns a value between -1 and 1 (1 = identical direction).
  */
-export async function cosineSimilarity(a: number[], b: number[]): Promise<number> {
+export function cosineSimilarity(a: number[], b: number[]): number {
   if (a.length !== b.length) {
     throw new Error(
       `Vetores de tamanhos diferentes: ${a.length} vs ${b.length}`
@@ -201,7 +201,7 @@ export async function searchDocuments(
   for (const chunk of chunks) {
     if (!chunk.embedding || chunk.embedding.length === 0) continue;
 
-    const similarity = await cosineSimilarity(queryEmbedding, chunk.embedding);
+    const similarity = cosineSimilarity(queryEmbedding, chunk.embedding);
 
     if (similarity >= RAG_SIMILARITY_THRESHOLD) {
       scored.push({

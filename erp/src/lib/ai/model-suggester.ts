@@ -29,6 +29,7 @@ const PROVIDER_MODELS: Record<string, string[]> = {
   ],
   grok: ["grok-2", "grok-2-mini"],
   qwen: ["qwen-max", "qwen-plus", "qwen-turbo"],
+  deepseek: ["deepseek-reasoner", "deepseek-chat"],
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

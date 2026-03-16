@@ -74,7 +74,7 @@ export async function processDocumentProcessing(
     }
 
     // 2. Split text into chunks
-    const chunks = await chunkText(text);
+    const chunks = chunkText(text);
     console.log(
       `[document-processing] Document ${documentId}: ${chunks.length} chunks created`
     );
