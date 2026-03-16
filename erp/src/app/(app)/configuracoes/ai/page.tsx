@@ -92,8 +92,13 @@ const DEFAULT_CONFIG: AiConfigData = {
 export default function AiConfigPage() {
   const { selectedCompanyId } = useCompany();
   const [config, setConfig] = useState<AiConfigData>(DEFAULT_CONFIG);
+  const [savedConfig, setSavedConfig] = useState<AiConfigData>(DEFAULT_CONFIG);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+
+  // true enquanto há campos alterados ainda não salvos no banco
+  const hasUnsavedChanges =
+    !loading && JSON.stringify(config) !== JSON.stringify(savedConfig);
 
   // Provider / Model
   const [models, setModels] = useState<string[]>([]);
@@ -130,6 +135,7 @@ export default function AiConfigPage() {
     try {
       const data = await getAiConfig(selectedCompanyId);
       setConfig(data);
+      setSavedConfig(data);
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : "Erro ao carregar configurações",
@@ -298,6 +304,7 @@ export default function AiConfigPage() {
     setSaving(true);
     try {
       await updateAiConfig(selectedCompanyId, config);
+      setSavedConfig(config);
       toast.success("Configurações do Agente IA salvas com sucesso");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao salvar");
@@ -440,7 +447,12 @@ export default function AiConfigPage() {
                     variant="outline"
                     size="sm"
                     onClick={handleTestConnection}
-                    disabled={testingConnection}
+                    disabled={testingConnection || hasUnsavedChanges}
+                    title={
+                      hasUnsavedChanges
+                        ? "Salve as configurações antes de testar a conexão"
+                        : undefined
+                    }
                   >
                     {testingConnection ? (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
