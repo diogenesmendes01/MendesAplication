@@ -299,6 +299,28 @@ describe("listAvailableModels", () => {
 
     expect(result).toEqual(["gpt-4o", "gpt-4o-mini"]);
   });
+
+  // ── WARN-5 fix: providerOverride must be validated against VALID_PROVIDERS ──
+
+  it("throws when providerOverride is not a valid provider", async () => {
+    const { listAvailableModels } = await import(
+      "@/app/(app)/configuracoes/ai/actions"
+    );
+
+    await expect(
+      listAvailableModels("company-models-8", "invalid-provider")
+    ).rejects.toThrow("provider must be one of:");
+  });
+
+  it("accepts a valid providerOverride and returns HARDCODED_MODELS", async () => {
+    const { listAvailableModels } = await import(
+      "@/app/(app)/configuracoes/ai/actions"
+    );
+    const result = await listAvailableModels("company-models-9", "anthropic");
+
+    expect(result).toContain("claude-sonnet-4-20250514");
+    expect(vi.mocked(global.fetch)).not.toHaveBeenCalled();
+  });
 });
 
 // ─── updateAiConfig ───────────────────────────────────────────────────────────

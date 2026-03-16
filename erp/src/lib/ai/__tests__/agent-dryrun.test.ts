@@ -281,4 +281,63 @@ describe("runAgentDryRun", () => {
     expect(result.error).toBe("whatsapp_channel_disabled");
     expect(result.response).toBe("");
   });
+
+  // ── WARN-1 fix: escalation keyword fast-path must apply in dry-run ──────────
+
+  it("returns simulation-escalated response without calling LLM when keyword matches", async () => {
+    mockFindUnique.mockResolvedValue({
+      ...mockAiConfig,
+      escalationKeywords: ["urgente", "cancelar"],
+    });
+
+    const { runAgentDryRun } = await import("@/lib/ai/agent");
+    const result = await runAgentDryRun("company-1", "Quero CANCELAR meu contrato", "WHATSAPP");
+
+    // Must NOT call LLM — fast-path short-circuits before runAgentLoop
+    expect(mockChatCompletion).not.toHaveBeenCalled();
+    expect(result.inputTokens).toBe(0);
+    expect(result.outputTokens).toBe(0);
+    expect(result.estimatedCostBrl).toBe(0);
+    expect(result.error).toBeUndefined();
+    expect(result.response).toContain("cancelar");
+    expect(result.response).toContain("Simulação");
+  });
+
+  it("does NOT escalate in dry-run when no keyword matches", async () => {
+    mockFindUnique.mockResolvedValue({
+      ...mockAiConfig,
+      escalationKeywords: ["urgente", "cancelar"],
+    });
+    mockChatCompletion.mockResolvedValue({
+      content: "Posso ajudar!",
+      tool_calls: [],
+      usage: { inputTokens: 50, outputTokens: 20 },
+    });
+
+    const { runAgentDryRun } = await import("@/lib/ai/agent");
+    const result = await runAgentDryRun("company-1", "Olá, como vai?", "WHATSAPP");
+
+    // No keyword match — LLM should be called normally
+    expect(mockChatCompletion).toHaveBeenCalled();
+    expect(result.response).toBe("Posso ajudar!");
+    expect(result.error).toBeUndefined();
+  });
+
+  it("does NOT escalate in dry-run when escalationKeywords is empty", async () => {
+    mockFindUnique.mockResolvedValue({
+      ...mockAiConfig,
+      escalationKeywords: [],
+    });
+    mockChatCompletion.mockResolvedValue({
+      content: "Tudo bem!",
+      tool_calls: [],
+      usage: { inputTokens: 30, outputTokens: 10 },
+    });
+
+    const { runAgentDryRun } = await import("@/lib/ai/agent");
+    const result = await runAgentDryRun("company-1", "cancelar urgente", "WHATSAPP");
+
+    expect(mockChatCompletion).toHaveBeenCalled();
+    expect(result.response).toBe("Tudo bem!");
+  });
 });

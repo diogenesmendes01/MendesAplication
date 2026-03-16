@@ -510,6 +510,30 @@ export async function runAgentDryRun(
     return { response: "", inputTokens: 0, outputTokens: 0, estimatedCostBrl: 0, error: "whatsapp_channel_disabled" };
   }
 
+  // ── Escalation keyword fast-path (mirrors runAgent behaviour) ────────────
+  // Without this check the dry-run would call the LLM even when the production
+  // path would have escalated immediately, producing misleading simulation
+  // results and unnecessary token costs.
+  if (aiConfig.escalationKeywords && aiConfig.escalationKeywords.length > 0) {
+    const lowerContent = incomingMessage.toLowerCase();
+    const matchedKeyword = aiConfig.escalationKeywords.find((keyword) =>
+      lowerContent.includes(keyword.toLowerCase())
+    );
+
+    if (matchedKeyword) {
+      console.log(
+        `[runAgentDryRun] Escalation keyword "${matchedKeyword}" detected — ` +
+        `simulation would escalate without calling LLM`
+      );
+      return {
+        response: `[Simulação] Seria escalado automaticamente — palavra-chave detectada: "${matchedKeyword}"`,
+        inputTokens: 0,
+        outputTokens: 0,
+        estimatedCostBrl: 0,
+      };
+    }
+  }
+
   let providerConfig: ProviderConfig;
   if (aiConfig.apiKey) {
     let decryptedApiKey: string;

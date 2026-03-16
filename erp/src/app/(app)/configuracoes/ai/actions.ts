@@ -418,6 +418,13 @@ export async function listAvailableModels(
   await requireAdmin();
   await requireCompanyAccess(companyId);
 
+  // Validate providerOverride against VALID_PROVIDERS (mirrors updateAiConfig).
+  // An unknown provider would silently return [] via HARDCODED_MODELS[provider] ?? [].
+  // Explicit rejection surfaces misconfiguration in the UI immediately.
+  if (providerOverride !== undefined && !VALID_PROVIDERS.includes(providerOverride as typeof VALID_PROVIDERS[number])) {
+    throw new Error(`provider must be one of: ${VALID_PROVIDERS.join(", ")}`);
+  }
+
   const config = await prisma.aiConfig.findUnique({
     where: { companyId },
   });
