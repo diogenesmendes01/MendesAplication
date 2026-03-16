@@ -1,6 +1,7 @@
 /**
  * Unit tests for AI config server actions (WARN #5 fix).
  * Covers: testAiConnection — the critical path exercised most in production.
+ *         updateAiConfig — encryption, masked-key preservation, validation (WARN-3 fix).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
@@ -11,6 +12,8 @@ const mockRequireCompanyAccess = vi.fn().mockResolvedValue(undefined);
 const mockChatCompletion = vi.fn();
 const mockDecrypt = vi.fn((v: string) => `decrypted:${v}`);
 const mockFindUnique = vi.fn();
+const mockEncrypt = vi.fn((v: string) => `encrypted:${v}`);
+const mockUpsert = vi.fn().mockResolvedValue({});
 
 vi.mock("@/lib/session", () => ({
   requireAdmin: () => mockRequireAdmin(),
@@ -28,7 +31,7 @@ vi.mock("@/lib/ai/provider", () => ({
 }));
 
 vi.mock("@/lib/encryption", () => ({
-  encrypt: (v: string) => `encrypted:${v}`,
+  encrypt: (v: string) => mockEncrypt(v),
   decrypt: (v: string) => mockDecrypt(v),
 }));
 
@@ -36,7 +39,7 @@ vi.mock("@/lib/prisma", () => ({
   prisma: {
     aiConfig: {
       findUnique: (...args: unknown[]) => mockFindUnique(...args),
-      upsert: vi.fn().mockResolvedValue({}),
+      upsert: (...args: unknown[]) => mockUpsert(...args),
     },
     aiUsageLog: {
       groupBy: vi.fn().mockResolvedValue([]),
@@ -295,5 +298,126 @@ describe("listAvailableModels", () => {
     const result = await listAvailableModels("company-models-7");
 
     expect(result).toEqual(["gpt-4o", "gpt-4o-mini"]);
+  });
+});
+
+// ─── updateAiConfig ───────────────────────────────────────────────────────────
+
+describe("updateAiConfig", () => {
+  const validData = {
+    enabled: true,
+    persona: "Assistente de vendas",
+    welcomeMessage: "Olá! Como posso ajudar?",
+    escalationKeywords: ["humano", "atendente"],
+    maxIterations: 5,
+    provider: "openai",
+    apiKey: "sk-test-newkey-1234567890",
+    model: "gpt-4o",
+    temperature: 0.7,
+    dailySpendLimitBrl: null,
+    whatsappEnabled: true,
+    emailEnabled: false,
+    emailPersona: null,
+    emailSignature: null,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockRequireAdmin.mockResolvedValue({ userId: "user-1", role: "ADMIN" });
+    mockRequireCompanyAccess.mockResolvedValue(undefined);
+    mockFindUnique.mockResolvedValue(baseConfig);
+    mockEncrypt.mockImplementation((v: string) => `encrypted:${v}`);
+    mockUpsert.mockResolvedValue({});
+  });
+
+  it("encrypts new API key — encrypt() called with plain key and upsert receives encrypted value", async () => {
+    const { updateAiConfig } = await import(
+      "@/app/(app)/configuracoes/ai/actions"
+    );
+
+    const plainKey = "sk-test-brand-new-key-abc123";
+    await updateAiConfig("company-enc", { ...validData, apiKey: plainKey });
+
+    // encrypt() must have been called with the plain key
+    expect(mockEncrypt).toHaveBeenCalledWith(plainKey);
+
+    // upsert must have been called with the encrypted value in the create path
+    expect(mockUpsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({ apiKey: `encrypted:${plainKey}` }),
+        update: expect.objectContaining({ apiKey: `encrypted:${plainKey}` }),
+      })
+    );
+  });
+
+  it("preserves existing API key when masked value (****) is submitted", async () => {
+    const { updateAiConfig } = await import(
+      "@/app/(app)/configuracoes/ai/actions"
+    );
+
+    // Submit the masked value that maskApiKey() returns
+    await updateAiConfig("company-masked", { ...validData, apiKey: "****" });
+
+    // encrypt() must NOT have been called — masked key means "keep existing"
+    expect(mockEncrypt).not.toHaveBeenCalled();
+
+    // The upsert update payload must NOT include apiKey (preserves existing DB value)
+    const upsertCall = mockUpsert.mock.calls[0][0] as Record<string, unknown>;
+    const updatePayload = upsertCall.update as Record<string, unknown>;
+    expect(updatePayload).not.toHaveProperty("apiKey");
+  });
+
+  it("also preserves key when empty string is submitted (no masked pattern match needed)", async () => {
+    const { updateAiConfig } = await import(
+      "@/app/(app)/configuracoes/ai/actions"
+    );
+
+    await updateAiConfig("company-empty-key", { ...validData, apiKey: "" });
+
+    // Empty string → no encrypt call, no apiKey in update
+    expect(mockEncrypt).not.toHaveBeenCalled();
+    const upsertCall = mockUpsert.mock.calls[0][0] as Record<string, unknown>;
+    const updatePayload = upsertCall.update as Record<string, unknown>;
+    expect(updatePayload).not.toHaveProperty("apiKey");
+  });
+
+  it("throws when temperature is out of range (> 1)", async () => {
+    const { updateAiConfig } = await import(
+      "@/app/(app)/configuracoes/ai/actions"
+    );
+
+    await expect(
+      updateAiConfig("company-1", { ...validData, temperature: 1.5 })
+    ).rejects.toThrow(/temperature must be a number between 0 and 1/i);
+  });
+
+  it("throws when temperature is negative", async () => {
+    const { updateAiConfig } = await import(
+      "@/app/(app)/configuracoes/ai/actions"
+    );
+
+    await expect(
+      updateAiConfig("company-1", { ...validData, temperature: -0.1 })
+    ).rejects.toThrow(/temperature must be a number between 0 and 1/i);
+  });
+
+  it("throws when provider is not in the allowed list", async () => {
+    const { updateAiConfig } = await import(
+      "@/app/(app)/configuracoes/ai/actions"
+    );
+
+    await expect(
+      updateAiConfig("company-1", { ...validData, provider: "evil-provider" })
+    ).rejects.toThrow(/provider must be one of/i);
+  });
+
+  it("throws when apiKey is too short (< 8 chars)", async () => {
+    const { updateAiConfig } = await import(
+      "@/app/(app)/configuracoes/ai/actions"
+    );
+
+    await expect(
+      updateAiConfig("company-1", { ...validData, apiKey: "short" })
+    ).rejects.toThrow(/apiKey too short/i);
   });
 });
