@@ -122,6 +122,9 @@ export const PRODUCTION_PROVIDER_REGISTRY: Record<string, ProviderDefinition> = 
 /**
  * Registry estendido com providers de desenvolvimento/teste.
  * Inclui todos os providers de produção + mock.
+ *
+ * @internal — use `PROVIDER_REGISTRY` para acesso público; importar
+ * `DEV_PROVIDER_REGISTRY` diretamente bypassa o env check de produção.
  */
 export const DEV_PROVIDER_REGISTRY: Record<string, ProviderDefinition> = {
   ...PRODUCTION_PROVIDER_REGISTRY,

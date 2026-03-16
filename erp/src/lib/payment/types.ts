@@ -27,11 +27,13 @@ export type ProviderType = (typeof PRODUCTION_PROVIDER_TYPES)[number] | typeof M
  * Elimina a necessidade de casts `as ProviderType` e garante fail-fast
  * com mensagem clara para dados legados ou corrompidos.
  *
- * Nota: "mock" é aceito pois pode ser usado como fallback interno (ver propostas/actions.ts).
- * Valores de DB deveriam constar apenas em PRODUCTION_PROVIDER_TYPES (produção).
+ * Nota: "mock" só é aceito fora de produção (NODE_ENV !== "production").
+ * Valores de DB devem constar apenas em PRODUCTION_PROVIDER_TYPES.
  */
 export function isProviderType(v: string): v is ProviderType {
-  return (PRODUCTION_PROVIDER_TYPES as readonly string[]).includes(v) || v === MOCK_PROVIDER;
+  if ((PRODUCTION_PROVIDER_TYPES as readonly string[]).includes(v)) return true;
+  if (process.env.NODE_ENV !== "production" && v === MOCK_PROVIDER) return true;
+  return false;
 }
 
 // ============================================================

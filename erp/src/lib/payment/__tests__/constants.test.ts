@@ -1,58 +1,107 @@
-import { describe, it, expect } from "vitest";
-import {
-  PRODUCTION_PROVIDER_TYPES,
-  DEV_PROVIDER_TYPES,
-  PROVIDER_TYPES,
-} from "@/lib/payment/constants";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-describe("PRODUCTION_PROVIDER_TYPES", () => {
-  it("contém pagarme e pinbank", () => {
+// Atenção: PROVIDER_TYPES é avaliado em module-load time.
+// Usamos vi.resetModules() + vi.stubEnv() + dynamic import para simular cada env.
+
+describe("PRODUCTION_PROVIDER_TYPES e DEV_PROVIDER_TYPES (estáticos)", () => {
+  it("PRODUCTION_PROVIDER_TYPES contém pagarme e pinbank", async () => {
+    const { PRODUCTION_PROVIDER_TYPES } = await import("@/lib/payment/constants");
     expect(PRODUCTION_PROVIDER_TYPES).toContain("pagarme");
     expect(PRODUCTION_PROVIDER_TYPES).toContain("pinbank");
   });
 
-  it("NÃO contém mock", () => {
+  it("PRODUCTION_PROVIDER_TYPES não inclui mock", async () => {
+    const { PRODUCTION_PROVIDER_TYPES } = await import("@/lib/payment/constants");
     expect(PRODUCTION_PROVIDER_TYPES).not.toContain("mock");
   });
 
-  it("é readonly (as const)", () => {
-    // Verifica que é um array com pelo menos 2 elementos
-    expect(PRODUCTION_PROVIDER_TYPES.length).toBeGreaterThanOrEqual(2);
+  it("DEV_PROVIDER_TYPES contém pagarme, pinbank e mock", async () => {
+    const { DEV_PROVIDER_TYPES } = await import("@/lib/payment/constants");
+    expect(DEV_PROVIDER_TYPES).toContain("pagarme");
+    expect(DEV_PROVIDER_TYPES).toContain("pinbank");
+    expect(DEV_PROVIDER_TYPES).toContain("mock");
   });
-});
 
-describe("DEV_PROVIDER_TYPES", () => {
-  it("contém todos os providers de produção", () => {
+  it("DEV_PROVIDER_TYPES é superconjunto de PRODUCTION_PROVIDER_TYPES", async () => {
+    const { PRODUCTION_PROVIDER_TYPES, DEV_PROVIDER_TYPES } = await import(
+      "@/lib/payment/constants"
+    );
     for (const p of PRODUCTION_PROVIDER_TYPES) {
       expect(DEV_PROVIDER_TYPES).toContain(p);
     }
   });
+});
 
-  it("contém mock", () => {
-    expect(DEV_PROVIDER_TYPES).toContain("mock");
+describe("PROVIDER_TYPES em produção (NODE_ENV=production)", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.stubEnv("NODE_ENV", "production");
   });
 
-  it("tem mais providers que PRODUCTION_PROVIDER_TYPES", () => {
-    expect(DEV_PROVIDER_TYPES.length).toBeGreaterThan(PRODUCTION_PROVIDER_TYPES.length);
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("não inclui mock", async () => {
+    const { PROVIDER_TYPES } = await import("@/lib/payment/constants");
+    expect(PROVIDER_TYPES).not.toContain("mock");
+  });
+
+  it("inclui pagarme e pinbank", async () => {
+    const { PROVIDER_TYPES } = await import("@/lib/payment/constants");
+    expect(PROVIDER_TYPES).toContain("pagarme");
+    expect(PROVIDER_TYPES).toContain("pinbank");
+  });
+
+  it("é idêntico a PRODUCTION_PROVIDER_TYPES", async () => {
+    const { PROVIDER_TYPES, PRODUCTION_PROVIDER_TYPES } = await import(
+      "@/lib/payment/constants"
+    );
+    expect([...PROVIDER_TYPES].sort()).toEqual([...PRODUCTION_PROVIDER_TYPES].sort());
   });
 });
 
-describe("PROVIDER_TYPES (condicional por NODE_ENV)", () => {
-  it("é PRODUCTION_PROVIDER_TYPES em ambiente de teste (NODE_ENV=test)", () => {
-    // Em vitest, NODE_ENV é 'test', portanto PROVIDER_TYPES === DEV_PROVIDER_TYPES
-    // Verificamos que o conteúdo inclui mock (dev/test) e os providers de produção
-    for (const p of PRODUCTION_PROVIDER_TYPES) {
-      expect(PROVIDER_TYPES).toContain(p);
-    }
+describe("PROVIDER_TYPES em desenvolvimento (NODE_ENV=development)", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.stubEnv("NODE_ENV", "development");
   });
 
-  it("em ambiente não-produção, inclui mock", () => {
-    // NODE_ENV=test → branch dev/test ativo
-    expect(process.env.NODE_ENV).not.toBe("production");
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("inclui mock", async () => {
+    const { PROVIDER_TYPES } = await import("@/lib/payment/constants");
     expect(PROVIDER_TYPES).toContain("mock");
   });
 
-  it("PRODUCTION_PROVIDER_TYPES nunca inclui mock, independente do ambiente", () => {
-    expect(PRODUCTION_PROVIDER_TYPES).not.toContain("mock");
+  it("inclui pagarme e pinbank", async () => {
+    const { PROVIDER_TYPES } = await import("@/lib/payment/constants");
+    expect(PROVIDER_TYPES).toContain("pagarme");
+    expect(PROVIDER_TYPES).toContain("pinbank");
+  });
+
+  it("é idêntico a DEV_PROVIDER_TYPES", async () => {
+    const { PROVIDER_TYPES, DEV_PROVIDER_TYPES } = await import(
+      "@/lib/payment/constants"
+    );
+    expect([...PROVIDER_TYPES].sort()).toEqual([...DEV_PROVIDER_TYPES].sort());
+  });
+});
+
+describe("PROVIDER_TYPES em teste (NODE_ENV=test)", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.stubEnv("NODE_ENV", "test");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("inclui mock (ambiente não-produção)", async () => {
+    const { PROVIDER_TYPES } = await import("@/lib/payment/constants");
+    expect(PROVIDER_TYPES).toContain("mock");
   });
 });

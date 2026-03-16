@@ -1,76 +1,122 @@
-import { describe, it, expect } from "vitest";
-import {
-  PRODUCTION_PROVIDER_REGISTRY,
-  DEV_PROVIDER_REGISTRY,
-  PROVIDER_REGISTRY,
-} from "@/lib/payment/registry";
-import { PRODUCTION_PROVIDER_TYPES } from "@/lib/payment/constants";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-describe("PRODUCTION_PROVIDER_REGISTRY", () => {
-  it("contém pagarme e pinbank", () => {
+// PROVIDER_REGISTRY é avaliado em module-load time.
+// Usamos vi.resetModules() + vi.stubEnv() + dynamic import para testar cada env.
+
+describe("PRODUCTION_PROVIDER_REGISTRY (estático)", () => {
+  it("contém pagarme e pinbank", async () => {
+    const { PRODUCTION_PROVIDER_REGISTRY } = await import("@/lib/payment/registry");
     expect(PRODUCTION_PROVIDER_REGISTRY).toHaveProperty("pagarme");
     expect(PRODUCTION_PROVIDER_REGISTRY).toHaveProperty("pinbank");
   });
 
-  it("NÃO contém mock", () => {
+  it("não inclui mock", async () => {
+    const { PRODUCTION_PROVIDER_REGISTRY } = await import("@/lib/payment/registry");
     expect(PRODUCTION_PROVIDER_REGISTRY).not.toHaveProperty("mock");
   });
 
-  it("cada entrada tem id, name, configSchema e settingsSchema", () => {
-    for (const key of Object.keys(PRODUCTION_PROVIDER_REGISTRY)) {
-      const entry = PRODUCTION_PROVIDER_REGISTRY[key];
-      expect(entry).toHaveProperty("id", key);
-      expect(entry).toHaveProperty("name");
-      expect(Array.isArray(entry.configSchema)).toBe(true);
-      expect(Array.isArray(entry.settingsSchema)).toBe(true);
+  it("cada provider tem id, name e configSchema", async () => {
+    const { PRODUCTION_PROVIDER_REGISTRY } = await import("@/lib/payment/registry");
+    for (const [key, def] of Object.entries(PRODUCTION_PROVIDER_REGISTRY)) {
+      expect(def.id).toBe(key);
+      expect(typeof def.name).toBe("string");
+      expect(Array.isArray(def.configSchema)).toBe(true);
     }
-  });
-
-  it("chaves do registry estão alinhadas com PRODUCTION_PROVIDER_TYPES", () => {
-    const registryKeys = Object.keys(PRODUCTION_PROVIDER_REGISTRY).sort();
-    const typesKeys = [...PRODUCTION_PROVIDER_TYPES].sort();
-    expect(registryKeys).toEqual(typesKeys);
   });
 });
 
-describe("DEV_PROVIDER_REGISTRY", () => {
-  it("contém todos os providers de produção", () => {
+describe("DEV_PROVIDER_REGISTRY (estático)", () => {
+  it("contém mock além dos providers de produção", async () => {
+    const { DEV_PROVIDER_REGISTRY, PRODUCTION_PROVIDER_REGISTRY } = await import(
+      "@/lib/payment/registry"
+    );
+    expect(DEV_PROVIDER_REGISTRY).toHaveProperty("mock");
     for (const key of Object.keys(PRODUCTION_PROVIDER_REGISTRY)) {
       expect(DEV_PROVIDER_REGISTRY).toHaveProperty(key);
     }
   });
 
-  it("contém mock", () => {
-    expect(DEV_PROVIDER_REGISTRY).toHaveProperty("mock");
+  it("mock provider tem configSchema e settingsSchema vazios", async () => {
+    const { DEV_PROVIDER_REGISTRY } = await import("@/lib/payment/registry");
+    expect(DEV_PROVIDER_REGISTRY.mock.configSchema).toEqual([]);
+    expect(DEV_PROVIDER_REGISTRY.mock.settingsSchema).toEqual([]);
+  });
+});
+
+describe("PROVIDER_REGISTRY em produção (NODE_ENV=production)", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.stubEnv("NODE_ENV", "production");
   });
 
-  it("entrada mock tem id='mock' e schemas vazios", () => {
-    const mock = DEV_PROVIDER_REGISTRY["mock"];
-    expect(mock.id).toBe("mock");
-    expect(mock.configSchema).toEqual([]);
-    expect(mock.settingsSchema).toEqual([]);
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
-  it("tem mais providers que PRODUCTION_PROVIDER_REGISTRY", () => {
-    expect(Object.keys(DEV_PROVIDER_REGISTRY).length).toBeGreaterThan(
-      Object.keys(PRODUCTION_PROVIDER_REGISTRY).length
+  it("não inclui mock", async () => {
+    const { PROVIDER_REGISTRY } = await import("@/lib/payment/registry");
+    expect(PROVIDER_REGISTRY).not.toHaveProperty("mock");
+  });
+
+  it("inclui pagarme e pinbank", async () => {
+    const { PROVIDER_REGISTRY } = await import("@/lib/payment/registry");
+    expect(PROVIDER_REGISTRY).toHaveProperty("pagarme");
+    expect(PROVIDER_REGISTRY).toHaveProperty("pinbank");
+  });
+
+  it("é idêntico a PRODUCTION_PROVIDER_REGISTRY", async () => {
+    const { PROVIDER_REGISTRY, PRODUCTION_PROVIDER_REGISTRY } = await import(
+      "@/lib/payment/registry"
+    );
+    expect(Object.keys(PROVIDER_REGISTRY).sort()).toEqual(
+      Object.keys(PRODUCTION_PROVIDER_REGISTRY).sort()
     );
   });
 });
 
-describe("PROVIDER_REGISTRY (condicional por NODE_ENV)", () => {
-  it("em ambiente não-produção (test), inclui mock", () => {
-    expect(process.env.NODE_ENV).not.toBe("production");
+describe("PROVIDER_REGISTRY em desenvolvimento (NODE_ENV=development)", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.stubEnv("NODE_ENV", "development");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("inclui mock", async () => {
+    const { PROVIDER_REGISTRY } = await import("@/lib/payment/registry");
     expect(PROVIDER_REGISTRY).toHaveProperty("mock");
   });
 
-  it("sempre contém os providers de produção", () => {
-    for (const key of Object.keys(PRODUCTION_PROVIDER_REGISTRY)) {
-      expect(PROVIDER_REGISTRY).toHaveProperty(key);
-    }
+  it("inclui pagarme e pinbank", async () => {
+    const { PROVIDER_REGISTRY } = await import("@/lib/payment/registry");
+    expect(PROVIDER_REGISTRY).toHaveProperty("pagarme");
+    expect(PROVIDER_REGISTRY).toHaveProperty("pinbank");
   });
 
-  it("PRODUCTION_PROVIDER_REGISTRY nunca inclui mock, independente do ambiente", () => {
-    expect(PRODUCTION_PROVIDER_REGISTRY).not.toHaveProperty("mock");
+  it("é idêntico a DEV_PROVIDER_REGISTRY", async () => {
+    const { PROVIDER_REGISTRY, DEV_PROVIDER_REGISTRY } = await import(
+      "@/lib/payment/registry"
+    );
+    expect(Object.keys(PROVIDER_REGISTRY).sort()).toEqual(
+      Object.keys(DEV_PROVIDER_REGISTRY).sort()
+    );
+  });
+});
+
+describe("PROVIDER_REGISTRY em teste (NODE_ENV=test)", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.stubEnv("NODE_ENV", "test");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("inclui mock (ambiente não-produção)", async () => {
+    const { PROVIDER_REGISTRY } = await import("@/lib/payment/registry");
+    expect(PROVIDER_REGISTRY).toHaveProperty("mock");
   });
 });

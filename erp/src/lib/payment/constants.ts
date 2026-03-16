@@ -12,12 +12,20 @@ export const PRODUCTION_PROVIDER_TYPES = ["pagarme", "pinbank"] as const;
  */
 export const DEV_PROVIDER_TYPES = [...PRODUCTION_PROVIDER_TYPES, "mock"] as const;
 
+/** Union de todos os provider types possíveis (prod + dev). */
+type AnyProviderType =
+  | (typeof PRODUCTION_PROVIDER_TYPES)[number]
+  | (typeof DEV_PROVIDER_TYPES)[number];
+
 /**
  * Provider types ativos no ambiente atual.
  * Em produção: apenas pagarme e pinbank.
  * Em dev/test: inclui mock.
+ *
+ * Tipo explícito evita inferência como union de tuples readonly,
+ * garantindo compatibilidade com Array.prototype.includes(string).
  */
-export const PROVIDER_TYPES =
+export const PROVIDER_TYPES: ReadonlyArray<AnyProviderType> =
   process.env.NODE_ENV === "production"
     ? PRODUCTION_PROVIDER_TYPES
     : DEV_PROVIDER_TYPES;
