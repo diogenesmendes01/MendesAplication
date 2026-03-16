@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import {
   PRODUCTION_PROVIDER_TYPES,
   DEV_PROVIDER_TYPES,
