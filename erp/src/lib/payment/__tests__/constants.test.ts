@@ -42,10 +42,8 @@ describe("DEV_PROVIDER_TYPES", () => {
 });
 
 describe("PROVIDER_TYPES (env-aware)", () => {
-  const originalEnv = process.env.NODE_ENV;
-
   afterEach(() => {
-    process.env.NODE_ENV = originalEnv;
+    vi.unstubAllEnvs();
     vi.resetModules();
   });
 
@@ -55,7 +53,7 @@ describe("PROVIDER_TYPES (env-aware)", () => {
   });
 
   it("em produção contém exatamente os providers de PRODUCTION_PROVIDER_TYPES", async () => {
-    process.env.NODE_ENV = "production";
+    vi.stubEnv("NODE_ENV", "production");
     vi.resetModules();
     const { PROVIDER_TYPES, PRODUCTION_PROVIDER_TYPES: PROD } = await import(
       "@/lib/payment/constants"

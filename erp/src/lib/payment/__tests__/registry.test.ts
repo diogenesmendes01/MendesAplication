@@ -73,22 +73,20 @@ describe("DEV_PROVIDER_REGISTRY", () => {
 });
 
 describe("PROVIDER_REGISTRY (env-aware)", () => {
-  const originalEnv = process.env.NODE_ENV;
-
   afterEach(() => {
-    process.env.NODE_ENV = originalEnv;
+    vi.unstubAllEnvs();
     vi.resetModules();
   });
 
   it("em produção não expõe mock", async () => {
-    process.env.NODE_ENV = "production";
+    vi.stubEnv("NODE_ENV", "production");
     vi.resetModules();
     const { PROVIDER_REGISTRY } = await import("@/lib/payment/registry");
     expect(PROVIDER_REGISTRY).not.toHaveProperty("mock");
   });
 
   it("fora de produção expõe mock", async () => {
-    process.env.NODE_ENV = "test";
+    vi.stubEnv("NODE_ENV", "test");
     vi.resetModules();
     const { PROVIDER_REGISTRY } = await import("@/lib/payment/registry");
     expect(PROVIDER_REGISTRY).toHaveProperty("mock");
