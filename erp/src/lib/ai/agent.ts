@@ -220,7 +220,7 @@ async function runAgentLoop(options: {
       );
       messages.push({
         role: "user",
-        content: `Erro interno: ${error instanceof Error ? error.message : String(error)}. Tente uma abordagem diferente.`,
+        content: `Erro interno ao processar a solicitação. Tente uma abordagem diferente.`,
       });
     }
   }
@@ -402,7 +402,16 @@ export async function runAgent(
   ];
 
   const effectiveModel =
-    providerConfig.model || aiConfig.model || DEFAULT_MODELS[aiConfig.provider] || aiConfig.provider;
+    providerConfig.model || aiConfig.model || DEFAULT_MODELS[aiConfig.provider];
+
+  if (!effectiveModel) {
+    return {
+      responded: false,
+      escalated: false,
+      iterations: 0,
+      error: `no_default_model_for_provider:${aiConfig.provider}`,
+    };
+  }
 
   const tools = getToolsForChannel(channel);
 
@@ -511,7 +520,17 @@ export async function runAgentDryRun(
   ];
 
   const effectiveModel =
-    providerConfig.model || aiConfig.model || DEFAULT_MODELS[aiConfig.provider] || aiConfig.provider;
+    providerConfig.model || aiConfig.model || DEFAULT_MODELS[aiConfig.provider];
+
+  if (!effectiveModel) {
+    return {
+      response: "",
+      inputTokens: 0,
+      outputTokens: 0,
+      estimatedCostBrl: 0,
+      error: `no_default_model_for_provider:${aiConfig.provider}`,
+    };
+  }
 
   const tools = getToolsForChannel(channel);
 

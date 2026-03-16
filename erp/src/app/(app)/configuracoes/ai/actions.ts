@@ -77,6 +77,30 @@ function maskApiKey(key: string | null | undefined): string {
 }
 
 // ---------------------------------------------------------------------------
+// Rate limiter for testAiConnection (in-memory, per-company, max 5/min)
+//
+// ⚠️  KNOWN LIMITATION — IN-MEMORY ONLY (same as simulationRateMap above).
+// TODO: Replace with Redis-backed counter when available.
+// ---------------------------------------------------------------------------
+
+const testConnectionRateMap = new Map<string, number[]>();
+const TEST_CONN_RATE_LIMIT = 5;
+const TEST_CONN_RATE_WINDOW_MS = 60_000; // 1 minute
+
+function checkTestConnectionRateLimit(companyId: string): boolean {
+  const now = Date.now();
+  const timestamps = testConnectionRateMap.get(companyId) ?? [];
+  const recent = timestamps.filter((ts) => now - ts < TEST_CONN_RATE_WINDOW_MS);
+  if (recent.length >= TEST_CONN_RATE_LIMIT) {
+    testConnectionRateMap.set(companyId, recent);
+    return false; // rate limited
+  }
+  recent.push(now);
+  testConnectionRateMap.set(companyId, recent);
+  return true; // allowed
+}
+
+// ---------------------------------------------------------------------------
 // Rate limiter for simulation (in-memory, per-company, max 10/min)
 //
 // ⚠️  KNOWN LIMITATION — IN-MEMORY ONLY:
@@ -280,6 +304,10 @@ export async function testAiConnection(
 ): Promise<{ ok: boolean; error?: string }> {
   await requireAdmin();
   await requireCompanyAccess(companyId);
+
+  if (!checkTestConnectionRateLimit(companyId)) {
+    return { ok: false, error: "Limite de testes atingido (máx 5/min). Aguarde um momento." };
+  }
 
   const config = await prisma.aiConfig.findUnique({
     where: { companyId },
