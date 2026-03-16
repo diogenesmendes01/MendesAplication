@@ -1,6 +1,8 @@
 // ─── Pricing table (USD per 1M tokens) ───────────────────────────────────────
 // Update prices when providers change their rates.
 // Source: each provider's pricing page.
+// Last verified: 2026-03-16
+// Review schedule: quarterly (next: 2026-06-16)
 // This file has NO "use server" directive — constants are importable anywhere.
 
 export interface ModelPricing {
@@ -32,7 +34,11 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
   "deepseek-reasoner": { input: 0.55, output: 2.19 },
 };
 
-// Fallback pricing for unknown models
+// Fallback pricing for unknown models.
+// ⚠️ WARNING: When a model is not in MODEL_PRICING, cost-tracker.ts will
+// log a warning and use this generic fallback. Add new models to
+// MODEL_PRICING to track costs accurately.
+// See: https://github.com/diogenesmendes01/MendesAplication/issues/128
 export const FALLBACK_PRICING: ModelPricing = { input: 1.0, output: 3.0 };
 
 /**

@@ -30,6 +30,14 @@ interface LogUsageParams {
 export async function logUsage(params: LogUsageParams) {
   const pricing = MODEL_PRICING[params.model] ?? FALLBACK_PRICING;
 
+  if (!MODEL_PRICING[params.model]) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[cost-tracker] Unknown model "${params.model}" — using FALLBACK_PRICING. ` +
+      `Update MODEL_PRICING in pricing.ts to track costs accurately.`
+    );
+  }
+
   const costUsd =
     (params.inputTokens * pricing.input +
       params.outputTokens * pricing.output) /

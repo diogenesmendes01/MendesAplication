@@ -8,7 +8,7 @@ import { executeTool } from "./tool-executor";
 import type { ToolContext } from "./tool-executor";
 import { decrypt } from "@/lib/encryption";
 import { getTodaySpend, logUsage } from "./cost-tracker";
-import { MODEL_PRICING, DEFAULT_MODELS } from "./pricing";
+import { MODEL_PRICING, FALLBACK_PRICING, DEFAULT_MODELS } from "./pricing";
 import { getBrlUsdRateSync } from "./exchange-rate";
 
 // ─── Result types ─────────────────────────────────────────────────────────────
@@ -646,7 +646,7 @@ function estimateCostBrl(
   inputTokens: number,
   outputTokens: number
 ): number {
-  const pricing = MODEL_PRICING[model] ?? { input: 1.0, output: 3.0 };
+  const pricing = MODEL_PRICING[model] ?? FALLBACK_PRICING;
   const costUsd =
     (inputTokens * pricing.input + outputTokens * pricing.output) / 1_000_000;
   return costUsd * getBrlUsdRateSync();
