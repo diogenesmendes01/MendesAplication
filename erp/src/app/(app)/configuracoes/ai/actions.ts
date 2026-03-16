@@ -62,25 +62,19 @@ export type { UsageSummary };
 // ---------------------------------------------------------------------------
 
 /**
- * Mask a secret string: show only the last 4 chars, replace the rest with ****.
- * Returns empty string for null/undefined/empty input.
+ * Returns a fully opaque mask (`"****"`) for any non-empty API key value.
+ * Returns empty string for null / undefined / empty input.
  *
- * ⚠️  KNOWN LIMITATION — DECRYPT-ON-READ:
- * This function decrypts the full API key on every call to getAiConfig()
- * (including polling from Settings tabs and the Consumo tab). This results
- * in unnecessary decrypt operations and silently returns "" for null keys,
- * which can mask unconfigured keys in the frontend.
+ * The function intentionally does NOT decrypt the stored ciphertext —
+ * it simply signals "a key is configured" without exposing any key material.
  *
- * TODO(#107): Refactor updateAiConfig to persist apiKeyHint = plaintext.slice(-4)
- * in a new AiConfig.apiKeyHint column, then return `****${record.apiKeyHint}`
- * here without decrypting. Requires migration — see linked issue.
+ * TODO(#107): Add an `apiKeyHint` column to AiConfig (last-4 chars of
+ * plaintext, stored on save) so we can return `****${record.apiKeyHint}`
+ * here without ever decrypting. Requires a DB migration.
  */
-// Returns "****" when no plaintext hint available — avoids decrypt-on-read
-// and the incorrect masking of ciphertext chars.
-// TODO(#107): Add apiKeyHint column to AiConfig and populate on save.
 function maskApiKey(key: string | null | undefined): string {
   if (!key) return "";
-  return "****"; // Always opaque until apiKeyHint migration is done
+  return "****"; // Always opaque until apiKeyHint migration is done (#107)
 }
 
 // ---------------------------------------------------------------------------
