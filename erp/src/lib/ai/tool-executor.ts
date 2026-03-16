@@ -256,7 +256,7 @@ const ALLOWED_EMAIL_TAGS = new Set(["b", "i", "br", "p", "ul", "li", "strong", "
 
 // Solução segura: strip TUDO e reinsere somente as tags permitidas via whitelist,
 // sem depender de regex para preservar qualquer tag com atributos.
-function sanitizeEmailHtml(input: string): string {
+export function sanitizeEmailHtml(input: string): string {
   // Tira todos os atributos de todas as tags primeiro; grupos separados para open/close
   // evitam ambiguidade de captura que permitia bypass via atributos malformados.
   const noAttrs = input.replace(

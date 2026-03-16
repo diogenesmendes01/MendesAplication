@@ -347,7 +347,24 @@ export async function testAiConnection(
     );
     return { ok: true };
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Erro desconhecido";
+    // Log full error server-side (may contain raw API key hints, rate-limit details, etc.)
+    console.error("[testAiConnection] provider error:", err);
+
+    // Map common provider error patterns to safe, generic messages for the frontend.
+    // Raw provider messages can expose partial API keys ("sk-proj-xxx...") or internal details.
+    const raw = err instanceof Error ? err.message : String(err);
+    let message: string;
+    if (/401|unauthorized|incorrect api key|invalid.*(key|token)/i.test(raw)) {
+      message = "API key inválida ou sem permissão. Verifique a chave configurada.";
+    } else if (/429|rate.?limit|quota/i.test(raw)) {
+      message = "Limite de requisições atingido no provider. Tente novamente em instantes.";
+    } else if (/5\d{2}|server error|internal error|service unavailable/i.test(raw)) {
+      message = "Erro interno no servidor do provider. Tente novamente mais tarde.";
+    } else if (/timeout|timed out|ETIMEDOUT/i.test(raw)) {
+      message = "Timeout ao conectar ao provider. Verifique a conexão.";
+    } else {
+      message = "Erro ao testar conexão com o provider. Verifique as configurações.";
+    }
     return { ok: false, error: message };
   }
 }
