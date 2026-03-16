@@ -303,16 +303,29 @@ async function executeRespondEmail(
     },
   });
 
-  // Enqueue for email outbound delivery
-  await emailOutboundQueue.add("send-email", {
-    messageId: ticketMessage.id,
-    ticketId: context.ticketId,
-    companyId: context.companyId,
-    to: recipientEmail,
-    subject,
-    content: message,
-    attachmentIds: [],
-  });
+  // Enqueue for email outbound delivery.
+  // If the queue fails after the DB record was created, mark the message as
+  // failed to prevent a false-positive in the ticket history (W4 fix).
+  try {
+    await emailOutboundQueue.add("send-email", {
+      messageId: ticketMessage.id,
+      ticketId: context.ticketId,
+      companyId: context.companyId,
+      to: recipientEmail,
+      subject,
+      content: message,
+      attachmentIds: [],
+    });
+  } catch (queueErr) {
+    // Best-effort: flag the message so the agent/human knows the send failed
+    await prisma.ticketMessage
+      .update({
+        where: { id: ticketMessage.id },
+        data: { content: `[FALHA NO ENVIO] ${message}` },
+      })
+      .catch(() => {}); // compensação best-effort; não mascarar o erro original
+    throw queueErr; // propaga para executeTool tratar
+  }
 
   return `Email enfileirado para envio ao destinatario ${recipientEmail} com assunto "${subject}".`;
 }
