@@ -259,7 +259,8 @@ async function executeRespondEmail(
   args: Record<string, unknown>,
   context: ToolContext
 ): Promise<string> {
-  const subject = args.subject as string;
+  // Strip CRLF to prevent SMTP header injection via LLM-generated subject
+  const subject = (args.subject as string)?.replace(/[\r\n]+/g, " ").trim();
   const rawMessage = args.message as string;
   if (!subject) return "Erro: assunto (subject) nao fornecido.";
   if (!rawMessage) return "Erro: mensagem (message) nao fornecida.";
@@ -402,7 +403,8 @@ function executeDryRunRespond(args: Record<string, unknown>): string {
 }
 
 function executeDryRunRespondEmail(args: Record<string, unknown>): string {
-  const subject = args.subject as string;
+  // Strip CRLF to prevent SMTP header injection via LLM-generated subject (consistency with real path)
+  const subject = (args.subject as string)?.replace(/[\r\n]+/g, " ").trim();
   const message = args.message as string;
   if (!subject) return "Erro: assunto (subject) nao fornecido.";
   if (!message) return "Erro: mensagem (message) nao fornecida.";
