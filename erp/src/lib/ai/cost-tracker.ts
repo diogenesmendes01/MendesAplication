@@ -136,38 +136,37 @@ export async function getUsageSummary(
   // consumption totals displayed in the dashboard's Consumo tab.
   const where = { companyId, createdAt: { gte: since }, isSimulation: false };
 
-  // Overall totals
-  const totals = await prisma.aiUsageLog.aggregate({
-    where,
-    _sum: {
-      inputTokens: true,
-      outputTokens: true,
-      costBrl: true,
-      costUsd: true,
-    },
-  });
-
-  // Breakdown by channel
-  const channelGroups = await prisma.aiUsageLog.groupBy({
-    by: ["channel"],
-    where,
-    _sum: {
-      inputTokens: true,
-      outputTokens: true,
-      costBrl: true,
-    },
-  });
-
-  // Breakdown by model
-  const modelGroups = await prisma.aiUsageLog.groupBy({
-    by: ["model"],
-    where,
-    _sum: {
-      inputTokens: true,
-      outputTokens: true,
-      costBrl: true,
-    },
-  });
+  // Run all 3 aggregations in parallel — avoids sequential round-trips that
+  // triple latency on admin queries spanning 30–90-day windows.
+  const [totals, channelGroups, modelGroups] = await Promise.all([
+    prisma.aiUsageLog.aggregate({
+      where,
+      _sum: {
+        inputTokens: true,
+        outputTokens: true,
+        costBrl: true,
+        costUsd: true,
+      },
+    }),
+    prisma.aiUsageLog.groupBy({
+      by: ["channel"],
+      where,
+      _sum: {
+        inputTokens: true,
+        outputTokens: true,
+        costBrl: true,
+      },
+    }),
+    prisma.aiUsageLog.groupBy({
+      by: ["model"],
+      where,
+      _sum: {
+        inputTokens: true,
+        outputTokens: true,
+        costBrl: true,
+      },
+    }),
+  ]);
 
   return {
     totalInputTokens: totals._sum.inputTokens ?? 0,
