@@ -322,9 +322,10 @@ export async function updateAiConfig(
   };
 
   // Build update payload: include apiKey/hint only when they changed.
-  // When apiKeyToStore === undefined, apiKeyHintToStore is also always undefined
-  // (null is only assigned in the same branch that sets apiKeyToStore = null),
-  // so the inner check for apiKeyHintToStore === null would be unreachable.
+  // apiKeyToStore !== undefined covers two cases:
+  //   - new plaintext key (string) → encrypt + update hint
+  //   - explicit null removal → clear both key and hint
+  // undefined means "keep existing" (masked or empty string submitted).
   const updateData =
     apiKeyToStore !== undefined
       ? { ...baseData, apiKey: apiKeyToStore, apiKeyHint: apiKeyHintToStore }
