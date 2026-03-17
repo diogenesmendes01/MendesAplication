@@ -443,3 +443,80 @@ describe("updateAiConfig", () => {
     ).rejects.toThrow(/apiKey too short/i);
   });
 });
+
+// ─── getAiUsageSummary — days validation ──────────────────────────────────────
+
+describe("getAiUsageSummary — days validation", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    mockRequireAdmin.mockResolvedValue(undefined);
+    mockRequireCompanyAccess.mockResolvedValue(undefined);
+  });
+
+  it("rejects days = 0", async () => {
+    const { getAiUsageSummary } = await import(
+      "@/app/(app)/configuracoes/ai/actions"
+    );
+    await expect(
+      getAiUsageSummary("company-1", 0)
+    ).rejects.toThrow(/days must be an integer between 1 and 365/i);
+  });
+
+  it("rejects days = -1", async () => {
+    const { getAiUsageSummary } = await import(
+      "@/app/(app)/configuracoes/ai/actions"
+    );
+    await expect(
+      getAiUsageSummary("company-1", -1)
+    ).rejects.toThrow(/days must be an integer between 1 and 365/i);
+  });
+
+  it("rejects days = 366 (above maximum)", async () => {
+    const { getAiUsageSummary } = await import(
+      "@/app/(app)/configuracoes/ai/actions"
+    );
+    await expect(
+      getAiUsageSummary("company-1", 366)
+    ).rejects.toThrow(/days must be an integer between 1 and 365/i);
+  });
+
+  it("rejects days = NaN", async () => {
+    const { getAiUsageSummary } = await import(
+      "@/app/(app)/configuracoes/ai/actions"
+    );
+    await expect(
+      getAiUsageSummary("company-1", NaN)
+    ).rejects.toThrow(/days must be an integer between 1 and 365/i);
+  });
+
+  it("rejects days = 1.5 (non-integer)", async () => {
+    const { getAiUsageSummary } = await import(
+      "@/app/(app)/configuracoes/ai/actions"
+    );
+    await expect(
+      getAiUsageSummary("company-1", 1.5)
+    ).rejects.toThrow(/days must be an integer between 1 and 365/i);
+  });
+
+  it("accepts days = 1 (minimum valid) — passes bounds check, reaches DB layer", async () => {
+    const { getAiUsageSummary } = await import(
+      "@/app/(app)/configuracoes/ai/actions"
+    );
+    // Passes validation; may throw DB error from partial mock — that's fine,
+    // we only assert the bounds guard does NOT fire.
+    const result = getAiUsageSummary("company-1", 1);
+    await expect(result).rejects.not.toThrow(
+      /days must be an integer between 1 and 365/i
+    );
+  });
+
+  it("accepts days = 365 (maximum valid) — passes bounds check, reaches DB layer", async () => {
+    const { getAiUsageSummary } = await import(
+      "@/app/(app)/configuracoes/ai/actions"
+    );
+    const result = getAiUsageSummary("company-1", 365);
+    await expect(result).rejects.not.toThrow(
+      /days must be an integer between 1 and 365/i
+    );
+  });
+});
