@@ -296,6 +296,7 @@ export async function updateAiConfig(
     apiKeyToStore = encrypt(data.apiKey);
     apiKeyHintToStore = data.apiKey.trim().slice(-4);
   }
+  // data.apiKey === "" or masked pattern = keep-existing — do not touch hint
 
   const baseData = {
     enabled: data.enabled,
