@@ -29,6 +29,15 @@ vi.mock("@/lib/ai/tools", () => ({
   getToolsForChannel: vi.fn().mockReturnValue([]),
 }));
 
+vi.mock("@/lib/logger", () => ({
+  logger: {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  },
+}));
+
 // Base AI config used in tests
 const mockAiConfig = {
   id: "config-1",
