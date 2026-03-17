@@ -22,6 +22,7 @@ const EMAIL_SANITIZE_CONFIG: sanitizeHtml.IOptions = {
     a: ["href"],
   },
   allowedSchemes: ["https", "mailto"],
+  allowProtocolRelative: false,
   // Disallow javascript: and data: URIs
   disallowedTagsMode: "discard",
 };

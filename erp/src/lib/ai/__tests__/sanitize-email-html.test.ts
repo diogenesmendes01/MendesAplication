@@ -133,6 +133,12 @@ describe("sanitizeEmailHtml", () => {
     expect(result).not.toContain("data:");
   });
 
+  it("blocks protocol-relative URL in href (//evil.com bypasses allowedSchemes)", () => {
+    const result = sanitizeEmailHtml('<a href="//evil.com">click</a>');
+    expect(result).not.toContain("//evil.com");
+    expect(result).toContain("click");
+  });
+
   // --- Mixed / nested HTML ---
 
   it("handles nested allowed inside disallowed: <div><b>ok</b></div> → <b>ok</b>", () => {
