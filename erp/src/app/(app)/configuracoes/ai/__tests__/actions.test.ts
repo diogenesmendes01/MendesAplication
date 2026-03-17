@@ -389,20 +389,19 @@ describe("updateAiConfig", () => {
     expect(updatePayload).not.toHaveProperty("apiKey");
   });
 
-  it("clears apiKey and apiKeyHint when empty string is submitted (explicit key removal)", async () => {
+  it("also preserves key when empty string is submitted (no masked pattern match needed)", async () => {
     const { updateAiConfig } = await import(
       "@/app/(app)/configuracoes/ai/actions"
     );
 
     await updateAiConfig("company-empty-key", { ...validData, apiKey: "" });
 
-    // Empty string → no encrypt call, but apiKey and apiKeyHint must be explicitly nulled
-    // to avoid leaving a stale hint after key removal (QA BLOCK #2)
+    // Empty string → keep-existing (same as masked key); explicit removal requires null.
+    // The upsert update payload must NOT include apiKey (preserves existing DB value).
     expect(mockEncrypt).not.toHaveBeenCalled();
     const upsertCall = mockUpsert.mock.calls[0][0] as Record<string, unknown>;
     const updatePayload = upsertCall.update as Record<string, unknown>;
-    expect(updatePayload).toHaveProperty("apiKey", null);
-    expect(updatePayload).toHaveProperty("apiKeyHint", null);
+    expect(updatePayload).not.toHaveProperty("apiKey");
   });
 
   it("throws when temperature is out of range (> 1)", async () => {
