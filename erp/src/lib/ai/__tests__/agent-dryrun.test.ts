@@ -6,6 +6,7 @@ const mockChatCompletion = vi.fn();
 const mockGetEnvProviderConfig = vi.fn();
 const mockExecuteTool = vi.fn();
 const mockDecrypt = vi.fn((v: string) => `decrypted:${v}`);
+const mockLogUsage = vi.fn();
 
 vi.mock("@/lib/ai/provider", () => ({
   chatCompletion: (...args: unknown[]) => mockChatCompletion(...args),
@@ -22,7 +23,7 @@ vi.mock("@/lib/encryption", () => ({
 
 vi.mock("@/lib/ai/cost-tracker", () => ({
   getTodaySpend: vi.fn().mockResolvedValue(0),
-  logUsage: vi.fn().mockResolvedValue(undefined),
+  logUsage: (...args: unknown[]) => mockLogUsage(...args),
 }));
 
 vi.mock("@/lib/ai/tools", () => ({
@@ -70,6 +71,7 @@ vi.mock("@/lib/prisma", () => ({
 describe("runAgentDryRun", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockLogUsage.mockResolvedValue(undefined);
     mockFindUnique.mockResolvedValue(mockAiConfig);
     mockGetEnvProviderConfig.mockResolvedValue({
       provider: "openai",
@@ -192,7 +194,6 @@ describe("runAgentDryRun", () => {
   });
 
   it("calls logUsage in dry-run mode so tokens are tracked in Consumo and against the daily limit", async () => {
-    const { logUsage } = await import("@/lib/ai/cost-tracker");
     mockChatCompletion.mockResolvedValue({
       content: "Oi",
       tool_calls: [],
@@ -202,7 +203,7 @@ describe("runAgentDryRun", () => {
     const { runAgentDryRun } = await import("@/lib/ai/agent");
     await runAgentDryRun("company-1", "Oi", "WHATSAPP");
 
-    expect(logUsage).toHaveBeenCalledWith(
+    expect(mockLogUsage).toHaveBeenCalledWith(
       expect.objectContaining({
         aiConfigId: expect.any(String),
         companyId: "company-1",
@@ -339,5 +340,27 @@ describe("runAgentDryRun", () => {
 
     expect(mockChatCompletion).toHaveBeenCalled();
     expect(result.response).toBe("Tudo bem!");
+  });
+
+  // ── Regression: WARN-1 fix — logUsage failure must NOT corrupt agent flow ──
+
+  it("returns correct response even when logUsage throws (non-fatal DB error)", async () => {
+    mockChatCompletion.mockResolvedValue({
+      content: "Resposta mesmo com erro de log",
+      tool_calls: [],
+      usage: { inputTokens: 40, outputTokens: 15 },
+    });
+    // Simulate a DB write failure in logUsage
+    mockLogUsage.mockRejectedValueOnce(new Error("DB pool exhausted"));
+
+    const { runAgentDryRun } = await import("@/lib/ai/agent");
+    const result = await runAgentDryRun("company-1", "Olá!", "WHATSAPP");
+
+    // The agent response must still be returned successfully
+    expect(result.response).toBe("Resposta mesmo com erro de log");
+    expect(result.error).toBeUndefined();
+    // Token counts must still reflect the successful LLM call
+    expect(result.inputTokens).toBe(40);
+    expect(result.outputTokens).toBe(15);
   });
 });

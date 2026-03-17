@@ -107,7 +107,17 @@ async function runAgentLoop(options: {
       if (response.usage) {
         totalInputTokens += response.usage.inputTokens;
         totalOutputTokens += response.usage.outputTokens;
-        await onUsage(response.usage.inputTokens, response.usage.outputTokens);
+        // Non-fatal: usage logging failure must NOT interrupt the agent flow.
+        // The LLM call already succeeded and consumed tokens; a DB write
+        // error (timeout, pool exhausted) should never corrupt the conversation.
+        try {
+          await onUsage(response.usage.inputTokens, response.usage.outputTokens);
+        } catch (usageErr) {
+          console.error(
+            `[ai-agent] Failed to log usage (non-fatal):`,
+            usageErr
+          );
+        }
       }
 
       // ── LLM returned tool calls ────────────────────────────────────────
