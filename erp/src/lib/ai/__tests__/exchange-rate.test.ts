@@ -107,6 +107,35 @@ describe("getBrlUsdRate()", () => {
     // Now getBrlUsdRateSync should reflect the freshly cached value
     expect(getBrlUsdRateSync()).toBe(5.99);
   });
+
+  it("deduplicates concurrent cache-miss calls (single inflight promise)", async () => {
+    let callCount = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(async () => {
+        callCount++;
+        // Small delay to allow concurrent callers to pile up
+        await new Promise((r) => setTimeout(r, 10));
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ USDBRL: { bid: "5.90" } }),
+        };
+      })
+    );
+
+    // Fire 5 concurrent calls — should result in a single HTTP request
+    const results = await Promise.all([
+      getBrlUsdRate(),
+      getBrlUsdRate(),
+      getBrlUsdRate(),
+      getBrlUsdRate(),
+      getBrlUsdRate(),
+    ]);
+
+    expect(callCount).toBe(1);
+    expect(results.every((r) => r === 5.90)).toBe(true);
+  });
 });
 
 // ─── getBrlUsdRateSync ────────────────────────────────────────────────────────
