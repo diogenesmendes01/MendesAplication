@@ -227,6 +227,35 @@ describe("runAgentDryRun", () => {
     expect(result.estimatedCostBrl).toBeGreaterThan(0);
   });
 
+  it("emits console.warn and returns estimatedCostBrl > 0 for unknown model (fallback path)", async () => {
+    mockFindUnique.mockResolvedValue({
+      ...mockAiConfig,
+      model: "unknown-model-xyz",
+    });
+    mockChatCompletion.mockResolvedValue({
+      content: "Tudo bem!",
+      tool_calls: [],
+      usage: { inputTokens: 1000, outputTokens: 500 },
+    });
+
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const { runAgentDryRun } = await import("@/lib/ai/agent");
+    const result = await runAgentDryRun("company-1", "Teste fallback", "WHATSAPP");
+
+    // Cost is estimated using FALLBACK_PRICING — must be positive
+    expect(result.estimatedCostBrl).toBeGreaterThan(0);
+
+    // Warning must be emitted exactly once for the unknown model
+    const fallbackWarns = warnSpy.mock.calls.filter(
+      (args) => typeof args[0] === "string" && args[0].includes("unknown-model-xyz")
+    );
+    expect(fallbackWarns.length).toBeGreaterThanOrEqual(1);
+    expect(fallbackWarns[0][0]).toContain("FALLBACK_PRICING");
+
+    warnSpy.mockRestore();
+  });
+
   it("uses EMAIL RESPOND_EMAIL tool for email channel", async () => {
     mockChatCompletion.mockResolvedValue({
       content: null,

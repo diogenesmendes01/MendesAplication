@@ -84,6 +84,57 @@ describe("cost-tracker", () => {
       expect(parseFloat(data.costUsd.toString())).toBeCloseTo(4.0, 4);
     });
 
+    it("emits console.warn when model is unknown (fallback path)", async () => {
+      mockCreate.mockResolvedValue({});
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      const { logUsage } = await import("@/lib/ai/cost-tracker");
+
+      await logUsage({
+        aiConfigId: "config-1",
+        companyId: "company-1",
+        provider: "openai",
+        model: "totally-unknown-model",
+        channel: "WHATSAPP",
+        inputTokens: 100,
+        outputTokens: 50,
+      });
+
+      // Filter only pricing-related warns (exchange-rate may also warn on 429)
+      const pricingWarns = warnSpy.mock.calls.filter(
+        (args) => typeof args[0] === "string" && args[0].includes("totally-unknown-model")
+      );
+      expect(pricingWarns).toHaveLength(1);
+      expect(pricingWarns[0][0]).toContain("FALLBACK_PRICING");
+
+      warnSpy.mockRestore();
+    });
+
+    it("does NOT emit pricing console.warn for known models", async () => {
+      mockCreate.mockResolvedValue({});
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      const { logUsage } = await import("@/lib/ai/cost-tracker");
+
+      await logUsage({
+        aiConfigId: "config-1",
+        companyId: "company-1",
+        provider: "openai",
+        model: "gpt-4o",  // known model — no pricing warn expected
+        channel: "WHATSAPP",
+        inputTokens: 500,
+        outputTokens: 200,
+      });
+
+      // Only pricing-specific warns are checked — exchange-rate API warns are unrelated
+      const pricingWarns = warnSpy.mock.calls.filter(
+        (args) => typeof args[0] === "string" && args[0].includes("[cost-tracker]")
+      );
+      expect(pricingWarns).toHaveLength(0);
+
+      warnSpy.mockRestore();
+    });
+
     it("passes ticketId when provided", async () => {
       mockCreate.mockResolvedValue({});
       const { logUsage } = await import("@/lib/ai/cost-tracker");

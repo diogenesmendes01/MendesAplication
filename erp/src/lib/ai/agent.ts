@@ -646,6 +646,13 @@ function estimateCostBrl(
   inputTokens: number,
   outputTokens: number
 ): number {
+  if (!MODEL_PRICING[model]) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[ai-agent] Unknown model "${model}" in estimateCostBrl — using FALLBACK_PRICING. ` +
+      `Update MODEL_PRICING in pricing.ts to track costs accurately.`
+    );
+  }
   const pricing = MODEL_PRICING[model] ?? FALLBACK_PRICING;
   const costUsd =
     (inputTokens * pricing.input + outputTokens * pricing.output) / 1_000_000;
