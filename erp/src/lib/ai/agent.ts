@@ -208,7 +208,7 @@ async function runAgentLoop(options: {
         };
       }
     } catch (error) {
-      logger.error({ contextId, iteration: iteration + 1, error }, "Error in agent iteration");
+      logger.error({ contextId, iteration: iteration + 1, err: error }, "Error in agent iteration");
       messages.push({
         role: "user",
         content: `Erro interno ao processar a solicitação. Tente uma abordagem diferente.`,

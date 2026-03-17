@@ -6,7 +6,7 @@
 //   import { logger } from "@/lib/logger";
 //   logger.info({ companyId, ticketId }, "Processing ticket");
 //   logger.warn({ model, fallback: true }, "Using fallback pricing");
-//   logger.error({ error }, "Failed to process");
+//   logger.error({ err }, "Failed to process");
 
 import pino from "pino";
 
@@ -14,7 +14,6 @@ export const logger = pino({
   level: process.env.LOG_LEVEL || "info",
   serializers: {
     err: pino.stdSerializers.err,
-    error: pino.stdSerializers.err,
   },
   ...(process.env.NODE_ENV === "development" && {
     transport: { target: "pino-pretty" },
