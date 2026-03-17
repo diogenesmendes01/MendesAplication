@@ -243,6 +243,40 @@ async function runAgentLoop(options: {
   };
 }
 
+// ─── Provider config builder ─────────────────────────────────────────────────
+
+/**
+ * Resolves the ProviderConfig for a company's AiConfig.
+ * Extracted to eliminate the identical decrypt block that was duplicated
+ * between runAgent and runAgentDryRun.
+ *
+ * @returns `{ config }` on success, or `{ error: 'api_key_decrypt_failed' }` if decrypt throws.
+ */
+async function buildProviderConfig(
+  aiConfig: { apiKey: string | null; provider: string; model: string | null; temperature?: number | null },
+  companyId: string
+): Promise<{ config: ProviderConfig } | { error: "api_key_decrypt_failed" }> {
+  if (aiConfig.apiKey) {
+    try {
+      const decryptedApiKey = decrypt(aiConfig.apiKey);
+      return {
+        config: {
+          provider: aiConfig.provider,
+          apiKey: decryptedApiKey,
+          model: aiConfig.model || undefined,
+          temperature: aiConfig.temperature ?? undefined,
+        },
+      };
+    } catch {
+      return { error: "api_key_decrypt_failed" };
+    }
+  }
+  console.warn(
+    `[ai-agent] No apiKey for company ${companyId}, falling back to global env — usage costs unattributed`
+  );
+  return { config: await getEnvProviderConfig() };
+}
+
 // ─── Main agent function ─────────────────────────────────────────────────────
 
 export async function runAgent(
@@ -322,24 +356,11 @@ export async function runAgent(
   const maxIterations = aiConfig.maxIterations || 5;
 
   // ── Build provider config ────────────────────────────────────────────────
-  let providerConfig: ProviderConfig;
-  if (aiConfig.apiKey) {
-    let decryptedApiKey: string;
-    try {
-      decryptedApiKey = decrypt(aiConfig.apiKey);
-    } catch {
-      return { responded: false, escalated: false, iterations: 0, error: "api_key_decrypt_failed" };
-    }
-    providerConfig = {
-      provider: aiConfig.provider,
-      apiKey: decryptedApiKey,
-      model: aiConfig.model || undefined,
-      temperature: aiConfig.temperature,
-    };
-  } else {
-    console.warn(`[ai-agent] No apiKey for company ${companyId}, falling back to global env — usage costs unattributed`);
-    providerConfig = await getEnvProviderConfig();
+  const providerResult = await buildProviderConfig(aiConfig, companyId);
+  if ("error" in providerResult) {
+    return { responded: false, escalated: false, iterations: 0, error: providerResult.error };
   }
+  const providerConfig = providerResult.config;
 
   // Load ticket with client and contact info
   const ticket = await prisma.ticket.findUnique({
@@ -534,24 +555,11 @@ export async function runAgentDryRun(
     }
   }
 
-  let providerConfig: ProviderConfig;
-  if (aiConfig.apiKey) {
-    let decryptedApiKey: string;
-    try {
-      decryptedApiKey = decrypt(aiConfig.apiKey);
-    } catch {
-      return { response: "", inputTokens: 0, outputTokens: 0, estimatedCostBrl: 0, error: "api_key_decrypt_failed" };
-    }
-    providerConfig = {
-      provider: aiConfig.provider,
-      apiKey: decryptedApiKey,
-      model: aiConfig.model || undefined,
-      temperature: aiConfig.temperature,
-    };
-  } else {
-    console.warn(`[ai-agent] No apiKey for company ${companyId}, falling back to global env — usage costs unattributed`);
-    providerConfig = await getEnvProviderConfig();
+  const providerResult = await buildProviderConfig(aiConfig, companyId);
+  if ("error" in providerResult) {
+    return { response: "", inputTokens: 0, outputTokens: 0, estimatedCostBrl: 0, error: providerResult.error };
   }
+  const providerConfig = providerResult.config;
 
   const maxIterations = aiConfig.maxIterations || 5;
 
