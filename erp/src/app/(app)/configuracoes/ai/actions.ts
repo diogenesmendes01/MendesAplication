@@ -149,7 +149,7 @@ export async function getAiConfig(companyId: string): Promise<AiConfigData> {
     escalationKeywords: config.escalationKeywords,
     maxIterations: config.maxIterations,
     provider: config.provider,
-    apiKey: maskApiKey(config.apiKey, (config as unknown as { apiKeyHint?: string }).apiKeyHint),
+    apiKey: maskApiKey(config.apiKey, config.apiKeyHint),
     model: config.model ?? "",
     whatsappEnabled: config.whatsappEnabled,
     emailEnabled: config.emailEnabled,
