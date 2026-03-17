@@ -279,11 +279,16 @@ export async function updateAiConfig(
   }
 
   // Determine the apiKey to store:
-  // - If the incoming apiKey is empty or matches the masked pattern, keep existing
-  // - Otherwise, validate and encrypt the new value
-  let apiKeyToStore: string | undefined;
-  let apiKeyHintToStore: string | undefined;
-  if (data.apiKey && !MASKED_API_KEY_PATTERN.test(data.apiKey)) {
+  // - If incoming apiKey is null → explicit removal: clear key and zero the hint
+  // - If the incoming apiKey is empty string or matches the masked pattern, keep existing
+  // - Otherwise, validate and encrypt the new value and persist the last-4-char hint
+  let apiKeyToStore: string | null | undefined;
+  let apiKeyHintToStore: string | null | undefined;
+  if (data.apiKey == null) {
+    // Explicit key removal — zero both the encrypted key and the hint to avoid stale display
+    apiKeyToStore = null;
+    apiKeyHintToStore = null;
+  } else if (data.apiKey && !MASKED_API_KEY_PATTERN.test(data.apiKey)) {
     // Validate minimum key length to surface accidental empty-like submissions
     if (data.apiKey.trim().length < 8) {
       throw new Error("apiKey too short — minimum 8 characters");
@@ -315,9 +320,13 @@ export async function updateAiConfig(
     ...(apiKeyHintToStore !== undefined && { apiKeyHint: apiKeyHintToStore }),
   };
 
-  const updateData = apiKeyToStore !== undefined
-    ? { ...baseData, apiKey: apiKeyToStore, apiKeyHint: apiKeyHintToStore }
-    : baseData;
+  // Build update payload: include apiKey/hint only when they changed
+  const updateData =
+    apiKeyToStore !== undefined
+      ? { ...baseData, apiKey: apiKeyToStore, apiKeyHint: apiKeyHintToStore }
+      : apiKeyHintToStore === null
+        ? { ...baseData, apiKeyHint: null }
+        : baseData;
 
   await prisma.aiConfig.upsert({
     where: { companyId },

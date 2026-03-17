@@ -442,4 +442,87 @@ describe("updateAiConfig", () => {
       updateAiConfig("company-1", { ...validData, apiKey: "short" })
     ).rejects.toThrow(/apiKey too short/i);
   });
+
+  // ── hint save/clear coverage (QA WARN #3 — issue #242) ───────────────────
+
+  it("saves apiKeyHint = last 4 chars of plain key when a new key is provided", async () => {
+    const { updateAiConfig } = await import(
+      "@/app/(app)/configuracoes/ai/actions"
+    );
+
+    const plainKey = "sk-test-brand-new-key-ABCD";
+    await updateAiConfig("company-hint-save", { ...validData, apiKey: plainKey });
+
+    const upsertCall = mockUpsert.mock.calls[0][0] as Record<string, unknown>;
+    const updatePayload = upsertCall.update as Record<string, unknown>;
+    const createPayload = upsertCall.create as Record<string, unknown>;
+
+    // hint must be the last 4 characters of the plain key
+    expect(updatePayload.apiKeyHint).toBe("ABCD");
+    expect(createPayload.apiKeyHint).toBe("ABCD");
+  });
+
+  it("zeros apiKeyHint = null when apiKey is explicitly removed (null)", async () => {
+    const { updateAiConfig } = await import(
+      "@/app/(app)/configuracoes/ai/actions"
+    );
+
+    // Simulate explicit key removal (e.g. a "remove API key" action in the UI)
+    await updateAiConfig("company-hint-clear", {
+      ...validData,
+      apiKey: null as unknown as string,
+    });
+
+    const upsertCall = mockUpsert.mock.calls[0][0] as Record<string, unknown>;
+    const updatePayload = upsertCall.update as Record<string, unknown>;
+    const createPayload = upsertCall.create as Record<string, unknown>;
+
+    // Both the key and the hint must be zeroed to avoid stale display
+    expect(updatePayload.apiKey).toBeNull();
+    expect(updatePayload.apiKeyHint).toBeNull();
+    expect(createPayload.apiKey).toBeNull();
+    expect(createPayload.apiKeyHint).toBeNull();
+  });
+});
+
+// ─── getAiConfig — apiKeyHint coverage (QA WARN #3 — issue #242) ─────────────
+
+describe("getAiConfig — apiKeyHint masking", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockRequireCompanyAccess.mockResolvedValue(undefined);
+  });
+
+  it("returns ****XXXX when apiKeyHint is populated (user-friendly key display)", async () => {
+    mockFindUnique.mockResolvedValue({
+      ...baseConfig,
+      apiKey: "encrypted-key",
+      apiKeyHint: "ABCD",
+    });
+
+    const { getAiConfig } = await import(
+      "@/app/(app)/configuracoes/ai/actions"
+    );
+    const result = await getAiConfig("company-hint-display");
+
+    // maskApiKey(encryptedKey, "ABCD") → "****ABCD"
+    expect(result.apiKey).toBe("****ABCD");
+  });
+
+  it("returns '' (empty string) when key is null but hint is stale — maskApiKey(null, hint)", async () => {
+    // Edge case: key was deleted but hint column still has a value (data inconsistency)
+    mockFindUnique.mockResolvedValue({
+      ...baseConfig,
+      apiKey: null,
+      apiKeyHint: "ABCD",
+    });
+
+    const { getAiConfig } = await import(
+      "@/app/(app)/configuracoes/ai/actions"
+    );
+    const result = await getAiConfig("company-hint-stale");
+
+    // maskApiKey(null, "ABCD") → "" — no key means nothing to mask, hint is irrelevant
+    expect(result.apiKey).toBe("");
+  });
 });
