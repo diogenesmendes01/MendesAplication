@@ -320,13 +320,14 @@ export async function updateAiConfig(
     ...(apiKeyHintToStore !== undefined && { apiKeyHint: apiKeyHintToStore }),
   };
 
-  // Build update payload: include apiKey/hint only when they changed
+  // Build update payload: include apiKey/hint only when they changed.
+  // When apiKeyToStore === undefined, apiKeyHintToStore is also always undefined
+  // (null is only assigned in the same branch that sets apiKeyToStore = null),
+  // so the inner check for apiKeyHintToStore === null would be unreachable.
   const updateData =
     apiKeyToStore !== undefined
       ? { ...baseData, apiKey: apiKeyToStore, apiKeyHint: apiKeyHintToStore }
-      : apiKeyHintToStore === null
-        ? { ...baseData, apiKeyHint: null }
-        : baseData;
+      : baseData;
 
   await prisma.aiConfig.upsert({
     where: { companyId },
