@@ -4,7 +4,6 @@
 
 import { prisma } from "@/lib/prisma";
 import { chunkText, cosineSimilarity } from "@/lib/ai/embedding-utils";
-export { chunkText, cosineSimilarity };
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
