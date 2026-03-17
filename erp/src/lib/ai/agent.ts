@@ -118,6 +118,16 @@ async function runAgentLoop(options: {
             usageErr
           );
         }
+      } else {
+        // ⚠️ Provider did not return usage field — tokens untracked, daily spend
+        // will be underestimated. Known affected cases: Anthropic streaming,
+        // older Qwen/Grok API versions. FALLBACK_PRICING in cost-tracker is NOT
+        // invoked here; fix requires propagating estimated token counts upstream.
+        console.warn(
+          `[ai-agent] response.usage missing — token usage untracked for this LLM call.` +
+          ` provider=${providerConfig.provider} model=${providerConfig.model}.` +
+          ` Daily spend limit may be underestimated.`
+        );
       }
 
       // ── LLM returned tool calls ────────────────────────────────────────
