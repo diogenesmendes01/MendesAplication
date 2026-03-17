@@ -1,5 +1,5 @@
-"use server";
-
+// Server-only utility module — Prisma import já garante que não pode ser bundled no client.
+// NÃO marcar como "use server": essas funções são utilitários internos, não Server Actions.
 import { prisma } from "@/lib/prisma";
 import {
   MODEL_PRICING,
