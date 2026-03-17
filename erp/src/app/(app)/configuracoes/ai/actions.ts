@@ -149,7 +149,7 @@ export async function getAiConfig(companyId: string): Promise<AiConfigData> {
     escalationKeywords: config.escalationKeywords,
     maxIterations: config.maxIterations,
     provider: config.provider,
-    apiKey: maskApiKey(config.apiKey, (config as unknown as { apiKeyHint?: string }).apiKeyHint),
+    apiKey: maskApiKey(config.apiKey, config.apiKeyHint),
     model: config.model ?? "",
     whatsappEnabled: config.whatsappEnabled,
     emailEnabled: config.emailEnabled,
@@ -228,9 +228,14 @@ export async function updateAiConfig(
   // Determine the apiKey to store:
   // - If the incoming apiKey is empty or matches the masked pattern, keep existing
   // - Otherwise, validate and encrypt the new value
-  let apiKeyToStore: string | undefined;
-  let apiKeyHintToStore: string | undefined;
-  if (data.apiKey && !MASKED_API_KEY_PATTERN.test(data.apiKey)) {
+  let apiKeyToStore: string | null | undefined;
+  let apiKeyHintToStore: string | null | undefined;
+  if (data.apiKey === null) {
+    // Explicit null means "remove the key" — zero out both key and hint to
+    // avoid stale hint (invariant: apiKeyHint is only valid when apiKey != null)
+    apiKeyToStore = null;
+    apiKeyHintToStore = null;
+  } else if (data.apiKey && !MASKED_API_KEY_PATTERN.test(data.apiKey)) {
     // Validate minimum key length to surface accidental empty-like submissions
     if (data.apiKey.trim().length < 8) {
       throw new Error("apiKey too short — minimum 8 characters");
@@ -263,7 +268,7 @@ export async function updateAiConfig(
   };
 
   const updateData = apiKeyToStore !== undefined
-    ? { ...baseData, apiKey: apiKeyToStore, apiKeyHint: apiKeyHintToStore }
+    ? { ...baseData, apiKey: apiKeyToStore, apiKeyHint: apiKeyHintToStore ?? null }
     : baseData;
 
   await prisma.aiConfig.upsert({

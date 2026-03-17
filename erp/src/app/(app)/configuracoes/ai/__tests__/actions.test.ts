@@ -442,4 +442,75 @@ describe("updateAiConfig", () => {
       updateAiConfig("company-1", { ...validData, apiKey: "short" })
     ).rejects.toThrow(/apiKey too short/i);
   });
+
+  it("saves apiKeyHint (last 4 chars) when a new plaintext key is provided", async () => {
+    const { updateAiConfig } = await import(
+      "@/app/(app)/configuracoes/ai/actions"
+    );
+
+    const plainKey = "sk-test-hint-abcd";
+    await updateAiConfig("company-hint-save", { ...validData, apiKey: plainKey });
+
+    const upsertCall = mockUpsert.mock.calls[0][0] as Record<string, unknown>;
+    const updatePayload = upsertCall.update as Record<string, unknown>;
+    // hint must be the last 4 chars of the trimmed plain key
+    expect(updatePayload).toHaveProperty("apiKeyHint", "abcd");
+    expect(updatePayload).toHaveProperty("apiKey", `encrypted:${plainKey}`);
+  });
+
+  it("clears apiKeyHint when apiKey is explicitly null (key removal)", async () => {
+    const { updateAiConfig } = await import(
+      "@/app/(app)/configuracoes/ai/actions"
+    );
+
+    // apiKey: null means "remove key" — hint must also be cleared to avoid stale display
+    await updateAiConfig("company-hint-clear", { ...validData, apiKey: null as unknown as string });
+
+    const upsertCall = mockUpsert.mock.calls[0][0] as Record<string, unknown>;
+    const updatePayload = upsertCall.update as Record<string, unknown>;
+    expect(updatePayload).toHaveProperty("apiKey", null);
+    expect(updatePayload).toHaveProperty("apiKeyHint", null);
+  });
+});
+
+// ─── maskApiKey (via getAiConfig) ────────────────────────────────────────────
+
+describe("getAiConfig — maskApiKey with hint", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockRequireCompanyAccess.mockResolvedValue(undefined);
+  });
+
+  it("returns '****XXXX' format when apiKeyHint is present", async () => {
+    mockFindUnique.mockResolvedValue({ ...baseConfig, apiKey: "encrypted-key", apiKeyHint: "1234" });
+
+    const { getAiConfig } = await import(
+      "@/app/(app)/configuracoes/ai/actions"
+    );
+    const result = await getAiConfig("company-hint-1");
+
+    expect(result.apiKey).toBe("****1234");
+  });
+
+  it("returns '****' when apiKeyHint is null (legacy record before hint was stored)", async () => {
+    mockFindUnique.mockResolvedValue({ ...baseConfig, apiKey: "encrypted-key", apiKeyHint: null });
+
+    const { getAiConfig } = await import(
+      "@/app/(app)/configuracoes/ai/actions"
+    );
+    const result = await getAiConfig("company-hint-2");
+
+    expect(result.apiKey).toBe("****");
+  });
+
+  it("returns empty string when apiKey is null (no key configured)", async () => {
+    mockFindUnique.mockResolvedValue({ ...baseConfig, apiKey: null, apiKeyHint: null });
+
+    const { getAiConfig } = await import(
+      "@/app/(app)/configuracoes/ai/actions"
+    );
+    const result = await getAiConfig("company-hint-3");
+
+    expect(result.apiKey).toBe("");
+  });
 });
