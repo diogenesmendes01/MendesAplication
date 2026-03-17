@@ -9,6 +9,7 @@ import { chatCompletion } from "@/lib/ai/provider";
 import { getTodaySpend, getUsageSummary, type UsageSummary } from "@/lib/ai/cost-tracker";
 import { suggestModel } from "@/lib/ai/model-suggester";
 import { runAgentDryRun, type DryRunResult } from "@/lib/ai/agent";
+import { createRateLimiter } from "@/lib/rate-limiter";
 import type { Prisma } from "@prisma/client";
 
 // ---------------------------------------------------------------------------
@@ -82,8 +83,6 @@ function maskApiKey(key: string | null | undefined): string {
 // See: https://github.com/diogenesmendes01/MendesAplication/issues/124
 // Swap to Redis-backed implementation when available via createRateLimiter().
 // ---------------------------------------------------------------------------
-
-import { createRateLimiter } from "@/lib/rate-limiter";
 
 const testConnectionLimiter = createRateLimiter({ limit: 5, windowMs: 60_000 });
 
