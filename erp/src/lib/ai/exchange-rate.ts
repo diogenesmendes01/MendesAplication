@@ -62,11 +62,15 @@ async function _fetchRate(): Promise<number> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
 
-    const res = await fetch(
-      "https://economia.awesomeapi.com.br/json/last/USD-BRL",
-      { signal: controller.signal }
-    );
-    clearTimeout(timeout);
+    let res: Response;
+    try {
+      res = await fetch(
+        "https://economia.awesomeapi.com.br/json/last/USD-BRL",
+        { signal: controller.signal }
+      );
+    } finally {
+      clearTimeout(timeout);
+    }
 
     if (!res.ok) {
       throw new Error(`AwesomeAPI returned ${res.status}`);
