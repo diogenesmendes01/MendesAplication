@@ -89,6 +89,9 @@ const TEST_CONN_RATE_WINDOW_MS = 60_000; // 1 minute
 const SIMULATION_RATE_LIMIT = 10;
 const SIMULATION_RATE_WINDOW_MS = 60_000; // 1 minute
 
+const LIST_MODELS_RATE_LIMIT = 10;
+const LIST_MODELS_RATE_WINDOW_MS = 60_000; // 1 minute
+
 // ---------------------------------------------------------------------------
 // Hardcoded model lists for providers that don't have a list endpoint
 // ---------------------------------------------------------------------------
@@ -373,6 +376,20 @@ export async function listAvailableModels(
 ): Promise<string[]> {
   await requireAdmin();
   await requireCompanyAccess(companyId);
+
+  // Rate limit — Redis-backed via checkRateLimit() (same pattern as testAiConnection
+  // and simulateAiResponse). Each OpenAI call decrypts the API key and makes an
+  // external request; limiting to 10/min per company prevents abuse from rapid
+  // UI interactions (e.g. multiple admins or fast dropdown clicks).
+  const listModelsRL = await checkRateLimit(
+    companyId,
+    LIST_MODELS_RATE_LIMIT,
+    LIST_MODELS_RATE_WINDOW_MS,
+    "ai_list_models"
+  );
+  if (!listModelsRL.allowed) {
+    throw new Error("Limite de requisições atingido (máx 10/min). Aguarde um momento.");
+  }
 
   // Validate providerOverride against VALID_PROVIDERS (mirrors updateAiConfig).
   // An unknown provider would silently return [] via HARDCODED_MODELS[provider] ?? [].
