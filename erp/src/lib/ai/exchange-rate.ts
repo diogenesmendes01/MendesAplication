@@ -67,8 +67,18 @@ export async function getBrlUsdRate(): Promise<number> {
 /**
  * Synchronous fallback — returns the cached rate or env var default.
  * Use this only where async is not possible.
+ *
+ * On first call (cold start), triggers a fire-and-forget async warm-up so that
+ * subsequent calls (and the next sync call after TTL) will return the live rate.
+ * Until the warm-up resolves, the env-var / hardcoded fallback is returned.
  */
 export function getBrlUsdRateSync(): number {
+  if (cachedRate.fetchedAt === 0) {
+    // Fire-and-forget: warm the cache in the background without blocking.
+    getBrlUsdRate().catch(() => {
+      // Errors are already logged inside getBrlUsdRate(); suppress here.
+    });
+  }
   return cachedRate.value;
 }
 
