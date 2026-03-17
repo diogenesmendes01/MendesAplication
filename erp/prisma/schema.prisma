@@ -413,6 +413,19 @@ enum PayableOrigin {
   REFUND
 }
 
+enum AiProvider {
+  openai
+  anthropic
+  deepseek
+  grok
+  qwen
+}
+
+enum AiChannel {
+  WHATSAPP
+  EMAIL
+}
+
 enum DocumentStatus {
   PROCESSING
   READY
@@ -773,7 +786,7 @@ model AiConfig {
   maxIterations      Int      @default(5)
 
   // --- Provider ---
-  provider           String   @default("openai")
+  provider           AiProvider @default(openai)
   apiKey             String?  @db.Text
   apiKeyHint         String?  // Last 4 chars of plaintext key (e.g. "k3y9"); stored on save for admin display
   model              String?
@@ -803,9 +816,9 @@ model AiUsageLog {
   id           String   @id @default(cuid())
   aiConfigId   String
   companyId    String
-  provider     String
+  provider     AiProvider
   model        String
-  channel      String   // TODO: migrar para Enum (WHATSAPP | EMAIL) — constraint de tipo só existe em TypeScript; futura migration deve adicionar CHECK constraint ou converter para Prisma Enum
+  channel      AiChannel
   inputTokens  Int
   outputTokens Int
   costUsd      Decimal  @db.Decimal(10, 6)
