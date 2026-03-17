@@ -111,30 +111,31 @@ export async function checkRateLimit(
       const client = getRedis();
       const windowSec = Math.ceil(windowMs / 1000);
 
-      const results = await client.multi().incr(key).ttl(key).exec();
+      // Atomic INCR + conditional EXPIRE via Lua script.
+      // Using a separate `expire()` call after `incr()` is non-atomic: if the
+      // process crashes or the connection drops between the two calls, the key
+      // is left without a TTL and the rate-limit counter never resets —
+      // permanently blocking the company/IP for that prefix.
+      // The Lua script runs atomically on the Redis server, guaranteeing that
+      // the TTL is always set on the first increment.
+      const luaScript = `
+        local count = redis.call('INCR', KEYS[1])
+        if count == 1 then
+          redis.call('EXPIRE', KEYS[1], ARGV[1])
+        end
+        return {count, redis.call('TTL', KEYS[1])}
+      `;
 
-      // exec() returns null when the transaction is aborted
-      if (!results || results.length < 2) {
-        throw new Error("Redis multi/exec returned unexpected result");
+      const result = await client.eval(luaScript, 1, key, String(windowSec)) as [number, number];
+
+      if (!Array.isArray(result) || result.length < 2) {
+        throw new Error("Lua eval returned unexpected result");
       }
 
-      const count = parseExecResult(results[0]);
-      const ttl = parseExecResult(results[1]);
-
-      if (count === null || ttl === null) {
-        throw new Error(
-          `Redis multi/exec contained errors: incr=${JSON.stringify(results[0])}, ttl=${JSON.stringify(results[1])}`
-        );
-      }
-
-      // Set TTL on first attempt (when ttl is -1, key has no expiry)
-      if (ttl === -1) {
-        await client.expire(key, windowSec);
-      }
+      const [count, ttl] = result;
 
       if (count > maxAttempts) {
-        const remainingTtl = ttl === -1 ? windowSec : ttl;
-        return { allowed: false, retryAfterMs: remainingTtl * 1000 };
+        return { allowed: false, retryAfterMs: ttl > 0 ? ttl * 1000 : windowMs };
       }
 
       return { allowed: true, retryAfterMs: 0 };
