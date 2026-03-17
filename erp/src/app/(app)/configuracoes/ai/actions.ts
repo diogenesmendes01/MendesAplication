@@ -478,6 +478,9 @@ export async function getSuggestedModel(
 ): Promise<ModelSuggestionData> {
   await requireAdmin();
   await requireCompanyAccess(companyId);
+  if (!VALID_PROVIDERS.includes(provider as typeof VALID_PROVIDERS[number])) {
+    throw new Error(`provider must be one of: ${VALID_PROVIDERS.join(", ")}`);
+  }
   return suggestModel(provider, dailyBudgetBrl);
 }
 
