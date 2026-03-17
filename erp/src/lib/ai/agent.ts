@@ -327,8 +327,9 @@ export async function runAgent(
     // exceeded by 2–10× depending on concurrency and avg cost per call.
     // A post-logUsage heuristic re-check (see onUsage callback below) amortises
     // the risk but does NOT eliminate it — the LLM call has already been made.
-    // TODO: Replace with Redis INCR+EXPIRE atomic counter (see simulationRateMap
-    //       TODO). Until then, the limit is best-effort / advisory only.
+    // TODO(#307): Replace with Redis INCR+EXPIRE atomic counter.
+    //   Tracking: https://github.com/diogenesmendes01/MendesAplication/issues/307
+    //   Until then, the limit is best-effort / advisory only.
   }
 
   // ── Check escalation keywords (fast-path before LLM) ────────────────────

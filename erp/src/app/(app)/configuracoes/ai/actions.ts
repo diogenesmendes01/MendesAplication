@@ -200,6 +200,21 @@ export async function updateAiConfig(
       `provider must be one of: ${VALID_PROVIDERS.join(", ")}`,
     );
   }
+  // Validate model field — prevents oversized strings and unknown model names
+  // from reaching provider APIs (where they cause opaque 400 errors).
+  if (data.model) {
+    if (data.model.length > 100) {
+      throw new Error("model name too long (max 100 characters)");
+    }
+    // For providers with a hardcoded model list, reject unknown model names.
+    // OpenAI models are fetched dynamically and not validated here.
+    const hardcodedList = HARDCODED_MODELS[data.provider];
+    if (hardcodedList && !hardcodedList.includes(data.model)) {
+      throw new Error(
+        `Unknown model "${data.model}" for provider "${data.provider}". Valid options: ${hardcodedList.join(", ")}`,
+      );
+    }
+  }
   if (
     data.dailySpendLimitBrl !== null &&
     (typeof data.dailySpendLimitBrl !== "number" || !Number.isFinite(data.dailySpendLimitBrl) || data.dailySpendLimitBrl <= 0)
