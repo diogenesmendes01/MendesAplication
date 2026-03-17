@@ -578,6 +578,11 @@ export default function AiConfigPage() {
                   Deixe vazio para não limitar. Quando o limite for atingido, o
                   agente para de responder automaticamente.
                 </p>
+                <p className="text-xs text-amber-600">
+                  ⚠️ O limite diário é indicativo (advisory) — sob alta
+                  concorrência, o gasto real pode ultrapassar levemente o valor
+                  configurado.
+                </p>
               </div>
 
               {/* Model suggestion badge */}

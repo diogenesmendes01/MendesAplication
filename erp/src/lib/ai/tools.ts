@@ -121,8 +121,8 @@ export const CREATE_NOTE: AiToolDefinition = {
   },
 };
 
-// ─── All Tools (legacy — includes WhatsApp RESPOND) ─────────────────────────
-
+// ─── All Tools (deprecated — use getToolsForChannel()) ──────────────────────
+/** @deprecated Use getToolsForChannel(channel) instead */
 export const ALL_TOOLS: AiToolDefinition[] = [
   SEARCH_DOCUMENTS,
   GET_CLIENT_INFO,
