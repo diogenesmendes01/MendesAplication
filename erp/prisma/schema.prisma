@@ -775,6 +775,7 @@ model AiConfig {
   // --- Provider ---
   provider           String   @default("openai")
   apiKey             String?  @db.Text
+  apiKeyHint         String?  // Last 4 chars of plaintext key (e.g. "k3y9"); stored on save for admin display
   model              String?
 
   // --- Canais ---

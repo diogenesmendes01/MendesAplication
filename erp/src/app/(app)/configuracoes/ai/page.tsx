@@ -1034,6 +1034,11 @@ export default function AiConfigPage() {
                         Nenhum uso registrado nos últimos 30 dias.
                       </p>
                     )}
+
+                  {/* BRL estimate disclaimer */}
+                  <p className="text-xs text-muted-foreground border-t pt-3 mt-2">
+                    ⚠️ Os valores em R$ são <strong>estimativas</strong> calculadas com base em uma taxa de câmbio BRL/USD fixa. O custo real pode variar conforme a cotação do dia.
+                  </p>
                 </div>
               )}
             </CardContent>

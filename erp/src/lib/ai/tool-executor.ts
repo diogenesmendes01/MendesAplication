@@ -249,9 +249,7 @@ async function executeRespond(
 // from allowed tags to prevent prompt-injection attacks where inbound email
 // content could cause the LLM to emit malicious HTML (tracking pixels,
 // phishing links, arbitrary scripts) in outgoing replies.
-//
-// TODO(#103): Replace with `sanitize-html` package for production-grade
-// sanitization once the dependency is approved and added.
+// Sanitization is handled by `sanitize-utils.ts` (sanitizeEmailHtml).
 //
 // ─── RESPOND_EMAIL ───────────────────────────────────────────────────────────
 
