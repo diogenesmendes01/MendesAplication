@@ -47,7 +47,7 @@
       "title": "Gerador atômico de Nosso Número por convênio",
       "description": "Como sistema, quero gerar nosso número sequencial e único por empresa/convênio, para evitar rejeição de boleto por duplicidade no banco.",
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "Schema Prisma: novo model SantanderSequence { id, companyId, covenantCode, lastNumber (Int, default 0), updatedAt } com @@unique([companyId, covenantCode])",
         "Migration roda sem erro",
