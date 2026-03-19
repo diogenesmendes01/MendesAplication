@@ -91,6 +91,7 @@ model Company {
   documents          Document[]
   fiscalConfig       FiscalConfig?
   paymentProviders   PaymentProvider[]
+  santanderSequences SantanderSequence[]
 
   @@map("companies")
 }
@@ -933,4 +934,17 @@ model PaymentRoutingRule {
 
   @@index([providerId, priority])
   @@map("payment_routing_rules")
+}
+
+model SantanderSequence {
+  id           String   @id @default(cuid())
+  companyId    String
+  covenantCode String
+  lastNumber   Int      @default(0)
+  updatedAt    DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, covenantCode])
+  @@map("santander_sequences")
 }

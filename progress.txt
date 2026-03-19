@@ -195,3 +195,173 @@ model AiConfig {
 - ⏳ SEARCH_DOCUMENTS deve funcionar igual no dry-run para que a simulação reflita a resposta real da IA com a base de conhecimento da empresa
 - ⏳ Rate limit in-memory (Map<companyId, timestamps[]>) é suficiente para server actions em Next.js — se houver múltiplas instâncias, migrar para Redis
 - ⏳ O dryRun flag no ToolContext permite que o dispatcher roteie para funções sem side effects sem alterar a interface do executeTool
+
+## US-SAN-001 — Adicionar 'santander' ao type system, registry e constants (2026-03-19)
+
+### O que foi feito
+- constants.ts: adicionado 'santander' ao PRODUCTION_PROVIDER_TYPES
+- registry.ts: adicionado entry completo do Santander com configSchema (7 campos) e settingsSchema (9 campos)
+- configSchema: clientId, clientSecret, keyUser, covenantCode, certificate (PEM), certificateKey (PEM), workspaceId
+- settingsSchema: documentKind (select), finePercentage, fineQuantityDays, interestPercentage, writeOffQuantityDays, protestType (select), defaultMessages, pixKeyType (select), pixDictKey
+- Criado placeholder santander.provider.ts seguindo padrão do pinbank.provider.ts
+- factory.ts: adicionado case 'santander' que instancia SantanderProvider
+- prd.json: US-SAN-001 passes=true
+- npm run lint: ✅ sem erros
+- npx tsc --noEmit: ✅ sem erros no módulo payment (erros pré-existentes no módulo AI não relacionados)
+
+### Lições
+- ⏳ O type system deriva ProviderType automaticamente de PRODUCTION_PROVIDER_TYPES — basta adicionar ao array e tudo propaga (types.ts, isProviderType guard, etc.)
+- ⏳ Erros de tsc pré-existentes no módulo AI (sanitize-html, apiKeyHint, isSimulation) — não relacionados ao payment module
+- ⏳ ConfigField type 'password' é usado para campos sensíveis como certificados PEM (armazenados encriptados AES no banco)
+
+## US-SAN-002 — SantanderAuthManager — mTLS + OAuth 2.0 com cache de token (2026-03-19)
+
+### O que foi feito
+- Criado src/lib/payment/providers/santander-auth.ts com classe SantanderAuthManager
+- SantanderCredentials interface: clientId, clientSecret, certificate (PEM), certificateKey (PEM), keyUser, sandbox
+- getHttpsAgent(): cria https.Agent com cert/key para mTLS, singleton (reutilizado)
+- getAccessToken(): POST ao endpoint OAuth com grant_type=client_credentials, token cacheado com renovação quando faltam <= 60s
+- getAuthHeaders(): retorna { Authorization: 'Bearer <token>', 'X-Application-Key': keyUser, 'Content-Type': 'application/json' }
+- getBaseUrl(): retorna URL de sandbox ou produção
+- authenticatedFetch(path, options): wrapper que injeta agent mTLS + headers OAuth automaticamente
+- Erros 401 invalidam token cache e orientam verificação de credenciais; 403 orienta verificação de certificado
+- URLs OAuth: trust-open (produção) e trust-sandbox (sandbox) sob /auth/oauth/v2/token
+- prd.json: US-SAN-002 passes=true
+- npx tsc --noEmit: ✅ sem erros no módulo payment (erros pré-existentes no módulo AI)
+- npm run lint: ✅ sem erros
+
+### Lições
+- ⏳ Node.js fetch (undici) aceita `agent` como propriedade não-tipada — precisa de @ts-expect-error para mTLS
+- ⏳ O endpoint OAuth do Santander usa application/x-www-form-urlencoded (padrão OAuth), não JSON
+- ⏳ TOKEN_RENEWAL_MARGIN_MS = 60s garante que requests em andamento não usem token prestes a expirar
+- ⏳ O https.Agent é singleton na instância do AuthManager — evita criar conexões TLS desnecessárias
+
+## US-SAN-003 — Gerador atômico de Nosso Número por convênio (2026-03-19)
+
+### O que foi feito
+- Adicionado model SantanderSequence ao schema.prisma com @@unique([companyId, covenantCode]) e @@map("santander_sequences")
+- Relação company adicionada ao Company model (santanderSequences SantanderSequence[])
+- Migration manual SQL criada: 20260319000001_add_santander_sequence (CREATE TABLE + UNIQUE INDEX + FK)
+- Criado src/lib/payment/providers/santander-sequence.ts com duas funções:
+  - getNextBankNumber(companyId, covenantCode): usa $transaction com Serializable isolation, cria registro se não existe (lastNumber=1), incrementa atomicamente
+  - setLastBankNumber(companyId, covenantCode, number): upsert para seed manual com validação (0 a 9_999_999_999_999)
+- prisma validate: ✅
+- prisma generate: ✅
+- npx tsc --noEmit: ✅ (erro pré-existente em sanitize-html do módulo AI apenas)
+- npm run lint: ✅ sem erros
+- prd.json: US-SAN-003 passes=true
+
+### Lições
+- ⏳ Prisma $transaction com isolationLevel Serializable é a forma correta de garantir atomicidade em counters — evita race conditions em requests concorrentes
+- ⏳ O compound unique @@unique([companyId, covenantCode]) gera automaticamente o nome companyId_covenantCode para uso em findUnique/where
+- ⏳ Migration manual segue padrão: CREATE TABLE, CREATE INDEX separado, ADD CONSTRAINT para FK — mesmo formato que o Prisma geraria
+
+## US-SAN-004 — SantanderProvider — createBoleto (2026-03-19)
+
+### O que foi feito
+- Substituído placeholder santander.provider.ts com implementação completa de createBoleto
+- SantanderProvider implements PaymentGateway com constructor que recebe SantanderCredentials + settings + webhookSecret + workspaceId + covenantCode + companyId
+- Instancia SantanderAuthManager internamente para mTLS + OAuth
+- createBoleto: gera nsuCode (timestamp base36 + random, até 20 chars alfanuméricos), nsuDate (YYYY-MM-DD), environment (TESTE/PRODUCAO)
+- bankNumber obtido via getNextBankNumber() atômico por empresa+convênio
+- Mapeamento customer → payer com truncamento nos limites da API (name 40, address 40, neighborhood 30, city 20)
+- nominalValue: centavos → "X.XX" string, formatPercentage para multa/juros
+- Boleto híbrido Pix: se pixKeyType + pixDictKey configurados nos settings, inclui key e txId (26-35 chars alfanuméricos)
+- Campos opcionais: finePercentage, fineQuantityDays, interestPercentage, writeOffQuantityDays, protestType, messages (max 4, 100 chars cada)
+- POST /workspaces/{workspaceId}/bank_slips via authenticatedFetch com AbortController (15s timeout)
+- Erros Santander parseados via ErrorTemplate: _errorCode, _message, _details, _errors[].field/_message
+- Response mapeada: gatewayId composto (nsuCode.nsuDate.ENV.covenantCode.bankNumber), barcode, line, qrCode, url, nossoNumero
+- factory.ts: case 'santander' extrai SantanderCredentials dos decryptedCredentials, sandbox de options.sandbox, companyId de options.companyId
+- factory.ts: adicionado 5º parâmetro opcional `options?: { sandbox?: boolean; companyId?: string }` para dados que não vêm de credentials/metadata
+- getBoletoStatus, cancelBoleto, validateWebhook, parseWebhookEvent, testConnection: placeholders com throw (US-SAN-005)
+- prd.json: US-SAN-004 passes=true
+- npx tsc --noEmit: ✅ (erro pré-existente sanitize-html apenas)
+- npm run lint: ✅ sem erros
+
+### Lições
+- ⏳ Placeholder methods no TS podem omitir parâmetros da interface — evita lint errors de unused vars
+- ⏳ O _webhookSecret com underscore prefix é aceito pelo eslint como "intencionalmente não usado" — útil para constructor params reservados para futuro
+- ⏳ factory.ts precisou de um 5º param `options` para sandbox e companyId — são dados do modelo PaymentProvider que não vêm nem de credentials nem de metadata
+- ⏳ zipCode Santander exige formato XXXXX-XXX (com hífen) — formatar antes de enviar
+- ⏳ NominalValue Santander é string "X.XX" (reais, não centavos) — dividir amount por 100
+- ⏳ finePercentage, interestPercentage, fineQuantityDays, writeOffQuantityDays são strings na API Santander, não numbers
+- ⏳ txId para bolepix precisa ter entre 26 e 35 caracteres alfanuméricos — padding com zeros se necessário
+
+## US-SAN-005 — SantanderProvider — getBoletoStatus + cancelBoleto + testConnection (2026-03-19)
+
+### O que foi feito
+- getBoletoStatus(gatewayId): parseia gatewayId composto (5 partes separadas por ponto), monta bill_id como covenantCode.bankNumber, GET /bills/{bill_id}?tipoConsulta=default
+- Mapeia status Santander → BoletoStatusResult: ATIVO→pending, LIQUIDADO→paid, LIQUIDADO PARCIALMENTE→paid, BAIXADO→cancelled
+- Se status LIQUIDADO ou LIQUIDADO PARCIALMENTE, faz segunda request com tipoConsulta=settlement para obter paidAt (settlementDate) e paidAmount (settlementValue convertido de reais para centavos)
+- cancelBoleto(gatewayId): PATCH /workspaces/{workspaceId}/bank_slips com { covenantCode, bankNumber, operation: 'BAIXAR' }
+- Retorna { success: true } se response 201/2xx; trata edge case de _errorCode no body apesar de status 2xx
+- testConnection(): GET /workspaces — se 200, retorna contagem de workspaces; se 401/403, credenciais inválidas; se erro TLS/cert, certificado inválido
+- validateWebhook e parseWebhookEvent mantidos como placeholder (US-SAN-006)
+- Helper parseGatewayId() extraído para reuso (split por ponto, valida 5 partes)
+- Helper mapSantanderStatus() para mapeamento de status
+- fetchSettlementData() como método privado best-effort (não falha a query principal)
+- Interfaces internas tipadas: SantanderBillStatusResponse, SantanderBillSettlementResponse, SantanderInstructionRequest/Response, SantanderWorkspacesResponse
+- prd.json: US-SAN-005 passes=true
+- npx tsc --noEmit: ✅ (erro pré-existente sanitize-html apenas)
+- npm run lint: ✅ sem erros
+
+### Lições
+- ⏳ O gatewayId composto usa ponto como separador e nsuDate usa hífen — split por ponto é seguro, resulta exatamente 5 partes
+- ⏳ settlementValue vem como string em reais ("X.XX") — converter para centavos (Math.round(parseFloat * 100)) para manter consistência com BoletoStatusResult.paidAmount
+- ⏳ A consulta settlement é best-effort — se falhar, o status principal já foi obtido, retorna sem paidAt/paidAmount em vez de estourar erro
+- ⏳ O PATCH para BAIXAR pode retornar 201 (não 200) como sucesso — tratar ambos
+- ⏳ Erros TLS/cert podem vir como exceções do fetch (não HTTP status) — detectar via keywords no message (certificate, ssl, tls, eproto)
+- ⏳ O authManager.authenticatedFetch já trata 401/403 com throw — testConnection precisa capturar essas exceções para retornar { ok: false } em vez de propagar
+
+## US-SAN-007 — Download de PDF do boleto Santander (2026-03-19)
+
+### O que foi feito
+- Novo método getBankSlipPdf() no SantanderProvider: POST /bills/{bill_id}/bank_slips com payerDocumentNumber como integer
+- bill_id formato: bankNumber.covenantCode (beneficiaryCode = covenantCode)
+- Retorna { link: string } com URL do PDF
+- Nova API route: GET /api/boletos/[boletoId]/pdf/route.ts
+- Autenticação via cookie accessToken + verifyAccessToken + canAccessCompany
+- Busca boleto com provider e proposal.client para obter cpfCnpj do pagador
+- Extrai covenantCode e bankNumber do gatewayId composto (5 partes separadas por ponto)
+- Instancia gateway via getGateway() e verifica instanceof SantanderProvider
+- Tratamento de erros: boleto não encontrado (404), acesso negado (403), provider não Santander (400), gatewayId inválido (400)
+- prd.json: US-SAN-007 passes=true
+- npx tsc --noEmit: ✅ (erro pré-existente sanitize-html apenas)
+- npm run lint: ✅ sem erros
+
+### Lições
+- ⏳ O bill_id para POST /bills/{bill_id}/bank_slips é bankNumber.covenantCode (ordem inversa do que se poderia esperar)
+- ⏳ payerDocumentNumber deve ser enviado como integer (parseInt) — a API Santander espera int64, não string
+- ⏳ getBankSlipPdf é método Santander-specific, não parte do PaymentGateway interface — uso de instanceof check na API route
+- ⏳ Next.js 15 App Router: params em route handlers é Promise — precisa de await params
+- ⏳ A cadeia para obter o documento do pagador é: boleto → proposal → client → cpfCnpj
+
+## US-SAN-008 — Frontend — configuração do provider Santander com upload de certificado (2026-03-19)
+
+### O que foi feito
+- Enhanced DynamicField component in integracoes-bancarias/page.tsx to detect PEM certificate fields
+- Detection via isPemCertificateField(): type "password" + helpText contains "PEM" (matches certificate and certificateKey from registry)
+- New PemCertificateField component renders:
+  - Textarea with monospace font for pasting PEM content
+  - File upload button (.crt/.pem/.cer for certificate, .key/.pem for certificateKey)
+  - Live PEM validation indicator (green checkmark if valid, red error if not starting with "-----BEGIN")
+  - Clear button to reset content
+- File upload reads content via FileReader.readAsText() and populates textarea
+- PEM validation in handleSave(): blocks submission if certificate field has content not starting with "-----BEGIN"
+- PemCertificateField spans full 2 columns (sm:col-span-2) for better readability of PEM content
+- Sandbox/production toggle already existed and works correctly
+- "Testar Conexão" button already existed and calls testConnection() correctly
+- Provider Santander already appears in registry dropdown (from US-SAN-001)
+- settingsSchema fields already render with correct defaults via existing DynamicField
+- Updated help text hint: "Deixe campos de senha/certificado em branco para manter o valor atual"
+- Added imports: Textarea, Upload icon, CheckCircle2 icon, useRef
+- prd.json: US-SAN-008 passes=true
+- npx tsc --noEmit: ✅ (only pre-existing sanitize-html error)
+- npm run lint: ✅ sem erros
+
+### Lições
+- ⏳ PEM certificate fields are detected by helpText containing "PEM" — this is more robust than checking key names, and uses data already in the registry
+- ⏳ FileReader.readAsText() is the correct approach for reading .crt/.key files — they are text, not binary
+- ⏳ The existing DynamicField + provider config UI was already 90% complete for Santander — only PEM textarea + file upload was the missing piece
+- ⏳ PemCertificateField uses sm:col-span-2 to span the full grid width since PEM content is multi-line and needs space
+- ⏳ File input accept attribute should include .pem alongside .crt/.key since PEM files can have various extensions
