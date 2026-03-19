@@ -805,6 +805,75 @@ export class SantanderProvider implements PaymentGateway {
     }
   }
 
+
+  
+  // ------------------------------------------
+  // Santander-specific - getBankSlipPdf (US-SAN-007)
+  // ------------------------------------------
+
+  /**
+   * Downloads a PDF link for a Santander bank slip.
+   * This is a Santander-specific method - NOT part of PaymentGateway interface.
+   *
+   * @param covenantCode - The covenant (beneficiary) code
+   * @param bankNumber - The bank number (nosso numero)
+   * @param payerDocumentNumber - CPF/CNPJ without formatting (digits only)
+   * @returns Object with the PDF download link
+   */
+  async getBankSlipPdf(
+    covenantCode: string,
+    bankNumber: string,
+    payerDocumentNumber: string,
+  ): Promise<{ link: string }> {
+    const billId = `${bankNumber}.${covenantCode}`;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+    try {
+      const response = await this.authManager.authenticatedFetch(
+        `/bills/${billId}/bank_slips`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            payerDocumentNumber: parseInt(payerDocumentNumber, 10),
+          }),
+          signal: controller.signal,
+        },
+      );
+
+      if (!response.ok) {
+        let errorMessage: string;
+        try {
+          const errorBody = (await response.json()) as SantanderErrorTemplate;
+          errorMessage = parseSantanderError(errorBody);
+        } catch {
+          errorMessage = `Santander API error (${response.status}): ${response.statusText}`;
+        }
+        throw new Error(errorMessage);
+      }
+
+      const data = (await response.json()) as { link?: string };
+
+      if (!data.link) {
+        throw new Error(
+          "Santander API: Resposta do PDF nao contem campo 'link'",
+        );
+      }
+
+      return { link: data.link };
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        throw new Error(
+          `Santander API timeout (${REQUEST_TIMEOUT_MS}ms): POST /bills/${billId}/bank_slips`,
+        );
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
   // ──────────────────────────────────────────────
   // PaymentGateway — webhooks (US-SAN-006)
   // ──────────────────────────────────────────────

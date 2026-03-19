@@ -128,7 +128,7 @@
       "title": "Download de PDF do boleto Santander",
       "description": "Como usuário, quero baixar o PDF de um boleto Santander, para enviar ao cliente ou imprimir.",
       "priority": 7,
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "Novo método no SantanderProvider: getBankSlipPdf(gatewayId, payerDocumentNumber): POST /bills/{bill_id}/bank_slips com { payerDocumentNumber }",
         "bill_id formato: bankNumber.beneficiaryCode (ou digitableLine)",

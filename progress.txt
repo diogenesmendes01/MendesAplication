@@ -312,3 +312,26 @@ model AiConfig {
 - ⏳ O PATCH para BAIXAR pode retornar 201 (não 200) como sucesso — tratar ambos
 - ⏳ Erros TLS/cert podem vir como exceções do fetch (não HTTP status) — detectar via keywords no message (certificate, ssl, tls, eproto)
 - ⏳ O authManager.authenticatedFetch já trata 401/403 com throw — testConnection precisa capturar essas exceções para retornar { ok: false } em vez de propagar
+
+## US-SAN-007 — Download de PDF do boleto Santander (2026-03-19)
+
+### O que foi feito
+- Novo método getBankSlipPdf() no SantanderProvider: POST /bills/{bill_id}/bank_slips com payerDocumentNumber como integer
+- bill_id formato: bankNumber.covenantCode (beneficiaryCode = covenantCode)
+- Retorna { link: string } com URL do PDF
+- Nova API route: GET /api/boletos/[boletoId]/pdf/route.ts
+- Autenticação via cookie accessToken + verifyAccessToken + canAccessCompany
+- Busca boleto com provider e proposal.client para obter cpfCnpj do pagador
+- Extrai covenantCode e bankNumber do gatewayId composto (5 partes separadas por ponto)
+- Instancia gateway via getGateway() e verifica instanceof SantanderProvider
+- Tratamento de erros: boleto não encontrado (404), acesso negado (403), provider não Santander (400), gatewayId inválido (400)
+- prd.json: US-SAN-007 passes=true
+- npx tsc --noEmit: ✅ (erro pré-existente sanitize-html apenas)
+- npm run lint: ✅ sem erros
+
+### Lições
+- ⏳ O bill_id para POST /bills/{bill_id}/bank_slips é bankNumber.covenantCode (ordem inversa do que se poderia esperar)
+- ⏳ payerDocumentNumber deve ser enviado como integer (parseInt) — a API Santander espera int64, não string
+- ⏳ getBankSlipPdf é método Santander-specific, não parte do PaymentGateway interface — uso de instanceof check na API route
+- ⏳ Next.js 15 App Router: params em route handlers é Promise — precisa de await params
+- ⏳ A cadeia para obter o documento do pagador é: boleto → proposal → client → cpfCnpj
