@@ -91,7 +91,7 @@
       "title": "SantanderProvider — getBoletoStatus + cancelBoleto + testConnection",
       "description": "Como admin, quero consultar status e cancelar boletos do Santander, para manter controle sobre cobranças emitidas.",
       "priority": 5,
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "getBoletoStatus(gatewayId): parseia gatewayId composto, faz GET /bills/{covenantCode}.{bankNumber}?tipoConsulta=default",
         "Mapeia status Santander → BoletoStatusResult: ATIVO→pending, LIQUIDADO→paid, LIQUIDADO PARCIALMENTE→paid, BAIXADO→cancelled",

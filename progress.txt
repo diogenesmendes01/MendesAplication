@@ -286,3 +286,29 @@ model AiConfig {
 - ⏳ NominalValue Santander é string "X.XX" (reais, não centavos) — dividir amount por 100
 - ⏳ finePercentage, interestPercentage, fineQuantityDays, writeOffQuantityDays são strings na API Santander, não numbers
 - ⏳ txId para bolepix precisa ter entre 26 e 35 caracteres alfanuméricos — padding com zeros se necessário
+
+## US-SAN-005 — SantanderProvider — getBoletoStatus + cancelBoleto + testConnection (2026-03-19)
+
+### O que foi feito
+- getBoletoStatus(gatewayId): parseia gatewayId composto (5 partes separadas por ponto), monta bill_id como covenantCode.bankNumber, GET /bills/{bill_id}?tipoConsulta=default
+- Mapeia status Santander → BoletoStatusResult: ATIVO→pending, LIQUIDADO→paid, LIQUIDADO PARCIALMENTE→paid, BAIXADO→cancelled
+- Se status LIQUIDADO ou LIQUIDADO PARCIALMENTE, faz segunda request com tipoConsulta=settlement para obter paidAt (settlementDate) e paidAmount (settlementValue convertido de reais para centavos)
+- cancelBoleto(gatewayId): PATCH /workspaces/{workspaceId}/bank_slips com { covenantCode, bankNumber, operation: 'BAIXAR' }
+- Retorna { success: true } se response 201/2xx; trata edge case de _errorCode no body apesar de status 2xx
+- testConnection(): GET /workspaces — se 200, retorna contagem de workspaces; se 401/403, credenciais inválidas; se erro TLS/cert, certificado inválido
+- validateWebhook e parseWebhookEvent mantidos como placeholder (US-SAN-006)
+- Helper parseGatewayId() extraído para reuso (split por ponto, valida 5 partes)
+- Helper mapSantanderStatus() para mapeamento de status
+- fetchSettlementData() como método privado best-effort (não falha a query principal)
+- Interfaces internas tipadas: SantanderBillStatusResponse, SantanderBillSettlementResponse, SantanderInstructionRequest/Response, SantanderWorkspacesResponse
+- prd.json: US-SAN-005 passes=true
+- npx tsc --noEmit: ✅ (erro pré-existente sanitize-html apenas)
+- npm run lint: ✅ sem erros
+
+### Lições
+- ⏳ O gatewayId composto usa ponto como separador e nsuDate usa hífen — split por ponto é seguro, resulta exatamente 5 partes
+- ⏳ settlementValue vem como string em reais ("X.XX") — converter para centavos (Math.round(parseFloat * 100)) para manter consistência com BoletoStatusResult.paidAmount
+- ⏳ A consulta settlement é best-effort — se falhar, o status principal já foi obtido, retorna sem paidAt/paidAmount em vez de estourar erro
+- ⏳ O PATCH para BAIXAR pode retornar 201 (não 200) como sucesso — tratar ambos
+- ⏳ Erros TLS/cert podem vir como exceções do fetch (não HTTP status) — detectar via keywords no message (certificate, ssl, tls, eproto)
+- ⏳ O authManager.authenticatedFetch já trata 401/403 com throw — testConnection precisa capturar essas exceções para retornar { ok: false } em vez de propagar

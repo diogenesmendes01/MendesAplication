@@ -82,6 +82,46 @@ interface SantanderErrorTemplate {
   }>;
 }
 
+/** Response from GET /bills/{bill_id}?tipoConsulta=default */
+interface SantanderBillStatusResponse {
+  status?: string;
+  covenantCode?: string;
+  bankNumber?: string;
+  nominalValue?: string;
+  dueDate?: string;
+  issueDate?: string;
+}
+
+/** Response from GET /bills/{bill_id}?tipoConsulta=settlement */
+interface SantanderBillSettlementResponse {
+  status?: string;
+  settlementData?: Array<{
+    settlementDate?: string;
+    settlementValue?: string;
+    settlementChannel?: string;
+  }>;
+}
+
+/** Request body for PATCH /workspaces/{id}/bank_slips (instructions) */
+interface SantanderInstructionRequest {
+  covenantCode: string;
+  bankNumber: string;
+  operation: "BAIXAR" | "PROTESTAR" | "CANCELAR_PROTESTO";
+}
+
+/** Response from PATCH /workspaces/{id}/bank_slips */
+interface SantanderInstructionResponse {
+  message?: string;
+  _message?: string;
+  _errorCode?: number;
+}
+
+/** Response from GET /workspaces */
+interface SantanderWorkspacesResponse {
+  content?: Array<{ id?: string; name?: string }>;
+  totalElements?: number;
+}
+
 // ---------------------------------------------------------------------------
 // Settings interface (from registry settingsSchema)
 // ---------------------------------------------------------------------------
@@ -190,6 +230,56 @@ function parseSantanderError(error: SantanderErrorTemplate): string {
   return parts.length > 0
     ? `Santander API: ${parts.join(" — ")}`
     : "Santander API: Erro desconhecido";
+}
+
+/**
+ * Parses the compound gatewayId into its components.
+ * Format: nsuCode.nsuDate.ENV.covenantCode.bankNumber
+ * Note: nsuDate contains hyphens (YYYY-MM-DD), so we can't simply split by dot.
+ * Strategy: split by dot, then reassemble nsuDate from parts 1-3 (YYYY-MM-DD).
+ *
+ * Example: "abc123.2026-03-19.PRODUCAO.123456789.0000000000001"
+ * Split by '.': ["abc123", "2026-03-19", "PRODUCAO", "123456789", "0000000000001"]
+ *
+ * Wait — nsuDate is YYYY-MM-DD which has hyphens, not dots. So splitting by dot is safe.
+ * The 5 parts separated by dots are: nsuCode, nsuDate, ENV, covenantCode, bankNumber
+ */
+function parseGatewayId(gatewayId: string): {
+  nsuCode: string;
+  nsuDate: string;
+  environment: string;
+  covenantCode: string;
+  bankNumber: string;
+} {
+  const parts = gatewayId.split(".");
+  if (parts.length !== 5) {
+    throw new Error(
+      `Santander: gatewayId inválido — esperado formato nsuCode.nsuDate.ENV.covenantCode.bankNumber (5 partes), recebido ${parts.length} partes: "${gatewayId}"`,
+    );
+  }
+
+  const [nsuCode, nsuDate, environment, covenantCode, bankNumber] = parts;
+  return { nsuCode, nsuDate, environment, covenantCode, bankNumber };
+}
+
+/**
+ * Maps Santander bill status to BoletoStatusResult status.
+ */
+function mapSantanderStatus(
+  santanderStatus: string,
+): "pending" | "paid" | "cancelled" | "expired" | "failed" {
+  const normalized = santanderStatus.toUpperCase().trim();
+  switch (normalized) {
+    case "ATIVO":
+      return "pending";
+    case "LIQUIDADO":
+    case "LIQUIDADO PARCIALMENTE":
+      return "paid";
+    case "BAIXADO":
+      return "cancelled";
+    default:
+      return "pending";
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -396,36 +486,287 @@ export class SantanderProvider implements PaymentGateway {
   }
 
   // ──────────────────────────────────────────────
-  // PaymentGateway — placeholders (US-SAN-005)
+  // PaymentGateway — getBoletoStatus
   // ──────────────────────────────────────────────
 
-  async getBoletoStatus(): Promise<BoletoStatusResult> {
-    throw new Error(
-      "Santander: getBoletoStatus não implementado — aguardando US-SAN-005",
-    );
+  async getBoletoStatus(gatewayId: string): Promise<BoletoStatusResult> {
+    const { covenantCode, bankNumber } = parseGatewayId(gatewayId);
+    const billId = `${covenantCode}.${bankNumber}`;
+
+    // 1. First request: get current status
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+    try {
+      const response = await this.authManager.authenticatedFetch(
+        `/bills/${billId}?tipoConsulta=default`,
+        { signal: controller.signal },
+      );
+
+      if (!response.ok) {
+        let errorMessage: string;
+        try {
+          const errorBody = (await response.json()) as SantanderErrorTemplate;
+          errorMessage = parseSantanderError(errorBody);
+        } catch {
+          errorMessage = `Santander API error (${response.status}): ${response.statusText}`;
+        }
+        throw new Error(errorMessage);
+      }
+
+      const data = (await response.json()) as SantanderBillStatusResponse;
+      const santanderStatus = (data.status ?? "").toUpperCase().trim();
+      const status = mapSantanderStatus(santanderStatus);
+
+      const result: BoletoStatusResult = {
+        gatewayId,
+        status,
+      };
+
+      // 2. If paid (LIQUIDADO or LIQUIDADO PARCIALMENTE), fetch settlement details
+      if (
+        santanderStatus === "LIQUIDADO" ||
+        santanderStatus === "LIQUIDADO PARCIALMENTE"
+      ) {
+        const settlementData = await this.fetchSettlementData(billId);
+        if (settlementData) {
+          result.paidAt = settlementData.paidAt;
+          result.paidAmount = settlementData.paidAmount;
+        }
+      }
+
+      return result;
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        throw new Error(
+          `Santander API timeout (${REQUEST_TIMEOUT_MS}ms): GET /bills/${billId}`,
+        );
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeoutId);
+    }
   }
 
-  async cancelBoleto(): Promise<{ success: boolean }> {
-    throw new Error(
-      "Santander: cancelBoleto não implementado — aguardando US-SAN-005",
-    );
+  // ──────────────────────────────────────────────
+  // PaymentGateway — cancelBoleto
+  // ──────────────────────────────────────────────
+
+  async cancelBoleto(gatewayId: string): Promise<{ success: boolean }> {
+    if (!this.workspaceId) {
+      throw new Error("Santander: workspaceId é obrigatório para cancelar boleto");
+    }
+
+    const { covenantCode, bankNumber } = parseGatewayId(gatewayId);
+
+    const payload: SantanderInstructionRequest = {
+      covenantCode,
+      bankNumber,
+      operation: "BAIXAR",
+    };
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+    try {
+      const response = await this.authManager.authenticatedFetch(
+        `/workspaces/${this.workspaceId}/bank_slips`,
+        {
+          method: "PATCH",
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        },
+      );
+
+      if (response.status === 201 || response.ok) {
+        // Attempt to read response body for confirmation
+        try {
+          const data = (await response.json()) as SantanderInstructionResponse;
+          // Check if response contains an error code despite 2xx status
+          if (data._errorCode && data._errorCode >= 400) {
+            throw new Error(
+              parseSantanderError(data as unknown as SantanderErrorTemplate),
+            );
+          }
+        } catch (parseErr) {
+          // If JSON parsing fails on a 2xx, still consider it success
+          if (parseErr instanceof SyntaxError) {
+            return { success: true };
+          }
+          throw parseErr;
+        }
+        return { success: true };
+      }
+
+      // Non-success status
+      let errorMessage: string;
+      try {
+        const errorBody = (await response.json()) as SantanderErrorTemplate;
+        errorMessage = parseSantanderError(errorBody);
+      } catch {
+        errorMessage = `Santander API error (${response.status}): ${response.statusText}`;
+      }
+      throw new Error(errorMessage);
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        throw new Error(
+          `Santander API timeout (${REQUEST_TIMEOUT_MS}ms): PATCH /workspaces/${this.workspaceId}/bank_slips`,
+        );
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeoutId);
+    }
   }
+
+  // ──────────────────────────────────────────────
+  // PaymentGateway — testConnection
+  // ──────────────────────────────────────────────
+
+  async testConnection(): Promise<{ ok: boolean; message: string }> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+    try {
+      const response = await this.authManager.authenticatedFetch(
+        "/workspaces",
+        { signal: controller.signal },
+      );
+
+      if (response.ok) {
+        try {
+          const data = (await response.json()) as SantanderWorkspacesResponse;
+          const count =
+            data.totalElements ?? data.content?.length ?? 0;
+          return {
+            ok: true,
+            message: `Conectado ao Santander (${count} workspaces)`,
+          };
+        } catch {
+          return {
+            ok: true,
+            message: "Conectado ao Santander",
+          };
+        }
+      }
+
+      if (response.status === 401 || response.status === 403) {
+        return {
+          ok: false,
+          message: "Credenciais inválidas",
+        };
+      }
+
+      return {
+        ok: false,
+        message: `Erro ao conectar (HTTP ${response.status})`,
+      };
+    } catch (err) {
+      // TLS/certificate errors
+      if (err instanceof Error) {
+        const msg = err.message.toLowerCase();
+        if (
+          msg.includes("certificate") ||
+          msg.includes("ssl") ||
+          msg.includes("tls") ||
+          msg.includes("unable to verify") ||
+          msg.includes("self signed") ||
+          msg.includes("cert") ||
+          msg.includes("eproto") ||
+          msg.includes("err_tls")
+        ) {
+          return {
+            ok: false,
+            message: "Certificado inválido ou expirado",
+          };
+        }
+
+        // 401 thrown by authManager (token request failed)
+        if (msg.includes("não autorizado") || msg.includes("401")) {
+          return {
+            ok: false,
+            message: "Credenciais inválidas",
+          };
+        }
+      }
+
+      throw err;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  // ──────────────────────────────────────────────
+  // PaymentGateway — webhooks (placeholder — US-SAN-006)
+  // ──────────────────────────────────────────────
 
   validateWebhook(): boolean {
     throw new Error(
-      "Santander: validateWebhook não implementado — aguardando US-SAN-005",
+      "Santander: validateWebhook não implementado — aguardando US-SAN-006",
     );
   }
 
   parseWebhookEvent(): WebhookEvent | null {
     throw new Error(
-      "Santander: parseWebhookEvent não implementado — aguardando US-SAN-005",
+      "Santander: parseWebhookEvent não implementado — aguardando US-SAN-006",
     );
   }
 
-  async testConnection(): Promise<{ ok: boolean; message: string }> {
-    throw new Error(
-      "Santander: testConnection não implementado — aguardando US-SAN-005",
-    );
+  // ──────────────────────────────────────────────
+  // Private helpers
+  // ──────────────────────────────────────────────
+
+  /**
+   * Fetches settlement details for a paid bill.
+   * Uses tipoConsulta=settlement to get paidAt and paidAmount.
+   */
+  private async fetchSettlementData(
+    billId: string,
+  ): Promise<{ paidAt?: Date; paidAmount?: number } | null> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+    try {
+      const response = await this.authManager.authenticatedFetch(
+        `/bills/${billId}?tipoConsulta=settlement`,
+        { signal: controller.signal },
+      );
+
+      if (!response.ok) {
+        // Settlement query failed — return null, caller still has the status
+        return null;
+      }
+
+      const data = (await response.json()) as SantanderBillSettlementResponse;
+
+      if (!data.settlementData?.length) {
+        return null;
+      }
+
+      // Use the most recent settlement entry
+      const settlement = data.settlementData[0];
+
+      const result: { paidAt?: Date; paidAmount?: number } = {};
+
+      if (settlement.settlementDate) {
+        result.paidAt = new Date(settlement.settlementDate);
+      }
+
+      if (settlement.settlementValue) {
+        // settlementValue comes as string "X.XX" (reais)
+        const valueInReais = parseFloat(settlement.settlementValue);
+        if (!isNaN(valueInReais)) {
+          // Convert to centavos to match BoletoStatusResult.paidAmount convention
+          result.paidAmount = Math.round(valueInReais * 100);
+        }
+      }
+
+      return result;
+    } catch {
+      // Settlement fetch is best-effort — don't fail the entire status query
+      return null;
+    } finally {
+      clearTimeout(timeoutId);
+    }
   }
 }
