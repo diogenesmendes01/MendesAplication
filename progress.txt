@@ -335,3 +335,33 @@ model AiConfig {
 - ⏳ getBankSlipPdf é método Santander-specific, não parte do PaymentGateway interface — uso de instanceof check na API route
 - ⏳ Next.js 15 App Router: params em route handlers é Promise — precisa de await params
 - ⏳ A cadeia para obter o documento do pagador é: boleto → proposal → client → cpfCnpj
+
+## US-SAN-008 — Frontend — configuração do provider Santander com upload de certificado (2026-03-19)
+
+### O que foi feito
+- Enhanced DynamicField component in integracoes-bancarias/page.tsx to detect PEM certificate fields
+- Detection via isPemCertificateField(): type "password" + helpText contains "PEM" (matches certificate and certificateKey from registry)
+- New PemCertificateField component renders:
+  - Textarea with monospace font for pasting PEM content
+  - File upload button (.crt/.pem/.cer for certificate, .key/.pem for certificateKey)
+  - Live PEM validation indicator (green checkmark if valid, red error if not starting with "-----BEGIN")
+  - Clear button to reset content
+- File upload reads content via FileReader.readAsText() and populates textarea
+- PEM validation in handleSave(): blocks submission if certificate field has content not starting with "-----BEGIN"
+- PemCertificateField spans full 2 columns (sm:col-span-2) for better readability of PEM content
+- Sandbox/production toggle already existed and works correctly
+- "Testar Conexão" button already existed and calls testConnection() correctly
+- Provider Santander already appears in registry dropdown (from US-SAN-001)
+- settingsSchema fields already render with correct defaults via existing DynamicField
+- Updated help text hint: "Deixe campos de senha/certificado em branco para manter o valor atual"
+- Added imports: Textarea, Upload icon, CheckCircle2 icon, useRef
+- prd.json: US-SAN-008 passes=true
+- npx tsc --noEmit: ✅ (only pre-existing sanitize-html error)
+- npm run lint: ✅ sem erros
+
+### Lições
+- ⏳ PEM certificate fields are detected by helpText containing "PEM" — this is more robust than checking key names, and uses data already in the registry
+- ⏳ FileReader.readAsText() is the correct approach for reading .crt/.key files — they are text, not binary
+- ⏳ The existing DynamicField + provider config UI was already 90% complete for Santander — only PEM textarea + file upload was the missing piece
+- ⏳ PemCertificateField uses sm:col-span-2 to span the full grid width since PEM content is multi-line and needs space
+- ⏳ File input accept attribute should include .pem alongside .crt/.key since PEM files can have various extensions

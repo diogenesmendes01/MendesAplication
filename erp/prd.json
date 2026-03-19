@@ -144,7 +144,7 @@
       "title": "Frontend — configuração do provider Santander com upload de certificado",
       "description": "Como admin, quero configurar o Santander como provider de pagamento na interface do ERP, incluindo upload do certificado digital.",
       "priority": 8,
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "Provider Santander aparece na lista de providers disponíveis para adicionar",
         "Campos do configSchema renderizados: clientId, clientSecret, keyUser, covenantCode, workspaceId",

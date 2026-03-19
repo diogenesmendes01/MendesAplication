@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { toast } from "sonner";
 import {
   Plus,
@@ -13,10 +13,13 @@ import {
   Loader2,
   Landmark,
   X,
+  Upload,
+  CheckCircle2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Card,
   CardContent,
@@ -118,6 +121,136 @@ function formToRule(r: RuleFormData): SaveRoutingRuleInput {
   };
 }
 
+/**
+ * Detects PEM certificate fields: type "password" with helpText mentioning PEM.
+ * These fields need a textarea + file upload instead of a simple password input.
+ */
+function isPemCertificateField(field: ConfigField): boolean {
+  return (
+    field.type === "password" &&
+    !!field.helpText &&
+    field.helpText.toLowerCase().includes("pem")
+  );
+}
+
+/**
+ * Validates that a PEM string starts with the expected header.
+ */
+function isValidPem(value: string): boolean {
+  return value.trimStart().startsWith("-----BEGIN");
+}
+
+// ---------------------------------------------------------------------------
+// PEM Certificate Field Component
+// ---------------------------------------------------------------------------
+
+function PemCertificateField({
+  field,
+  value,
+  onChange,
+}: {
+  field: ConfigField;
+  value: string;
+  onChange: (val: string) => void;
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const hasValue = value.length > 0 && !value.startsWith("****");
+  const isValid = !hasValue || isValidPem(value);
+  const fileExtension = field.key === "certificateKey" ? ".key,.pem" : ".crt,.pem,.cer";
+
+  function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const content = reader.result as string;
+      onChange(content);
+      if (!isValidPem(content)) {
+        toast.error(
+          `Arquivo "${file.name}" não parece ser um certificado PEM válido. O conteúdo deve começar com "-----BEGIN".`,
+        );
+      } else {
+        toast.success(`Arquivo "${file.name}" carregado`);
+      }
+    };
+    reader.onerror = () => {
+      toast.error(`Erro ao ler arquivo "${file.name}"`);
+    };
+    reader.readAsText(file);
+
+    // Reset input so the same file can be re-selected
+    e.target.value = "";
+  }
+
+  return (
+    <div className="sm:col-span-2">
+      <div className="flex items-center justify-between">
+        <Label htmlFor={field.key}>
+          {field.label}
+          {field.required && <span className="text-danger ml-1">*</span>}
+        </Label>
+        {hasValue && isValid && (
+          <span className="flex items-center gap-1 text-xs text-success">
+            <CheckCircle2 className="h-3 w-3" />
+            PEM válido
+          </span>
+        )}
+        {hasValue && !isValid && (
+          <span className="text-xs text-danger">
+            PEM deve começar com &quot;-----BEGIN&quot;
+          </span>
+        )}
+      </div>
+      <div className="mt-1 space-y-2">
+        <Textarea
+          id={field.key}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={`Cole o conteúdo do ${field.label} aqui...\n-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----`}
+          className="font-mono text-xs min-h-[120px] resize-y"
+          rows={6}
+        />
+        <div className="flex items-center gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <Upload className="mr-1.5 h-3.5 w-3.5" />
+            Upload {field.key === "certificateKey" ? ".KEY" : ".CRT"}
+          </Button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept={fileExtension}
+            onChange={handleFileUpload}
+            className="hidden"
+          />
+          {hasValue && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="text-xs text-text-secondary"
+              onClick={() => onChange("")}
+            >
+              Limpar
+            </Button>
+          )}
+          <span className="text-xs text-text-tertiary ml-auto">
+            Aceita: {fileExtension}
+          </span>
+        </div>
+      </div>
+      {field.helpText && (
+        <p className="text-xs text-text-secondary mt-1">{field.helpText}</p>
+      )}
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Dynamic field renderer
 // ---------------------------------------------------------------------------
@@ -135,6 +268,13 @@ function DynamicField({
   visiblePasswords: Set<string>;
   onToggleVisibility: (key: string) => void;
 }) {
+  // PEM certificate fields: render as textarea + file upload
+  if (isPemCertificateField(field)) {
+    return (
+      <PemCertificateField field={field} value={value} onChange={onChange} />
+    );
+  }
+
   if (field.type === "password") {
     const visible = visiblePasswords.has(field.key);
     return (
@@ -388,6 +528,17 @@ export default function IntegracoesBancariasPage() {
         if (field.required && !editingProvider && !formCredentials[field.key]) {
           toast.error(`Campo "${field.label}" é obrigatório`);
           return;
+        }
+
+        // PEM certificate validation: if value is present, must start with -----BEGIN
+        if (isPemCertificateField(field)) {
+          const val = formCredentials[field.key];
+          if (val && val.trim().length > 0 && !isValidPem(val)) {
+            toast.error(
+              `"${field.label}" não é um certificado PEM válido. Deve começar com "-----BEGIN".`,
+            );
+            return;
+          }
         }
       }
     }
@@ -726,7 +877,7 @@ export default function IntegracoesBancariasPage() {
                 </div>
                 {editingProvider && (
                   <p className="text-xs text-text-secondary">
-                    Deixe campos de senha em branco para manter o valor atual.
+                    Deixe campos de senha/certificado em branco para manter o valor atual.
                   </p>
                 )}
               </div>
