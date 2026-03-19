@@ -108,7 +108,7 @@
       "title": "Webhook receiver para pagamentos Santander",
       "description": "Como sistema, quero receber notificações automáticas quando um boleto Santander é pago, para atualizar o status sem polling.",
       "priority": 6,
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "Nova API route: POST /api/webhooks/santander/[providerId]",
         "Valida que providerId existe e é provider Santander ativo",

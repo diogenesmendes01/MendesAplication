@@ -283,6 +283,115 @@ function mapSantanderStatus(
 }
 
 // ---------------------------------------------------------------------------
+// Webhook types and helpers (US-SAN-006)
+// ---------------------------------------------------------------------------
+
+/**
+ * Santander webhook payload — defensive typing since the exact format
+ * is not fully documented in the OpenAPI spec. All fields are optional.
+ */
+interface SantanderWebhookPayload {
+  // Status / event identification
+  status?: string;
+  situacao?: string;
+  eventType?: string;
+  type?: string;
+
+  // Boleto identification
+  covenantCode?: string;
+  codigoConvenio?: string;
+  convenio?: string;
+  bankNumber?: string;
+  nossoNumero?: string;
+  nsuCode?: string;
+  nsuDate?: string;
+  environment?: string;
+
+  // Payment details
+  dataPagamento?: string;
+  paymentDate?: string;
+  settlementDate?: string;
+  datLiquidacao?: string;
+  valorPago?: string | number;
+  paidAmount?: string | number;
+  settlementValue?: string | number;
+  vlrLiquidacao?: string | number;
+
+  // Additional fields that may be present
+  barcode?: string;
+  digitableLine?: string;
+  nominalValue?: string;
+  dueDate?: string;
+
+  // Allow any additional properties
+  [key: string]: unknown;
+}
+
+/**
+ * Maps Santander webhook status strings to WebhookEvent types.
+ * Returns null for unrecognized statuses.
+ */
+function mapWebhookEventType(
+  status: string,
+): WebhookEvent["type"] | null {
+  switch (status) {
+    // Payment confirmed
+    case "LIQUIDADO":
+    case "LIQUIDADO PARCIALMENTE":
+    case "PAGO":
+    case "PAYMENT":
+    case "PAID":
+    case "SETTLED":
+      return "boleto.paid";
+
+    // Cancellation / write-off
+    case "BAIXADO":
+    case "BAIXA":
+    case "CANCELLED":
+    case "CANCELED":
+    case "CANCEL":
+      return "boleto.cancelled";
+
+    // Expiration
+    case "EXPIRADO":
+    case "EXPIRED":
+    case "VENCIDO":
+      return "boleto.expired";
+
+    default:
+      return null;
+  }
+}
+
+/**
+ * Builds a gatewayId from webhook payload data.
+ *
+ * Attempts to reconstruct the full composite gatewayId format:
+ *   nsuCode.nsuDate.ENV.covenantCode.bankNumber
+ *
+ * If nsuCode/nsuDate/environment are not in the payload, uses the
+ * partial format that the webhook route can search with LIKE/endsWith.
+ */
+function buildGatewayIdFromWebhook(
+  payload: SantanderWebhookPayload,
+  covenantCode: string,
+  bankNumber: string,
+): string {
+  const nsuCode = (payload.nsuCode ?? "").toString();
+  const nsuDate = (payload.nsuDate ?? "").toString();
+  const environment = (payload.environment ?? "").toString().toUpperCase();
+
+  // If we have all parts, build the full gatewayId
+  if (nsuCode && nsuDate && environment) {
+    return `${nsuCode}.${nsuDate}.${environment}.${covenantCode}.${bankNumber}`;
+  }
+
+  // Partial: use suffix format that the webhook route matches against
+  // The route will search boletos WHERE gatewayId LIKE '%.covenantCode.bankNumber'
+  return `%.${covenantCode}.${bankNumber}`;
+}
+
+// ---------------------------------------------------------------------------
 // SantanderProvider
 // ---------------------------------------------------------------------------
 
@@ -697,19 +806,150 @@ export class SantanderProvider implements PaymentGateway {
   }
 
   // ──────────────────────────────────────────────
-  // PaymentGateway — webhooks (placeholder — US-SAN-006)
+  // PaymentGateway — webhooks (US-SAN-006)
   // ──────────────────────────────────────────────
 
-  validateWebhook(): boolean {
-    throw new Error(
-      "Santander: validateWebhook não implementado — aguardando US-SAN-006",
-    );
+  /**
+   * Validates an incoming Santander webhook request.
+   * Basic validation: Content-Type must be JSON and body must be parseable.
+   * Santander does not provide HMAC signatures — validation is URL-based
+   * (each provider has a unique webhook URL with providerId).
+   */
+  validateWebhook(headers: Record<string, string>, body: string): boolean {
+    // 1. Check Content-Type is JSON (Santander sends application/json)
+    const contentType = headers["content-type"] ?? "";
+    if (!contentType.includes("json")) {
+      console.warn(
+        `[santander-webhook] Invalid Content-Type: ${contentType}`,
+      );
+      return false;
+    }
+
+    // 2. Check body is parseable JSON
+    try {
+      JSON.parse(body);
+    } catch {
+      console.warn("[santander-webhook] Body is not valid JSON");
+      return false;
+    }
+
+    return true;
   }
 
-  parseWebhookEvent(): WebhookEvent | null {
-    throw new Error(
-      "Santander: parseWebhookEvent não implementado — aguardando US-SAN-006",
+  /**
+   * Parses a Santander webhook notification payload into a WebhookEvent.
+   *
+   * Santander webhook payload format is not fully documented.
+   * This handler is defensive — it logs the raw event and tries to extract:
+   * - status/event type (payment, baixa/cancellation)
+   * - covenantCode + bankNumber → gatewayId
+   * - payment details (paidAt, paidAmount)
+   *
+   * Returns null for unrecognized event types (acknowledged but not processed).
+   */
+  parseWebhookEvent(body: string): WebhookEvent | null {
+    let payload: SantanderWebhookPayload;
+    try {
+      payload = JSON.parse(body) as SantanderWebhookPayload;
+    } catch {
+      console.error("[santander-webhook] Failed to parse webhook body");
+      return null;
+    }
+
+    // Log raw event for debugging (always, regardless of outcome)
+    console.log(
+      "[santander-webhook] Raw event received:",
+      JSON.stringify(payload).slice(0, 2000),
     );
+
+    // Extract status/event type from payload
+    // Santander may use different field names; try multiple possibilities
+    const status = (
+      payload.status ??
+      payload.situacao ??
+      payload.eventType ??
+      payload.type ??
+      ""
+    )
+      .toString()
+      .toUpperCase()
+      .trim();
+
+    // Map Santander event status to WebhookEvent type
+    const eventType = mapWebhookEventType(status);
+    if (!eventType) {
+      console.warn(
+        `[santander-webhook] Unknown event status: "${status}", skipping`,
+      );
+      return null;
+    }
+
+    // Extract covenantCode and bankNumber to build gatewayId
+    const covenantCode = (
+      payload.covenantCode ??
+      payload.codigoConvenio ??
+      payload.convenio ??
+      ""
+    ).toString();
+    const bankNumber = (
+      payload.bankNumber ??
+      payload.nossoNumero ??
+      payload.nsuCode ??
+      ""
+    ).toString();
+
+    if (!covenantCode || !bankNumber) {
+      console.error(
+        "[santander-webhook] Missing covenantCode or bankNumber in payload",
+      );
+      return null;
+    }
+
+    // Build gatewayId — match format used in createBoleto:
+    // nsuCode.nsuDate.ENV.covenantCode.bankNumber
+    // From webhook we only have covenantCode + bankNumber, so we search
+    // using a partial match pattern. The webhook route will handle lookup.
+    // For now, compose a searchable gatewayId suffix.
+    const gatewayId = buildGatewayIdFromWebhook(payload, covenantCode, bankNumber);
+
+    // Extract payment details
+    let paidAt: Date | undefined;
+    let paidAmount: number | undefined;
+
+    const paymentDate =
+      payload.dataPagamento ??
+      payload.paymentDate ??
+      payload.settlementDate ??
+      payload.datLiquidacao;
+    if (paymentDate) {
+      const parsed = new Date(paymentDate.toString());
+      if (!isNaN(parsed.getTime())) {
+        paidAt = parsed;
+      }
+    }
+
+    const paymentValue =
+      payload.valorPago ??
+      payload.paidAmount ??
+      payload.settlementValue ??
+      payload.vlrLiquidacao;
+    if (paymentValue !== undefined && paymentValue !== null) {
+      const numValue = parseFloat(paymentValue.toString());
+      if (!isNaN(numValue)) {
+        // If value looks like reais (has decimal), convert to centavos
+        paidAmount = numValue < 1000 && paymentValue.toString().includes(".")
+          ? Math.round(numValue * 100)
+          : Math.round(numValue);
+      }
+    }
+
+    return {
+      type: eventType,
+      gatewayId,
+      paidAt,
+      paidAmount,
+      rawEvent: payload,
+    };
   }
 
   // ──────────────────────────────────────────────
