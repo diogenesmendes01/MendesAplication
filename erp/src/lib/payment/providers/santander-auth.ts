@@ -1,4 +1,4 @@
-import https from "node:https";
+import { Agent as UndiciAgent } from "undici";
 
 // ============================================================
 // SantanderAuthManager — mTLS + OAuth 2.0 com cache de token
@@ -70,7 +70,7 @@ const TOKEN_RENEWAL_MARGIN_MS = 60 * 1000;
 export class SantanderAuthManager {
   private readonly credentials: SantanderCredentials;
   private cachedToken: CachedToken | null = null;
-  private httpsAgent: https.Agent | null = null;
+  private httpsAgent: UndiciAgent | null = null;
 
   constructor(credentials: SantanderCredentials) {
     this.credentials = credentials;
@@ -81,16 +81,19 @@ export class SantanderAuthManager {
   // -----------------------------------------------------------------------
 
   /**
-   * Retorna um https.Agent configurado com o certificado mTLS do cliente.
+   * Retorna um UndiciAgent configurado com o certificado mTLS do cliente.
    * O agent é criado uma vez e reutilizado nas chamadas subsequentes.
+   * Usa undici.Agent (via `dispatcher`) pois o fetch nativo do Node.js 18+
+   * é implementado sobre undici e ignora silenciosamente `https.Agent`.
    */
-  getHttpsAgent(): https.Agent {
+  getHttpsAgent(): UndiciAgent {
     if (!this.httpsAgent) {
-      this.httpsAgent = new https.Agent({
-        cert: this.credentials.certificate,
-        key: this.credentials.certificateKey,
-        // Não rejeitar certs self-signed em sandbox (Santander pode usar)
-        rejectUnauthorized: true,
+      this.httpsAgent = new UndiciAgent({
+        connect: {
+          cert: this.credentials.certificate,
+          key: this.credentials.certificateKey,
+          rejectUnauthorized: true,
+        },
       });
     }
     return this.httpsAgent;
@@ -150,7 +153,6 @@ export class SantanderAuthManager {
   ): Promise<Response> {
     const url = `${this.getBaseUrl()}${path}`;
     const headers = await this.getAuthHeaders();
-    const agent = this.getHttpsAgent();
 
     const response = await fetch(url, {
       ...options,
@@ -158,8 +160,8 @@ export class SantanderAuthManager {
         ...headers,
         ...(options.headers as Record<string, string> | undefined),
       },
-      // @ts-expect-error -- Node.js fetch suporta `dispatcher` via undici, mas o type do DOM não reconhece. O agent é necessário para mTLS.
-      agent,
+      // @ts-expect-error -- `dispatcher` é propriedade do undici/Node.js fetch; não existe no type DOM.
+      dispatcher: this.getHttpsAgent(),
     });
 
     if (response.status === 401) {
@@ -204,7 +206,6 @@ export class SantanderAuthManager {
    */
   private async requestNewToken(): Promise<OAuthTokenResponse> {
     const url = this.getOAuthUrl();
-    const agent = this.getHttpsAgent();
 
     const body = new URLSearchParams({
       grant_type: "client_credentials",
@@ -218,8 +219,8 @@ export class SantanderAuthManager {
         "Content-Type": "application/x-www-form-urlencoded",
       },
       body: body.toString(),
-      // @ts-expect-error -- Node.js fetch suporta `agent` para mTLS, mas o type DOM não inclui essa propriedade.
-      agent,
+      // @ts-expect-error -- `dispatcher` é propriedade do undici/Node.js fetch; não existe no type DOM.
+      dispatcher: this.getHttpsAgent(),
     });
 
     if (response.status === 401 || response.status === 403) {
