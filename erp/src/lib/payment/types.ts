@@ -69,6 +69,22 @@ export interface PaymentGateway {
   validateWebhook(headers: Record<string, string>, body: string): boolean;
   parseWebhookEvent(body: string): WebhookEvent | null;
   testConnection(): Promise<{ ok: boolean; message: string }>;
+
+  /**
+   * Downloads a PDF link for a bank slip (boleto).
+   * Optional — only providers that support server-side PDF generation implement this.
+   * Currently implemented by: SantanderProvider.
+   *
+   * @param covenantCode - The covenant (beneficiary) code
+   * @param bankNumber - The bank number (nosso numero)
+   * @param payerDocumentNumber - CPF/CNPJ without formatting (digits only)
+   * @returns Object with the PDF download link
+   */
+  getBankSlipPdf?(
+    covenantCode: string,
+    bankNumber: string,
+    payerDocumentNumber: string,
+  ): Promise<{ link: string }>;
 }
 
 export interface CreateBoletoInput {

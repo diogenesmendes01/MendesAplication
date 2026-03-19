@@ -31,6 +31,12 @@ interface PagarmeMetadata {
  *
  * Uses native fetch with Basic Auth (apiKey as username, empty password).
  * API docs: https://docs.pagar.me/reference/introducao-1
+ *
+ * @todo TD-03 (Tech Lead Review #313): Consider refactoring this monolithic provider
+ * into separate modules (auth, business logic) following the pattern established by
+ * SantanderProvider (santander-auth.ts, santander-sequence.ts, santander.provider.ts).
+ * This would improve testability and maintainability. Low priority — current code works
+ * correctly but all auth + API + business logic lives in a single ~400 LOC file.
  */
 export class PagarmeProvider implements PaymentGateway {
   private readonly apiKey: string;
