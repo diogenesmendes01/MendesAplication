@@ -28,11 +28,11 @@ export class SantanderProvider implements PaymentGateway {
   }
 
   validateWebhook(): boolean {
-    throw new Error(NOT_IMPLEMENTED);
+    return false; // placeholder — implementar em US-SAN-006
   }
 
   parseWebhookEvent(): WebhookEvent | null {
-    throw new Error(NOT_IMPLEMENTED);
+    return null; // placeholder — implementar em US-SAN-006
   }
 
   async testConnection(): Promise<{ ok: boolean; message: string }> {
