@@ -64,7 +64,7 @@
       "title": "SantanderProvider — createBoleto",
       "description": "Como admin, quero registrar boletos no Santander via API, para cobrar clientes com boleto híbrido (código de barras + QR Code Pix).",
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "acceptanceCriteria": [
         "Arquivo: erp/src/lib/payment/providers/santander.provider.ts",
         "Classe SantanderProvider implements PaymentGateway",
