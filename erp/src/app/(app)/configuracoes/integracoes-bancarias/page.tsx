@@ -162,6 +162,12 @@ function PemCertificateField({
     const file = e.target.files?.[0];
     if (!file) return;
 
+    if (file.size > 50_000) {
+      toast.error("Arquivo muito grande. Certificados PEM normalmente têm menos de 10KB.");
+      e.target.value = "";
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = () => {
       const content = reader.result as string;

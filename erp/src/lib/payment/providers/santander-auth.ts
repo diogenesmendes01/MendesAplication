@@ -165,11 +165,29 @@ export class SantanderAuthManager {
     });
 
     if (response.status === 401) {
-      // Invalidar token cacheado para forçar renovação na próxima chamada
+      // Invalidar token cacheado e retry com token novo (1x)
       this.cachedToken = null;
-      throw new Error(
-        `Santander API: Não autorizado (401). Verifique se o Client ID, Client Secret e Key User estão corretos. URL: ${url}`,
-      );
+      const freshHeaders = await this.getAuthHeaders();
+      const retryResponse = await fetch(url, {
+        ...options,
+        headers: {
+          ...freshHeaders,
+          ...(options.headers as Record<string, string> | undefined),
+        },
+        // @ts-expect-error -- `dispatcher` é propriedade do undici/Node.js fetch; não existe no type DOM.
+        dispatcher: this.getHttpsAgent(),
+      });
+      if (retryResponse.status === 401) {
+        throw new Error(
+          `Santander API: Não autorizado (401). Verifique se o Client ID, Client Secret e Key User estão corretos. URL: ${url}`,
+        );
+      }
+      if (retryResponse.status === 403) {
+        throw new Error(
+          `Santander API: Acesso negado (403). Verifique se o certificado digital (.CRT/.KEY) está válido e associado às credenciais no portal Santander. URL: ${url}`,
+        );
+      }
+      return retryResponse;
     }
 
     if (response.status === 403) {

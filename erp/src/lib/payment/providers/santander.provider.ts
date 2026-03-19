@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import type {
   PaymentGateway,
   CreateBoletoInput,
@@ -147,10 +148,7 @@ interface SantanderSettings {
  * Pattern: ^[A-Za-z0-9]{1,20}$
  */
 function generateNsuCode(): string {
-  const timestamp = Date.now().toString(36); // base36 timestamp (~8 chars)
-  const randomPart = Math.random().toString(36).slice(2, 7); // 5 random chars
-  const nsu = `${timestamp}${randomPart}`.slice(0, 20);
-  return nsu;
+  return crypto.randomUUID().replace(/-/g, "").slice(0, 20);
 }
 
 /**
@@ -406,6 +404,7 @@ export class SantanderProvider implements PaymentGateway {
   constructor(
     credentials: SantanderCredentials,
     metadata?: SantanderSettings | null,
+    /** Unused. Santander validates webhooks by unique URL per provider, not HMAC. */
     _webhookSecret?: string,
     workspaceId?: string,
     covenantCode?: string,
@@ -467,6 +466,12 @@ export class SantanderProvider implements PaymentGateway {
         ? formatZipCode(input.customer.address.zipCode)
         : "00000-000",
     };
+
+    if (!input.customer.address?.zipCode) {
+      console.warn(
+        `[santander] Boleto criado sem endereço completo do pagador — pode ser rejeitado pelo Santander em produção`,
+      );
+    }
 
     // 3. Build request payload
     const dueDate = formatDate(new Date(input.dueDate));
@@ -836,7 +841,7 @@ export class SantanderProvider implements PaymentGateway {
         {
           method: "POST",
           body: JSON.stringify({
-            payerDocumentNumber: parseInt(payerDocumentNumber, 10),
+            payerDocumentNumber,
           }),
           signal: controller.signal,
         },
@@ -895,11 +900,28 @@ export class SantanderProvider implements PaymentGateway {
     }
 
     // 2. Check body is parseable JSON
+    let payload: SantanderWebhookPayload;
     try {
-      JSON.parse(body);
+      payload = JSON.parse(body) as SantanderWebhookPayload;
     } catch {
       console.warn("[santander-webhook] Body is not valid JSON");
       return false;
+    }
+
+    // 3. Verify covenantCode matches the provider's configured covenant
+    if (this.covenantCode) {
+      const payloadCovenant = (
+        payload.covenantCode ??
+        payload.codigoConvenio ??
+        payload.convenio ??
+        ""
+      ).toString();
+      if (payloadCovenant && payloadCovenant !== this.covenantCode) {
+        console.warn(
+          `[santander-webhook] covenantCode mismatch: payload="${payloadCovenant}" != provider="${this.covenantCode}"`,
+        );
+        return false;
+      }
     }
 
     return true;
@@ -963,7 +985,6 @@ export class SantanderProvider implements PaymentGateway {
     const bankNumber = (
       payload.bankNumber ??
       payload.nossoNumero ??
-      payload.nsuCode ??
       ""
     ).toString();
 
@@ -1005,10 +1026,9 @@ export class SantanderProvider implements PaymentGateway {
     if (paymentValue !== undefined && paymentValue !== null) {
       const numValue = parseFloat(paymentValue.toString());
       if (!isNaN(numValue)) {
-        // If value looks like reais (has decimal), convert to centavos
-        paidAmount = numValue < 1000 && paymentValue.toString().includes(".")
-          ? Math.round(numValue * 100)
-          : Math.round(numValue);
+        // Santander API retorna valores em reais (ex: "150.50")
+        // Sempre converter para centavos
+        paidAmount = Math.round(numValue * 100);
       }
     }
 

@@ -18,49 +18,66 @@ export async function getNextBankNumber(
   companyId: string,
   covenantCode: string,
 ): Promise<string> {
-  return prisma.$transaction(
-    async (tx) => {
-      const existing = await tx.santanderSequence.findUnique({
-        where: {
-          companyId_covenantCode: { companyId, covenantCode },
+  const MAX_RETRIES = 3
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      return await prisma.$transaction(
+        async (tx) => {
+          const existing = await tx.santanderSequence.findUnique({
+            where: {
+              companyId_covenantCode: { companyId, covenantCode },
+            },
+          })
+
+          let nextNumber: number
+
+          if (existing) {
+            nextNumber = existing.lastNumber + 1
+
+            if (nextNumber > MAX_BANK_NUMBER) {
+              throw new Error(
+                `Sequência de nosso número esgotada para convênio ${covenantCode} (máximo: ${MAX_BANK_NUMBER})`,
+              )
+            }
+
+            await tx.santanderSequence.update({
+              where: {
+                companyId_covenantCode: { companyId, covenantCode },
+              },
+              data: { lastNumber: nextNumber },
+            })
+          } else {
+            nextNumber = 1
+
+            await tx.santanderSequence.create({
+              data: {
+                companyId,
+                covenantCode,
+                lastNumber: nextNumber,
+              },
+            })
+          }
+
+          return String(nextNumber)
         },
-      })
-
-      let nextNumber: number
-
-      if (existing) {
-        nextNumber = existing.lastNumber + 1
-
-        if (nextNumber > MAX_BANK_NUMBER) {
-          throw new Error(
-            `Sequência de nosso número esgotada para convênio ${covenantCode} (máximo: ${MAX_BANK_NUMBER})`,
-          )
-        }
-
-        await tx.santanderSequence.update({
-          where: {
-            companyId_covenantCode: { companyId, covenantCode },
-          },
-          data: { lastNumber: nextNumber },
-        })
-      } else {
-        nextNumber = 1
-
-        await tx.santanderSequence.create({
-          data: {
-            companyId,
-            covenantCode,
-            lastNumber: nextNumber,
-          },
-        })
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        },
+      )
+    } catch (err) {
+      // Retry on serialization failure (P2034)
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === 'P2034' &&
+        attempt < MAX_RETRIES - 1
+      ) {
+        continue
       }
-
-      return String(nextNumber)
-    },
-    {
-      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-    },
-  )
+      throw err
+    }
+  }
+  // Unreachable, but TypeScript needs it
+  throw new Error('getNextBankNumber: max retries exceeded')
 }
 
 /**

@@ -86,7 +86,7 @@ export async function POST(
       decryptedCredentials,
       metadata,
       provider.webhookSecret ? decrypt(provider.webhookSecret) : undefined,
-      { sandbox: false, companyId: provider.companyId },
+      { sandbox: provider.sandbox, companyId: provider.companyId },
     );
   } catch (err) {
     console.error(
