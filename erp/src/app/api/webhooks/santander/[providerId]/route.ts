@@ -2,31 +2,15 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/encryption";
 import { getGateway } from "@/lib/payment/factory";
-import { logAuditEvent } from "@/lib/audit";
 import type { WebhookEvent } from "@/lib/payment/types";
-import { BoletoStatus, PaymentStatus } from "@prisma/client";
-import {
-  RECEIVABLE_VALUE_TOLERANCE,
-  RECEIVABLE_DUE_DATE_WINDOW_DAYS,
-} from "@/lib/payment/constants";
-
-// ---------------------------------------------------------------------------
-// Status mapping: WebhookEvent.type → BoletoStatus
-// ---------------------------------------------------------------------------
-
-const WEBHOOK_TO_BOLETO_STATUS: Record<WebhookEvent["type"], BoletoStatus> = {
-  "boleto.paid": BoletoStatus.PAID,
-  "boleto.cancelled": BoletoStatus.CANCELLED,
-  "boleto.expired": BoletoStatus.OVERDUE,
-  "boleto.failed": BoletoStatus.CANCELLED,
-};
+import { processBoletoWebhookEvent } from "@/lib/payment/webhook-handler";
 
 // ---------------------------------------------------------------------------
 // POST /api/webhooks/santander/[providerId]
 //
 // Santander-specific webhook receiver. Validates that providerId is a real,
-// active Santander provider before processing. Uses the same boleto/receivable
-// update logic as the generic webhook route.
+// active Santander provider before processing. Delegates boleto/receivable
+// update logic to the shared webhook-handler helper.
 // ---------------------------------------------------------------------------
 
 export async function POST(
@@ -134,214 +118,30 @@ export async function POST(
     `[santander-webhook] Event parsed: type=${event.type}, gatewayId=${event.gatewayId}`,
   );
 
-  // 7. Find boleto by gatewayId
-  // The gatewayId from webhook may be partial (%.covenantCode.bankNumber)
-  // or full (nsuCode.nsuDate.ENV.covenantCode.bankNumber)
-  let boleto;
-  if (event.gatewayId.startsWith("%.")) {
-    // Partial gatewayId — search by suffix
-    const suffix = event.gatewayId.slice(2); // Remove "%."
-    boleto = await prisma.boleto.findFirst({
-      where: {
-        gatewayId: { endsWith: `.${suffix}` },
-        providerId: provider.id,
-      },
-      include: {
-        proposal: {
-          select: {
-            id: true,
-            clientId: true,
-            companyId: true,
-          },
-        },
-      },
-    });
-  } else {
-    boleto = await prisma.boleto.findFirst({
-      where: {
-        gatewayId: event.gatewayId,
-        providerId: provider.id,
-      },
-      include: {
-        proposal: {
-          select: {
-            id: true,
-            clientId: true,
-            companyId: true,
-          },
-        },
-      },
-    });
-  }
-
-  if (!boleto) {
-    console.warn(
-      `[santander-webhook] Boleto not found for gatewayId: ${event.gatewayId}, provider: ${provider.id}`,
-    );
-    // Log audit event for debugging — fire-and-forget
-    logAuditEvent({
-      userId: "system",
-      action: "STATUS_CHANGE",
-      entity: "Webhook",
-      entityId: event.gatewayId,
-      dataAfter: {
-        source: "santander-webhook",
-        providerId: provider.id,
-        eventType: event.type,
-        status: "boleto_not_found",
-        rawGatewayId: event.gatewayId,
-      },
-      companyId: provider.companyId,
-    }).catch((err) => console.error("Audit log failed:", err));
-
-    return NextResponse.json(
-      { received: true, boleto: "not_found" },
-      { status: 200 },
-    );
-  }
-
-  // 8. Map event type to boleto status
-  const newBoletoStatus = WEBHOOK_TO_BOLETO_STATUS[event.type];
-  if (!newBoletoStatus) {
-    console.warn(
-      `[santander-webhook] Unknown event type: ${event.type}, skipping`,
-    );
-    return NextResponse.json(
-      { received: true, skipped: "unknown_event_type" },
-      { status: 200 },
-    );
-  }
-
-  // 9. Update boleto and receivable in a transaction
-  let updatedReceivableId: string | null = null;
-  let previousStatus: BoletoStatus = boleto.status as BoletoStatus;
-
-  const txResult = await prisma.$transaction(async (tx) => {
-    // SELECT FOR UPDATE to prevent race condition between concurrent webhooks
-    const lockedBoleto = await tx.$queryRaw<
-      Array<{ id: string; status: string; value: string }>
-    >`
-      SELECT id, status, value FROM boletos WHERE id = ${boleto.id} FOR UPDATE
-    `;
-
-    if (!lockedBoleto[0]) {
-      return { skipped: true, reason: "not_found" } as const;
-    }
-
-    const currentStatus = lockedBoleto[0].status as BoletoStatus;
-
-    // Idempotency — skip if already in target status
-    if (currentStatus === newBoletoStatus) {
-      return { skipped: true, reason: "already_in_status" } as const;
-    }
-
-    previousStatus = currentStatus;
-
-    // Update boleto status
-    await tx.boleto.update({
-      where: { id: boleto.id },
-      data: { status: newBoletoStatus },
-    });
-
-    // If paid: find and update matching AccountReceivable
-    if (newBoletoStatus === BoletoStatus.PAID && boleto.proposal) {
-      // Direct lookup via boletoId FK
-      const receivable = await tx.accountReceivable.findFirst({
-        where: {
-          boletoId: boleto.id,
-          companyId: boleto.companyId,
-          status: PaymentStatus.PENDING,
-        },
-      });
-
-      if (receivable) {
-        await tx.accountReceivable.update({
-          where: { id: receivable.id },
-          data: {
-            status: PaymentStatus.PAID,
-            paidAt: event.paidAt ?? new Date(),
-          },
-        });
-        updatedReceivableId = receivable.id;
-      } else {
-        // Fallback: heuristic match for legacy receivables without boletoId
-        const boletoValue = Number(boleto.value);
-        const tolerance = RECEIVABLE_VALUE_TOLERANCE;
-        const dueDateWindow = RECEIVABLE_DUE_DATE_WINDOW_DAYS;
-        const dueDateMin = new Date(boleto.dueDate);
-        dueDateMin.setDate(dueDateMin.getDate() - dueDateWindow);
-        const dueDateMax = new Date(boleto.dueDate);
-        dueDateMax.setDate(dueDateMax.getDate() + dueDateWindow);
-
-        const legacyReceivable = await tx.accountReceivable.findFirst({
-          where: {
-            companyId: boleto.companyId,
-            clientId: boleto.proposal.clientId,
-            boletoId: null,
-            status: PaymentStatus.PENDING,
-            value: {
-              gte: boletoValue - tolerance,
-              lte: boletoValue + tolerance,
-            },
-            dueDate: {
-              gte: dueDateMin,
-              lte: dueDateMax,
-            },
-          },
-          orderBy: { dueDate: "asc" },
-        });
-
-        if (legacyReceivable) {
-          await tx.accountReceivable.update({
-            where: { id: legacyReceivable.id },
-            data: {
-              status: PaymentStatus.PAID,
-              paidAt: event.paidAt ?? new Date(),
-              boletoId: boleto.id,
-            },
-          });
-          updatedReceivableId = legacyReceivable.id;
-        }
-      }
-    }
-    return { skipped: false } as const;
-  });
-
-  if (txResult.skipped) {
-    console.log(
-      `[santander-webhook] Boleto ${boleto.id} skipped: ${txResult.reason}`,
-    );
-    return NextResponse.json(
-      { received: true, skipped: txResult.reason },
-      { status: 200 },
-    );
-  }
-
-  // 10. Log audit event — fire-and-forget
-  logAuditEvent({
-    userId: "system",
-    action: "STATUS_CHANGE",
-    entity: "Boleto",
-    entityId: boleto.id,
-    dataBefore: { status: previousStatus },
-    dataAfter: {
-      status: newBoletoStatus,
-      webhookEvent: event.type,
-      source: "santander-webhook",
-      providerId: provider.id,
-      gatewayId: event.gatewayId,
-      paidAt: event.paidAt?.toISOString() ?? null,
-      paidAmount: event.paidAmount ?? null,
-      accountReceivableId: updatedReceivableId,
-    },
-    companyId: boleto.companyId,
-  }).catch((err) => console.error("Audit log failed:", err));
-
-  console.log(
-    `[santander-webhook] Boleto ${boleto.id} updated: ${previousStatus} → ${newBoletoStatus}` +
-      (updatedReceivableId ? ` | AR ${updatedReceivableId} → PAID` : ""),
+  // 7. Process boleto + receivable update via shared handler
+  const result = await processBoletoWebhookEvent(
+    event,
+    provider.id,
+    provider.companyId,
+    "santander-webhook",
   );
 
-  // 11. Return 200 OK to Santander to confirm receipt
+  if (!result.processed) {
+    console.log(
+      `[santander-webhook] Event not processed: ${result.reason}` +
+        (result.boletoId ? ` (boleto: ${result.boletoId})` : ""),
+    );
+    return NextResponse.json(
+      { received: true, skipped: result.reason },
+      { status: 200 },
+    );
+  }
+
+  console.log(
+    `[santander-webhook] Boleto ${result.boletoId} updated: ${result.previousStatus} → ${result.newStatus}` +
+      (result.accountReceivableId ? ` | AR ${result.accountReceivableId} → PAID` : ""),
+  );
+
+  // 8. Return 200 OK to Santander to confirm receipt
   return NextResponse.json({ received: true }, { status: 200 });
 }

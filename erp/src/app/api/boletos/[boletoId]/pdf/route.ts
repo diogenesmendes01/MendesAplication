@@ -5,12 +5,12 @@ import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/encryption";
 import { getGateway } from "@/lib/payment/factory";
 import { isProviderType } from "@/lib/payment/types";
-import { SantanderProvider } from "@/lib/payment/providers/santander.provider";
 
 /**
  * GET /api/boletos/[boletoId]/pdf
  *
- * Returns a JSON object with the PDF download link for a Santander boleto.
+ * Returns a JSON object with the PDF download link for a boleto.
+ * Uses the optional `getBankSlipPdf` method from the PaymentGateway interface.
  * Requires authenticated session with access to the boleto's company.
  *
  * Response: { link: string }
@@ -65,17 +65,10 @@ export async function GET(
       );
     }
 
-    // 4. Validate provider is Santander
+    // 4. Validate provider exists
     if (!boleto.provider) {
       return NextResponse.json(
         { error: "Boleto sem provider configurado" },
-        { status: 400 },
-      );
-    }
-
-    if (boleto.provider.provider !== "santander") {
-      return NextResponse.json(
-        { error: "Download de PDF disponível apenas para boletos Santander" },
         { status: 400 },
       );
     }
@@ -110,7 +103,7 @@ export async function GET(
     // Remove formatting (keep only digits)
     const cleanDocument = payerDocumentNumber.replace(/\D/g, "");
 
-    // 7. Instantiate the Santander provider
+    // 7. Instantiate the provider gateway
     const provider = boleto.provider;
     if (!isProviderType(provider.provider)) {
       return NextResponse.json(
@@ -132,8 +125,8 @@ export async function GET(
       { sandbox: provider.sandbox, companyId: boleto.companyId },
     );
 
-    // 8. Call getBankSlipPdf (Santander-specific method)
-    if (!(gateway instanceof SantanderProvider)) {
+    // 8. Call getBankSlipPdf via the PaymentGateway interface (optional method)
+    if (!gateway.getBankSlipPdf) {
       return NextResponse.json(
         { error: "Provider não suporta download de PDF" },
         { status: 400 },

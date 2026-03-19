@@ -818,7 +818,7 @@ export class SantanderProvider implements PaymentGateway {
 
   /**
    * Downloads a PDF link for a Santander bank slip.
-   * This is a Santander-specific method - NOT part of PaymentGateway interface.
+   * Optional method from PaymentGateway interface — currently only Santander implements this.
    *
    * @param covenantCode - The covenant (beneficiary) code
    * @param bankNumber - The bank number (nosso numero)
