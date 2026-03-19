@@ -2,11 +2,12 @@ import type { PaymentGateway } from "./types";
 import { PROVIDER_REGISTRY } from "./registry";
 import { MockProvider } from "./providers/mock.provider";
 import { PagarmeProvider } from "./providers/pagarme.provider";
+import { SantanderProvider } from "./providers/santander.provider";
 
 /**
  * Instancia o gateway correto baseado no tipo do provider.
  *
- * @param providerType - Tipo do provider ("pagarme" | "pinbank" | "mock")
+ * @param providerType - Tipo do provider ("pagarme" | "pinbank" | "santander" | "mock")
  * @param decryptedCredentials - Credentials já decriptadas (JSON parseado)
  * @param metadata - Config comportamental (juros, multa, instruções, etc.)
  * @param webhookSecret - Secret para validação de webhooks (opcional)
@@ -60,6 +61,9 @@ export function getGateway(
       throw new Error(
         "PinBank provider não está implementado. Aguardando documentação da API."
       );
+
+    case "santander":
+      return new SantanderProvider();
 
     default:
       throw new Error(`Provider not found: ${providerType}`);

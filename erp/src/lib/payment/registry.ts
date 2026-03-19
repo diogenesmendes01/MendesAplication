@@ -117,6 +117,147 @@ export const PRODUCTION_PROVIDER_REGISTRY: Record<string, ProviderDefinition> = 
       },
     ],
   },
+  santander: {
+    id: "santander",
+    name: "Santander",
+    configSchema: [
+      {
+        key: "clientId",
+        label: "Client ID",
+        type: "text",
+        required: true,
+        group: "credentials",
+      },
+      {
+        key: "clientSecret",
+        label: "Client Secret",
+        type: "password",
+        required: true,
+        group: "credentials",
+      },
+      {
+        key: "keyUser",
+        label: "Key User",
+        type: "text",
+        required: true,
+        group: "credentials",
+      },
+      {
+        key: "covenantCode",
+        label: "Código do Convênio",
+        type: "text",
+        required: true,
+        group: "credentials",
+      },
+      {
+        key: "certificate",
+        label: "Certificado (.CRT)",
+        type: "password",
+        required: true,
+        helpText: "Conteúdo do .CRT em PEM",
+        group: "credentials",
+      },
+      {
+        key: "certificateKey",
+        label: "Chave do Certificado (.KEY)",
+        type: "password",
+        required: true,
+        helpText: "Conteúdo do .KEY em PEM",
+        group: "credentials",
+      },
+      {
+        key: "workspaceId",
+        label: "Workspace ID",
+        type: "text",
+        required: true,
+        group: "credentials",
+      },
+    ],
+    settingsSchema: [
+      {
+        key: "documentKind",
+        label: "Espécie do Documento",
+        type: "select",
+        required: false,
+        options: [
+          { value: "DUPLICATA_MERCANTIL", label: "Duplicata Mercantil" },
+          { value: "DUPLICATA_SERVICO", label: "Duplicata de Serviço" },
+          { value: "RECIBO", label: "Recibo" },
+          { value: "NOTA_PROMISSORIA", label: "Nota Promissória" },
+          { value: "OUTROS", label: "Outros" },
+        ],
+        group: "settings",
+      },
+      {
+        key: "finePercentage",
+        label: "Multa (%)",
+        type: "number",
+        required: false,
+        group: "settings",
+      },
+      {
+        key: "fineQuantityDays",
+        label: "Dias para multa",
+        type: "number",
+        required: false,
+        group: "settings",
+      },
+      {
+        key: "interestPercentage",
+        label: "Juros ao mês (%)",
+        type: "number",
+        required: false,
+        group: "settings",
+      },
+      {
+        key: "writeOffQuantityDays",
+        label: "Dias para baixa automática",
+        type: "number",
+        required: false,
+        group: "settings",
+      },
+      {
+        key: "protestType",
+        label: "Tipo de Protesto",
+        type: "select",
+        required: false,
+        options: [
+          { value: "SEM_PROTESTO", label: "Sem Protesto" },
+          { value: "DIAS_CORRIDOS", label: "Dias Corridos" },
+          { value: "DIAS_UTEIS", label: "Dias Úteis" },
+        ],
+        group: "settings",
+      },
+      {
+        key: "defaultMessages",
+        label: "Mensagens Padrão",
+        type: "text",
+        required: false,
+        group: "settings",
+      },
+      {
+        key: "pixKeyType",
+        label: "Tipo de Chave Pix",
+        type: "select",
+        required: false,
+        options: [
+          { value: "CPF", label: "CPF" },
+          { value: "CNPJ", label: "CNPJ" },
+          { value: "CELULAR", label: "Celular" },
+          { value: "EMAIL", label: "E-mail" },
+          { value: "EVP", label: "EVP (Aleatória)" },
+        ],
+        group: "settings",
+      },
+      {
+        key: "pixDictKey",
+        label: "Chave Pix (DICT)",
+        type: "text",
+        required: false,
+        group: "settings",
+      },
+    ],
+  },
 };
 
 /**
@@ -135,7 +276,7 @@ export const DEV_PROVIDER_REGISTRY: Record<string, ProviderDefinition> = {
 
 /**
  * Registro central de todos os providers disponíveis.
- * Em produção: apenas pagarme e pinbank.
+ * Em produção: apenas pagarme, pinbank e santander.
  * Em dev/test: inclui mock.
  * O frontend consulta isso pra saber quais bancos existem e quais campos mostrar.
  */
