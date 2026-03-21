@@ -442,4 +442,24 @@ describe("updateAiConfig", () => {
       updateAiConfig("company-1", { ...validData, apiKey: "short" })
     ).rejects.toThrow(/apiKey too short/i);
   });
+
+  it("clears API key when null is submitted", async () => {
+    const { updateAiConfig } = await import(
+      "@/app/(app)/configuracoes/ai/actions"
+    );
+
+    await updateAiConfig("company-clear-key", { ...validData, apiKey: null });
+
+    // encrypt() must NOT have been called — null means clear the key
+    expect(mockEncrypt).not.toHaveBeenCalled();
+
+    // upsert must set apiKey to null (clearing it)
+    const upsertCall = mockUpsert.mock.calls[0][0] as Record<string, unknown>;
+    const updatePayload = upsertCall.update as Record<string, unknown>;
+    expect(updatePayload).toHaveProperty("apiKey", null);
+    expect(updatePayload).toHaveProperty("apiKeyHint", null);
+
+    const createPayload = upsertCall.create as Record<string, unknown>;
+    expect(createPayload).toHaveProperty("apiKey", null);
+  });
 });

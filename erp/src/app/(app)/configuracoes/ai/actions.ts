@@ -23,7 +23,7 @@ export interface AiConfigData {
   maxIterations: number;
   // Provider
   provider: string;
-  apiKey: string; // masked on read, plain on write
+  apiKey: string | null; // masked on read, plain on write, null to clear
   model: string;
   // Channels
   whatsappEnabled: boolean;
@@ -237,11 +237,16 @@ export async function updateAiConfig(
   }
 
   // Determine the apiKey to store:
+  // - If the incoming apiKey is null, clear the key (admin wants to remove it)
   // - If the incoming apiKey is empty or matches the masked pattern, keep existing
   // - Otherwise, validate and encrypt the new value
-  let apiKeyToStore: string | undefined;
-  let apiKeyHintToStore: string | undefined;
-  if (data.apiKey && !MASKED_API_KEY_PATTERN.test(data.apiKey)) {
+  let apiKeyToStore: string | null | undefined;
+  let apiKeyHintToStore: string | null | undefined;
+  if (data.apiKey === null) {
+    // Explicitly clear the API key
+    apiKeyToStore = null;
+    apiKeyHintToStore = null;
+  } else if (data.apiKey && !MASKED_API_KEY_PATTERN.test(data.apiKey)) {
     // Validate minimum key length to surface accidental empty-like submissions
     if (data.apiKey.trim().length < 8) {
       throw new Error("apiKey too short — minimum 8 characters");
@@ -286,7 +291,7 @@ export async function updateAiConfig(
   // Audit log — redact apiKey from the logged data
   const auditData = {
     ...data,
-    apiKey: data.apiKey ? "(redacted)" : "(empty)",
+    apiKey: data.apiKey === null ? "(cleared)" : data.apiKey ? "(redacted)" : "(empty)",
   };
 
   await logAuditEvent({

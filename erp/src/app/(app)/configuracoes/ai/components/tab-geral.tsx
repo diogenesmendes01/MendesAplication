@@ -162,7 +162,7 @@ export function TabGeral({
             <div className="flex items-center gap-2">
               <Input
                 type="password"
-                value={config.apiKey}
+                value={config.apiKey ?? ""}
                 onChange={(e) =>
                   setConfig((prev) => ({
                     ...prev,
