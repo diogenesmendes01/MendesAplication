@@ -7,11 +7,11 @@ import { logAuditEvent } from "@/lib/audit";
 import type { WebhookEvent } from "@/lib/payment/types";
 import { BoletoStatus, PaymentStatus } from "@prisma/client";
 import {
-import { logger } from "@/lib/logger";
   RECEIVABLE_VALUE_TOLERANCE,
   RECEIVABLE_DUE_DATE_WINDOW_DAYS,
   CENTS_PER_UNIT,
 } from "@/lib/payment/constants";
+import { logger } from "@/lib/logger";
 
 // ---------------------------------------------------------------------------
 // Status mapping: WebhookEvent.type → BoletoStatus

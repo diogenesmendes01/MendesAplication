@@ -1,11 +1,11 @@
 import type {
-import { logger } from "@/lib/logger";
   PaymentGateway,
   CreateBoletoInput,
   CreateBoletoResult,
   BoletoStatusResult,
   WebhookEvent,
 } from "../types";
+import { logger } from "@/lib/logger";
 
 /**
  * Mock payment provider for testing purposes.

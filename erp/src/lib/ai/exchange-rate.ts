@@ -56,7 +56,6 @@ export async function getBrlUsdRate(): Promise<number> {
     cachedRate = { value: bid, fetchedAt: Date.now() };
     return bid;
   } catch (error) {
-    // eslint-disable-next-line no-console
     logger.warn(
       `[exchange-rate] API failed, using fallback ${SAFE_FALLBACK}:`,
       error instanceof Error ? error.message : String(error)
