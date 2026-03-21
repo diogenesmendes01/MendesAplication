@@ -10,7 +10,8 @@ import { decrypt } from "@/lib/encryption";
 import { getTodaySpend, logUsage } from "./cost-tracker";
 import { MODEL_PRICING, FALLBACK_PRICING, DEFAULT_MODELS } from "./pricing";
 import { getBrlUsdRateSync } from "./exchange-rate";
-import { logger } from "@/lib/logger";
+import { createChildLogger } from "@/lib/logger";
+import type { Logger } from "pino";
 
 // ─── Result types ─────────────────────────────────────────────────────────────
 
@@ -67,6 +68,8 @@ async function runAgentLoop(options: {
   onUsage: (inputTokens: number, outputTokens: number) => Promise<void>;
   /** Identifies the ticket or "simulation" — used only for logging */
   contextId: string;
+  /** Child logger with traceId/companyId/ticketId already bound */
+  log: Logger;
 }): Promise<AgentLoopResult> {
   const {
     messages,
@@ -79,6 +82,7 @@ async function runAgentLoop(options: {
     dryRun,
     onUsage,
     contextId,
+    log,
   } = options;
 
   let totalInputTokens = 0;
@@ -88,7 +92,7 @@ async function runAgentLoop(options: {
   for (let iteration = 0; iteration < maxIterations; iteration++) {
     // ── Global timeout guard ───────────────────────────────────────────────
     if (Date.now() - startTime > timeout) {
-      logger.warn({ iteration, contextId }, "Agent timeout");
+      log.warn({ iteration }, "Agent timeout");
       return {
         responded: false,
         escalated: false,
@@ -132,7 +136,7 @@ async function runAgentLoop(options: {
           }
 
           if (!dryRun) {
-            logger.info({ tool: toolName, contextId, iteration: iteration + 1 }, "Executing tool");
+            log.info({ tool: toolName, iteration: iteration + 1 }, "Executing tool");
           }
 
           const result = await executeTool(toolName, args, toolContext);
@@ -172,7 +176,7 @@ async function runAgentLoop(options: {
       // ── LLM returned text only (no tool calls) ─────────────────────────
       } else if (response.content) {
         if (!dryRun) {
-          logger.info({ contextId, iteration: iteration + 1 }, "Direct text response from LLM");
+          log.info({ iteration: iteration + 1 }, "Direct text response from LLM");
           const respondTool =
             toolContext.channel === "EMAIL" ? "RESPOND_EMAIL" : "RESPOND";
           const respondArgs =
@@ -195,7 +199,7 @@ async function runAgentLoop(options: {
       // ── Empty response ─────────────────────────────────────────────────
       } else {
         if (!dryRun) {
-          logger.warn({ contextId, iteration: iteration + 1 }, "Empty response from LLM");
+          log.warn({ iteration: iteration + 1 }, "Empty response from LLM");
         }
         return {
           responded: false,
@@ -208,7 +212,7 @@ async function runAgentLoop(options: {
         };
       }
     } catch (error) {
-      logger.error({ contextId, iteration: iteration + 1, error }, "Error in agent iteration");
+      log.error({ iteration: iteration + 1, error }, "Error in agent iteration");
       messages.push({
         role: "user",
         content: `Erro interno ao processar a solicitação. Tente uma abordagem diferente.`,
@@ -218,7 +222,7 @@ async function runAgentLoop(options: {
 
   // Max iterations reached without terminal action
   if (!options.dryRun) {
-    logger.warn({ maxIterations, contextId }, "Max iterations reached");
+    log.warn({ maxIterations }, "Max iterations reached");
   }
 
   return {
@@ -242,6 +246,9 @@ export async function runAgent(
 ): Promise<AgentResult> {
   const startTime = Date.now();
   const timeout = parseInt(process.env.AI_TIMEOUT || "30000", 10);
+
+  // Create child logger with traceId for this entire request
+  const log = createChildLogger({ companyId, ticketId });
 
   // Load AI config for the company
   const aiConfig = await prisma.aiConfig.findUnique({
@@ -285,7 +292,7 @@ export async function runAgent(
     );
 
     if (matchedKeyword) {
-      logger.info({ ticketId, keyword: matchedKeyword }, "Escalation keyword detected, escalating without LLM");
+      log.info({ keyword: matchedKeyword }, "Escalation keyword detected, escalating without LLM");
 
       await prisma.ticket.update({
         where: { id: ticketId },
@@ -324,7 +331,7 @@ export async function runAgent(
       temperature: aiConfig.temperature,
     };
   } else {
-    logger.warn({ companyId }, "No apiKey for company, falling back to global env — usage costs unattributed");
+    log.warn("No apiKey for company, falling back to global env — usage costs unattributed");
     providerConfig = await getEnvProviderConfig();
   }
 
@@ -421,6 +428,7 @@ export async function runAgent(
     startTime,
     dryRun: false,
     contextId: ticketId,
+    log,
     onUsage: async (inputTokens, outputTokens) => {
       await logUsage({
         aiConfigId: aiConfig.id,
@@ -441,7 +449,7 @@ export async function runAgent(
       if (aiConfig.dailySpendLimitBrl) {
         const postCallSpend = await getTodaySpend(companyId);
         if (postCallSpend > Number(aiConfig.dailySpendLimitBrl)) {
-          logger.warn({ companyId, spend: postCallSpend, limit: Number(aiConfig.dailySpendLimitBrl), ticketId }, "Daily spend overshoot — TOCTOU race detected");
+          log.warn({ spend: postCallSpend, limit: Number(aiConfig.dailySpendLimitBrl) }, "Daily spend overshoot — TOCTOU race detected");
         }
       }
     },
@@ -474,6 +482,9 @@ export async function runAgentDryRun(
   const startTime = Date.now();
   const timeout = parseInt(process.env.AI_TIMEOUT || "30000", 10);
 
+  // Create child logger with traceId for this dry-run request
+  const log = createChildLogger({ companyId, ticketId: "simulation" });
+
   const aiConfig = await prisma.aiConfig.findUnique({
     where: { companyId },
   });
@@ -504,7 +515,7 @@ export async function runAgentDryRun(
     );
 
     if (matchedKeyword) {
-      logger.info({ keyword: matchedKeyword }, "Dry-run: escalation keyword detected, would escalate without LLM");
+      log.info({ keyword: matchedKeyword }, "Dry-run: escalation keyword detected, would escalate without LLM");
       return {
         response: `[Simulação] Seria escalado automaticamente — palavra-chave detectada: "${matchedKeyword}"`,
         inputTokens: 0,
@@ -529,7 +540,7 @@ export async function runAgentDryRun(
       temperature: aiConfig.temperature,
     };
   } else {
-    logger.warn({ companyId }, "No apiKey for company, falling back to global env — usage costs unattributed");
+    log.warn("No apiKey for company, falling back to global env — usage costs unattributed");
     providerConfig = await getEnvProviderConfig();
   }
 
@@ -585,6 +596,7 @@ export async function runAgentDryRun(
     startTime,
     dryRun: true,
     contextId: "simulation",
+    log,
     // Log simulation token usage for internal/technical DB audit (isSimulation=true).
     // NOT visible in the "Consumo de IA" tab — getUsageSummary() filters isSimulation: false.
     // NOT counted against the daily budget — getTodaySpend() also filters isSimulation: false.
