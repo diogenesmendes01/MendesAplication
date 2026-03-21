@@ -1,3 +1,4 @@
+import { sanitizeEmailHtml } from "@/lib/ai/sanitize-utils";
 import { Job } from "bullmq";
 import nodemailer from "nodemailer";
 import { prisma } from "@/lib/prisma";
@@ -69,7 +70,7 @@ export async function processEmailOutbound(job: Job<EmailOutboundJobData>) {
       from: smtpUser,
       to,
       subject,
-      html: `<div style="font-family: Arial, sans-serif;">${content.replace(/\n/g, "<br>")}</div>`,
+      html: `<div style="font-family: Arial, sans-serif;">${sanitizeEmailHtml(content.replace(/\n/g, "<br>"))}</div>`,
       attachments,
     });
 

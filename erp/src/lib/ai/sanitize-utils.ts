@@ -5,6 +5,9 @@
 //
 // Resolves TODO #103: replaced regex-based sanitization with `sanitize-html`
 // package for production-grade HTML sanitization.
+//
+// Resolves #293: added stripHtmlToText for inbound email text extraction,
+// replacing fragile regex `.replace(/<[^>]*>/g, "")`.
 
 import sanitizeHtml from "sanitize-html";
 
@@ -27,6 +30,16 @@ const EMAIL_SANITIZE_CONFIG: sanitizeHtml.IOptions = {
 };
 
 /**
+ * Configuration to strip ALL HTML tags, returning plain text only.
+ * Used for inbound email text extraction where no HTML should remain.
+ */
+const STRIP_ALL_CONFIG: sanitizeHtml.IOptions = {
+  allowedTags: [],
+  allowedAttributes: {},
+  disallowedTagsMode: "discard",
+};
+
+/**
  * Sanitizes LLM-generated HTML before email dispatch.
  *
  * Uses `sanitize-html` with a restrictive allow-list to prevent
@@ -36,4 +49,15 @@ const EMAIL_SANITIZE_CONFIG: sanitizeHtml.IOptions = {
  */
 export function sanitizeEmailHtml(input: string): string {
   return sanitizeHtml(input, EMAIL_SANITIZE_CONFIG);
+}
+
+/**
+ * Strips ALL HTML tags from input, returning plain text only.
+ *
+ * Replaces the fragile regex pattern `str.replace(/<[^>]*>/g, "")` which
+ * can be bypassed with malformed tags (e.g. `<b onclick="a>b">`) or
+ * unclosed tags. Uses `sanitize-html` parser for robust tag removal.
+ */
+export function stripHtmlToText(input: string): string {
+  return sanitizeHtml(input, STRIP_ALL_CONFIG);
 }
