@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireCompanyAccess } from "@/lib/rbac";
 import { Prisma } from "@prisma/client";
+import Decimal from "decimal.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -83,10 +84,10 @@ export async function listPipelineData(
   if (filters.valueMin !== undefined || filters.valueMax !== undefined) {
     where.totalValue = {};
     if (filters.valueMin !== undefined) {
-      where.totalValue.gte = new Prisma.Decimal(filters.valueMin);
+      where.totalValue.gte = new Decimal(filters.valueMin);
     }
     if (filters.valueMax !== undefined) {
-      where.totalValue.lte = new Prisma.Decimal(filters.valueMax);
+      where.totalValue.lte = new Decimal(filters.valueMax);
     }
   }
 

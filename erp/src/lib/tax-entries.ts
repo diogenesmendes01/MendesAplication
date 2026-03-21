@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { Prisma, type PrismaClient } from "@prisma/client";
+import Decimal from "decimal.js";
 import type { FiscalConfigData } from "@/app/(app)/configuracoes/fiscal/actions";
 
 // ---------------------------------------------------------------------------
@@ -71,7 +72,7 @@ export async function createTaxEntriesForInvoice(input: TaxEntryInput) {
       invoiceId,
       type: t.type as "ISS" | "PIS" | "COFINS" | "IRPJ" | "CSLL",
       period,
-      value: new Prisma.Decimal(sign * value * (t.rate / 100)),
+      value: new Decimal(sign * value * (t.rate / 100)),
       dueDate,
       status: "PENDING" as const,
     }));

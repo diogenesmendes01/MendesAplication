@@ -16,15 +16,6 @@ vi.mock("@/lib/prisma", () => ({
   },
 }));
 
-// Prisma Decimal stub — avoids loading the real Prisma runtime
-vi.mock("@prisma/client/runtime/library", () => ({
-  Decimal: class {
-    private val: string;
-    constructor(v: number | string) { this.val = String(v); }
-    toString() { return this.val; }
-  },
-}));
-
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
 describe("cost-tracker", () => {
