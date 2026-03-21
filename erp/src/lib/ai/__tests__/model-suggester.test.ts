@@ -45,6 +45,26 @@ describe("suggestModel", () => {
     });
   });
 
+  describe("deepseek provider", () => {
+    it("returns deepseek-chat as fallback when budget is near zero", () => {
+      const result = suggestModel("deepseek", 0.001);
+      expect(result.model).toBe("deepseek-chat");
+      expect(result.estimatedDailyCostBrl).toBeGreaterThan(0);
+    });
+
+    it("returns deepseek-reasoner when budget is high enough", () => {
+      const reasonerCost = dailyCostBrl("deepseek-reasoner");
+      const result = suggestModel("deepseek", reasonerCost + 1);
+      expect(result.model).toBe("deepseek-reasoner");
+    });
+
+    it("returns a valid deepseek model for any budget", () => {
+      const result = suggestModel("deepseek", 100);
+      expect(["deepseek-reasoner", "deepseek-chat"]).toContain(result.model);
+      expect(result.estimatedDailyCostBrl).toBeGreaterThan(0);
+    });
+  });
+
   describe("unknown provider", () => {
     it("returns a fallback model", () => {
       const result = suggestModel("unknown-provider", 100);
