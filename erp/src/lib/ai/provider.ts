@@ -22,11 +22,72 @@ export interface AiMessage {
   tool_call_id?: string;
 }
 
-export interface AiToolDefinition {
-  name: string;
-  description: string;
-  parameters: Record<string, unknown>; // JSON Schema object
+// ─── Strongly-typed tool definitions ──────────────────────────────────────────
+
+/** JSON-Schema property descriptor used inside tool parameter schemas. */
+export interface JsonSchemaProperty {
+  type: "string" | "number" | "boolean" | "array" | "object";
+  description?: string;
+  enum?: string[];
+  items?: JsonSchemaProperty;
 }
+
+export interface AiToolParameters<
+  Props extends Record<string, JsonSchemaProperty> = Record<string, JsonSchemaProperty>,
+  Req extends readonly (keyof Props & string)[] = readonly (keyof Props & string)[],
+> {
+  type: "object";
+  properties: Props;
+  required: Req;
+}
+
+export interface AiToolDefinition<
+  N extends string = string,
+  Props extends Record<string, JsonSchemaProperty> = Record<string, JsonSchemaProperty>,
+  Req extends readonly (keyof Props & string)[] = readonly (keyof Props & string)[],
+> {
+  name: N;
+  description: string;
+  parameters: AiToolParameters<Props, Req>;
+}
+
+export function defineTool<
+  N extends string,
+  Props extends Record<string, JsonSchemaProperty>,
+  const Req extends readonly (keyof Props & string)[],
+>(tool: {
+  name: N;
+  description: string;
+  parameters: {
+    type: "object";
+    properties: Props;
+    required: Req;
+  };
+}): AiToolDefinition<N, Props, Req> {
+  return tool;
+}
+
+type JsonSchemaTypeMap = {
+  string: string;
+  number: number;
+  boolean: boolean;
+  array: unknown[];
+  object: Record<string, unknown>;
+};
+
+export type InferToolArgs<T> = T extends AiToolDefinition<
+  string,
+  infer Props,
+  infer Req
+>
+  ? Req extends readonly (infer R extends keyof Props & string)[]
+    ? { [K in R]: JsonSchemaTypeMap[Props[K]["type"]] } &
+      { [K in Exclude<keyof Props & string, R>]?: JsonSchemaTypeMap[Props[K]["type"]] }
+    : never
+  : never;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type AnyAiToolDefinition = AiToolDefinition<string, any, any>;
 
 export interface AiResponse {
   content?: string | null;
@@ -112,7 +173,7 @@ export async function getEnvProviderConfig(
 
 export async function chatCompletion(
   messages: AiMessage[],
-  tools: AiToolDefinition[] | undefined,
+  tools: AnyAiToolDefinition[] | undefined,
   config: ProviderConfig
 ): Promise<AiResponse> {
   const timeout = parseInt(process.env.AI_TIMEOUT || "30000", 10);
@@ -133,7 +194,7 @@ export async function chatCompletion(
 async function openaiCompatibleCompletion(
   config: ProviderConfig,
   messages: AiMessage[],
-  tools?: AiToolDefinition[],
+  tools?: AnyAiToolDefinition[],
   timeout = 30000
 ): Promise<AiResponse> {
   const baseUrl =
@@ -236,7 +297,7 @@ interface AnthropicMessage {
 async function anthropicCompletion(
   config: ProviderConfig,
   messages: AiMessage[],
-  tools?: AiToolDefinition[],
+  tools?: AnyAiToolDefinition[],
   timeout = 30000
 ): Promise<AiResponse> {
   const model =
