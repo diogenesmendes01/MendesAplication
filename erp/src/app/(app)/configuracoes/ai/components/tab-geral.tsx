@@ -89,14 +89,18 @@ export function TabGeral({
   }, [loading, companyId, config.provider, loadModels]);
 
   // ── Load suggestion when budget or provider changes ───────────────────────
+  // Fix #143: companyId (selectedCompanyId) in deps + null-check + stale cleanup
   useEffect(() => {
-    if (companyId && config.dailySpendLimitBrl && config.dailySpendLimitBrl > 0) {
-      getSuggestedModel(companyId, config.provider, config.dailySpendLimitBrl).then(
-        setSuggestion,
-      );
-    } else {
+    if (!companyId || !config.dailySpendLimitBrl || config.dailySpendLimitBrl <= 0) {
       setSuggestion(null);
+      return;
     }
+
+    let cancelled = false;
+    getSuggestedModel(companyId, config.provider, config.dailySpendLimitBrl).then(
+      (result) => { if (!cancelled) setSuggestion(result); },
+    );
+    return () => { cancelled = true; };
   }, [companyId, config.provider, config.dailySpendLimitBrl]);
 
   function handleProviderChange(provider: string) {
