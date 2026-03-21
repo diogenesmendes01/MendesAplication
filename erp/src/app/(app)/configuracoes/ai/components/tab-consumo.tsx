@@ -1,7 +1,5 @@
 "use client";
 
-import { useState } from "react";
-import { toast } from "sonner";
 import { BarChart3, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -12,11 +10,8 @@ import {
   CardTitle,
   CardDescription,
 } from "@/components/ui/card";
-import {
-  getAiUsageSummary,
-  getTodaySpendAction,
-} from "../actions";
-import type { AiConfigData, UsageSummary } from "./types";
+import { useAiUsage } from "../hooks";
+import type { AiConfigData } from "./types";
 
 interface TabConsumoProps {
   companyId: string;
@@ -24,28 +19,8 @@ interface TabConsumoProps {
 }
 
 export function TabConsumo({ companyId, config }: TabConsumoProps) {
-  const [usageSummary, setUsageSummary] = useState<UsageSummary | null>(null);
-  const [todaySpend, setTodaySpend] = useState<number>(0);
-  const [loadingUsage, setLoadingUsage] = useState(false);
-
-  async function loadUsageData() {
-    if (!companyId) return;
-    setLoadingUsage(true);
-    try {
-      const [summary, spend] = await Promise.all([
-        getAiUsageSummary(companyId, 30),
-        getTodaySpendAction(companyId),
-      ]);
-      setUsageSummary(summary);
-      setTodaySpend(spend);
-    } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Erro ao carregar consumo",
-      );
-    } finally {
-      setLoadingUsage(false);
-    }
-  }
+  const { usageSummary, todaySpend, loadingUsage, loadUsageData } =
+    useAiUsage(companyId);
 
   return (
     <div className="space-y-4">
