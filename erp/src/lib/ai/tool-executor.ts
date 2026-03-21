@@ -262,6 +262,13 @@ async function executeRespondEmail(
   if (!subject) return "Erro: assunto (subject) nao fornecido.";
   if (!rawMessage) return "Erro: mensagem (message) nao fornecida.";
 
+  // Validate body size to prevent oversized emails from overwhelming SMTP/DB
+  // See: https://github.com/diogenesmendes01/MendesAplication/issues/102
+  const MAX_EMAIL_BODY_BYTES = 100 * 1024; // 100 KB
+  if (new TextEncoder().encode(rawMessage).byteLength > MAX_EMAIL_BODY_BYTES) {
+    return `Erro: corpo do email excede o limite maximo de 100KB (${Math.round(new TextEncoder().encode(rawMessage).byteLength / 1024)}KB). Reduza o conteudo antes de enviar.`;
+  }
+
   // Sanitize LLM-generated HTML before dispatch to prevent prompt-injection
   // from inbound email content influencing outgoing email markup.
   // See: https://github.com/diogenesmendes01/MendesAplication/issues/103
