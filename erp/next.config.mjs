@@ -11,6 +11,15 @@ const nextConfig = {
   },
   // Disable X-Powered-By header
   poweredByHeader: false,
+  async redirects() {
+    return [
+      {
+        source: '/configuracoes/agente-ia',
+        destination: '/configuracoes/ai',
+        permanent: true,
+      },
+    ];
+  },
 };
 
 export default nextConfig;
