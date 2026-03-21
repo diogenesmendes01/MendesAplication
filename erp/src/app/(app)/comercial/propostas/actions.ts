@@ -630,7 +630,7 @@ async function resolveGatewayForBoleto(
     if (!isProviderType(provider.provider)) {
       throw new Error(`Provider inválido encontrado no banco: ${provider.provider}`);
     }
-    const gateway = getGateway(
+    const gateway = await getGateway(
       provider.provider,
       decryptedCredentials,
       metadata,
@@ -662,7 +662,7 @@ async function resolveGatewayForBoleto(
     logger.warn(
       `[Payment] Nenhum provider configurado para empresa ${companyId}. Usando mock como fallback (não-produção).`,
     );
-    const gateway = getGateway("mock", {});
+    const gateway = await getGateway("mock", {});
     return {
       gateway,
       providerId: null,
@@ -678,7 +678,7 @@ async function resolveGatewayForBoleto(
   if (!isProviderType(provider.provider)) {
     throw new Error(`Provider inválido encontrado no banco: ${provider.provider}`);
   }
-  const gateway = getGateway(
+  const gateway = await getGateway(
     provider.provider,
     decryptedCredentials,
     metadata,

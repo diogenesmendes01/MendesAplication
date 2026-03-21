@@ -1,6 +1,5 @@
 import type { PaymentGateway } from "./types";
 import { PROVIDER_REGISTRY } from "./registry";
-import { MockProvider } from "./providers/mock.provider";
 import { PagarmeProvider } from "./providers/pagarme.provider";
 import { SantanderProvider } from "./providers/santander.provider";
 import type { SantanderCredentials } from "./providers/santander-auth";
@@ -31,10 +30,13 @@ type GatewayFactory = (
   metadata: Record<string, unknown> | null | undefined,
   webhookSecret: string | undefined,
   options: GatewayOptions | undefined,
-) => PaymentGateway;
+) => PaymentGateway | Promise<PaymentGateway>;
 
 const GATEWAY_FACTORIES: Record<string, GatewayFactory> = {
-  mock: () => new MockProvider(),
+  mock: async () => {
+    const { MockProvider } = await import("./providers/mock.provider");
+    return new MockProvider();
+  },
 
   pagarme: (decryptedCredentials, metadata, webhookSecret) => {
     // Bug #17 fix: Validate required credential fields before instantiation
@@ -94,7 +96,7 @@ const GATEWAY_FACTORIES: Record<string, GatewayFactory> = {
 };
 
 // ---------------------------------------------------------------------------
-// getGateway — public API (unchanged signature for backward compatibility)
+// getGateway — public API
 // ---------------------------------------------------------------------------
 
 /**
@@ -103,6 +105,9 @@ const GATEWAY_FACTORIES: Record<string, GatewayFactory> = {
  * Uses a registry-based factory pattern: each provider registers a factory
  * function in GATEWAY_FACTORIES. Adding a new provider requires only adding
  * an entry — no switch/case modification needed.
+ *
+ * Now async to support dynamic imports (e.g. MockProvider is lazy-loaded
+ * so it never ends up in the production bundle).
  *
  * @param providerType - Tipo do provider ("pagarme" | "pinbank" | "santander" | "mock")
  * @param decryptedCredentials - Credentials já decriptadas (JSON parseado)
@@ -114,13 +119,13 @@ const GATEWAY_FACTORIES: Record<string, GatewayFactory> = {
  * @throws Error se o provider não existir no registry
  * @throws Error se o provider ainda não estiver implementado
  */
-export function getGateway(
+export async function getGateway(
   providerType: string,
   decryptedCredentials: Record<string, unknown>,
   metadata?: Record<string, unknown> | null,
   webhookSecret?: string,
   options?: GatewayOptions,
-): PaymentGateway {
+): Promise<PaymentGateway> {
   if (!PROVIDER_REGISTRY[providerType]) {
     throw new Error(`Provider not found: ${providerType}`);
   }

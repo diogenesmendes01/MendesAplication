@@ -424,7 +424,7 @@ export async function testProviderConnection(
     if (!isProviderType(provider.provider)) {
       return { ok: false, message: `Provider inválido encontrado no banco: ${provider.provider}` };
     }
-    const gateway = getGateway(
+    const gateway = await getGateway(
       provider.provider,
       decryptedCredentials,
       provider.metadata as Record<string, unknown> | null,

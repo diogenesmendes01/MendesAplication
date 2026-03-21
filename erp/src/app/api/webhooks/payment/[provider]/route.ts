@@ -78,7 +78,7 @@ export async function POST(
 
   // 4. Try to validate signature with each provider's webhookSecret
   let matchedProvider: (typeof providers)[number] | null = null;
-  let gateway: ReturnType<typeof getGateway> | null = null;
+  let gateway: Awaited<ReturnType<typeof getGateway>> | null = null;
 
   for (const prov of providers) {
     try {
@@ -92,7 +92,7 @@ export async function POST(
       if (!isProviderType(prov.provider)) {
         throw new Error(`Provider inválido encontrado no banco: ${prov.provider}`);
       }
-      const gw = getGateway(
+      const gw = await getGateway(
         prov.provider,
         decryptedCredentials,
         metadata,

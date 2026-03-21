@@ -118,7 +118,7 @@ export async function GET(
     ) as Record<string, unknown>;
     const metadata = provider.metadata as Record<string, unknown> | null;
 
-    const gateway = getGateway(
+    const gateway = await getGateway(
       provider.provider,
       decryptedCredentials,
       metadata,
