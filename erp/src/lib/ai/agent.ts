@@ -331,8 +331,7 @@ export async function runAgent(
       temperature: aiConfig.temperature,
     };
   } else {
-    log.warn("No apiKey for company, falling back to global env — usage costs unattributed");
-    providerConfig = await getEnvProviderConfig();
+    providerConfig = await getEnvProviderConfig({ companyId, ticketId });
   }
 
   // Load ticket with client and contact info
@@ -540,8 +539,7 @@ export async function runAgentDryRun(
       temperature: aiConfig.temperature,
     };
   } else {
-    log.warn("No apiKey for company, falling back to global env — usage costs unattributed");
-    providerConfig = await getEnvProviderConfig();
+    providerConfig = await getEnvProviderConfig({ companyId, ticketId: "simulation" });
   }
 
   const maxIterations = aiConfig.maxIterations || 5;

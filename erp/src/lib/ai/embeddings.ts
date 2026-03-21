@@ -1,8 +1,9 @@
 
-
 "use server";
 
 import { prisma } from "@/lib/prisma";
+import { logger } from "@/lib/logger";
+import { isGlobalFallbackBlocked } from "./provider";
 import { chunkText, cosineSimilarity } from "@/lib/ai/embedding-utils";
 export { chunkText, cosineSimilarity };
 
@@ -29,15 +30,31 @@ const DEFAULT_EMBEDDING_MODELS: Record<string, string> = {
  * Generates an embedding vector for the given text using the configured
  * embedding provider (AI_EMBEDDING_PROVIDER env).
  * Supports OpenAI-compatible APIs (openai, deepseek).
+ *
+ * ⚠️  Uses global env vars for API key — costs are NOT attributed per-company.
+ *     When BLOCK_GLOBAL_AI_FALLBACK=true, this will throw unless a key is
+ *     explicitly provided.
  */
 export async function generateEmbedding(text: string): Promise<number[]> {
   const provider = process.env.AI_EMBEDDING_PROVIDER || "openai";
   const apiKey = process.env.AI_EMBEDDING_KEY;
+
   if (!apiKey) {
+    if (isGlobalFallbackBlocked()) {
+      throw new Error(
+        "AI_EMBEDDING_KEY not set and global fallback is blocked (BLOCK_GLOBAL_AI_FALLBACK=true). " +
+          "Configure AI_EMBEDDING_KEY or a per-company embedding key.",
+      );
+    }
     throw new Error(
       `AI_EMBEDDING_KEY nao configurada para provider ${provider}`
     );
   }
+
+  // Warn that embedding calls use global keys (unattributed costs)
+  logger.warn(
+    "Embedding call using global env key (AI_EMBEDDING_KEY) — costs are not attributed per-company",
+  );
 
   const model =
     process.env.AI_EMBEDDING_MODEL || DEFAULT_EMBEDDING_MODELS[provider] || "text-embedding-3-small";
