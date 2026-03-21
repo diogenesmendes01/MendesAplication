@@ -1,4 +1,5 @@
 import Redis from "ioredis";
+import { logger } from "@/lib/logger";
 
 // ---------------------------------------------------------------------------
 // Rate limiter baseado em Redis — compartilha estado entre réplicas.
@@ -52,14 +53,14 @@ function getRedis(): Redis {
       lazyConnect: true,
     });
     redis.on("error", (err) => {
-      console.error("[rate-limit] Redis connection error:", err.message);
+      logger.error("[rate-limit] Redis connection error:", err.message);
       redisAvailable = false;
     });
     redis.on("connect", () => {
       redisAvailable = true;
     });
     redis.connect().catch((err) => {
-      console.error("[rate-limit] Redis initial connection failed:", err.message);
+      logger.error("[rate-limit] Redis initial connection failed:", err.message);
       redisAvailable = false;
     });
   }
@@ -139,7 +140,7 @@ export async function checkRateLimit(
 
       return { allowed: true, retryAfterMs: 0 };
     } catch (err) {
-      console.error(
+      logger.error(
         "[rate-limit] Redis operation failed, falling back to in-memory:",
         err instanceof Error ? err.message : err
       );

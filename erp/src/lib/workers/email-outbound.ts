@@ -3,6 +3,7 @@ import nodemailer from "nodemailer";
 import { prisma } from "@/lib/prisma";
 import { decryptConfig } from "@/lib/encryption";
 import path from "path";
+import { logger } from "@/lib/logger";
 
 export interface EmailOutboundJobData {
   messageId: string;
@@ -23,7 +24,7 @@ export async function processEmailOutbound(job: Job<EmailOutboundJobData>) {
   });
 
   if (!channel) {
-    console.warn(`[email-outbound] No active EMAIL channel for company ${companyId}`);
+    logger.warn(`[email-outbound] No active EMAIL channel for company ${companyId}`);
     return;
   }
 
@@ -35,7 +36,7 @@ export async function processEmailOutbound(job: Job<EmailOutboundJobData>) {
   const smtpPass = config.password as string;
 
   if (!smtpHost || !smtpUser || !smtpPass) {
-    console.error(`[email-outbound] Incomplete SMTP config for channel ${channel.id}`);
+    logger.error(`[email-outbound] Incomplete SMTP config for channel ${channel.id}`);
     return;
   }
 
@@ -81,9 +82,9 @@ export async function processEmailOutbound(job: Job<EmailOutboundJobData>) {
       });
     }
 
-    console.log(`[email-outbound] Email sent to ${to}, messageId: ${externalId}`);
+    logger.info(`[email-outbound] Email sent to ${to}, messageId: ${externalId}`);
   } catch (err) {
-    console.error(`[email-outbound] Failed to send email for message ${messageId}:`, err);
+    logger.error(`[email-outbound] Failed to send email for message ${messageId}:`, err);
     throw err; // Let BullMQ retry
   }
 }

@@ -4,6 +4,7 @@ import { chunkText } from "@/lib/ai/embedding-utils";
 import { generateEmbedding } from "@/lib/ai/embeddings";
 import fs from "fs/promises";
 import { PDFParse } from "pdf-parse";
+import { logger } from "@/lib/logger";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -50,14 +51,14 @@ export async function processDocumentProcessing(
   });
 
   if (!document) {
-    console.warn(
+    logger.warn(
       `[document-processing] Document ${documentId} not found, skipping`
     );
     return;
   }
 
   if (document.companyId !== companyId) {
-    console.warn(
+    logger.warn(
       `[document-processing] Document ${documentId} does not belong to company ${companyId}, skipping`
     );
     return;
@@ -65,7 +66,7 @@ export async function processDocumentProcessing(
 
   try {
     // 1. Extract text from file
-    console.log(
+    logger.info(
       `[document-processing] Extracting text from ${filePath} (${document.mimeType})`
     );
     const text = await extractText(filePath, document.mimeType);
@@ -76,7 +77,7 @@ export async function processDocumentProcessing(
 
     // 2. Split text into chunks
     const chunks = chunkText(text);
-    console.log(
+    logger.info(
       `[document-processing] Document ${documentId}: ${chunks.length} chunks created`
     );
 
@@ -84,7 +85,7 @@ export async function processDocumentProcessing(
     for (let i = 0; i < chunks.length; i++) {
       const chunkContent = chunks[i];
 
-      console.log(
+      logger.info(
         `[document-processing] Document ${documentId}: generating embedding for chunk ${i + 1}/${chunks.length}`
       );
       const embedding = await generateEmbedding(chunkContent);
@@ -105,11 +106,11 @@ export async function processDocumentProcessing(
       data: { status: "READY" },
     });
 
-    console.log(
+    logger.info(
       `[document-processing] Document ${documentId} processed successfully: ${chunks.length} chunks with embeddings`
     );
   } catch (error) {
-    console.error(
+    logger.error(
       `[document-processing] Failed to process document ${documentId}:`,
       error
     );

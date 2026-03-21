@@ -5,6 +5,7 @@ import { sseBus } from "@/lib/sse";
 import { invalidateKpiCache } from "@/lib/kpi-cache";
 import path from "path";
 import fs from "fs/promises";
+import { logger } from "@/lib/logger";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -151,7 +152,7 @@ async function downloadAndSaveMedia(
   try {
     const res = await fetch(mediaUrl);
     if (!res.ok) {
-      console.error(`[whatsapp-inbound] Failed to download media: ${res.status}`);
+      logger.error(`[whatsapp-inbound] Failed to download media: ${res.status}`);
       return null;
     }
 
@@ -169,7 +170,7 @@ async function downloadAndSaveMedia(
 
     return { storagePath, fileSize: buffer.length };
   } catch (err) {
-    console.error("[whatsapp-inbound] Failed to save media:", err);
+    logger.error("[whatsapp-inbound] Failed to save media:", err);
     return null;
   }
 }
@@ -194,7 +195,7 @@ async function saveBase64Media(
 
     return { storagePath, fileSize: buffer.length };
   } catch (err) {
-    console.error("[whatsapp-inbound] Failed to save base64 media:", err);
+    logger.error("[whatsapp-inbound] Failed to save base64 media:", err);
     return null;
   }
 }
@@ -225,7 +226,7 @@ async function processMediaFollowUp(job: Job<MediaWebhookPayload>) {
   const media = payload.data?.media;
 
   if (!externalId || !media?.url) {
-    console.warn("[whatsapp-inbound] process-media: missing externalId or media.url");
+    logger.warn("[whatsapp-inbound] process-media: missing externalId or media.url");
     return;
   }
 
@@ -236,14 +237,14 @@ async function processMediaFollowUp(job: Job<MediaWebhookPayload>) {
   });
 
   if (!existingMessage) {
-    console.warn(`[whatsapp-inbound] process-media: no message found for externalId ${externalId}`);
+    logger.warn(`[whatsapp-inbound] process-media: no message found for externalId ${externalId}`);
     return;
   }
 
   // Download and save media
   const saved = await downloadAndSaveMedia(media.url, companyId, media.fileName);
   if (!saved) {
-    console.error(`[whatsapp-inbound] process-media: failed to download media for ${externalId}`);
+    logger.error(`[whatsapp-inbound] process-media: failed to download media for ${externalId}`);
     return;
   }
 
@@ -259,7 +260,7 @@ async function processMediaFollowUp(job: Job<MediaWebhookPayload>) {
     },
   });
 
-  console.log(
+  logger.info(
     `[whatsapp-inbound] Media attachment saved for message ${existingMessage.id} (${media.fileName})`
   );
 }
@@ -280,7 +281,7 @@ export async function processWhatsAppInbound(job: Job<any>) {
   const data = payload.data;
 
   if (!data?.key) {
-    console.warn("[whatsapp-inbound] Missing data.key in payload");
+    logger.warn("[whatsapp-inbound] Missing data.key in payload");
     return;
   }
 
@@ -312,7 +313,7 @@ export async function processWhatsAppInbound(job: Job<any>) {
   });
 
   if (!foundChannel) {
-    console.warn(`[whatsapp-inbound] No channel found for companyId: ${instanceName}`);
+    logger.warn(`[whatsapp-inbound] No channel found for companyId: ${instanceName}`);
     return;
   }
 
@@ -326,7 +327,7 @@ export async function processWhatsAppInbound(job: Job<any>) {
       where: { externalId, channel: "WHATSAPP" },
     });
     if (existing) {
-      console.log(`[whatsapp-inbound] Duplicate message ${externalId}, skipping`);
+      logger.info(`[whatsapp-inbound] Duplicate message ${externalId}, skipping`);
       return;
     }
   }
@@ -423,7 +424,7 @@ export async function processWhatsAppInbound(job: Job<any>) {
         },
       });
       ticketId = ticket.id;
-      console.log(
+      logger.info(
         `[whatsapp-inbound] Created ticket ${ticketId} for client ${client?.name ?? clientId}`
       );
     }
@@ -467,7 +468,7 @@ export async function processWhatsAppInbound(job: Job<any>) {
         },
       });
       ticketId = ticket.id;
-      console.log(
+      logger.info(
         `[whatsapp-inbound] Created ticket ${ticketId} with tag "Pendente Vinculação" for ${phone}`
       );
     }
@@ -522,7 +523,7 @@ export async function processWhatsAppInbound(job: Job<any>) {
     });
   }
 
-  console.log(
+  logger.info(
     `[whatsapp-inbound] Message ${message.id} added to ticket ${ticketId} (${direction}/${origin}, phone: ${phone})`
   );
 
@@ -538,7 +539,7 @@ export async function processWhatsAppInbound(job: Job<any>) {
       messageContent: content,
       channel: "WHATSAPP" as const,
     });
-    console.log(
+    logger.info(
       `[whatsapp-inbound] Enqueued ai-agent job for ticket ${ticketId}`
     );
   }

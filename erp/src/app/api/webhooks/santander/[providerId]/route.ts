@@ -4,6 +4,7 @@ import { decrypt } from "@/lib/encryption";
 import { getGateway } from "@/lib/payment/factory";
 import type { WebhookEvent } from "@/lib/payment/types";
 import { processBoletoWebhookEvent } from "@/lib/payment/webhook-handler";
+import { logger } from "@/lib/logger";
 
 // ---------------------------------------------------------------------------
 // POST /api/webhooks/santander/[providerId]
@@ -19,14 +20,14 @@ export async function POST(
 ) {
   const { providerId } = await params;
 
-  console.log(`[santander-webhook] Received webhook for providerId: ${providerId}`);
+  logger.info(`[santander-webhook] Received webhook for providerId: ${providerId}`);
 
   // 1. Read raw body — return 500 on failure to force Santander retry
   let rawBody: string;
   try {
     rawBody = await request.text();
   } catch (err) {
-    console.error("[santander-webhook] Failed to read request body:", err);
+    logger.error("[santander-webhook] Failed to read request body:", err);
     return NextResponse.json({ error: "body_read_failed" }, { status: 500 });
   }
 
@@ -46,7 +47,7 @@ export async function POST(
   });
 
   if (!provider) {
-    console.warn(
+    logger.warn(
       `[santander-webhook] No active Santander provider found for id: ${providerId}`,
     );
     // Return 200 to avoid infinite retries from Santander
@@ -73,7 +74,7 @@ export async function POST(
       { sandbox: provider.sandbox, companyId: provider.companyId },
     );
   } catch (err) {
-    console.error(
+    logger.error(
       `[santander-webhook] Error instantiating provider ${providerId}:`,
       err,
     );
@@ -85,7 +86,7 @@ export async function POST(
 
   // 5. Validate the webhook request
   if (!gateway.validateWebhook(headers, rawBody)) {
-    console.warn(
+    logger.warn(
       `[santander-webhook] Validation failed for provider ${providerId}`,
     );
     return NextResponse.json(
@@ -99,7 +100,7 @@ export async function POST(
   try {
     event = gateway.parseWebhookEvent(rawBody);
   } catch (err) {
-    console.error("[santander-webhook] Failed to parse webhook event:", err);
+    logger.error("[santander-webhook] Failed to parse webhook event:", err);
     return NextResponse.json(
       { received: true, error: "parse_error" },
       { status: 200 },
@@ -114,7 +115,7 @@ export async function POST(
     );
   }
 
-  console.log(
+  logger.info(
     `[santander-webhook] Event parsed: type=${event.type}, gatewayId=${event.gatewayId}`,
   );
 
@@ -127,7 +128,7 @@ export async function POST(
   );
 
   if (!result.processed) {
-    console.log(
+    logger.info(
       `[santander-webhook] Event not processed: ${result.reason}` +
         (result.boletoId ? ` (boleto: ${result.boletoId})` : ""),
     );
@@ -137,7 +138,7 @@ export async function POST(
     );
   }
 
-  console.log(
+  logger.info(
     `[santander-webhook] Boleto ${result.boletoId} updated: ${result.previousStatus} → ${result.newStatus}` +
       (result.accountReceivableId ? ` | AR ${result.accountReceivableId} → PAID` : ""),
   );

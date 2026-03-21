@@ -1,4 +1,5 @@
 import type {
+import { logger } from "@/lib/logger";
   PaymentGateway,
   CreateBoletoInput,
   CreateBoletoResult,
@@ -22,17 +23,17 @@ export class MockProvider implements PaymentGateway {
     const line = `23793.38128 60000.000${random} ${installmentSuffix}0000.000${timestamp} 1 ${input.amount}`;
     const barcode = `23791${input.amount}${timestamp}${random}0000000000${installmentSuffix}`;
 
-    console.log("========== BOLETO (MOCK) ==========");
-    console.log(`Gateway ID:     ${gatewayId}`);
-    console.log(`Client:         ${input.customer.name} (${input.customer.document})`);
-    console.log(`Value:          R$ ${(input.amount / 100).toFixed(2)}`);
-    console.log(`Due Date:       ${input.dueDate.toISOString().split("T")[0]}`);
+    logger.info("========== BOLETO (MOCK) ==========");
+    logger.info(`Gateway ID:     ${gatewayId}`);
+    logger.info(`Client:         ${input.customer.name} (${input.customer.document})`);
+    logger.info(`Value:          R$ ${(input.amount / 100).toFixed(2)}`);
+    logger.info(`Due Date:       ${input.dueDate.toISOString().split("T")[0]}`);
     if (input.installmentNumber && input.totalInstallments) {
-      console.log(
+      logger.info(
         `Installment:    ${input.installmentNumber}/${input.totalInstallments}`
       );
     }
-    console.log("===================================");
+    logger.info("===================================");
 
     return {
       gatewayId,

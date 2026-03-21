@@ -7,6 +7,7 @@ import { logAuditEvent } from "@/lib/audit";
 import type { WebhookEvent } from "@/lib/payment/types";
 import { BoletoStatus, PaymentStatus } from "@prisma/client";
 import {
+import { logger } from "@/lib/logger";
   RECEIVABLE_VALUE_TOLERANCE,
   RECEIVABLE_DUE_DATE_WINDOW_DAYS,
   CENTS_PER_UNIT,
@@ -39,7 +40,7 @@ export async function POST(
   try {
     rawBody = await request.text();
   } catch (err) {
-    console.error("[webhook] Failed to read request body:", err);
+    logger.error("[webhook] Failed to read request body:", err);
     return NextResponse.json({ error: "body_read_failed" }, { status: 500 });
   }
 
@@ -69,7 +70,7 @@ export async function POST(
   }
 
   if (providers.length === 0) {
-    console.warn(`[webhook] No active providers found for: ${providerParam}`);
+    logger.warn(`[webhook] No active providers found for: ${providerParam}`);
     // Return 200 to avoid infinite retries from the bank
     return NextResponse.json({ received: true, error: "no_providers" }, { status: 200 });
   }
@@ -103,7 +104,7 @@ export async function POST(
         break;
       }
     } catch (err) {
-      console.error(
+      logger.error(
         `[webhook] Error validating with provider ${prov.id}:`,
         err
       );
@@ -112,7 +113,7 @@ export async function POST(
   }
 
   if (!matchedProvider || !gateway) {
-    console.warn(`[webhook] Signature validation failed for all providers (param: ${providerParam})`);
+    logger.warn(`[webhook] Signature validation failed for all providers (param: ${providerParam})`);
     return NextResponse.json(
       { error: "invalid_signature" },
       { status: 401 }
@@ -124,7 +125,7 @@ export async function POST(
   try {
     event = gateway.parseWebhookEvent(rawBody);
   } catch (err) {
-    console.error("[webhook] Failed to parse webhook event:", err);
+    logger.error("[webhook] Failed to parse webhook event:", err);
     return NextResponse.json({ received: true, error: "parse_error" }, { status: 200 });
   }
 
@@ -151,7 +152,7 @@ export async function POST(
   });
 
   if (!boleto) {
-    console.warn(
+    logger.warn(
       `[webhook] Boleto not found for gatewayId: ${event.gatewayId}, provider: ${matchedProvider.id}`
     );
     // Return 200 to avoid infinite retries
@@ -168,14 +169,14 @@ export async function POST(
         status: "boleto_not_found",
       },
       companyId: matchedProvider.companyId,
-    }).catch(err => console.error("Audit log failed:", err));
+    }).catch(err => logger.error("Audit log failed:", err));
     return NextResponse.json({ received: true, boleto: "not_found" }, { status: 200 });
   }
 
   // Bug #12 fix: Early return if event type is not in our status map
   const newBoletoStatus = WEBHOOK_TO_BOLETO_STATUS[event.type];
   if (!newBoletoStatus) {
-    console.warn(`[webhook] Unknown event type: ${event.type}, skipping`);
+    logger.warn(`[webhook] Unknown event type: ${event.type}, skipping`);
     return NextResponse.json({ received: true, skipped: "unknown_event_type" }, { status: 200 });
   }
 
@@ -285,7 +286,7 @@ export async function POST(
   });
 
   if (txResult.skipped) {
-    console.log(`[webhook] Boleto ${boleto.id} skipped: ${txResult.reason}`);
+    logger.info(`[webhook] Boleto ${boleto.id} skipped: ${txResult.reason}`);
     return NextResponse.json({ received: true, skipped: txResult.reason }, { status: 200 });
   }
 
@@ -293,7 +294,7 @@ export async function POST(
   // so it never passes unnoticed. This enables monitoring/alerting tools to trigger
   // refund workflows based on the OVERPAID audit action.
   if (isOverpaid) {
-    console.warn(
+    logger.warn(
       `[webhook] ⚠️ OVERPAID BOLETO DETECTED | boletoId=${boleto.id} | ` +
         `expected=${expectedAmountCents} | paid=${paidAmount} | delta=${overpaidDelta} | ` +
         `gatewayId=${event.gatewayId} | providerId=${matchedProvider.id} | ` +
@@ -318,7 +319,7 @@ export async function POST(
           `Verificar necessidade de devolução.`,
       },
       companyId: boleto.companyId,
-    }).catch(err => console.error("Audit log failed:", err));
+    }).catch(err => logger.error("Audit log failed:", err));
   }
 
   // 10. Log audit event
@@ -341,9 +342,9 @@ export async function POST(
       ...(isOverpaid ? { overpaid: true, overpaidDelta } : {}),
     },
     companyId: boleto.companyId,
-  }).catch(err => console.error("Audit log failed:", err));
+  }).catch(err => logger.error("Audit log failed:", err));
 
-  console.log(
+  logger.info(
     `[webhook] Boleto ${boleto.id} updated: ${previousStatus} → ${newBoletoStatus}` +
       (updatedReceivableId ? ` | AR ${updatedReceivableId} → PAID` : "") +
       (isOverpaid ? ` | ⚠️ OVERPAID by ${overpaidDelta}` : "")

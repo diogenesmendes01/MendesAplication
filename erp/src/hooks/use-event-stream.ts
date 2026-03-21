@@ -23,6 +23,7 @@ export function useEventStream(
           const data = JSON.parse(e.data);
           handlersRef.current[eventName]?.(data);
         } catch {
+          // eslint-disable-next-line no-console
           console.warn(`[SSE] Failed to parse ${eventName}:`, e.data);
         }
       });

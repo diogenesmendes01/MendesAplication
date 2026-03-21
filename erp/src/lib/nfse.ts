@@ -1,3 +1,4 @@
+import { logger } from "@/lib/logger";
 // ---------------------------------------------------------------------------
 // NFS-e — Interface e providers
 // ---------------------------------------------------------------------------
@@ -71,21 +72,21 @@ export class MockNfseProvider implements NfseProvider {
 
     const issValue = input.value * (input.issRate / 100);
 
-    console.log("========== NFS-e (MOCK) ==========");
-    console.log(`NF Number:      ${nfNumber}`);
-    console.log(`Company:        ${input.companyData.razaoSocial} (${input.companyData.cnpj})`);
-    console.log(`Client:         ${input.clientData.name} (${input.clientData.cpfCnpj})`);
-    console.log(`Service:        ${input.serviceDescription}`);
-    console.log(`Value:          R$ ${input.value.toFixed(2)}`);
-    console.log(`ISS Rate:       ${input.issRate.toFixed(2)}%`);
-    console.log(`ISS Value:      R$ ${issValue.toFixed(2)}`);
-    console.log("==================================");
+    logger.info("========== NFS-e (MOCK) ==========");
+    logger.info(`NF Number:      ${nfNumber}`);
+    logger.info(`Company:        ${input.companyData.razaoSocial} (${input.companyData.cnpj})`);
+    logger.info(`Client:         ${input.clientData.name} (${input.clientData.cpfCnpj})`);
+    logger.info(`Service:        ${input.serviceDescription}`);
+    logger.info(`Value:          R$ ${input.value.toFixed(2)}`);
+    logger.info(`ISS Rate:       ${input.issRate.toFixed(2)}%`);
+    logger.info(`ISS Value:      R$ ${issValue.toFixed(2)}`);
+    logger.info("==================================");
 
     return { nfNumber };
   }
 
   async cancelNFSe(input: CancelNfseInput): Promise<CancelNfseResult> {
-    console.log(`[MockNfseProvider] cancelNFSe MOCK — NFS-e ${input.nfNumber} cancelada (simulação)`);
+    logger.info(`[MockNfseProvider] cancelNFSe MOCK — NFS-e ${input.nfNumber} cancelada (simulação)`);
     return { success: true, protocol: `MOCK-CANCEL-${Date.now()}` };
   }
 }

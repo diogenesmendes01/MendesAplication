@@ -10,6 +10,7 @@ import {
   type CompanyBranding,
 } from "@/lib/email-templates";
 import { Prisma } from "@prisma/client";
+import { logger } from "@/lib/logger";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -268,7 +269,7 @@ export async function sendProposalEmail(
       },
     });
   } catch (eventErr) {
-    console.error("[ProposalEvent] Falha ao registrar evento EMAIL_SENT:", eventErr);
+    logger.error("[ProposalEvent] Falha ao registrar evento EMAIL_SENT:", eventErr);
   }
 
   return { success: true };
@@ -413,7 +414,7 @@ export async function sendBoletoEmail(
       },
     });
   } catch (eventErr) {
-    console.error("[ProposalEvent] Falha ao registrar evento BOLETO_SENT:", eventErr);
+    logger.error("[ProposalEvent] Falha ao registrar evento BOLETO_SENT:", eventErr);
   }
 
   return { success: true };

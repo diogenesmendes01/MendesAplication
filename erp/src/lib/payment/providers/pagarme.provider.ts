@@ -7,6 +7,7 @@ import type {
   WebhookEvent,
 } from "../types";
 import {
+import { logger } from "@/lib/logger";
   PHONE_PLACEHOLDER,
   PHONE_AREA_CODE_PLACEHOLDER,
   PHONE_COUNTRY_CODE,
@@ -332,7 +333,7 @@ export class PagarmeProvider implements PaymentGateway {
     const mappedType = typeMap[eventType] ?? null;
 
     if (!mappedType) {
-      console.log(`[Pagar.me] Unknown webhook event type: ${eventType}, ignoring`);
+      logger.info(`[Pagar.me] Unknown webhook event type: ${eventType}, ignoring`);
       return null;
     }
 

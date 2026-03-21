@@ -1,6 +1,7 @@
 import { Job } from "bullmq";
 import { prisma } from "@/lib/prisma";
 import { runAgent } from "@/lib/ai/agent";
+import { logger } from "@/lib/logger";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -29,25 +30,25 @@ export async function processAiAgent(job: Job<AiAgentJobData>) {
   });
 
   if (!ticket) {
-    console.warn(`[ai-agent] Ticket ${ticketId} not found, skipping`);
+    logger.warn(`[ai-agent] Ticket ${ticketId} not found, skipping`);
     return;
   }
 
   if (!ticket.aiEnabled) {
-    console.log(
+    logger.info(
       `[ai-agent] AI disabled for ticket ${ticketId}, skipping`
     );
     return;
   }
 
   // 2. Run the AI agent loop (handles aiConfig checks + escalation keywords internally)
-  console.log(
+  logger.info(
     `[ai-agent] Running agent for ticket ${ticketId}, company ${companyId}, channel ${channel}`
   );
 
   const result = await runAgent(ticketId, companyId, messageContent, channel);
 
-  console.log(
+  logger.info(
     `[ai-agent] Agent completed for ticket ${ticketId}: responded=${result.responded}, escalated=${result.escalated}, iterations=${result.iterations}${result.error ? `, error=${result.error}` : ""}`
   );
 }

@@ -3,6 +3,7 @@ import { logAuditEvent } from "@/lib/audit";
 import type { WebhookEvent } from "@/lib/payment/types";
 import { BoletoStatus, PaymentStatus } from "@prisma/client";
 import {
+import { logger } from "@/lib/logger";
   RECEIVABLE_VALUE_TOLERANCE,
   RECEIVABLE_DUE_DATE_WINDOW_DAYS,
 } from "@/lib/payment/constants";
@@ -124,7 +125,7 @@ export async function processBoletoWebhookEvent(
         rawGatewayId: event.gatewayId,
       },
       companyId,
-    }).catch((err) => console.error("Audit log failed:", err));
+    }).catch((err) => logger.error("Audit log failed:", err));
 
     return { processed: false, reason: "boleto_not_found" };
   }
@@ -250,7 +251,7 @@ export async function processBoletoWebhookEvent(
       accountReceivableId: updatedReceivableId,
     },
     companyId: boleto.companyId,
-  }).catch((err) => console.error("Audit log failed:", err));
+  }).catch((err) => logger.error("Audit log failed:", err));
 
   return {
     processed: true,
