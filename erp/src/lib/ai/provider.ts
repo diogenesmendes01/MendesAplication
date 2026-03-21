@@ -1,8 +1,8 @@
 
-
 "use server";
 
 import { DEFAULT_MODELS } from "./pricing";
+import { logger } from "@/lib/logger";
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
 
@@ -51,13 +51,51 @@ const PROVIDER_BASE_URLS: Record<string, string> = {
   qwen: "https://dashscope.aliyuncs.com/compatible-mode",
 };
 
+// ─── Global fallback guard ────────────────────────────────────────────────────
+
+/**
+ * Returns true when the BLOCK_GLOBAL_AI_FALLBACK env var is set to a truthy
+ * value ("true", "1", "yes").  When enabled, AI calls that would fall back to
+ * the global env API key are blocked instead, preventing unattributed costs.
+ */
+export function isGlobalFallbackBlocked(): boolean {
+  const raw = (process.env.BLOCK_GLOBAL_AI_FALLBACK || "").toLowerCase().trim();
+  return ["true", "1", "yes"].includes(raw);
+}
+
 // ─── Backward-compat helper ───────────────────────────────────────────────────
 
 /**
  * Reads provider config from legacy environment variables.
  * Use when caller does not have per-company config available.
+ *
+ * @param context  Optional context for structured logging (companyId, ticketId, etc.)
+ *
+ * ⚠️  Emits a warning log when used — costs from this path are NOT attributed
+ *     to any company.  Set BLOCK_GLOBAL_AI_FALLBACK=true to hard-block instead.
  */
-export async function getEnvProviderConfig(): Promise<ProviderConfig> {
+export async function getEnvProviderConfig(
+  context?: { companyId?: string; ticketId?: string },
+): Promise<ProviderConfig> {
+  // ── Guard: optionally block global fallback entirely ────────────────────
+  if (isGlobalFallbackBlocked()) {
+    const msg =
+      "Global AI env fallback is blocked (BLOCK_GLOBAL_AI_FALLBACK=true). " +
+      "Configure an API key for this company in AI settings.";
+    logger.error(
+      { companyId: context?.companyId, ticketId: context?.ticketId },
+      msg,
+    );
+    throw new Error(msg);
+  }
+
+  // ── Warn: fallback causes unattributed costs ───────────────────────────
+  logger.warn(
+    { companyId: context?.companyId, ticketId: context?.ticketId },
+    "AI call using global env fallback — costs will NOT be attributed to a company. " +
+      "Configure a per-company API key or set BLOCK_GLOBAL_AI_FALLBACK=true to prevent this.",
+  );
+
   const provider = process.env.AI_PROVIDER || "openai";
   const apiKey = process.env.AI_API_KEY;
   if (!apiKey) {
