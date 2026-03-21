@@ -4,8 +4,7 @@
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
 import { isGlobalFallbackBlocked } from "./provider";
-import { chunkText, cosineSimilarity } from "@/lib/ai/embedding-utils";
-export { chunkText, cosineSimilarity };
+import { cosineSimilarity } from "@/lib/ai/embedding-utils";
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
