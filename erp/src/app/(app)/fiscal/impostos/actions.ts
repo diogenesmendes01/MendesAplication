@@ -5,6 +5,7 @@ import { requireCompanyAccess } from "@/lib/rbac";
 import { requireSession } from "@/lib/session";
 import { logAuditEvent } from "@/lib/audit";
 import { type TaxType, type TaxStatus, Prisma } from "@prisma/client";
+import Decimal from "decimal.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -256,7 +257,7 @@ export async function createTaxEntry(input: {
       companyId: input.companyId,
       type: input.type,
       period: input.period,
-      value: new Prisma.Decimal(input.value),
+      value: new Decimal(input.value),
       dueDate: new Date(input.dueDate),
     },
   });

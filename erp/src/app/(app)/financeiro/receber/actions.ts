@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requireCompanyAccess } from "@/lib/rbac";
 import { logAuditEvent } from "@/lib/audit";
 import { Prisma, type PaymentStatus } from "@prisma/client";
+import Decimal from "decimal.js";
 import { getSharedCompanyIds } from "@/lib/shared-clients";
 
 // ---------------------------------------------------------------------------
@@ -161,7 +162,7 @@ export async function createReceivable(input: CreateReceivableInput) {
     data: {
       clientId: input.clientId,
       description: input.description.trim(),
-      value: new Prisma.Decimal(input.value),
+      value: new Decimal(input.value),
       dueDate: new Date(input.dueDate),
       companyId: input.companyId,
     },

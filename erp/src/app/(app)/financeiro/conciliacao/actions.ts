@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requireCompanyAccess } from "@/lib/rbac";
 import { logAuditEvent } from "@/lib/audit";
 import { Prisma, type BankTransactionStatus, type PaymentStatus } from "@prisma/client";
+import Decimal from "decimal.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -296,7 +297,7 @@ export async function importBankTransactions(
         data: {
           date: trx.date,
           description: trx.description || "Sem descrição",
-          value: new Prisma.Decimal(trx.value),
+          value: new Decimal(trx.value),
           companyId,
         },
       });

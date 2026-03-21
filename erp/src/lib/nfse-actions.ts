@@ -10,6 +10,7 @@ import {
   type CompanyBranding,
 } from "@/lib/email-templates";
 import { Prisma } from "@prisma/client";
+import Decimal from "decimal.js";
 import { getCachedFiscalConfig } from "@/app/(app)/configuracoes/fiscal/actions";
 import { createTaxEntriesForInvoice } from "@/lib/tax-entries";
 import { logger } from "@/lib/logger";
@@ -248,8 +249,8 @@ export async function emitInvoiceForBoleto(
       boletoId: boleto.id,
       clientId: client.id,
       serviceDescription,
-      value: new Prisma.Decimal(value),
-      issRate: new Prisma.Decimal(issRate),
+      value: new Decimal(value),
+      issRate: new Decimal(issRate),
       status: "PENDING",
       nfNumber: null,
       companyId,

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requireCompanyAccess } from "@/lib/rbac";
 import { logAuditEvent } from "@/lib/audit";
 import { Prisma, type PaymentStatus, type Recurrence } from "@prisma/client";
+import Decimal from "decimal.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -239,7 +240,7 @@ export async function createPayable(input: CreatePayableInput) {
     data: {
       supplier: input.supplier.trim(),
       description: input.description.trim(),
-      value: new Prisma.Decimal(input.value),
+      value: new Decimal(input.value),
       dueDate: new Date(input.dueDate),
       categoryId: input.categoryId || null,
       recurrence: input.recurrence || "NONE",
@@ -305,7 +306,7 @@ export async function updatePayable(input: UpdatePayableInput) {
     data: {
       supplier: input.supplier.trim(),
       description: input.description.trim(),
-      value: new Prisma.Decimal(input.value),
+      value: new Decimal(input.value),
       dueDate: new Date(input.dueDate),
       categoryId: input.categoryId || null,
       recurrence: input.recurrence || "NONE",

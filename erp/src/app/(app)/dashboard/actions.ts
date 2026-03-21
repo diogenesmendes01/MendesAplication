@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/session";
 import { Prisma } from "@prisma/client";
+import type Decimal from "decimal.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -343,7 +344,7 @@ export async function getDashboardData(filters: DashboardFilters): Promise<Dashb
     }),
 
     // Monthly revenue — uses period-aware date range
-    prisma.$queryRaw<{ month: Date; total: Prisma.Decimal }[]>`
+    prisma.$queryRaw<{ month: Date; total: Decimal }[]>`
       SELECT date_trunc('month', "paidAt") AS month, SUM(value) AS total
       FROM accounts_receivable
       WHERE "companyId" = ANY(${companyIds})
@@ -355,7 +356,7 @@ export async function getDashboardData(filters: DashboardFilters): Promise<Dashb
     `,
 
     // Monthly expenses — uses period-aware date range
-    prisma.$queryRaw<{ month: Date; total: Prisma.Decimal }[]>`
+    prisma.$queryRaw<{ month: Date; total: Decimal }[]>`
       SELECT date_trunc('month', "paidAt") AS month, SUM(value) AS total
       FROM accounts_payable
       WHERE "companyId" = ANY(${companyIds})
@@ -647,7 +648,7 @@ export async function getRevenueExpenseChart(): Promise<MonthlyChartEntry[]> {
   ];
 
   const [monthlyRevenue, monthlyExpenses] = await Promise.all([
-    prisma.$queryRaw<{ month: Date; total: Prisma.Decimal }[]>`
+    prisma.$queryRaw<{ month: Date; total: Decimal }[]>`
       SELECT date_trunc('month', "paidAt") AS month, SUM(value) AS total
       FROM accounts_receivable
       WHERE "companyId" = ANY(${companyIds})
@@ -657,7 +658,7 @@ export async function getRevenueExpenseChart(): Promise<MonthlyChartEntry[]> {
       GROUP BY date_trunc('month', "paidAt")
       ORDER BY month
     `,
-    prisma.$queryRaw<{ month: Date; total: Prisma.Decimal }[]>`
+    prisma.$queryRaw<{ month: Date; total: Decimal }[]>`
       SELECT date_trunc('month', "paidAt") AS month, SUM(value) AS total
       FROM accounts_payable
       WHERE "companyId" = ANY(${companyIds})

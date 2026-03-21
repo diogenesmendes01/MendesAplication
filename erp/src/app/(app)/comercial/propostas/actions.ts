@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requireCompanyAccess } from "@/lib/rbac";
 import { logAuditEvent } from "@/lib/audit";
 import { Prisma, type ProposalStatus, type BoletoStatus } from "@prisma/client";
+import Decimal from "decimal.js";
 import { getSharedCompanyIds } from "@/lib/shared-clients";
 import { getCachedFiscalConfig } from "@/app/(app)/configuracoes/fiscal/actions";
 import { emitInvoiceForBoleto } from "@/lib/nfse-actions";
@@ -130,11 +131,11 @@ const VALID_STATUS_TRANSITIONS: Record<ProposalStatus, ProposalStatus[]> = {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function calculateTotalValue(items: ProposalItemInput[]): Prisma.Decimal {
-  let total = new Prisma.Decimal(0);
+function calculateTotalValue(items: ProposalItemInput[]): Decimal {
+  let total = new Decimal(0);
   for (const item of items) {
-    const qty = new Prisma.Decimal(item.quantity);
-    const price = new Prisma.Decimal(item.unitPrice);
+    const qty = new Decimal(item.quantity);
+    const price = new Decimal(item.unitPrice);
     total = total.add(qty.mul(price));
   }
   return total;
@@ -220,10 +221,10 @@ export async function listProposals(
   if (params.valueMin !== undefined || params.valueMax !== undefined) {
     where.totalValue = {};
     if (params.valueMin !== undefined) {
-      where.totalValue.gte = new Prisma.Decimal(params.valueMin);
+      where.totalValue.gte = new Decimal(params.valueMin);
     }
     if (params.valueMax !== undefined) {
-      where.totalValue.lte = new Prisma.Decimal(params.valueMax);
+      where.totalValue.lte = new Decimal(params.valueMax);
     }
   }
 
@@ -293,8 +294,8 @@ export async function createProposal(
       items: {
         create: input.items.map((item) => ({
           description: item.description.trim(),
-          quantity: new Prisma.Decimal(item.quantity),
-          unitPrice: new Prisma.Decimal(item.unitPrice),
+          quantity: new Decimal(item.quantity),
+          unitPrice: new Decimal(item.unitPrice),
         })),
       },
     },
@@ -373,8 +374,8 @@ export async function updateProposal(
         items: {
           create: input.items.map((item) => ({
             description: item.description.trim(),
-            quantity: new Prisma.Decimal(item.quantity),
-            unitPrice: new Prisma.Decimal(item.unitPrice),
+            quantity: new Decimal(item.quantity),
+            unitPrice: new Decimal(item.unitPrice),
           })),
         },
       },
@@ -871,7 +872,7 @@ export async function generateBoletosForProposal(
           gatewayId: result.gatewayId,
           gatewayData: gatewayData as unknown as Prisma.InputJsonValue,
           manualOverride,
-          value: new Prisma.Decimal(value),
+          value: new Decimal(value),
           dueDate,
           installmentNumber: i,
           status: "GENERATED",
@@ -884,7 +885,7 @@ export async function generateBoletosForProposal(
         data: {
           clientId: proposal.clientId,
           description: `Boleto ${i}/${input.installments} - Proposta #${proposal.id.slice(-6)}`,
-          value: new Prisma.Decimal(value),
+          value: new Decimal(value),
           dueDate,
           status: "PENDING",
           companyId: input.companyId,

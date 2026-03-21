@@ -20,23 +20,10 @@ vi.mock("@/lib/shared-clients", () => ({
   getSharedCompanyIds: (...args: unknown[]) => mockGetSharedCompanyIds(...args),
 }));
 
-// Mock @prisma/client to avoid loading the real Prisma runtime in unit tests.
-// Prisma.Decimal is used inside createReceivable — we provide a lightweight stub.
-vi.mock("@prisma/client", async () => {
-  class DecimalStub {
-    private val: string;
-    constructor(v: number | string) {
-      this.val = String(v);
-    }
-    toString() {
-      return this.val;
-    }
-  }
-  return {
-    Prisma: { Decimal: DecimalStub },
-    // Expose commonly referenced enums/types as needed
-  };
-});
+// Mock @prisma/client — Prisma.Decimal no longer needed (replaced by decimal.js)
+vi.mock("@prisma/client", async () => ({
+  Prisma: {},
+}));
 
 const mockFindMany = vi.fn();
 const mockCount = vi.fn();
