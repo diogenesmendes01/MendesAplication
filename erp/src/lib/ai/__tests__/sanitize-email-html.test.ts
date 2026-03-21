@@ -164,3 +164,63 @@ describe("sanitizeEmailHtml", () => {
     expect(result).toContain("<p>ok</p>");
   });
 });
+
+// ─── stripHtmlToText Tests (Issue #293) ──────────────────────────────────────
+
+import { stripHtmlToText } from "@/lib/ai/sanitize-utils";
+
+describe("stripHtmlToText", () => {
+  it("strips all HTML tags and returns plain text", () => {
+    expect(stripHtmlToText("<p>Hello <b>world</b></p>")).toBe("Hello world");
+  });
+
+  it("strips <script> tags and their content", () => {
+    const result = stripHtmlToText("<script>alert(1)</script>safe text");
+    expect(result).not.toContain("<script");
+    expect(result).toContain("safe text");
+  });
+
+  it("strips <img> tracking pixels", () => {
+    const result = stripHtmlToText('text<img src="http://evil.com/pixel.gif" />more');
+    expect(result).not.toContain("<img");
+    expect(result).not.toContain("evil.com");
+    expect(result).toContain("text");
+    expect(result).toContain("more");
+  });
+
+  it("handles malformed tags that bypass regex (e.g. attribute with >)", () => {
+    // The old regex `/<[^>]*>/g` would fail on this — it would match up to
+    // the `>` inside the attribute, leaving a broken fragment.
+    const result = stripHtmlToText('<b onclick="a>b">texto</b>');
+    expect(result).not.toContain("<b");
+    expect(result).not.toContain("onclick");
+    expect(result).toContain("texto");
+  });
+
+  it("handles unclosed tags", () => {
+    const result = stripHtmlToText("<div>content<br>more");
+    expect(result).not.toContain("<div");
+    expect(result).not.toContain("<br");
+    expect(result).toContain("content");
+    expect(result).toContain("more");
+  });
+
+  it("passes plain text through unchanged", () => {
+    expect(stripHtmlToText("just plain text")).toBe("just plain text");
+  });
+
+  it("returns empty string for empty input", () => {
+    expect(stripHtmlToText("")).toBe("");
+  });
+
+  it("strips nested HTML completely", () => {
+    const result = stripHtmlToText("<div><p><b>deep</b></p></div>");
+    expect(result).toBe("deep");
+  });
+
+  it("strips <style> tags", () => {
+    const result = stripHtmlToText("<style>body{color:red}</style>text");
+    expect(result).not.toContain("<style");
+    expect(result).toContain("text");
+  });
+});

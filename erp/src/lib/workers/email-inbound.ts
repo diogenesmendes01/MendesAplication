@@ -1,3 +1,4 @@
+import { stripHtmlToText } from "@/lib/ai/sanitize-utils";
 import { Job } from "bullmq";
 import { ImapFlow } from "imapflow";
 import type { FetchMessageObject, MessageStructureObject } from "imapflow";
@@ -322,11 +323,12 @@ export async function processEmail(
     const rawStr = msg.source.toString("utf-8");
     const headerEnd = rawStr.indexOf("\r\n\r\n");
     if (headerEnd > 0) {
-      textContent = rawStr
-        .substring(headerEnd + 4)
-        .replace(/<[^>]*>/g, "") // strip HTML tags
-        .replace(/=\r?\n/g, "") // handle quoted-printable line continuations
-        .replace(/=([0-9A-F]{2})/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16))) // decode QP
+      textContent = stripHtmlToText(
+        rawStr
+          .substring(headerEnd + 4)
+          .replace(/=\r?\n/g, "") // handle quoted-printable line continuations
+          .replace(/=([0-9A-F]{2})/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16))) // decode QP
+      )
         .trim()
         .substring(0, 5000); // limit content length
     }
