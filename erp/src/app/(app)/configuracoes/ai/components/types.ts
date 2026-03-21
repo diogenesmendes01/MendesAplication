@@ -2,6 +2,11 @@ import type { AiConfigData, UsageSummary, ModelSuggestionData, SimulationResult 
 
 export type { AiConfigData, UsageSummary, ModelSuggestionData, SimulationResult };
 
+/**
+ * Frontend provider selector options.
+ * Must stay in sync with VALID_PROVIDERS in actions.ts (backend).
+ * See issue #80 for context on the consistency requirement.
+ */
 export const PROVIDERS = [
   { value: "openai", label: "OpenAI" },
   { value: "anthropic", label: "Anthropic" },
