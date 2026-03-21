@@ -651,16 +651,23 @@ async function resolveGatewayForBoleto(
   });
 
   if (providerCount === 0) {
-    // No providers configured — fallback to mock
+    // No providers configured — block mock in production (issue #119)
+    if (process.env.NODE_ENV === "production") {
+      throw new Error(
+        `Nenhum provider de pagamento configurado para empresa ${companyId}. ` +
+        "Configure um provider antes de gerar boletos.",
+      );
+    }
+    // Non-production: allow mock fallback for development/testing
     logger.warn(
-      `[Payment] Nenhum provider configurado para empresa ${companyId}. Usando mock como fallback.`,
+      `[Payment] Nenhum provider configurado para empresa ${companyId}. Usando mock como fallback (não-produção).`,
     );
     const gateway = getGateway("mock", {});
     return {
       gateway,
       providerId: null,
       manualOverride: false,
-      providerName: "Mock (fallback)",
+      providerName: "Mock (fallback — dev only)",
     };
   }
 
