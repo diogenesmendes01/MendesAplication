@@ -12,6 +12,7 @@ import { getCachedFiscalConfig } from "@/app/(app)/configuracoes/fiscal/actions"
 import type { JwtPayload } from "@/lib/auth";
 import { sseBus } from "@/lib/sse";
 import { getCompanyKpis, invalidateKpiCache, fetchSlaConfigs } from "@/lib/kpi-cache";
+import { logger } from "@/lib/logger";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -695,7 +696,7 @@ export async function createTicketReply(input: CreateTicketReplyInput) {
       });
     } catch {
       // Email failure should not block the reply creation
-      console.error("Failed to send ticket reply email");
+      logger.error("Failed to send ticket reply email");
     }
   }
 
@@ -1120,7 +1121,7 @@ export async function sendEmailReply(
       attachmentIds,
     });
   } catch (err) {
-    console.error("Failed to enqueue email-outbound job:", err);
+    logger.error("Failed to enqueue email-outbound job:", err);
   }
 
   await logAuditEvent({
@@ -1390,7 +1391,7 @@ export async function sendWhatsAppMessage(
       attachmentIds,
     });
   } catch (err) {
-    console.error("Failed to enqueue whatsapp-outbound job:", err);
+    logger.error("Failed to enqueue whatsapp-outbound job:", err);
   }
 
   await logAuditEvent({

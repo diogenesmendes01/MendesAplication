@@ -12,6 +12,7 @@ import {
 import { Prisma } from "@prisma/client";
 import { getCachedFiscalConfig } from "@/app/(app)/configuracoes/fiscal/actions";
 import { createTaxEntriesForInvoice } from "@/lib/tax-entries";
+import { logger } from "@/lib/logger";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -282,7 +283,7 @@ export async function emitInvoiceForBoleto(
       where: { id: invoice.id },
       data: { status: "CANCELLED", cancellationReason: String(emitError) },
     }).catch((updateErr) => {
-      console.error("Falha ao cancelar invoice após erro de emissão:", updateErr);
+      logger.error("Falha ao cancelar invoice após erro de emissão:", updateErr);
     });
     throw emitError;
   }
@@ -297,7 +298,7 @@ export async function emitInvoiceForBoleto(
     });
   } catch (updateError) {
     // Registrar o nfNumber mesmo com falha no update para não perder o número
-    console.error(
+    logger.error(
       `ATENÇÃO: NFS-e ${result.nfNumber} emitida na prefeitura mas falha ao atualizar invoice ${invoice.id}:`,
       updateError
     );
@@ -305,7 +306,7 @@ export async function emitInvoiceForBoleto(
     await prisma.invoice.update({
       where: { id: invoice.id },
       data: { nfNumber: result.nfNumber },
-    }).catch(console.error);
+    }).catch((err: unknown) => logger.error({ err }, "Unexpected error"));
     throw updateError;
   }
 
@@ -393,7 +394,7 @@ export async function emitInvoiceForBoleto(
       });
     } catch (error) {
       // Email failure should not prevent invoice emission
-      console.error("Failed to send NFS-e email:", error);
+      logger.error("Failed to send NFS-e email:", error);
     }
   }
 
@@ -408,7 +409,7 @@ export async function emitInvoiceForBoleto(
       },
     });
   } catch (eventErr) {
-    console.error("[ProposalEvent] Falha ao registrar evento NFSE_EMITTED:", eventErr);
+    logger.error("[ProposalEvent] Falha ao registrar evento NFSE_EMITTED:", eventErr);
   }
 
   return {

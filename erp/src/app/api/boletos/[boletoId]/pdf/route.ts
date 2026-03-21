@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/encryption";
 import { getGateway } from "@/lib/payment/factory";
 import { isProviderType } from "@/lib/payment/types";
+import { logger } from "@/lib/logger";
 
 /**
  * GET /api/boletos/[boletoId]/pdf
@@ -141,7 +142,7 @@ export async function GET(
 
     return NextResponse.json({ link: result.link });
   } catch (err) {
-    console.error("[api/boletos/pdf] Error:", err);
+    logger.error("[api/boletos/pdf] Error:", err);
     const message =
       err instanceof Error ? err.message : "Erro ao obter PDF do boleto";
     return NextResponse.json({ error: message }, { status: 500 });

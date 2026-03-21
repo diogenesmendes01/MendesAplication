@@ -1,3 +1,4 @@
+import { logger } from "@/lib/logger";
 // ─── Dynamic BRL/USD Exchange Rate ───────────────────────────────────────────
 // Fetches the current USD→BRL rate from AwesomeAPI with 24h in-memory cache.
 // Falls back to BRL_USD_RATE env var (or 5.80 hardcoded) if the API is unavailable.
@@ -24,7 +25,7 @@ let cachedRate: CachedRate = { value: SAFE_FALLBACK, fetchedAt: 0 };
  * - Caches the result for 24 hours
  * - Falls back to env var BRL_USD_RATE or 5.80 if API fails
  *
- * TODO: Replace console.warn with structured logger after #126
+ * Logger migrated from console.warn per #308
  */
 export async function getBrlUsdRate(): Promise<number> {
   if (Date.now() - cachedRate.fetchedAt < TTL_MS) {
@@ -55,8 +56,7 @@ export async function getBrlUsdRate(): Promise<number> {
     cachedRate = { value: bid, fetchedAt: Date.now() };
     return bid;
   } catch (error) {
-    // eslint-disable-next-line no-console
-    console.warn(
+    logger.warn(
       `[exchange-rate] API failed, using fallback ${SAFE_FALLBACK}:`,
       error instanceof Error ? error.message : String(error)
     );

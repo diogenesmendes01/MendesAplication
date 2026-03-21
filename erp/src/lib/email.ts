@@ -1,3 +1,4 @@
+import { logger } from "@/lib/logger";
 export interface EmailAttachment {
   filename: string;
   content: Buffer | string;
@@ -16,16 +17,16 @@ export interface EmailProvider {
 
 class ConsoleEmailProvider implements EmailProvider {
   async sendEmail(options: EmailOptions): Promise<void> {
-    console.log("========== EMAIL ==========");
-    console.log(`To:      ${options.to}`);
-    console.log(`Subject: ${options.subject}`);
-    console.log(`Body:\n${options.htmlBody}`);
+    logger.info("========== EMAIL ==========");
+    logger.info(`To:      ${options.to}`);
+    logger.info(`Subject: ${options.subject}`);
+    logger.info(`Body:\n${options.htmlBody}`);
     if (options.attachments?.length) {
-      console.log(
+      logger.info(
         `Attachments: ${options.attachments.map((a) => a.filename).join(", ")}`
       );
     }
-    console.log("===========================");
+    logger.info("===========================");
   }
 }
 

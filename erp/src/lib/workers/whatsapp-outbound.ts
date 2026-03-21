@@ -2,6 +2,7 @@ import { Job } from "bullmq";
 import { prisma } from "@/lib/prisma";
 import { sendTextMessage, sendMediaMessage } from "@/lib/whatsapp-api";
 import { generateSignedFileUrl } from "@/lib/file-token";
+import { logger } from "@/lib/logger";
 
 export interface WhatsAppOutboundJobData {
   messageId: string;
@@ -21,7 +22,7 @@ export async function processWhatsAppOutbound(job: Job<WhatsAppOutboundJobData>)
   });
 
   if (!channel) {
-    console.warn(`[whatsapp-outbound] No active WHATSAPP channel for company ${companyId}`);
+    logger.warn(`[whatsapp-outbound] No active WHATSAPP channel for company ${companyId}`);
     return;
   }
 
@@ -58,14 +59,14 @@ export async function processWhatsAppOutbound(job: Job<WhatsAppOutboundJobData>)
       },
     });
 
-    console.log(`[whatsapp-outbound] Message sent to ${to}, externalId: ${externalId}`);
+    logger.info(`[whatsapp-outbound] Message sent to ${to}, externalId: ${externalId}`);
   } catch (err) {
     // Mark as FAILED
     await prisma.ticketMessage.update({
       where: { id: messageId },
       data: { deliveryStatus: "FAILED" },
     }).catch(() => {}); // Don't let status update failure mask the original error
-    console.error(`[whatsapp-outbound] Failed to send WhatsApp for message ${messageId}:`, err);
+    logger.error(`[whatsapp-outbound] Failed to send WhatsApp for message ${messageId}:`, err);
     throw err; // Let BullMQ retry
   }
 }

@@ -11,6 +11,7 @@ import {
   PHONE_AREA_CODE_PLACEHOLDER,
   PHONE_COUNTRY_CODE,
 } from "../constants";
+import { logger } from "@/lib/logger";
 
 const BASE_URL = "https://api.pagar.me/core/v5";
 
@@ -332,7 +333,7 @@ export class PagarmeProvider implements PaymentGateway {
     const mappedType = typeMap[eventType] ?? null;
 
     if (!mappedType) {
-      console.log(`[Pagar.me] Unknown webhook event type: ${eventType}, ignoring`);
+      logger.info(`[Pagar.me] Unknown webhook event type: ${eventType}, ignoring`);
       return null;
     }
 

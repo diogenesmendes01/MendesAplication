@@ -84,6 +84,7 @@ function maskApiKey(key: string | null | undefined, hint?: string | null): strin
 // ---------------------------------------------------------------------------
 
 import { createAsyncRateLimiter } from "@/lib/rate-limiter";
+import { logger } from "@/lib/logger";
 
 const testConnectionLimiter = createAsyncRateLimiter({
   limit: 5,
@@ -347,7 +348,7 @@ export async function testAiConnection(
             .replace(/sk-[^\s"]+/g, "sk-[REDACTED]")
             .replace(/[a-zA-Z0-9]{32,}/g, "[REDACTED]")
         : String(err);
-    console.error("[testAiConnection] provider error:", safeErr);
+    logger.error("[testAiConnection] provider error:", safeErr);
 
     // Map common provider error patterns to safe, generic messages for the frontend.
     // Raw provider messages can expose partial API keys ("sk-proj-xxx...") or internal details.

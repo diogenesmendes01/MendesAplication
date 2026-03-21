@@ -352,6 +352,7 @@ export default function ProposalDetailPage() {
       setRoutingPreview(preview);
       setSelectedProviderId("__auto__");
     } catch (err) {
+      // eslint-disable-next-line no-console
       console.error("Failed to load providers:", err);
       setProviders([]);
       setRoutingPreview(null);
@@ -379,6 +380,7 @@ export default function ProposalDetailPage() {
         );
         setRoutingPreview(preview);
       } catch (err) {
+        // eslint-disable-next-line no-console
         console.error("Failed to update routing preview:", err);
       }
     }, 300);

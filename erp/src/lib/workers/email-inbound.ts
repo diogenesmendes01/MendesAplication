@@ -6,6 +6,7 @@ import { decryptConfig } from "@/lib/encryption";
 import { aiAgentQueue } from "@/lib/queue";
 import path from "path";
 import fs from "fs/promises";
+import { logger } from "@/lib/logger";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -117,7 +118,7 @@ async function fetchAndProcessMailbox(
     lock = await client.getMailboxLock(mailboxPath, { readOnly: true });
   } catch {
     // Mailbox may not exist (e.g., Sent folder)
-    console.log(`[email-inbound] Could not open mailbox ${mailboxPath} for channel ${channel.id}`);
+    logger.info(`[email-inbound] Could not open mailbox ${mailboxPath} for channel ${channel.id}`);
     return lastUid;
   }
 
@@ -145,7 +146,7 @@ async function fetchAndProcessMailbox(
       await processEmail(client, msg, channel, isSent);
     }
   } catch (err) {
-    console.error(`[email-inbound] Error fetching ${mailboxPath} for channel ${channel.id}:`, err);
+    logger.error(`[email-inbound] Error fetching ${mailboxPath} for channel ${channel.id}:`, err);
   } finally {
     lock.release();
   }
@@ -177,7 +178,7 @@ export async function processEmail(
       where: { externalId: messageId, channel: "EMAIL" },
     });
     if (existing) {
-      console.log(`[email-inbound] Duplicate email ${messageId}, skipping`);
+      logger.info(`[email-inbound] Duplicate email ${messageId}, skipping`);
       return;
     }
   }
@@ -290,7 +291,7 @@ export async function processEmail(
         },
       });
       ticketId = ticket.id;
-      console.log(
+      logger.info(
         `[email-inbound] Created ticket ${ticketId} for client ${clientRecord?.name ?? clientId}`
       );
     }
@@ -309,7 +310,7 @@ export async function processEmail(
       },
     });
     ticketId = ticket.id;
-    console.log(
+    logger.info(
       `[email-inbound] Created ticket ${ticketId} with tag "Pendente Vinculação" for ${lookupEmail || senderAddress}`
     );
   }
@@ -382,14 +383,14 @@ export async function processEmail(
             storagePath: saved.storagePath,
           },
         });
-        console.log(`[email-inbound] Saved attachment ${fileName} (${saved.fileSize} bytes)`);
+        logger.info(`[email-inbound] Saved attachment ${fileName} (${saved.fileSize} bytes)`);
       } catch (err) {
-        console.error(`[email-inbound] Failed to save attachment:`, err);
+        logger.error(`[email-inbound] Failed to save attachment:`, err);
       }
     }
   }
 
-  console.log(
+  logger.info(
     `[email-inbound] Message ${message.id} added to ticket ${ticketId} (${direction}/${origin}, from: ${senderAddress}, msgId: ${messageId ?? "none"})`
   );
 
@@ -404,7 +405,7 @@ export async function processEmail(
       messageContent: textContent,
       channel: "EMAIL" as const,
     });
-    console.log(
+    logger.info(
       `[email-inbound] Enqueued ai-agent job for ticket ${ticketId} (channel: EMAIL)`
     );
   }
@@ -433,7 +434,7 @@ async function findSentFolder(client: ImapFlow): Promise<string | null> {
       }
     }
   } catch (err) {
-    console.error("[email-inbound] Error listing mailboxes:", err);
+    logger.error("[email-inbound] Error listing mailboxes:", err);
   }
   return null;
 }
@@ -451,7 +452,7 @@ export async function processEmailInbound(_job: Job): Promise<void> {
   });
 
   if (channels.length === 0) {
-    console.log("[email-inbound] No active EMAIL channels found");
+    logger.info("[email-inbound] No active EMAIL channels found");
     return;
   }
 
@@ -459,7 +460,7 @@ export async function processEmailInbound(_job: Job): Promise<void> {
     const config = decryptConfig(ch.config as Record<string, unknown>) as unknown as EmailChannelConfig;
 
     if (!config.imapHost || !config.email || !config.password) {
-      console.warn(`[email-inbound] Channel ${ch.id} missing IMAP config, skipping`);
+      logger.warn(`[email-inbound] Channel ${ch.id} missing IMAP config, skipping`);
       continue;
     }
 
@@ -484,7 +485,7 @@ export async function processEmailInbound(_job: Job): Promise<void> {
 
     try {
       await imapClient.connect();
-      console.log(`[email-inbound] Connected to IMAP for channel ${ch.id} (${config.email})`);
+      logger.info(`[email-inbound] Connected to IMAP for channel ${ch.id} (${config.email})`);
 
       // 1. Fetch Inbox (INBOUND messages)
       const newInboxUid = await fetchAndProcessMailbox(
@@ -518,11 +519,11 @@ export async function processEmailInbound(_job: Job): Promise<void> {
         },
       });
 
-      console.log(
+      logger.info(
         `[email-inbound] Sync complete for channel ${ch.id}: inbox UID=${newInboxUid}, sent UID=${newSentUid}`
       );
     } catch (err) {
-      console.error(`[email-inbound] Error processing channel ${ch.id}:`, err);
+      logger.error(`[email-inbound] Error processing channel ${ch.id}:`, err);
     } finally {
       try {
         await imapClient.logout();

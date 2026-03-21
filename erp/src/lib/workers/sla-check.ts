@@ -1,6 +1,7 @@
 import { Job } from "bullmq";
 import { prisma } from "@/lib/prisma";
 import type { RefundStatus, TicketPriority } from "@prisma/client";
+import { logger } from "@/lib/logger";
 
 const DEFAULT_ALERT_MINUTES = 30;
 const ANY_PRIORITY_KEY = "__ANY__";
@@ -86,7 +87,7 @@ export async function processSlaCheck(job: Job): Promise<void> {
   });
 
   if (firstReplyBreached.count > 0) {
-    console.log(
+    logger.info(
       `[sla-check] Marked ${firstReplyBreached.count} ticket(s) as SLA breached (first reply deadline passed)`
     );
   }
@@ -105,7 +106,7 @@ export async function processSlaCheck(job: Job): Promise<void> {
   });
 
   if (resolutionBreached.count > 0) {
-    console.log(
+    logger.info(
       `[sla-check] Marked ${resolutionBreached.count} ticket(s) as SLA breached (resolution deadline passed)`
     );
   }
@@ -124,7 +125,7 @@ export async function processSlaCheck(job: Job): Promise<void> {
   });
 
   if (refundBreached.count > 0) {
-    console.log(
+    logger.info(
       `[sla-check] Marked ${refundBreached.count} refund(s) as SLA breached`
     );
   }
@@ -219,7 +220,7 @@ export async function processSlaCheck(job: Job): Promise<void> {
       where: { id: { in: ticketsToMarkAtRisk } },
       data: { slaAtRisk: true },
     });
-    console.log(
+    logger.info(
       `[sla-check] Marked ${ticketsToMarkAtRisk.length} ticket(s) as at risk of SLA breach`
     );
   }
@@ -277,7 +278,7 @@ export async function processSlaCheck(job: Job): Promise<void> {
       where: { id: { in: refundsToMarkAtRisk } },
       data: { slaAtRisk: true },
     });
-    console.log(
+    logger.info(
       `[sla-check] Marked ${refundsToMarkAtRisk.length} refund(s) as at risk of SLA breach`
     );
   }
@@ -293,6 +294,6 @@ export async function processSlaCheck(job: Job): Promise<void> {
     firstReplyBreached.count + resolutionBreached.count + refundBreached.count;
   const totalAtRisk = ticketsToMarkAtRisk.length + refundsToMarkAtRisk.length;
   if (totalBreaches === 0 && totalAtRisk === 0) {
-    console.log("[sla-check] All SLAs healthy");
+    logger.info("[sla-check] All SLAs healthy");
   }
 }

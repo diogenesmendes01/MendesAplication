@@ -7,6 +7,7 @@ import {
 } from "@/lib/auth";
 import { logAuditEvent } from "@/lib/audit";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { logger } from "@/lib/logger";
 
 // ---------------------------------------------------------------------------
 // Rate limiting via Redis — compartilha estado entre réplicas.
@@ -111,7 +112,7 @@ export async function POST(req: NextRequest) {
       entity: "User",
       entityId: user.id,
       ipAddress,
-    }).catch(console.error);
+    }).catch((err: unknown) => logger.error({ err }, "Unexpected error"));
 
     const response = NextResponse.json({
       user: {

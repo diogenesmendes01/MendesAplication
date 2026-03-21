@@ -13,6 +13,7 @@ import { isProviderType } from "@/lib/payment/types";
 import { decrypt } from "@/lib/encryption";
 import type { CreateBoletoInput, CreateBoletoResult, PaymentGateway } from "@/lib/payment/types";
 import { MAX_INSTALLMENTS } from "@/lib/payment/constants";
+import { logger } from "@/lib/logger";
 
 // ---------------------------------------------------------------------------
 // Proposal Event Helper
@@ -30,7 +31,7 @@ async function createProposalEvent(
     });
   } catch (err) {
     // Não propagar erro de log — o evento principal não deve falhar por causa do log
-    console.error("[ProposalEvent] Falha ao registrar evento:", err);
+    logger.error("[ProposalEvent] Falha ao registrar evento:", err);
   }
 }
 
@@ -600,7 +601,7 @@ export async function previewRoutingForProposal(
  * Flow:
  * 1. If providerId is given → getProviderById (manual override, must be active)
  * 2. If not → resolveProvider with routing rules
- * 3. If no providers configured → fallback to mock with console.warn
+ * 3. If no providers configured → fallback to mock with logger.warn
  *
  * Bug #6 fix: Only fall back to mock when no providers exist.
  *             Propagate decrypt/factory errors instead of swallowing them.
@@ -651,7 +652,7 @@ async function resolveGatewayForBoleto(
 
   if (providerCount === 0) {
     // No providers configured — fallback to mock
-    console.warn(
+    logger.warn(
       `[Payment] Nenhum provider configurado para empresa ${companyId}. Usando mock como fallback.`,
     );
     const gateway = getGateway("mock", {});
@@ -816,9 +817,9 @@ export async function generateBoletosForProposal(
       for (const gid of createdGatewayIds) {
         try {
           await gateway.cancelBoleto(gid);
-          console.log(`[Payment] Compensação: boleto ${gid} cancelado no gateway`);
+          logger.info(`[Payment] Compensação: boleto ${gid} cancelado no gateway`);
         } catch (cancelErr) {
-          console.error(`[Payment] Falha ao cancelar boleto órfão ${gid}:`, cancelErr);
+          logger.error(`[Payment] Falha ao cancelar boleto órfão ${gid}:`, cancelErr);
         }
       }
 
@@ -838,9 +839,9 @@ export async function generateBoletosForProposal(
               data: { status: "CANCELLED" },
             });
           });
-          console.log(`[Payment] Compensação DB: ${compensatedBoletoIds.length} boleto(s) e receivables marcados como CANCELLED`);
+          logger.info(`[Payment] Compensação DB: ${compensatedBoletoIds.length} boleto(s) e receivables marcados como CANCELLED`);
         } catch (dbErr) {
-          console.error("[Payment] Falha ao compensar registros no DB:", dbErr);
+          logger.error("[Payment] Falha ao compensar registros no DB:", dbErr);
         }
         // Clear createdBoletos to avoid returning phantom boletos
         createdBoletos.length = 0;
@@ -1066,7 +1067,7 @@ export async function updateBoletoStatus(
       }
     } catch (err) {
       // If auto-emit fails, create PENDING invoice for manual resolution
-      console.error("Auto-emit NFS-e failed:", err);
+      logger.error("Auto-emit NFS-e failed:", err);
       try {
         const boletoData = await prisma.boleto.findFirst({
           where: { id: boletoId, companyId },
@@ -1101,7 +1102,7 @@ export async function updateBoletoStatus(
           }
         }
       } catch (fallbackErr) {
-        console.error("Failed to create PENDING invoice:", fallbackErr);
+        logger.error("Failed to create PENDING invoice:", fallbackErr);
       }
     }
   }

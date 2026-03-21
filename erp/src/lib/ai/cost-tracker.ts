@@ -6,6 +6,7 @@ import {
   FALLBACK_PRICING,
 } from "@/lib/ai/pricing";
 import { getBrlUsdRate } from "@/lib/ai/exchange-rate";
+import { logger } from "@/lib/logger";
 
 // ─── logUsage ─────────────────────────────────────────────────────────────────
 
@@ -31,8 +32,7 @@ export async function logUsage(params: LogUsageParams) {
   const pricing = MODEL_PRICING[params.model] ?? FALLBACK_PRICING;
 
   if (!MODEL_PRICING[params.model]) {
-    // eslint-disable-next-line no-console
-    console.warn(
+    logger.warn(
       `[cost-tracker] Unknown model "${params.model}" — using FALLBACK_PRICING. ` +
       `Update MODEL_PRICING in pricing.ts to track costs accurately.`
     );

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { logger } from "@/lib/logger";
 
 const WHATSAPP_WEBHOOK_SECRET = process.env.WHATSAPP_WEBHOOK_SECRET || "";
 
@@ -33,7 +34,7 @@ export async function POST(request: Request) {
     const jobName = event === "message.media" ? "process-media" : "process-inbound";
     await whatsappInboundQueue.add(jobName, data);
   } catch (err) {
-    console.error("[webhook/whatsapp] Failed to enqueue:", err);
+    logger.error("[webhook/whatsapp] Failed to enqueue:", err);
     return NextResponse.json(
       { error: "Failed to enqueue message" },
       { status: 500 }

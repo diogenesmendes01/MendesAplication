@@ -7,8 +7,9 @@ import { processWhatsAppOutbound } from './whatsapp-outbound'
 import { processSlaCheck } from './sla-check'
 import { processAiAgent } from './ai-agent'
 import { processDocumentProcessing } from './document-processor'
+import { logger } from "@/lib/logger";
 
-console.log('Starting workers...')
+logger.info('Starting workers...')
 
 // Set up repeatable job for email inbound polling (every 2 minutes)
 emailInboundQueue.upsertJobScheduler(
@@ -16,9 +17,9 @@ emailInboundQueue.upsertJobScheduler(
   { every: 2 * 60 * 1000 },
   { name: 'poll-emails' }
 ).then(() => {
-  console.log('[email-inbound] Repeatable poll job scheduled (every 2 min)')
+  logger.info('[email-inbound] Repeatable poll job scheduled (every 2 min)')
 }).catch((err) => {
-  console.error('[email-inbound] Failed to schedule repeatable job:', err)
+  logger.error('[email-inbound] Failed to schedule repeatable job:', err)
 })
 
 // Set up repeatable job for SLA checks (every 1 minute)
@@ -27,9 +28,9 @@ slaCheckQueue.upsertJobScheduler(
   { every: 1 * 60 * 1000 },
   { name: 'check-sla' }
 ).then(() => {
-  console.log('[sla-check] Repeatable SLA check job scheduled (every 1 min)')
+  logger.info('[sla-check] Repeatable SLA check job scheduled (every 1 min)')
 }).catch((err) => {
-  console.error('[sla-check] Failed to schedule repeatable job:', err)
+  logger.error('[sla-check] Failed to schedule repeatable job:', err)
 })
 
 const emailInboundWorker = createWorker(QUEUE_NAMES.EMAIL_INBOUND, processEmailInbound, 2)
@@ -57,7 +58,7 @@ const workers = [
 ]
 
 async function shutdown() {
-  console.log('Shutting down workers...')
+  logger.info('Shutting down workers...')
   await Promise.all(workers.map((w) => w.close()))
   process.exit(0)
 }
@@ -65,4 +66,4 @@ async function shutdown() {
 process.on('SIGINT', shutdown)
 process.on('SIGTERM', shutdown)
 
-console.log('All workers started. Waiting for jobs...')
+logger.info('All workers started. Waiting for jobs...')

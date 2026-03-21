@@ -11,6 +11,7 @@ import {
   type SantanderCredentials,
 } from "./santander-auth";
 import { getNextBankNumber } from "./santander-sequence";
+import { logger } from "@/lib/logger";
 
 // ============================================================
 // SantanderProvider — Boleto híbrido (código de barras + QR Pix)
@@ -468,7 +469,7 @@ export class SantanderProvider implements PaymentGateway {
     };
 
     if (!input.customer.address?.zipCode) {
-      console.warn(
+      logger.warn(
         `[santander] Boleto criado sem endereço completo do pagador — pode ser rejeitado pelo Santander em produção`,
       );
     }
@@ -893,7 +894,7 @@ export class SantanderProvider implements PaymentGateway {
     // 1. Check Content-Type is JSON (Santander sends application/json)
     const contentType = headers["content-type"] ?? "";
     if (!contentType.includes("json")) {
-      console.warn(
+      logger.warn(
         `[santander-webhook] Invalid Content-Type: ${contentType}`,
       );
       return false;
@@ -904,7 +905,7 @@ export class SantanderProvider implements PaymentGateway {
     try {
       payload = JSON.parse(body) as SantanderWebhookPayload;
     } catch {
-      console.warn("[santander-webhook] Body is not valid JSON");
+      logger.warn("[santander-webhook] Body is not valid JSON");
       return false;
     }
 
@@ -917,7 +918,7 @@ export class SantanderProvider implements PaymentGateway {
         ""
       ).toString();
       if (payloadCovenant && payloadCovenant !== this.covenantCode) {
-        console.warn(
+        logger.warn(
           `[santander-webhook] covenantCode mismatch: payload="${payloadCovenant}" != provider="${this.covenantCode}"`,
         );
         return false;
@@ -943,12 +944,12 @@ export class SantanderProvider implements PaymentGateway {
     try {
       payload = JSON.parse(body) as SantanderWebhookPayload;
     } catch {
-      console.error("[santander-webhook] Failed to parse webhook body");
+      logger.error("[santander-webhook] Failed to parse webhook body");
       return null;
     }
 
     // Log raw event for debugging (always, regardless of outcome)
-    console.log(
+    logger.info(
       "[santander-webhook] Raw event received:",
       JSON.stringify(payload).slice(0, 2000),
     );
@@ -969,7 +970,7 @@ export class SantanderProvider implements PaymentGateway {
     // Map Santander event status to WebhookEvent type
     const eventType = mapWebhookEventType(status);
     if (!eventType) {
-      console.warn(
+      logger.warn(
         `[santander-webhook] Unknown event status: "${status}", skipping`,
       );
       return null;
@@ -989,7 +990,7 @@ export class SantanderProvider implements PaymentGateway {
     ).toString();
 
     if (!covenantCode || !bankNumber) {
-      console.error(
+      logger.error(
         "[santander-webhook] Missing covenantCode or bankNumber in payload",
       );
       return null;

@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
+import { logger } from "@/lib/logger";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -50,6 +51,6 @@ export async function logAuditEvent(params: AuditEventParams): Promise<void> {
       },
     });
   } catch (error) {
-    console.error("Failed to log audit event:", error);
+    logger.error("Failed to log audit event:", error);
   }
 }
