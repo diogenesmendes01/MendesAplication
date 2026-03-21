@@ -1,7 +1,5 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { toast } from "sonner";
 import {
   Save,
   Zap,
@@ -16,16 +14,14 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCompany } from "@/contexts/company-context";
-import { getAiConfig, updateAiConfig } from "./actions";
 import {
   TabGeral,
   TabWhatsApp,
   TabEmail,
   TabConsumo,
   TabSimulador,
-  DEFAULT_CONFIG,
-  type AiConfigData,
 } from "./components";
+import { useAiConfig } from "./hooks";
 
 // ---------------------------------------------------------------------------
 // Page
@@ -33,58 +29,16 @@ import {
 
 export default function AiConfigPage() {
   const { selectedCompanyId } = useCompany();
-  const [config, setConfig] = useState<AiConfigData>(DEFAULT_CONFIG);
-  const [savedConfig, setSavedConfig] = useState<AiConfigData>(DEFAULT_CONFIG);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const {
+    config,
+    setConfig,
+    loading,
+    saving,
+    hasUnsavedChanges,
+    handleSave,
+  } = useAiConfig(selectedCompanyId);
 
-  const hasUnsavedChanges =
-    !loading && JSON.stringify(config) !== JSON.stringify(savedConfig);
-
-  // ── Load config ───────────────────────────────────────────────────────────
-  const loadData = useCallback(async () => {
-    if (!selectedCompanyId) return;
-    setLoading(true);
-    try {
-      const data = await getAiConfig(selectedCompanyId);
-      setConfig(data);
-      setSavedConfig(data);
-    } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Erro ao carregar configurações",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [selectedCompanyId]);
-
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
-
-  // ── Save ──────────────────────────────────────────────────────────────────
-  async function handleSave() {
-    if (!selectedCompanyId) return;
-
-    // Client-side validation: reject non-positive dailySpendLimitBrl
-    if (config.dailySpendLimitBrl !== null && config.dailySpendLimitBrl <= 0) {
-      toast.error("O limite de gasto diário deve ser um valor positivo (maior que zero).");
-      return;
-    }
-
-    setSaving(true);
-    try {
-      await updateAiConfig(selectedCompanyId, config);
-      setSavedConfig(config);
-      toast.success("Configurações do Agente IA salvas com sucesso");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao salvar");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  // ── Guards ────────────────────────────────────────────────────────────────
+  // ── Guards ────────────────────────────────────────────────────────────────────────
   if (!selectedCompanyId) {
     return (
       <div className="flex h-64 items-center justify-center text-muted-foreground">
@@ -102,7 +56,7 @@ export default function AiConfigPage() {
     );
   }
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-6">
       {/* Header */}
