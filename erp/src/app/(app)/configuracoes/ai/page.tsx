@@ -65,6 +65,13 @@ export default function AiConfigPage() {
   // ── Save ──────────────────────────────────────────────────────────────────
   async function handleSave() {
     if (!selectedCompanyId) return;
+
+    // Client-side validation: reject non-positive dailySpendLimitBrl
+    if (config.dailySpendLimitBrl !== null && config.dailySpendLimitBrl <= 0) {
+      toast.error("O limite de gasto diário deve ser um valor positivo (maior que zero).");
+      return;
+    }
+
     setSaving(true);
     try {
       await updateAiConfig(selectedCompanyId, config);

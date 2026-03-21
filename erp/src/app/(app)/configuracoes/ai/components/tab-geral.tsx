@@ -297,11 +297,16 @@ export function TabGeral({
                   }));
                 }}
                 placeholder="Sem limite"
-                min={0}
+                min={0.01}
                 step={0.5}
-                className="w-32"
+                className={`w-32 ${config.dailySpendLimitBrl !== null && config.dailySpendLimitBrl <= 0 ? "border-red-500 focus-visible:ring-red-500" : ""}`}
               />
             </div>
+            {config.dailySpendLimitBrl !== null && config.dailySpendLimitBrl <= 0 && (
+              <p className="text-xs text-red-500">
+                O limite deve ser um valor positivo (maior que zero).
+              </p>
+            )}
             <p className="text-xs text-muted-foreground">
               Deixe vazio para não limitar. Quando o limite for atingido, o
               agente para de responder automaticamente.
