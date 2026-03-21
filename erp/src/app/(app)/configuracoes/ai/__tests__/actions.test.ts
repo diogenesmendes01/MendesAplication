@@ -462,4 +462,44 @@ describe("updateAiConfig", () => {
     const createPayload = upsertCall.create as Record<string, unknown>;
     expect(createPayload).toHaveProperty("apiKey", null);
   });
+
+  it("throws when dailySpendLimitBrl is negative", async () => {
+    const { updateAiConfig } = await import(
+      "@/app/(app)/configuracoes/ai/actions"
+    );
+
+    await expect(
+      updateAiConfig("company-1", { ...validData, dailySpendLimitBrl: -1 })
+    ).rejects.toThrow(/dailySpendLimitBrl must be a positive number/i);
+  });
+
+  it("throws when dailySpendLimitBrl is zero", async () => {
+    const { updateAiConfig } = await import(
+      "@/app/(app)/configuracoes/ai/actions"
+    );
+
+    await expect(
+      updateAiConfig("company-1", { ...validData, dailySpendLimitBrl: 0 })
+    ).rejects.toThrow(/dailySpendLimitBrl must be a positive number/i);
+  });
+
+  it("accepts null dailySpendLimitBrl (no limit)", async () => {
+    const { updateAiConfig } = await import(
+      "@/app/(app)/configuracoes/ai/actions"
+    );
+
+    await expect(
+      updateAiConfig("company-1", { ...validData, dailySpendLimitBrl: null })
+    ).resolves.not.toThrow();
+  });
+
+  it("accepts positive dailySpendLimitBrl", async () => {
+    const { updateAiConfig } = await import(
+      "@/app/(app)/configuracoes/ai/actions"
+    );
+
+    await expect(
+      updateAiConfig("company-1", { ...validData, dailySpendLimitBrl: 10.5 })
+    ).resolves.not.toThrow();
+  });
 });
