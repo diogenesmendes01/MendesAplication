@@ -393,7 +393,7 @@ export async function runAgent(
     return { responded: false, escalated: false, iterations: 0, error: "Ticket not found" };
   }
 
-  const contactPhone = ticket.contact?.whatsapp || ticket.client.telefone;
+  const contactPhone = ticket.contact?.whatsapp || ticket.client?.telefone;
   if (channel === "WHATSAPP" && !contactPhone) {
     return {
       responded: false,
@@ -438,7 +438,7 @@ export async function runAgent(
       ? aiConfig.emailPersona
       : aiConfig.persona;
 
-  const clientName = ticket.contact?.name || ticket.client.name;
+  const clientName = ticket.contact?.name || ticket.client?.name;
   const systemPrompt =
     channel === "EMAIL"
       ? buildEmailSystemPrompt(persona, clientName, historyContext, aiConfig.emailSignature)
