@@ -30,6 +30,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   testAiConnection,
   listAvailableModels,
   getSuggestedModel,
@@ -59,6 +65,8 @@ export function TabGeral({
   >("idle");
   const [connectionError, setConnectionError] = useState("");
   const [suggestion, setSuggestion] = useState<ModelSuggestionData | null>(null);
+
+  const isTestDisabled = testingConnection || hasUnsavedChanges;
 
   // ── Load models when provider changes ─────────────────────────────────────
   const loadModels = useCallback(async () => {
@@ -122,6 +130,27 @@ export function TabGeral({
     }
   }
 
+  // ── Test connection button ────────────────────────────────────────────────
+  const testButtonElement = (
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={handleTestConnection}
+      disabled={isTestDisabled}
+    >
+      {testingConnection ? (
+        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+      ) : connectionStatus === "success" ? (
+        <CheckCircle2 className="mr-2 h-4 w-4 text-green-600" />
+      ) : connectionStatus === "error" ? (
+        <XCircle className="mr-2 h-4 w-4 text-red-600" />
+      ) : (
+        <Zap className="mr-2 h-4 w-4" />
+      )}
+      Testar Conexão
+    </Button>
+  );
+
   return (
     <div className="space-y-4">
       {/* Provider + API Key */}
@@ -172,32 +201,33 @@ export function TabGeral({
                 placeholder="sk-..."
                 className="flex-1 max-w-md font-mono"
               />
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleTestConnection}
-                disabled={testingConnection || hasUnsavedChanges}
-                title={
-                  hasUnsavedChanges
-                    ? "Salve as configurações antes de testar a conexão"
-                    : undefined
-                }
-              >
-                {testingConnection ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : connectionStatus === "success" ? (
-                  <CheckCircle2 className="mr-2 h-4 w-4 text-green-600" />
-                ) : connectionStatus === "error" ? (
-                  <XCircle className="mr-2 h-4 w-4 text-red-600" />
-                ) : (
-                  <Zap className="mr-2 h-4 w-4" />
-                )}
-                Testar Conexão
-              </Button>
+              {hasUnsavedChanges ? (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      {/* Wrapper span: disabled buttons swallow pointer events, preventing tooltip display */}
+                      <span tabIndex={0} className="inline-flex">
+                        {testButtonElement}
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">
+                      <p>Salve as configurações antes de testar a conexão</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              ) : (
+                testButtonElement
+              )}
             </div>
             {config.apiKey && /^\*{4}/.test(config.apiKey) && (
               <p className="text-sm text-muted-foreground">
                 🔑 Chave configurada. Para alterar, digite uma nova chave.
+              </p>
+            )}
+            {hasUnsavedChanges && (
+              <p className="text-sm text-amber-600">
+                ⚠ Salve as alterações antes de testar a conexão. O teste valida
+                a chave salva no sistema, não a digitada no formulário.
               </p>
             )}
             {connectionStatus === "success" && (
