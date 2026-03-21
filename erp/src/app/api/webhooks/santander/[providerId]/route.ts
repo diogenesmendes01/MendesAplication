@@ -58,7 +58,7 @@ export async function POST(
   }
 
   // 4. Instantiate gateway and validate webhook
-  let gateway: ReturnType<typeof getGateway>;
+  let gateway: Awaited<ReturnType<typeof getGateway>>;
   try {
     const decryptedCredentials = JSON.parse(
       decrypt(provider.credentials),
@@ -66,7 +66,7 @@ export async function POST(
 
     const metadata = provider.metadata as Record<string, unknown> | null;
 
-    gateway = getGateway(
+    gateway = await getGateway(
       "santander",
       decryptedCredentials,
       metadata,
