@@ -78,23 +78,33 @@ function maskApiKey(key: string | null | undefined, hint?: string | null): strin
 }
 
 // ---------------------------------------------------------------------------
-// Rate limiters — uses RateLimiter interface (currently in-memory).
-// See: https://github.com/diogenesmendes01/MendesAplication/issues/124
-// Swap to Redis-backed implementation when available via createRateLimiter().
+// Rate limiters — Redis-backed with in-memory fallback.
+// Keys: rate:simulate:{companyId}, rate:testconn:{companyId} (TTL 60s)
+// See: https://github.com/diogenesmendes01/MendesAplication/issues/310
 // ---------------------------------------------------------------------------
 
-import { createRateLimiter } from "@/lib/rate-limiter";
+import { createAsyncRateLimiter } from "@/lib/rate-limiter";
 
-const testConnectionLimiter = createRateLimiter({ limit: 5, windowMs: 60_000 });
+const testConnectionLimiter = createAsyncRateLimiter({
+  limit: 5,
+  windowMs: 60_000,
+  prefix: "rate:testconn",
+});
 
-function checkTestConnectionRateLimit(companyId: string): boolean {
-  return testConnectionLimiter.check(companyId).allowed;
+async function checkTestConnectionRateLimit(companyId: string): Promise<boolean> {
+  const result = await testConnectionLimiter.check(companyId);
+  return result.allowed;
 }
 
-const simulationLimiter = createRateLimiter({ limit: 10, windowMs: 60_000 });
+const simulationLimiter = createAsyncRateLimiter({
+  limit: 10,
+  windowMs: 60_000,
+  prefix: "rate:simulate",
+});
 
-function checkSimulationRateLimit(companyId: string): boolean {
-  return simulationLimiter.check(companyId).allowed;
+async function checkSimulationRateLimit(companyId: string): Promise<boolean> {
+  const result = await simulationLimiter.check(companyId);
+  return result.allowed;
 }
 
 // ---------------------------------------------------------------------------
@@ -297,7 +307,7 @@ export async function testAiConnection(
   await requireAdmin();
   await requireCompanyAccess(companyId);
 
-  if (!checkTestConnectionRateLimit(companyId)) {
+  if (!(await checkTestConnectionRateLimit(companyId))) {
     return { ok: false, error: "Limite de testes atingido (máx 5/min). Aguarde um momento." };
   }
 
@@ -522,7 +532,7 @@ export async function simulateAiResponse(
   }
 
   // Rate limit check
-  if (!checkSimulationRateLimit(companyId)) {
+  if (!(await checkSimulationRateLimit(companyId))) {
     return {
       response: "",
       inputTokens: 0,

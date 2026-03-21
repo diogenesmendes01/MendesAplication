@@ -1,20 +1,11 @@
-// ─── Rate Limiter Interface + In-Memory Implementation ───────────────────────
+// ─── Rate Limiter Interface + In-Memory & Redis Implementations ─────────────
 // See: https://github.com/diogenesmendes01/MendesAplication/issues/124
+// See: https://github.com/diogenesmendes01/MendesAplication/issues/310
 //
-// ## Current limitation
-// The in-memory implementation is per-process: in a multi-instance deployment
-// (e.g. multiple serverless workers or containers), each process has its own
-// Map, so the effective limit is `limit * N_INSTANCES`.
-//
-// ## Redis migration path
-// 1. Create `RedisRateLimiter` implementing `RateLimiter` interface below
-// 2. Use Redis MULTI/EXEC with sorted sets:
-//    - ZADD key <now> <now>        (add timestamp)
-//    - ZREMRANGEBYSCORE key 0 <now - windowMs>  (prune old)
-//    - ZCARD key                   (count recent)
-//    - EXPIRE key <windowMs/1000>  (auto-cleanup)
-// 3. Swap `createRateLimiter()` to return Redis-backed instance
-// 4. Keep InMemoryRateLimiter as fallback when Redis is unavailable
+// Redis-backed implementation uses INCR + EXPIRE (fixed window, TTL = windowMs).
+// Falls back to InMemoryRateLimiter when Redis is unavailable.
+
+import Redis from "ioredis";
 
 // ─── Interface ────────────────────────────────────────────────────────────────
 
@@ -37,6 +28,15 @@ export interface RateLimiter {
    * Reset rate limit for a specific key. Useful for testing.
    */
   reset(key: string): void;
+}
+
+/**
+ * Async rate limiter interface — used by Redis-backed implementation.
+ * Callers that support Redis should use this interface.
+ */
+export interface AsyncRateLimiter {
+  check(key: string): Promise<RateLimiterResult>;
+  reset(key: string): Promise<void>;
 }
 
 // ─── In-Memory Implementation ─────────────────────────────────────────────────
@@ -87,19 +87,150 @@ export class InMemoryRateLimiter implements RateLimiter {
   }
 }
 
+// ─── Redis Implementation ─────────────────────────────────────────────────────
+
+const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
+
+let redis: Redis | null = null;
+let redisAvailable = true;
+
+function getRedisClient(): Redis | null {
+  if (!redisAvailable) return null;
+
+  if (!redis) {
+    try {
+      redis = new Redis(REDIS_URL, {
+        maxRetriesPerRequest: 1,
+        lazyConnect: true,
+        enableOfflineQueue: false,
+      });
+      redis.on("error", (err) => {
+        console.error("[rate-limiter] Redis error:", err.message);
+        redisAvailable = false;
+      });
+      redis.on("connect", () => {
+        redisAvailable = true;
+      });
+      redis.connect().catch((err) => {
+        console.error("[rate-limiter] Redis connect failed:", err.message);
+        redisAvailable = false;
+      });
+    } catch {
+      redisAvailable = false;
+      return null;
+    }
+  }
+
+  return redisAvailable ? redis : null;
+}
+
+export class RedisRateLimiter implements AsyncRateLimiter {
+  private readonly fallback: InMemoryRateLimiter;
+  private readonly limit: number;
+  private readonly windowMs: number;
+  private readonly prefix: string;
+
+  constructor(opts: { limit: number; windowMs: number; prefix: string }) {
+    this.limit = opts.limit;
+    this.windowMs = opts.windowMs;
+    this.prefix = opts.prefix;
+    this.fallback = new InMemoryRateLimiter({
+      limit: opts.limit,
+      windowMs: opts.windowMs,
+    });
+  }
+
+  async check(key: string): Promise<RateLimiterResult> {
+    const client = getRedisClient();
+    if (!client) {
+      return this.fallback.check(key);
+    }
+
+    const redisKey = `${this.prefix}:${key}`;
+    const windowSec = Math.ceil(this.windowMs / 1000);
+
+    try {
+      const results = await client.multi().incr(redisKey).ttl(redisKey).exec();
+
+      if (!results || results.length < 2) {
+        throw new Error("Redis multi/exec returned unexpected result");
+      }
+
+      const [incrErr, incrVal] = results[0];
+      const [ttlErr, ttlVal] = results[1];
+
+      if (incrErr || ttlErr) {
+        throw new Error("Redis multi/exec contained errors");
+      }
+
+      const count = typeof incrVal === "number" ? incrVal : Number(incrVal);
+      const ttl = typeof ttlVal === "number" ? ttlVal : Number(ttlVal);
+
+      // Set TTL on first increment (ttl === -1 means no expiry set yet)
+      if (ttl === -1) {
+        await client.expire(redisKey, windowSec);
+      }
+
+      if (count > this.limit) {
+        const remainingSec = ttl === -1 ? windowSec : Math.max(ttl, 1);
+        return {
+          allowed: false,
+          remaining: 0,
+          retryAfterMs: remainingSec * 1000,
+        };
+      }
+
+      return {
+        allowed: true,
+        remaining: this.limit - count,
+        retryAfterMs: 0,
+      };
+    } catch (err) {
+      console.error(
+        "[rate-limiter] Redis op failed, falling back to in-memory:",
+        err instanceof Error ? err.message : err,
+      );
+      redisAvailable = false;
+      return this.fallback.check(key);
+    }
+  }
+
+  async reset(key: string): Promise<void> {
+    const client = getRedisClient();
+    if (client) {
+      try {
+        await client.del(`${this.prefix}:${key}`);
+      } catch {
+        // ignore — fallback cleanup below
+      }
+    }
+    this.fallback.reset(key);
+  }
+}
+
 // ─── Factory ──────────────────────────────────────────────────────────────────
 
 /**
- * Creates a rate limiter instance.
- *
- * Currently returns InMemoryRateLimiter.
- * When Redis is available, swap this to return a Redis-backed implementation.
+ * Creates a synchronous in-memory rate limiter.
+ * For Redis-backed rate limiting, use `createAsyncRateLimiter()`.
  */
 export function createRateLimiter(opts: {
   limit: number;
   windowMs: number;
 }): RateLimiter {
-  // TODO(#124): When Redis is available:
-  // if (redisClient) return new RedisRateLimiter(redisClient, opts);
   return new InMemoryRateLimiter(opts);
+}
+
+/**
+ * Creates a Redis-backed rate limiter with automatic in-memory fallback.
+ * Uses INCR + EXPIRE with a fixed window (TTL = windowMs).
+ *
+ * @param opts.prefix - Redis key prefix (e.g. "rate:simulate")
+ */
+export function createAsyncRateLimiter(opts: {
+  limit: number;
+  windowMs: number;
+  prefix: string;
+}): AsyncRateLimiter {
+  return new RedisRateLimiter(opts);
 }
