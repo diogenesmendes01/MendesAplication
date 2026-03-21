@@ -5,6 +5,8 @@
 // Review schedule: quarterly (next: 2026-06-16)
 // This file has NO "use server" directive — constants are importable anywhere.
 
+import { getBrlUsdRate, getBrlUsdRateSync } from "@/lib/ai/exchange-rate";
+
 export interface ModelPricing {
   input: number; // USD per 1M input tokens
   output: number; // USD per 1M output tokens
@@ -42,20 +44,22 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
 export const FALLBACK_PRICING: ModelPricing = { input: 1.0, output: 3.0 };
 
 /**
- * BRL/USD exchange rate (synchronous fallback).
+ * BRL/USD exchange rate — dynamic via AwesomeAPI (24h cache).
  *
- * For async consumers (cost-tracker, agent), prefer getBrlUsdRate() from
- * exchange-rate.ts which fetches the real-time rate from AwesomeAPI.
+ * Re-exported from exchange-rate.ts for backward compatibility.
+ * Sync consumers get the cached rate; async consumers should use getBrlUsdRate().
  *
- * This sync constant is kept for backwards compatibility and as fallback
- * when the API is unreachable.
- *
- * Configurable via BRL_USD_RATE env var.
- * See: https://github.com/diogenesmendes01/MendesAplication/issues/125
+ * Fixes: https://github.com/diogenesmendes01/MendesAplication/issues/280
  */
-const _brlUsdRate = parseFloat(process.env.BRL_USD_RATE ?? "5.8");
-export const BRL_USD_RATE =
-  Number.isFinite(_brlUsdRate) && _brlUsdRate > 0 ? _brlUsdRate : 5.8;
+export { getBrlUsdRate, getBrlUsdRateSync };
+
+/**
+ * Synchronous BRL/USD rate accessor for backward compatibility.
+ * Returns the cached dynamic rate (or env fallback on first call).
+ *
+ * @deprecated Use getBrlUsdRate() (async) or getBrlUsdRateSync() instead.
+ */
+export const BRL_USD_RATE: number = getBrlUsdRateSync();
 
 /**
  * Default model names per provider — used as fallback for usage logging
