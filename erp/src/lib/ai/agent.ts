@@ -7,11 +7,26 @@ import { getToolsForChannel } from "./tools";
 import { executeTool } from "./tool-executor";
 import type { ToolContext } from "./tool-executor";
 import { decrypt } from "@/lib/encryption";
-import { getTodaySpend, logUsage } from "./cost-tracker";
+import {
+  getTodaySpend,
+  logUsage,
+  checkAndReserveSpend,
+  rollbackSpendReservation,
+} from "./cost-tracker";
 import { MODEL_PRICING, FALLBACK_PRICING, DEFAULT_MODELS } from "./pricing";
 import { getBrlUsdRateSync } from "./exchange-rate";
-import { createChildLogger } from "@/lib/logger";
+import { logger, createChildLogger } from "@/lib/logger";
 import type { Logger } from "pino";
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+/**
+ * Conservative estimated cost per LLM iteration (in BRL) used to pre-reserve
+ * budget before the actual call. The real cost is reconciled in onUsage().
+ * Set high enough to prevent overshoot but low enough to not block legitimate
+ * requests. ~R$0.05 covers most GPT-4o-mini / Claude Haiku iterations.
+ */
+const ESTIMATED_COST_PER_ITERATION_BRL = 0.05;
 
 // ─── Result types ─────────────────────────────────────────────────────────────
 
@@ -68,8 +83,10 @@ async function runAgentLoop(options: {
   onUsage: (inputTokens: number, outputTokens: number) => Promise<void>;
   /** Identifies the ticket or "simulation" — used only for logging */
   contextId: string;
-  /** Child logger with traceId/companyId/ticketId already bound */
+/** Child logger with traceId/companyId/ticketId already bound */
   log: Logger;
+  /** Pre-iteration budget check — returns false to stop the loop */
+  onBudgetCheck?: () => Promise<boolean>;
 }): Promise<AgentLoopResult> {
   const {
     messages,
@@ -82,7 +99,8 @@ async function runAgentLoop(options: {
     dryRun,
     onUsage,
     contextId,
-    log,
+log,
+    onBudgetCheck,
   } = options;
 
   let totalInputTokens = 0;
@@ -102,6 +120,23 @@ async function runAgentLoop(options: {
         totalInputTokens,
         totalOutputTokens,
       };
+    }
+
+    // ── Per-iteration budget check (atomic via Redis) ────────────────────
+    if (onBudgetCheck) {
+      const allowed = await onBudgetCheck();
+      if (!allowed) {
+        logger.info({ contextId, iteration }, "Daily spend limit reached mid-loop");
+        return {
+          responded: false,
+          escalated: false,
+          iterations: iteration,
+          error: "daily_spend_limit_reached",
+          finalResponse,
+          totalInputTokens,
+          totalOutputTokens,
+        };
+      }
     }
 
     try {
@@ -267,20 +302,26 @@ export async function runAgent(
     return { responded: false, escalated: false, iterations: 0, error: "email_channel_disabled" };
   }
 
-  // ── Check daily spend limit ──────────────────────────────────────────────
-  if (aiConfig.dailySpendLimitBrl) {
-    const todaySpend = await getTodaySpend(companyId);
-    if (todaySpend >= Number(aiConfig.dailySpendLimitBrl)) {
+  // ── Check daily spend limit (atomic via Redis, DB fallback) ──────────────
+  // Previously used getTodaySpend() + logUsage() which was a TOCTOU race:
+  // multiple concurrent requests could pass the check before any logUsage()
+  // completed, allowing 2-10× overshoot under traffic bursts.
+  //
+  // Now uses Redis INCRBY atomic counter with EXPIRE until midnight BRT.
+  // Falls back to DB check-then-act when Redis is unavailable.
+  const dailyLimit = aiConfig.dailySpendLimitBrl
+    ? Number(aiConfig.dailySpendLimitBrl)
+    : null;
+
+  if (dailyLimit) {
+    const allowed = await checkAndReserveSpend(
+      companyId,
+      dailyLimit,
+      ESTIMATED_COST_PER_ITERATION_BRL
+    );
+    if (!allowed) {
       return { responded: false, escalated: false, iterations: 0, error: "daily_spend_limit_reached" };
     }
-    // ⚠️ KNOWN LIMITATION — TOCTOU RACE (check-then-act, not atomic):
-    // Under concurrent load, multiple requests may pass this check before any
-    // logUsage() call completes. In traffic bursts the daily limit can be
-    // exceeded by 2–10× depending on concurrency and avg cost per call.
-    // A post-logUsage heuristic re-check (see onUsage callback below) amortises
-    // the risk but does NOT eliminate it — the LLM call has already been made.
-    // TODO: Replace with Redis INCR+EXPIRE atomic counter (see simulationRateMap
-    //       TODO). Until then, the limit is best-effort / advisory only.
   }
 
   // ── Check escalation keywords (fast-path before LLM) ────────────────────
@@ -293,6 +334,11 @@ export async function runAgent(
 
     if (matchedKeyword) {
       log.info({ keyword: matchedKeyword }, "Escalation keyword detected, escalating without LLM");
+
+      // Rollback the pre-reserved spend since we won't call the LLM
+      if (dailyLimit) {
+        await rollbackSpendReservation(companyId, ESTIMATED_COST_PER_ITERATION_BRL);
+      }
 
       await prisma.ticket.update({
         where: { id: ticketId },
@@ -427,9 +473,22 @@ export async function runAgent(
     startTime,
     dryRun: false,
     contextId: ticketId,
-    log,
+log,
+    // ── Per-iteration atomic budget check ──────────────────────────────────
+    // Before each LLM call in multi-iteration loops, atomically reserve
+    // estimated cost in Redis. This prevents concurrent requests from
+    // exceeding the daily limit (the TOCTOU race this PR fixes).
+    onBudgetCheck: dailyLimit
+      ? async () => {
+          return checkAndReserveSpend(
+            companyId,
+            dailyLimit,
+            ESTIMATED_COST_PER_ITERATION_BRL
+          );
+        }
+      : undefined,
     onUsage: async (inputTokens, outputTokens) => {
-      await logUsage({
+      const result = await logUsage({
         aiConfigId: aiConfig.id,
         companyId,
         provider: providerConfig.provider,
@@ -439,17 +498,12 @@ export async function runAgent(
         outputTokens,
         ticketId,
       });
-      // ── Heuristic post-logUsage overshoot detection ────────────────────
-      // After persisting the usage record, re-check the daily spend. If we
-      // exceeded the limit, log a warning so ops teams can detect race-condition
-      // overshoots in monitoring dashboards. This does NOT stop the current
-      // request (the LLM call is already complete) but helps quantify the
-      // TOCTOU exposure. See the KNOWN LIMITATION comment above.
-      if (aiConfig.dailySpendLimitBrl) {
-        const postCallSpend = await getTodaySpend(companyId);
-        if (postCallSpend > Number(aiConfig.dailySpendLimitBrl)) {
-          log.warn({ spend: postCallSpend, limit: Number(aiConfig.dailySpendLimitBrl) }, "Daily spend overshoot — TOCTOU race detected");
-        }
+
+      // Reconcile: the pre-reserved estimate was approximate. The actual cost
+      // is now known via logUsage → atomicSpendIncrement. Remove the estimate
+      // reservation so only the real cost remains in the Redis counter.
+      if (dailyLimit && result) {
+        await rollbackSpendReservation(companyId, ESTIMATED_COST_PER_ITERATION_BRL);
       }
     },
   });
@@ -504,9 +558,6 @@ export async function runAgentDryRun(
   }
 
   // ── Escalation keyword fast-path (mirrors runAgent behaviour) ────────────
-  // Without this check the dry-run would call the LLM even when the production
-  // path would have escalated immediately, producing misleading simulation
-  // results and unnecessary token costs.
   if (aiConfig.escalationKeywords && aiConfig.escalationKeywords.length > 0) {
     const lowerContent = incomingMessage.toLowerCase();
     const matchedKeyword = aiConfig.escalationKeywords.find((keyword) =>
@@ -594,7 +645,7 @@ export async function runAgentDryRun(
     startTime,
     dryRun: true,
     contextId: "simulation",
-    log,
+log,
     // Log simulation token usage for internal/technical DB audit (isSimulation=true).
     // NOT visible in the "Consumo de IA" tab — getUsageSummary() filters isSimulation: false.
     // NOT counted against the daily budget — getTodaySpend() also filters isSimulation: false.

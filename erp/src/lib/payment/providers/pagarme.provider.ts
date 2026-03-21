@@ -7,6 +7,7 @@ import type {
   WebhookEvent,
 } from "../types";
 import {
+import { logger } from "@/lib/logger";
   PHONE_PLACEHOLDER,
   PHONE_AREA_CODE_PLACEHOLDER,
   PHONE_COUNTRY_CODE,
