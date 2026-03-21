@@ -1,7 +1,7 @@
 # Feature Spec: Personalização da IA — Resposta Automática
 
 > **Autor:** Vex ⚡ | **Data:** 2026-03-15  
-> **Status:** Draft — aguardando aprovação do Mendes
+> **Status:** Implemented
 
 ---
 
