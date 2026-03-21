@@ -10,6 +10,8 @@ import { getTodaySpend, getUsageSummary, type UsageSummary } from "@/lib/ai/cost
 import { suggestModel } from "@/lib/ai/model-suggester";
 import { runAgentDryRun, type DryRunResult } from "@/lib/ai/agent";
 import type { Prisma } from "@prisma/client";
+import { createAsyncRateLimiter } from "@/lib/rate-limiter";
+import { logger } from "@/lib/logger";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -82,9 +84,6 @@ function maskApiKey(key: string | null | undefined, hint?: string | null): strin
 // Keys: rate:simulate:{companyId}, rate:testconn:{companyId} (TTL 60s)
 // See: https://github.com/diogenesmendes01/MendesAplication/issues/310
 // ---------------------------------------------------------------------------
-
-import { createAsyncRateLimiter } from "@/lib/rate-limiter";
-import { logger } from "@/lib/logger";
 
 const testConnectionLimiter = createAsyncRateLimiter({
   limit: 5,
