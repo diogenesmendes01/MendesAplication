@@ -503,3 +503,48 @@ describe("updateAiConfig", () => {
     ).resolves.not.toThrow();
   });
 });
+
+// ─── Provider parity (issue #80) ─────────────────────────────────────────────
+describe("Provider parity — frontend ↔ backend", () => {
+  it("PROVIDERS (frontend) matches VALID_PROVIDERS (backend)", async () => {
+    const { PROVIDERS } = await import(
+      "@/app/(app)/configuracoes/ai/components/types"
+    );
+
+    // VALID_PROVIDERS is not exported, so we extract it indirectly:
+    // updateAiConfig rejects unknown providers with a message listing them.
+    const { updateAiConfig } = await import(
+      "@/app/(app)/configuracoes/ai/actions"
+    );
+
+    let errorMsg = "";
+    try {
+      await updateAiConfig("company-1", {
+        enabled: true,
+        persona: "test",
+        welcomeMessage: "hi",
+        escalationKeywords: [],
+        maxIterations: 5,
+        provider: "__invalid_provider__" as never,
+        apiKey: "sk-test",
+        model: "gpt-4o",
+        whatsappEnabled: true,
+        emailEnabled: false,
+        emailPersona: "",
+        emailSignature: "",
+        dailySpendLimitBrl: null,
+        temperature: 0.7,
+      });
+    } catch (e: unknown) {
+      errorMsg = (e as Error).message;
+    }
+
+    // Extract valid providers from error message: "provider must be one of: openai, anthropic, ..."
+    const match = errorMsg.match(/provider must be one of: (.+)/);
+    expect(match).not.toBeNull();
+    const backendProviders = match![1].split(", ").sort();
+    const frontendProviders = PROVIDERS.map((p) => p.value).sort();
+
+    expect(frontendProviders).toEqual(backendProviders);
+  });
+});
