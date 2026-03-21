@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -21,6 +21,7 @@ import {
   Receipt,
   Landmark,
   X,
+  LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -28,6 +29,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -83,6 +85,7 @@ interface SidebarProps {
 
 export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const { companies, selectedCompany, setSelectedCompanyId } = useCompany();
   const { user } = useUser();
   const [sacBadge, setSacBadge] = useState(0);
@@ -112,6 +115,15 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
       fetchBadge();
     },
   });
+
+  /* ── Logout handler ── */
+  const handleLogout = useCallback(async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } finally {
+      router.push("/login");
+    }
+  }, [router]);
 
   /* ── User display helpers ── */
   const userName = user?.name || "Usuário";
@@ -280,18 +292,54 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
         })}
       </nav>
 
-      {/* Footer com Avatar — dados dinâmicos da sessão */}
+      {/* Footer com Avatar + Logout */}
       {!collapsed && (
         <div className="border-t border-border-subtle p-3">
-          <div className="flex items-center gap-3 rounded-lg bg-sidebar-hover-bg p-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent text-xs font-bold text-white">
-              {userInitials}
-            </div>
-            <div className="flex-1 truncate">
-              <div className="truncate text-sm font-medium text-text-primary">{userName}</div>
-              <div className="truncate text-xs text-text-tertiary">{userRole}</div>
-            </div>
-          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="flex w-full items-center gap-3 rounded-lg bg-sidebar-hover-bg p-2 transition-colors hover:bg-sidebar-active-bg">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent text-xs font-bold text-white">
+                  {userInitials}
+                </div>
+                <div className="flex-1 truncate text-left">
+                  <div className="truncate text-sm font-medium text-text-primary">{userName}</div>
+                  <div className="truncate text-xs text-text-tertiary">{userRole}</div>
+                </div>
+                <ChevronDown className="h-4 w-4 text-text-tertiary" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" side="top" className="w-[220px]">
+              <div className="px-2 py-1.5">
+                <div className="text-sm font-medium">{userName}</div>
+                <div className="text-xs text-text-tertiary">{user?.email}</div>
+              </div>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleLogout} className="text-danger focus:text-danger">
+                <LogOut className="mr-2 h-4 w-4" />
+                Sair
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      )}
+
+      {/* Collapsed: logout icon button */}
+      {collapsed && (
+        <div className="border-t border-border-subtle p-2">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleLogout}
+                className="w-full text-text-secondary hover:bg-sidebar-hover-bg hover:text-danger"
+                aria-label="Sair"
+              >
+                <LogOut className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right">Sair</TooltipContent>
+          </Tooltip>
         </div>
       )}
 
