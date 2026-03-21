@@ -8,6 +8,7 @@ import { encrypt, decrypt } from "@/lib/encryption";
 import { chatCompletion } from "@/lib/ai/provider";
 import { getTodaySpend, getUsageSummary, type UsageSummary } from "@/lib/ai/cost-tracker";
 import { suggestModel } from "@/lib/ai/model-suggester";
+import { discoverModels } from "@/lib/ai/model-discovery";
 import { runAgentDryRun, type DryRunResult } from "@/lib/ai/agent";
 import type { Prisma } from "@prisma/client";
 
@@ -107,21 +108,6 @@ async function checkSimulationRateLimit(companyId: string): Promise<boolean> {
   const result = await simulationLimiter.check(companyId);
   return result.allowed;
 }
-
-// ---------------------------------------------------------------------------
-// Hardcoded model lists for providers that don't have a list endpoint
-// ---------------------------------------------------------------------------
-
-const HARDCODED_MODELS: Record<string, string[]> = {
-  anthropic: [
-    "claude-opus-4-20250514",
-    "claude-sonnet-4-20250514",
-    "claude-haiku-4-20250414",
-  ],
-  grok: ["grok-2", "grok-2-mini"],
-  qwen: ["qwen-max", "qwen-plus", "qwen-turbo"],
-  deepseek: ["deepseek-chat", "deepseek-reasoner"],
-};
 
 // ---------------------------------------------------------------------------
 // Server Actions
@@ -384,9 +370,6 @@ export async function listAvailableModels(
   await requireAdmin();
   await requireCompanyAccess(companyId);
 
-  // Validate providerOverride against VALID_PROVIDERS (mirrors updateAiConfig).
-  // An unknown provider would silently return [] via HARDCODED_MODELS[provider] ?? [].
-  // Explicit rejection surfaces misconfiguration in the UI immediately.
   if (providerOverride !== undefined && !VALID_PROVIDERS.includes(providerOverride as typeof VALID_PROVIDERS[number])) {
     throw new Error(`provider must be one of: ${VALID_PROVIDERS.join(", ")}`);
   }
@@ -395,58 +378,20 @@ export async function listAvailableModels(
     where: { companyId },
   });
 
-  // Use providerOverride (current UI state) if provided, otherwise fall back to
-  // the persisted config. This ensures the model list reflects the provider
-  // the admin has selected in the form — even before saving.
   const provider = providerOverride ?? config?.provider ?? "openai";
 
-  // For non-OpenAI providers, return hardcoded list
-  if (provider !== "openai") {
-    return HARDCODED_MODELS[provider] ?? [];
-  }
-
-  // For OpenAI: try to fetch from API
-  if (!config?.apiKey) {
-    return ["gpt-4o", "gpt-4o-mini"];
-  }
-
-  let apiKey: string;
-  try {
-    apiKey = decrypt(config.apiKey);
-  } catch {
-    return ["gpt-4o", "gpt-4o-mini"];
-  }
-
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 10000);
-
-    const res = await fetch("https://api.openai.com/v1/models", {
-      headers: { Authorization: `Bearer ${apiKey}` },
-      signal: controller.signal,
-    });
-    clearTimeout(timer);
-
-    if (!res.ok) {
-      return ["gpt-4o", "gpt-4o-mini"];
+  // Decrypt API key if available (needed for dynamic discovery)
+  let apiKey: string | undefined;
+  if (config?.apiKey) {
+    try {
+      apiKey = decrypt(config.apiKey);
+    } catch {
+      // Fall through — discoverModels will use static fallback
     }
-
-    const data = await res.json();
-    const models: string[] = (data.data ?? [])
-      .map((m: { id: string }) => m.id)
-      .filter(
-        (id: string) =>
-          id.startsWith("gpt-") &&
-          !id.includes("instruct") &&
-          !id.includes("realtime") &&
-          !id.includes("audio"),
-      )
-      .sort();
-
-    return models.length > 0 ? models : ["gpt-4o", "gpt-4o-mini"];
-  } catch {
-    return ["gpt-4o", "gpt-4o-mini"];
   }
+
+  // Dynamic discovery with cache + static fallback (all providers)
+  return discoverModels(provider, { apiKey });
 }
 
 /**
