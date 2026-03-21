@@ -1,5 +1,4 @@
 import type {
-import { logger } from "@/lib/logger";
   PaymentGateway,
   CreateBoletoInput,
   CreateBoletoResult,

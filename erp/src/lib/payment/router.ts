@@ -159,7 +159,7 @@ export async function previewRouting(
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-function matchesRule(
+export function matchesRule(
   rule: PaymentRoutingRule,
   context: RoutingContext,
 ): boolean {
@@ -190,7 +190,7 @@ function matchesRule(
   return true;
 }
 
-function buildReason(rule: PaymentRoutingRule): string {
+export function buildReason(rule: PaymentRoutingRule): string {
   const parts: string[] = [];
 
   if (rule.clientType !== null) {

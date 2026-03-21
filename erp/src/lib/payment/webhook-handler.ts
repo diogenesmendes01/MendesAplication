@@ -3,7 +3,6 @@ import { logAuditEvent } from "@/lib/audit";
 import type { WebhookEvent } from "@/lib/payment/types";
 import { BoletoStatus, PaymentStatus } from "@prisma/client";
 import {
-import { logger } from "@/lib/logger";
   RECEIVABLE_VALUE_TOLERANCE,
   RECEIVABLE_DUE_DATE_WINDOW_DAYS,
 } from "@/lib/payment/constants";
