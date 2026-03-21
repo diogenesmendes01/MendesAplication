@@ -4,12 +4,19 @@ import {
   FALLBACK_PRICING,
   BRL_USD_RATE,
   DEFAULT_MODELS,
+  getBrlUsdRateSync,
 } from "@/lib/ai/pricing";
 
 describe("pricing constants", () => {
   it("BRL_USD_RATE is a positive number", () => {
     expect(BRL_USD_RATE).toBeGreaterThan(0);
     expect(typeof BRL_USD_RATE).toBe("number");
+  });
+
+  it("getBrlUsdRateSync returns a positive number", () => {
+    const rate = getBrlUsdRateSync();
+    expect(rate).toBeGreaterThan(0);
+    expect(typeof rate).toBe("number");
   });
 
   it("MODEL_PRICING entries all have positive input and output rates", () => {
@@ -41,7 +48,6 @@ describe("pricing constants", () => {
   });
 
   it("output price is greater than or equal to input price for each model", () => {
-    // Output tokens are typically priced higher than input tokens
     for (const [model, pricing] of Object.entries(MODEL_PRICING)) {
       expect(
         pricing.output,
