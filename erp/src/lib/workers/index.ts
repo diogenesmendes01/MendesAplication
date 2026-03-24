@@ -8,6 +8,7 @@ import { processSlaCheck } from './sla-check'
 import { processAiAgent } from './ai-agent'
 import { processDocumentProcessing } from './document-processor'
 import { processReclameAquiInbound } from './reclameaqui-inbound'
+import { processReclameAquiOutbound } from './reclameaqui-outbound'
 import { logger } from "@/lib/logger";
 
 logger.info('Starting workers...')
@@ -62,6 +63,9 @@ const documentProcessingWorker = createWorker(QUEUE_NAMES.DOCUMENT_PROCESSING, p
 
 const reclameaquiInboundWorker = createWorker(QUEUE_NAMES.RECLAMEAQUI_INBOUND, processReclameAquiInbound)
 
+// Concurrency 1 for outbound RA — rate limit sensitive (10 req/min)
+const reclameaquiOutboundWorker = createWorker(QUEUE_NAMES.RECLAMEAQUI_OUTBOUND, processReclameAquiOutbound, 1)
+
 const workers = [
   emailInboundWorker,
   emailOutboundWorker,
@@ -71,6 +75,7 @@ const workers = [
   aiAgentWorker,
   documentProcessingWorker,
   reclameaquiInboundWorker,
+  reclameaquiOutboundWorker,
 ]
 
 async function shutdown() {

@@ -25,6 +25,7 @@ export const QUEUE_NAMES = {
   AI_AGENT: 'ai-agent',
   DOCUMENT_PROCESSING: 'document-processing',
   RECLAMEAQUI_INBOUND: 'reclameaqui-inbound',
+  RECLAMEAQUI_OUTBOUND: 'reclameaqui-outbound',
 } as const
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES]
@@ -32,6 +33,13 @@ export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES]
 const defaultJobOptions = {
   attempts: 3,
   backoff: { type: 'exponential' as const, delay: 2000 },
+  removeOnComplete: { count: 1000 },
+  removeOnFail: { count: 5000 },
+}
+
+// Outbound RA jobs should NOT retry automatically (business logic errors, not transient)
+const noRetryJobOptions = {
+  attempts: 1,
   removeOnComplete: { count: 1000 },
   removeOnFail: { count: 5000 },
 }
@@ -44,3 +52,4 @@ export const slaCheckQueue = new Queue(QUEUE_NAMES.SLA_CHECK, { connection })
 export const aiAgentQueue = new Queue(QUEUE_NAMES.AI_AGENT, { connection, defaultJobOptions })
 export const documentProcessingQueue = new Queue(QUEUE_NAMES.DOCUMENT_PROCESSING, { connection, defaultJobOptions })
 export const reclameaquiInboundQueue = new Queue(QUEUE_NAMES.RECLAMEAQUI_INBOUND, { connection, defaultJobOptions })
+export const reclameaquiOutboundQueue = new Queue(QUEUE_NAMES.RECLAMEAQUI_OUTBOUND, { connection, defaultJobOptions: noRetryJobOptions })
