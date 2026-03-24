@@ -53,13 +53,13 @@ describe("MockProvider", () => {
 
   describe("cancelBoleto", () => {
     it("retorna success: true", async () => {
-      expect((await provider.cancelBoleto("MOCK123")).success).toBe(true);
+      expect((await provider.cancelBoleto()).success).toBe(true);
     });
   });
 
   describe("validateWebhook", () => {
     it("sempre retorna true (mock)", () => {
-      expect(provider.validateWebhook({}, "any body")).toBe(true);
+      expect(provider.validateWebhook()).toBe(true);
     });
   });
 

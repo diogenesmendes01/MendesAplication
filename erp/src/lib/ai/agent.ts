@@ -5,10 +5,9 @@ import { chatCompletion, getEnvProviderConfig } from "./provider";
 import type { AiMessage, ProviderConfig } from "./provider";
 import { getToolsForChannel } from "./tools";
 import { executeTool } from "./tool-executor";
-import type { ToolContext } from "./tool-executor";
+import type { ToolContext, ReclameAquiResponse } from "./tool-executor";
 import { decrypt } from "@/lib/encryption";
 import {
-  getTodaySpend,
   logUsage,
   checkAndReserveSpend,
   rollbackSpendReservation,
@@ -35,6 +34,8 @@ export interface AgentResult {
   escalated: boolean;
   iterations: number;
   error?: string;
+  /** Reclame Aqui dual response — only present when channel is RECLAMEAQUI */
+  raResponse?: ReclameAquiResponse;
 }
 
 export interface DryRunResult {
@@ -43,6 +44,8 @@ export interface DryRunResult {
   outputTokens: number;
   estimatedCostBrl: number;
   error?: string;
+  /** Reclame Aqui dual response — only present when channel is RECLAMEAQUI */
+  raResponse?: ReclameAquiResponse;
 }
 
 // ─── Internal loop result ────────────────────────────────────────────────────
@@ -56,6 +59,8 @@ interface AgentLoopResult {
   finalResponse: string;
   totalInputTokens: number;
   totalOutputTokens: number;
+  /** Reclame Aqui dual response — only present when channel is RECLAMEAQUI */
+  raResponse?: ReclameAquiResponse;
 }
 
 // ─── Core agent loop ──────────────────────────────────────────────────────────
@@ -106,6 +111,7 @@ log,
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
   let finalResponse = "";
+  let raResponse: ReclameAquiResponse | undefined;
 
   for (let iteration = 0; iteration < maxIterations; iteration++) {
     // ── Global timeout guard ───────────────────────────────────────────────
@@ -119,6 +125,7 @@ log,
         finalResponse,
         totalInputTokens,
         totalOutputTokens,
+        raResponse,
       };
     }
 
@@ -135,6 +142,7 @@ log,
           finalResponse,
           totalInputTokens,
           totalOutputTokens,
+          raResponse,
         };
       }
     }
@@ -188,6 +196,17 @@ log,
             }
             responded = true;
             shouldStop = true;
+          } else if (toolName === "RESPOND_RECLAMEAQUI") {
+            // Parse the RA dual response from tool result
+            try {
+              raResponse = JSON.parse(result) as ReclameAquiResponse;
+              finalResponse = result;
+            } catch {
+              log.error({ result }, "Failed to parse RESPOND_RECLAMEAQUI result");
+              finalResponse = result;
+            }
+            responded = true;
+            shouldStop = true;
           } else if (toolName === "ESCALATE") {
             if (dryRun) {
               finalResponse = `[Escalado] ${(args.reason as string) || "Sem motivo"}`;
@@ -205,6 +224,7 @@ log,
             finalResponse,
             totalInputTokens,
             totalOutputTokens,
+            raResponse,
           };
         }
 
@@ -212,13 +232,45 @@ log,
       } else if (response.content) {
         if (!dryRun) {
           log.info({ iteration: iteration + 1 }, "Direct text response from LLM");
-          const respondTool =
-            toolContext.channel === "EMAIL" ? "RESPOND_EMAIL" : "RESPOND";
-          const respondArgs =
-            toolContext.channel === "EMAIL"
-              ? { subject: "Re: Atendimento", message: response.content }
-              : { message: response.content };
-          await executeTool(respondTool, respondArgs, toolContext);
+
+          // For RECLAMEAQUI, attempt to parse direct text as JSON dual response
+          if (toolContext.channel === "RECLAMEAQUI") {
+            try {
+              raResponse = JSON.parse(response.content) as ReclameAquiResponse;
+              finalResponse = response.content;
+            } catch {
+              // LLM returned plain text instead of structured RA response — wrap it
+              raResponse = {
+                privateMessage: response.content,
+                publicMessage: response.content,
+                detectedType: "outro",
+                confidence: 0.3,
+              };
+              finalResponse = JSON.stringify(raResponse);
+            }
+          } else {
+            const respondTool =
+              toolContext.channel === "EMAIL" ? "RESPOND_EMAIL" : "RESPOND";
+            const respondArgs =
+              toolContext.channel === "EMAIL"
+                ? { subject: "Re: Atendimento", message: response.content }
+                : { message: response.content };
+            await executeTool(respondTool, respondArgs, toolContext);
+          }
+        } else {
+          // Dry-run: handle RECLAMEAQUI text response
+          if (toolContext.channel === "RECLAMEAQUI") {
+            try {
+              raResponse = JSON.parse(response.content) as ReclameAquiResponse;
+            } catch {
+              raResponse = {
+                privateMessage: response.content,
+                publicMessage: response.content,
+                detectedType: "outro",
+                confidence: 0.3,
+              };
+            }
+          }
         }
 
         finalResponse = response.content;
@@ -229,6 +281,7 @@ log,
           finalResponse,
           totalInputTokens,
           totalOutputTokens,
+          raResponse,
         };
 
       // ── Empty response ─────────────────────────────────────────────────
@@ -244,6 +297,7 @@ log,
           finalResponse,
           totalInputTokens,
           totalOutputTokens,
+          raResponse,
         };
       }
     } catch (error) {
@@ -268,6 +322,7 @@ log,
     finalResponse: finalResponse || "(max iterations reached)",
     totalInputTokens,
     totalOutputTokens,
+    raResponse,
   };
 }
 
@@ -277,7 +332,7 @@ export async function runAgent(
   ticketId: string,
   companyId: string,
   incomingMessage: string,
-  channel: "WHATSAPP" | "EMAIL" = "WHATSAPP"
+  channel: "WHATSAPP" | "EMAIL" | "RECLAMEAQUI" = "WHATSAPP"
 ): Promise<AgentResult> {
   const startTime = Date.now();
   const timeout = parseInt(process.env.AI_TIMEOUT || "30000", 10);
@@ -301,14 +356,11 @@ export async function runAgent(
   if (channel === "EMAIL" && !aiConfig.emailEnabled) {
     return { responded: false, escalated: false, iterations: 0, error: "email_channel_disabled" };
   }
+  if (channel === "RECLAMEAQUI" && !aiConfig.raEnabled) {
+    return { responded: false, escalated: false, iterations: 0, error: "reclameaqui_channel_disabled" };
+  }
 
   // ── Check daily spend limit (atomic via Redis, DB fallback) ──────────────
-  // Previously used getTodaySpend() + logUsage() which was a TOCTOU race:
-  // multiple concurrent requests could pass the check before any logUsage()
-  // completed, allowing 2-10× overshoot under traffic bursts.
-  //
-  // Now uses Redis INCRBY atomic counter with EXPIRE until midnight BRT.
-  // Falls back to DB check-then-act when Redis is unavailable.
   const dailyLimit = aiConfig.dailySpendLimitBrl
     ? Number(aiConfig.dailySpendLimitBrl)
     : null;
@@ -325,15 +377,19 @@ export async function runAgent(
   }
 
   // ── Check escalation keywords (fast-path before LLM) ────────────────────
-  // Moved here from ai-agent worker to avoid a redundant aiConfig DB query.
-  if (aiConfig.escalationKeywords && aiConfig.escalationKeywords.length > 0) {
+  // For RECLAMEAQUI, use RA-specific escalation keywords if configured
+  const escalationKeywords = channel === "RECLAMEAQUI" && aiConfig.raEscalationKeywords?.length
+    ? aiConfig.raEscalationKeywords
+    : aiConfig.escalationKeywords;
+
+  if (escalationKeywords && escalationKeywords.length > 0) {
     const lowerContent = incomingMessage.toLowerCase();
-    const matchedKeyword = aiConfig.escalationKeywords.find((keyword) =>
+    const matchedKeyword = escalationKeywords.find((keyword) =>
       lowerContent.includes(keyword.toLowerCase())
     );
 
     if (matchedKeyword) {
-      log.info({ keyword: matchedKeyword }, "Escalation keyword detected, escalating without LLM");
+      log.info({ keyword: matchedKeyword, channel }, "Escalation keyword detected, escalating without LLM");
 
       // Rollback the pre-reserved spend since we won't call the LLM
       if (dailyLimit) {
@@ -439,10 +495,16 @@ export async function runAgent(
       : aiConfig.persona;
 
   const clientName = ticket.contact?.name || ticket.client?.name;
-  const systemPrompt =
-    channel === "EMAIL"
-      ? buildEmailSystemPrompt(persona, clientName, historyContext, aiConfig.emailSignature)
-      : buildWhatsAppSystemPrompt(persona, clientName, historyContext);
+
+  // Build channel-specific system prompt
+  let systemPrompt: string;
+  if (channel === "RECLAMEAQUI") {
+    systemPrompt = buildReclameAquiSystemPrompt(persona, clientName, historyContext);
+  } else if (channel === "EMAIL") {
+    systemPrompt = buildEmailSystemPrompt(persona, clientName, historyContext, aiConfig.emailSignature);
+  } else {
+    systemPrompt = buildWhatsAppSystemPrompt(persona, clientName, historyContext);
+  }
 
   const messages: AiMessage[] = [
     { role: "system", content: systemPrompt },
@@ -474,10 +536,6 @@ export async function runAgent(
     dryRun: false,
     contextId: ticketId,
 log,
-    // ── Per-iteration atomic budget check ──────────────────────────────────
-    // Before each LLM call in multi-iteration loops, atomically reserve
-    // estimated cost in Redis. This prevents concurrent requests from
-    // exceeding the daily limit (the TOCTOU race this PR fixes).
     onBudgetCheck: dailyLimit
       ? async () => {
           return checkAndReserveSpend(
@@ -499,9 +557,6 @@ log,
         ticketId,
       });
 
-      // Reconcile: the pre-reserved estimate was approximate. The actual cost
-      // is now known via logUsage → atomicSpendIncrement. Remove the estimate
-      // reservation so only the real cost remains in the Redis counter.
       if (dailyLimit && result) {
         await rollbackSpendReservation(companyId, ESTIMATED_COST_PER_ITERATION_BRL);
       }
@@ -513,6 +568,7 @@ log,
     escalated: loopResult.escalated,
     iterations: loopResult.iterations,
     error: loopResult.error,
+    raResponse: loopResult.raResponse,
   };
 }
 
@@ -523,14 +579,14 @@ log,
  * - Does NOT require a real ticket — uses mock client context
  * - Does NOT save TicketMessage records
  * - Does NOT send real WhatsApp/email messages
- * - Tools RESPOND / RESPOND_EMAIL return the message without side effects
+ * - Tools RESPOND / RESPOND_EMAIL / RESPOND_RECLAMEAQUI return the message without side effects
  * - Uses the real persona and knowledge base of the company
  * - Returns the AI response, token usage, and estimated cost
  */
 export async function runAgentDryRun(
   companyId: string,
   incomingMessage: string,
-  channel: "WHATSAPP" | "EMAIL" = "WHATSAPP"
+  channel: "WHATSAPP" | "EMAIL" | "RECLAMEAQUI" = "WHATSAPP"
 ): Promise<DryRunResult> {
   const startTime = Date.now();
   const timeout = parseInt(process.env.AI_TIMEOUT || "30000", 10);
@@ -556,11 +612,18 @@ export async function runAgentDryRun(
   if (channel === "WHATSAPP" && !aiConfig.whatsappEnabled) {
     return { response: "", inputTokens: 0, outputTokens: 0, estimatedCostBrl: 0, error: "whatsapp_channel_disabled" };
   }
+  if (channel === "RECLAMEAQUI" && !aiConfig.raEnabled) {
+    return { response: "", inputTokens: 0, outputTokens: 0, estimatedCostBrl: 0, error: "reclameaqui_channel_disabled" };
+  }
 
   // ── Escalation keyword fast-path (mirrors runAgent behaviour) ────────────
-  if (aiConfig.escalationKeywords && aiConfig.escalationKeywords.length > 0) {
+  const escalationKeywords = channel === "RECLAMEAQUI" && aiConfig.raEscalationKeywords?.length
+    ? aiConfig.raEscalationKeywords
+    : aiConfig.escalationKeywords;
+
+  if (escalationKeywords && escalationKeywords.length > 0) {
     const lowerContent = incomingMessage.toLowerCase();
-    const matchedKeyword = aiConfig.escalationKeywords.find((keyword) =>
+    const matchedKeyword = escalationKeywords.find((keyword) =>
       lowerContent.includes(keyword.toLowerCase())
     );
 
@@ -610,10 +673,15 @@ export async function runAgentDryRun(
       : aiConfig.persona;
 
   const mockClientName = "Cliente Simulação";
-  const systemPrompt =
-    channel === "EMAIL"
-      ? buildEmailSystemPrompt(persona, mockClientName, "", aiConfig.emailSignature)
-      : buildWhatsAppSystemPrompt(persona, mockClientName, "");
+
+  let systemPrompt: string;
+  if (channel === "RECLAMEAQUI") {
+    systemPrompt = buildReclameAquiSystemPrompt(persona, mockClientName, "");
+  } else if (channel === "EMAIL") {
+    systemPrompt = buildEmailSystemPrompt(persona, mockClientName, "", aiConfig.emailSignature);
+  } else {
+    systemPrompt = buildWhatsAppSystemPrompt(persona, mockClientName, "");
+  }
 
   const messages: AiMessage[] = [
     { role: "system", content: systemPrompt },
@@ -646,10 +714,6 @@ export async function runAgentDryRun(
     dryRun: true,
     contextId: "simulation",
 log,
-    // Log simulation token usage for internal/technical DB audit (isSimulation=true).
-    // NOT visible in the "Consumo de IA" tab — getUsageSummary() filters isSimulation: false.
-    // NOT counted against the daily budget — getTodaySpend() also filters isSimulation: false.
-    // Admin tests must not silently exhaust the company's limit.
     onUsage: async (inputTokens, outputTokens) => {
       if (aiConfig.id) {
         await logUsage({
@@ -676,6 +740,7 @@ log,
       loopResult.totalOutputTokens
     ),
     error: loopResult.error,
+    raResponse: loopResult.raResponse,
   };
 }
 
@@ -774,6 +839,61 @@ ${persona}
 
   if (historyContext) {
     prompt += `\n\n## HISTÓRICO RECENTE:\n${historyContext}`;
+  }
+
+  return prompt;
+}
+
+// ─── Reclame Aqui system prompt builder ──────────────────────────────────────
+
+function buildReclameAquiSystemPrompt(
+  persona: string,
+  clientName: string,
+  historyContext: string
+): string {
+  let prompt = `# Assistente de Atendimento - MendesERP (Reclame Aqui)
+
+${persona}
+
+## CONTEXTO CRÍTICO — RECLAME AQUI:
+Você está respondendo uma reclamação no Reclame Aqui. Respostas públicas são PERMANENTES e visíveis para TODOS na internet. Nunca exponha dados pessoais em respostas públicas. Siga as regras da Knowledge Base estritamente.
+
+## SUAS FERRAMENTAS DISPONÍVEIS:
+- SEARCH_DOCUMENTS(query): Busca informações na base de conhecimento da empresa (prioriza docs específicos do Reclame Aqui)
+- GET_CLIENT_INFO(): Retorna dados do cliente vinculado ao ticket (financeiro, tickets anteriores)
+- GET_HISTORY(limit?): Retorna histórico de mensagens/interações da reclamação
+- RESPOND_RECLAMEAQUI(privateMessage, publicMessage, detectedType, confidence): Gera resposta dual — privada + pública
+- ESCALATE(reason): Escala para atendente humano
+- CREATE_NOTE(content): Cria nota interna no ticket
+
+## REGRAS ESPECÍFICAS RECLAME AQUI:
+1. SEMPRE consulte a base de conhecimento ANTES de responder — busque por termos da reclamação
+2. NUNCA invente informações — se não souber, busque na base ou escale
+3. Use RESPOND_RECLAMEAQUI para gerar DUAS mensagens: privada e pública
+4. **MENSAGEM PRIVADA**: Pode conter detalhes específicos, CPF, valores, links de pagamento, instruções detalhadas
+5. **MENSAGEM PÚBLICA**: NUNCA inclua CPF, email, telefone, valores financeiros ou dados pessoais. Seja empático, profissional e mostre que a empresa se importa
+6. Classifique o tipo da reclamação (detectedType): boleto_nao_solicitado, cobranca_indevida, reembolso, servico_nao_entregue, qualidade_servico, trabalhista, outro
+7. Se detectar reclamação trabalhista → SEMPRE classifique como 'trabalhista' (isso ativa moderação)
+8. Se detectar palavras como "processo", "advogado", "procon", "judicial", "indenização" → use ESCALATE
+9. Responda SEMPRE em português brasileiro
+10. Tom público: empático, profissional, sem ser subserviente. Reconheça o problema, demonstre ação concreta
+11. Se não conseguir resolver em 3 tentativas de busca, escale para humano
+
+## FORMATO DE CLASSIFICAÇÃO:
+- boleto_nao_solicitado: Cliente recebeu boleto/cobrança que não solicitou
+- cobranca_indevida: Cobrança em valor errado, duplicada, ou após cancelamento
+- reembolso: Pedido de devolução/estorno de valor
+- servico_nao_entregue: Serviço contratado mas não realizado/entregue
+- qualidade_servico: Problemas com qualidade do serviço prestado
+- trabalhista: Questões trabalhistas (ex-funcionários, condições de trabalho)
+- outro: Não se encaixa nas categorias acima
+
+## CONTEXTO ATUAL:
+- Canal: Reclame Aqui
+- Reclamante: ${clientName}`;
+
+  if (historyContext) {
+    prompt += `\n\n## HISTÓRICO DA RECLAMAÇÃO:\n${historyContext}`;
   }
 
   return prompt;

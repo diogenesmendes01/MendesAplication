@@ -38,6 +38,8 @@ export interface ListTicketsParams {
   priority?: TicketPriority;
   clientId?: string;
   assigneeId?: string;
+  channelType?: ChannelType;
+  hasPendingSuggestion?: boolean;
 }
 
 export interface CreateTicketInput {
@@ -70,6 +72,10 @@ export interface TicketRow {
     id: string;
     name: string;
   } | null;
+  raExternalId: string | null;
+  raStatusName: string | null;
+  raRating: string | null;
+  hasPendingSuggestion: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -141,6 +147,9 @@ async function _listTicketsInternal(
   if (params.assigneeId && tab !== "my_tickets") {
     where.assigneeId = params.assigneeId;
   }
+  if (params.channelType) {
+    where.channel = { type: params.channelType };
+  }
 
   // Fetch SLA alert configs for at-risk calculation (cached)
   const slaConfigs = await fetchSlaConfigs(params.companyId);
@@ -166,6 +175,16 @@ async function _listTicketsInternal(
         },
         channel: {
           select: { type: true },
+        },
+        _count: {
+          select: {
+            messages: {
+              where: {
+                isAiGenerated: true,
+                deliveryStatus: "PENDING_APPROVAL",
+              },
+            },
+          },
         },
       },
     }),
@@ -210,15 +229,24 @@ async function _listTicketsInternal(
       tags: r.tags,
       client: r.client,
       assignee: r.assignee,
+      raExternalId: r.raExternalId ?? null,
+      raStatusName: r.raStatusName ?? null,
+      raRating: r.raRating ?? null,
+      hasPendingSuggestion: (r._count?.messages ?? 0) > 0,
     };
   });
 
+  // Post-filter for pending suggestions (computed field)
+  const filteredData = params.hasPendingSuggestion
+    ? data.filter((d) => d.hasPendingSuggestion)
+    : data;
+
   return {
-    data,
-    total,
+    data: filteredData,
+    total: params.hasPendingSuggestion ? filteredData.length : total,
     page,
     pageSize,
-    totalPages: Math.ceil(total / pageSize),
+    totalPages: Math.ceil((params.hasPendingSuggestion ? filteredData.length : total) / pageSize),
   };
 }
 
@@ -391,6 +419,10 @@ export interface TicketDetail {
   contact: { id: string; name: string; role: string | null } | null;
   channelType: ChannelType | null;
   aiEnabled: boolean;
+  raExternalId: string | null;
+  raStatusName: string | null;
+  raRating: string | null;
+  raCanEvaluate: boolean;
 }
 
 async function _getTicketByIdInternal(
@@ -434,6 +466,10 @@ async function _getTicketByIdInternal(
     contact: ticket.contact,
     channelType: ticket.channel?.type ?? null,
     aiEnabled: ticket.aiEnabled,
+    raExternalId: ticket.raExternalId ?? null,
+    raStatusName: ticket.raStatusName ?? null,
+    raRating: ticket.raRating ?? null,
+    raCanEvaluate: ticket.raCanEvaluate ?? false,
   };
 }
 
@@ -755,6 +791,7 @@ export interface TimelineEvent {
   refundAmount: string | null;
   refundStatus: RefundStatus | null;
   oldStatus: string | null;
+  deliveryStatus: string | null;
   newStatus: string | null;
 }
 
@@ -833,6 +870,7 @@ export async function listTimelineEvents(
       isInternal: m.isInternal,
       sentViaEmail: m.sentViaEmail,
       isAiGenerated: m.isAiGenerated,
+      deliveryStatus: m.deliveryStatus ?? null,
       sender: m.sender,
       contactName: m.contact?.name ?? null,
       contactRole: m.contact?.role ?? null,
@@ -862,6 +900,7 @@ export async function listTimelineEvents(
       isInternal: false,
       sentViaEmail: false,
       isAiGenerated: false,
+      deliveryStatus: null,
       sender: null,
       contactName: null,
       contactRole: null,
@@ -891,6 +930,7 @@ export async function listTimelineEvents(
       sentViaEmail: false,
       isAiGenerated: false,
       sender: null,
+      deliveryStatus: null,
       contactName: null,
       contactRole: null,
       attachments: [],
@@ -1121,7 +1161,7 @@ export async function sendEmailReply(
       attachmentIds,
     });
   } catch (err) {
-    logger.error("Failed to enqueue email-outbound job:", err);
+    logger.error({ err: err }, "Failed to enqueue email-outbound job:");
   }
 
   await logAuditEvent({
@@ -1391,7 +1431,7 @@ export async function sendWhatsAppMessage(
       attachmentIds,
     });
   } catch (err) {
-    logger.error("Failed to enqueue whatsapp-outbound job:", err);
+    logger.error({ err: err }, "Failed to enqueue whatsapp-outbound job:");
   }
 
   await logAuditEvent({

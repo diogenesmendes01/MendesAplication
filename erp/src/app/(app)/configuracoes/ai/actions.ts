@@ -35,6 +35,12 @@ export interface AiConfigData {
   emailSignature: string | null;
   // Limits
   dailySpendLimitBrl: number | null;
+  // Reclame Aqui
+  raEnabled: boolean;
+  raMode: string; // "suggest" | "auto" | "off"
+  raPrivateBeforePublic: boolean;
+  raAutoRequestEvaluation: boolean;
+  raEscalationKeywords: string[];
   // Temperature
   temperature: number;
 }
@@ -135,6 +141,11 @@ export async function getAiConfig(companyId: string): Promise<AiConfigData> {
       emailSignature: "",
       dailySpendLimitBrl: null,
       temperature: 0.7,
+      raEnabled: false,
+      raMode: "suggest",
+      raPrivateBeforePublic: true,
+      raAutoRequestEvaluation: false,
+      raEscalationKeywords: ["processo", "advogado", "procon", "judicial", "indenização"],
     };
   }
 
@@ -154,6 +165,11 @@ export async function getAiConfig(companyId: string): Promise<AiConfigData> {
     dailySpendLimitBrl: config.dailySpendLimitBrl
       ? Number(config.dailySpendLimitBrl)
       : null,
+    raEnabled: config.raEnabled,
+    raMode: config.raMode,
+    raPrivateBeforePublic: config.raPrivateBeforePublic,
+    raAutoRequestEvaluation: config.raAutoRequestEvaluation,
+    raEscalationKeywords: config.raEscalationKeywords,
     temperature: config.temperature,
   };
 }
@@ -254,6 +270,11 @@ export async function updateAiConfig(
     emailSignature: data.emailSignature || null,
     dailySpendLimitBrl: data.dailySpendLimitBrl,
     temperature: data.temperature,
+    raEnabled: data.raEnabled,
+    raMode: data.raMode,
+    raPrivateBeforePublic: data.raPrivateBeforePublic,
+    raAutoRequestEvaluation: data.raAutoRequestEvaluation,
+    raEscalationKeywords: data.raEscalationKeywords,
   };
 
   const createData = {
@@ -338,7 +359,7 @@ export async function testAiConnection(
             .replace(/sk-[^\s"]+/g, "sk-[REDACTED]")
             .replace(/[a-zA-Z0-9]{32,}/g, "[REDACTED]")
         : String(err);
-    logger.error("[testAiConnection] provider error:", safeErr);
+    logger.error({ err: safeErr }, "[testAiConnection] provider error:");
 
     // Map common provider error patterns to safe, generic messages for the frontend.
     // Raw provider messages can expose partial API keys ("sk-proj-xxx...") or internal details.

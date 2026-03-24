@@ -263,6 +263,25 @@ export async function testChannelConnection(
     }
   }
 
+  if (channel.type === "RECLAMEAQUI") {
+    try {
+      const { ReclameAquiClient } = await import("@/lib/reclameaqui/client");
+      const client = new ReclameAquiClient({
+        clientId: config.clientId as string,
+        clientSecret: config.clientSecret as string,
+        baseUrl: config.baseUrl as string,
+      });
+      await client.checkAvailability();
+      await client.authenticate();
+      return { success: true, message: "Conexão com Reclame Aqui OK" };
+    } catch (err) {
+      return {
+        success: false,
+        message: err instanceof Error ? err.message : "Erro ao testar conexão Reclame Aqui",
+      };
+    }
+  }
+
   return { success: false, message: "Tipo de canal não suportado" };
 }
 
@@ -293,5 +312,70 @@ export async function getWhatsAppStatus(
     return { isConnected: Boolean(data.isConnected) };
   } catch {
     return { isConnected: false };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Reclame Aqui Test Connection
+// ---------------------------------------------------------------------------
+
+export interface TestRaConnectionInput {
+  clientId: string;
+  clientSecret: string;
+  baseUrl: string;
+}
+
+export interface TestRaConnectionResult {
+  success: boolean;
+  companyId?: number;
+  companyName?: string;
+  error?: string;
+}
+
+export async function testRaConnection(
+  input: TestRaConnectionInput
+): Promise<TestRaConnectionResult> {
+  await requireAdmin();
+
+  const { clientId, clientSecret, baseUrl } = input;
+
+  if (!clientId || !clientSecret || !baseUrl) {
+    return { success: false, error: "Client ID, Client Secret e URL base são obrigatórios" };
+  }
+
+  try {
+    const { ReclameAquiClient } = await import("@/lib/reclameaqui/client");
+
+    const client = new ReclameAquiClient({
+      clientId,
+      clientSecret,
+      baseUrl,
+    });
+
+    // Step 1: Check API availability
+    await client.checkAvailability();
+
+    // Step 2: Authenticate
+    await client.authenticate();
+
+    // Step 3: List companies to auto-discover companyId
+    try {
+      const companies = await client.listCompanies();
+      if (companies && companies.length > 0) {
+        const company = companies[0]!;
+        return {
+          success: true,
+          companyId: company.companyId,
+          companyName: company.name,
+        };
+      }
+      return { success: true };
+    } catch {
+      // Auth worked but couldn't list companies — still a success
+      return { success: true };
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Erro desconhecido ao testar conexão";
+    return { success: false, error: message };
   }
 }

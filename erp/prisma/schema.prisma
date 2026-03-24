@@ -368,6 +368,7 @@ enum AccountType {
 enum ChannelType {
   EMAIL
   WHATSAPP
+  RECLAMEAQUI
 }
 
 enum MessageDirection {
@@ -460,6 +461,17 @@ model Ticket {
   slaBreached    Boolean        @default(false)
   slaAtRisk      Boolean        @default(false)
   tags           String[]       @default([])
+  raExternalId              String?
+  raStatusId                Int?
+  raStatusName              String?
+  raCanEvaluate             Boolean    @default(false)
+  raCanModerate             Boolean    @default(false)
+  raRating                  String?
+  raResolvedIssue           Boolean?
+  raBackDoingBusiness       Boolean?
+  raFrozen                  Boolean    @default(false)
+  raConsumerConsideration   String?    @db.Text
+  raCompanyConsideration    String?    @db.Text
   aiEnabled      Boolean        @default(true)
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
@@ -482,6 +494,7 @@ model Ticket {
   @@index([companyId, status, updatedAt])
   @@index([companyId, slaBreached, status])
   @@index([companyId, status, priority])
+  @@index([companyId, raExternalId])
   @@map("tickets")
 }
 
@@ -785,6 +798,13 @@ model AiConfig {
   emailPersona       String?  @db.Text
   emailSignature     String?  @db.Text
 
+  // --- Reclame Aqui ---
+  raEnabled                Boolean  @default(false)
+  raMode                   String   @default("suggest") // "suggest" | "auto" | "off"
+  raPrivateBeforePublic    Boolean  @default(true)
+  raAutoRequestEvaluation  Boolean  @default(false)
+  raEscalationKeywords     String[] @default(["processo", "advogado", "procon", "judicial", "indenização"])
+
   // --- Limites ---
   dailySpendLimitBrl Decimal? @db.Decimal(10, 2)
 
@@ -832,6 +852,7 @@ model Document {
   mimeType  String
   fileSize  Int
   status    DocumentStatus @default(PROCESSING)
+  channel   ChannelType?   // NULL = general (all channels), set to filter by channel
   createdAt DateTime       @default(now())
   updatedAt DateTime       @updatedAt
 

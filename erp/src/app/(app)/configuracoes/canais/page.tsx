@@ -6,11 +6,13 @@ import {
   Plus,
   Mail,
   MessageSquare,
+  ShieldAlert,
   Power,
   PowerOff,
   Pencil,
   Wifi,
   Clock,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,8 +40,10 @@ import {
   updateChannel,
   toggleChannel,
   testChannelConnection,
+  testRaConnection,
   type ChannelRow,
   type TestConnectionResult,
+  type TestRaConnectionResult,
 } from "./actions";
 
 // ---------------------------------------------------------------------------
@@ -55,16 +59,23 @@ const dateFmt = new Intl.DateTimeFormat("pt-BR", {
 });
 
 function channelIcon(type: string) {
-  return type === "EMAIL" ? (
-    <Mail className="h-5 w-5" />
-  ) : (
-    <MessageSquare className="h-5 w-5" />
-  );
+  if (type === "EMAIL") return <Mail className="h-5 w-5" />;
+  if (type === "RECLAMEAQUI") return <ShieldAlert className="h-5 w-5" />;
+  return <MessageSquare className="h-5 w-5" />;
+}
+
+function _channelLabel(type: string): string {
+  if (type === "EMAIL") return "Email";
+  if (type === "RECLAMEAQUI") return "Reclame Aqui";
+  return "WhatsApp";
 }
 
 function channelAddress(ch: ChannelRow): string {
   if (ch.type === "EMAIL") {
     return (ch.config.email as string) || "Não configurado";
+  }
+  if (ch.type === "RECLAMEAQUI") {
+    return (ch.config.baseUrl as string) || "Não configurado";
   }
   return (ch.config.instanceName as string) || "Não configurado";
 }
@@ -84,7 +95,7 @@ export default function CanaisPage() {
   const [saving, setSaving] = useState(false);
 
   // Form fields
-  const [channelType, setChannelType] = useState<"EMAIL" | "WHATSAPP">("EMAIL");
+  const [channelType, setChannelType] = useState<"EMAIL" | "WHATSAPP" | "RECLAMEAQUI">("EMAIL");
   const [name, setName] = useState("");
 
   // Email config fields
@@ -100,7 +111,17 @@ export default function CanaisPage() {
   const [apiUrl, setApiUrl] = useState("");
   const [apiKey, setApiKey] = useState("");
 
-  // Test result
+  // Reclame Aqui config fields
+  const [raClientId, setRaClientId] = useState("");
+  const [raClientSecret, setRaClientSecret] = useState("");
+  const [raBaseUrl, setRaBaseUrl] = useState("https://app.hugme.com.br/api");
+  const [raPollInterval, setRaPollInterval] = useState("15");
+
+  // RA test connection state
+  const [testingRa, setTestingRa] = useState(false);
+  const [raTestResult, setRaTestResult] = useState<TestRaConnectionResult | null>(null);
+
+  // Test result (existing channels)
   const [testing, setTesting] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<TestConnectionResult | null>(null);
 
@@ -133,6 +154,11 @@ export default function CanaisPage() {
     setInstanceName("");
     setApiUrl("");
     setApiKey("");
+    setRaClientId("");
+    setRaClientSecret("");
+    setRaBaseUrl("https://app.hugme.com.br/api");
+    setRaPollInterval("15");
+    setRaTestResult(null);
     setEditingId(null);
   }
 
@@ -153,6 +179,11 @@ export default function CanaisPage() {
       setSmtpPort(String(ch.config.smtpPort || "587"));
       setEmailAddress((ch.config.email as string) || "");
       setEmailPassword((ch.config.password as string) || "");
+    } else if (ch.type === "RECLAMEAQUI") {
+      setRaClientId((ch.config.clientId as string) || "");
+      setRaClientSecret((ch.config.clientSecret as string) || "");
+      setRaBaseUrl((ch.config.baseUrl as string) || "https://app.hugme.com.br/api");
+      setRaPollInterval(String(ch.config.pollIntervalMinutes || "15"));
     } else {
       setInstanceName((ch.config.instanceName as string) || "");
       setApiUrl((ch.config.apiUrl as string) || "");
@@ -171,6 +202,17 @@ export default function CanaisPage() {
         smtpPort: parseInt(smtpPort, 10),
         email: emailAddress,
         password: emailPassword,
+      };
+    }
+    if (channelType === "RECLAMEAQUI") {
+      return {
+        clientId: raClientId,
+        clientSecret: raClientSecret,
+        baseUrl: raBaseUrl,
+        pollIntervalMinutes: parseInt(raPollInterval, 10) || 15,
+        ...(raTestResult?.success && raTestResult.companyId
+          ? { companyId: raTestResult.companyId, companyName: raTestResult.companyName }
+          : {}),
       };
     }
     return { instanceName, apiUrl, apiKey };
@@ -237,6 +279,36 @@ export default function CanaisPage() {
     }
   }
 
+  async function handleTestRaConnection() {
+    if (!raClientId || !raClientSecret || !raBaseUrl) {
+      toast.error("Preencha Client ID, Client Secret e URL base");
+      return;
+    }
+    setTestingRa(true);
+    setRaTestResult(null);
+    try {
+      const result = await testRaConnection({
+        clientId: raClientId,
+        clientSecret: raClientSecret,
+        baseUrl: raBaseUrl,
+      });
+      setRaTestResult(result);
+      if (result.success) {
+        toast.success(
+          result.companyName
+            ? `Conectado! Empresa: ${result.companyName}`
+            : "Conexão bem-sucedida!"
+        );
+      } else {
+        toast.error(result.error || "Falha na conexão");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao testar conexão");
+    } finally {
+      setTestingRa(false);
+    }
+  }
+
   if (!selectedCompanyId) {
     return (
       <div className="flex h-64 items-center justify-center text-muted-foreground">
@@ -251,7 +323,7 @@ export default function CanaisPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Canais de Comunicação</h1>
           <p className="text-sm text-muted-foreground">
-            Configure canais de email e WhatsApp para a empresa
+            Configure canais de email, WhatsApp e Reclame Aqui para a empresa
           </p>
         </div>
         <Button onClick={openCreate}>
@@ -360,7 +432,9 @@ export default function CanaisPage() {
                 <Label>Tipo</Label>
                 <Select
                   value={channelType}
-                  onValueChange={(v) => setChannelType(v as "EMAIL" | "WHATSAPP")}
+                  onValueChange={(v) =>
+                    setChannelType(v as "EMAIL" | "WHATSAPP" | "RECLAMEAQUI")
+                  }
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -368,6 +442,7 @@ export default function CanaisPage() {
                   <SelectContent>
                     <SelectItem value="EMAIL">Email (IMAP/SMTP)</SelectItem>
                     <SelectItem value="WHATSAPP">WhatsApp</SelectItem>
+                    <SelectItem value="RECLAMEAQUI">Reclame Aqui</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -379,7 +454,11 @@ export default function CanaisPage() {
                 id="channel-name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Ex: Email Suporte, WhatsApp Comercial"
+                placeholder={
+                  channelType === "RECLAMEAQUI"
+                    ? "Ex: Reclame Aqui TrustCloud"
+                    : "Ex: Email Suporte, WhatsApp Comercial"
+                }
               />
             </div>
 
@@ -438,6 +517,95 @@ export default function CanaisPage() {
                     onChange={(e) => setEmailPassword(e.target.value)}
                     placeholder="Senha do email"
                   />
+                </div>
+              </>
+            ) : channelType === "RECLAMEAQUI" ? (
+              <>
+                <div className="space-y-2">
+                  <Label>Client ID</Label>
+                  <Input
+                    value={raClientId}
+                    onChange={(e) => setRaClientId(e.target.value)}
+                    placeholder="Client ID do HugMe"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Client Secret</Label>
+                  <Input
+                    type="password"
+                    value={raClientSecret}
+                    onChange={(e) => setRaClientSecret(e.target.value)}
+                    placeholder="Client Secret do HugMe"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>URL Base</Label>
+                  <Input
+                    value={raBaseUrl}
+                    onChange={(e) => setRaBaseUrl(e.target.value)}
+                    placeholder="https://app.hugme.com.br/api"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Intervalo de Polling (minutos)</Label>
+                  <Input
+                    type="number"
+                    value={raPollInterval}
+                    onChange={(e) => setRaPollInterval(e.target.value)}
+                    placeholder="15"
+                    min="1"
+                    max="60"
+                  />
+                </div>
+
+                {/* Test RA Connection */}
+                <div className="space-y-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleTestRaConnection}
+                    disabled={testingRa || !raClientId || !raClientSecret}
+                    className="w-full"
+                  >
+                    {testingRa ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Testando conexão...
+                      </>
+                    ) : (
+                      <>
+                        <Wifi className="mr-2 h-4 w-4" />
+                        Testar Conexão
+                      </>
+                    )}
+                  </Button>
+                  {raTestResult && (
+                    <div
+                      className={`rounded p-2 text-xs ${
+                        raTestResult.success
+                          ? "bg-green-50 text-green-700"
+                          : "bg-red-50 text-red-700"
+                      }`}
+                    >
+                      {raTestResult.success ? (
+                        <>
+                          ✅ Conexão bem-sucedida!
+                          {raTestResult.companyName && (
+                            <span className="block mt-1">
+                              Empresa: <strong>{raTestResult.companyName}</strong>
+                              {raTestResult.companyId && (
+                                <span className="text-muted-foreground">
+                                  {" "}(ID: {raTestResult.companyId})
+                                </span>
+                              )}
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <>❌ {raTestResult.error}</>
+                      )}
+                    </div>
+                  )}
                 </div>
               </>
             ) : (

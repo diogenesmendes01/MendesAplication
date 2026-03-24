@@ -78,6 +78,8 @@ import {
 import type { TicketStatus } from "@prisma/client";
 import { generateTicketPdf } from "@/lib/ticket-pdf";
 import TicketTimeline from "./ticket-timeline";
+import RaModerationDialog from "./ra-moderation-dialog";
+import { requestRaEvaluation } from "../ra-actions";
 
 const RequestRefundDialog = dynamic(() =>
   import("./refund-dialogs").then((m) => ({ default: m.RequestRefundDialog })),
@@ -298,6 +300,10 @@ export default function TicketDetailPage() {
   const [exportIncludeNotes, setExportIncludeNotes] = useState(true);
   const [exportIncludeAttachments, setExportIncludeAttachments] = useState(true);
   const [exporting, setExporting] = useState(false);
+
+  // RA actions state
+  const [raModerationOpen, setRaModerationOpen] = useState(false);
+  const [requestingEval, setRequestingEval] = useState(false);
 
   // ---------------------------------------------------
   // Load ticket
@@ -558,6 +564,28 @@ export default function TicketDetailPage() {
       toast.error(err instanceof Error ? err.message : "Erro ao exportar PDF");
     } finally {
       setExporting(false);
+    }
+  }
+
+  // ---------------------------------------------------
+  // RA evaluation handler
+  // ---------------------------------------------------
+
+  async function handleRequestRaEvaluation() {
+    if (!selectedCompanyId || !ticket) return;
+    setRequestingEval(true);
+    try {
+      const result = await requestRaEvaluation(ticketId, selectedCompanyId);
+      if (!result.success) {
+        toast.error(result.error ?? "Erro ao solicitar avaliação");
+        return;
+      }
+      toast.success("Solicitação de avaliação enviada ao Reclame Aqui");
+      loadTicket();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro inesperado");
+    } finally {
+      setRequestingEval(false);
     }
   }
 
@@ -1255,6 +1283,82 @@ export default function TicketDetailPage() {
             </Card>
           )}
 
+          {/* RA Info Panel */}
+          {ticket.channelType === "RECLAMEAQUI" && (ticket.raExternalId || ticket.raStatusName || ticket.raRating != null) && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  📋 Reclame Aqui — Info
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {ticket.raExternalId && (
+                  <div className="flex items-start gap-3">
+                    <ExternalLink className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground">ID Externo</p>
+                      <p className="text-sm font-mono">{ticket.raExternalId}</p>
+                    </div>
+                  </div>
+                )}
+                {ticket.raStatusName && (
+                  <div className="flex items-start gap-3">
+                    <Globe className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground">Status RA</p>
+                      <p className="text-sm">{ticket.raStatusName}</p>
+                    </div>
+                  </div>
+                )}
+                {ticket.raRating != null && (
+                  <div className="flex items-start gap-3">
+                    <span className="mt-0.5 text-base">⭐</span>
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground">Avaliação</p>
+                      <p className="text-sm font-semibold">{ticket.raRating}/10</p>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* RA Actions (US-RA-009) */}
+          {ticket.channelType === "RECLAMEAQUI" && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  📢 Ações Reclame Aqui
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {ticket.raCanEvaluate === true && (
+                  <Button
+                    variant="outline"
+                    className="w-full border-yellow-300 text-yellow-800 hover:bg-yellow-50"
+                    onClick={handleRequestRaEvaluation}
+                    disabled={requestingEval}
+                  >
+                    {requestingEval ? (
+                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <span className="mr-1.5">⭐</span>
+                    )}
+                    {requestingEval ? "Enviando..." : "Pedir Avaliação"}
+                  </Button>
+                )}
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => setRaModerationOpen(true)}
+                >
+                  <span className="mr-1.5">⚖️</span>
+                  Pedir Moderação
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Export PDF (US-089) */}
           <Card>
             <CardHeader>
@@ -1536,6 +1640,17 @@ export default function TicketDetailPage() {
           loadTicket();
         }}
       />
+
+      {/* RA Moderation Dialog (US-RA-009) */}
+      {ticket.channelType === "RECLAMEAQUI" && (
+        <RaModerationDialog
+          open={raModerationOpen}
+          onOpenChange={setRaModerationOpen}
+          ticketId={ticketId}
+          companyId={selectedCompanyId!}
+          onSuccess={loadTicket}
+        />
+      )}
 
       {/* Request Cancellation Dialog (US-086) */}
       <CancellationDialog

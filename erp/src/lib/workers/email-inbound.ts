@@ -147,7 +147,7 @@ async function fetchAndProcessMailbox(
       await processEmail(client, msg, channel, isSent);
     }
   } catch (err) {
-    logger.error(`[email-inbound] Error fetching ${mailboxPath} for channel ${channel.id}:`, err);
+    logger.error({ err: err }, `[email-inbound] Error fetching ${mailboxPath} for channel ${channel.id}:`);
   } finally {
     lock.release();
   }
@@ -387,7 +387,7 @@ export async function processEmail(
         });
         logger.info(`[email-inbound] Saved attachment ${fileName} (${saved.fileSize} bytes)`);
       } catch (err) {
-        logger.error(`[email-inbound] Failed to save attachment:`, err);
+        logger.error({ err: err }, `[email-inbound] Failed to save attachment:`);
       }
     }
   }
@@ -436,7 +436,7 @@ async function findSentFolder(client: ImapFlow): Promise<string | null> {
       }
     }
   } catch (err) {
-    logger.error("[email-inbound] Error listing mailboxes:", err);
+    logger.error({ err: err }, "[email-inbound] Error listing mailboxes:");
   }
   return null;
 }
@@ -525,7 +525,7 @@ export async function processEmailInbound(_job: Job): Promise<void> {
         `[email-inbound] Sync complete for channel ${ch.id}: inbox UID=${newInboxUid}, sent UID=${newSentUid}`
       );
     } catch (err) {
-      logger.error(`[email-inbound] Error processing channel ${ch.id}:`, err);
+      logger.error({ err: err }, `[email-inbound] Error processing channel ${ch.id}:`);
     } finally {
       try {
         await imapClient.logout();

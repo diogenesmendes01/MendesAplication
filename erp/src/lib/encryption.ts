@@ -149,7 +149,7 @@ function decryptV1Legacy(encryptedText: string): string {
 // Helpers para configurações sensíveis
 // ---------------------------------------------------------------------------
 
-const SENSITIVE_FIELDS = ["password", "apiKey"];
+const SENSITIVE_FIELDS = ["password", "apiKey", "clientSecret"];
 
 export function encryptConfig(config: Record<string, unknown>): Record<string, unknown> {
   const result = { ...config };

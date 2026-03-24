@@ -51,6 +51,6 @@ export async function logAuditEvent(params: AuditEventParams): Promise<void> {
       },
     });
   } catch (error) {
-    logger.error("Failed to log audit event:", error);
+    logger.error({ err: error }, "Failed to log audit event:");
   }
 }

@@ -150,3 +150,71 @@ export async function searchDocuments(
   scored.sort((a, b) => b.similarity - a.similarity);
   return scored.slice(0, RAG_MAX_RESULTS);
 }
+
+// ─── Channel-filtered Document Search ────────────────────────────────────────
+
+/**
+ * Searches documents filtered by channel.
+ * Returns documents where channel matches the specified value OR channel is NULL
+ * (general/shared KB docs). This ensures RA-specific knowledge base entries
+ * take priority while general docs remain accessible.
+ */
+export async function searchDocumentsByChannel(
+  query: string,
+  companyId: string,
+  channel: "RECLAMEAQUI" | "WHATSAPP" | "EMAIL"
+): Promise<SearchResult[]> {
+  // Generate query embedding
+  const queryEmbedding = await generateEmbedding(query);
+
+  // Fetch chunks for channel-specific + general (null channel) documents
+  const chunks = await prisma.documentChunk.findMany({
+    where: {
+      document: {
+        companyId,
+        status: "READY",
+        OR: [
+          { channel: channel },
+          { channel: null },
+        ],
+      },
+    },
+    include: {
+      document: {
+        select: { id: true, name: true, channel: true },
+      },
+    },
+  });
+
+  if (chunks.length === 0) return [];
+
+  // Calculate similarity for each chunk
+  const scored: SearchResult[] = [];
+
+  for (const chunk of chunks) {
+    if (!chunk.embedding || chunk.embedding.length === 0) continue;
+
+    const similarity = cosineSimilarity(queryEmbedding, chunk.embedding);
+
+    if (similarity >= RAG_SIMILARITY_THRESHOLD) {
+      // Boost channel-specific docs slightly (5% bonus) so they rank higher
+      // than general docs at similar similarity levels
+      const boostedSimilarity = chunk.document.channel === channel
+        ? Math.min(1, similarity * 1.05)
+        : similarity;
+
+      scored.push({
+        chunkId: chunk.id,
+        documentId: chunk.document.id,
+        documentName: chunk.document.name,
+        content: chunk.content,
+        similarity: boostedSimilarity,
+        chunkIndex: chunk.chunkIndex,
+      });
+    }
+  }
+
+  // Sort by similarity descending, take top N
+  scored.sort((a, b) => b.similarity - a.similarity);
+  return scored.slice(0, RAG_MAX_RESULTS);
+}

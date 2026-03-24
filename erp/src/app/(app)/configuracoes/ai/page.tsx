@@ -8,6 +8,7 @@ import {
   BarChart3,
   Loader2,
   FlaskConical,
+  ShieldAlert,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -20,6 +21,7 @@ import {
   TabEmail,
   TabConsumo,
   TabSimulador,
+  TabReclameAqui,
 } from "./components";
 import { useAiConfig } from "./hooks";
 
@@ -93,7 +95,7 @@ export default function AiConfigPage() {
 
       {/* Tabs */}
       <Tabs defaultValue="geral" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="geral" className="gap-1.5">
             <Zap className="h-4 w-4" />
             Geral
@@ -101,6 +103,10 @@ export default function AiConfigPage() {
           <TabsTrigger value="whatsapp" className="gap-1.5">
             <MessageSquare className="h-4 w-4" />
             WhatsApp
+          </TabsTrigger>
+          <TabsTrigger value="reclameaqui" className="gap-1.5">
+            <ShieldAlert className="h-4 w-4" />
+            Reclame Aqui
           </TabsTrigger>
           <TabsTrigger value="email" className="gap-1.5">
             <Mail className="h-4 w-4" />
@@ -132,6 +138,10 @@ export default function AiConfigPage() {
 
         <TabsContent value="email">
           <TabEmail config={config} setConfig={setConfig} />
+        </TabsContent>
+
+        <TabsContent value="reclameaqui">
+          <TabReclameAqui config={config} setConfig={setConfig} />
         </TabsContent>
 
         <TabsContent value="consumo">

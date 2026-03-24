@@ -1,4 +1,4 @@
-import { QUEUE_NAMES, emailInboundQueue, slaCheckQueue } from '../queue'
+import { QUEUE_NAMES, emailInboundQueue, slaCheckQueue, reclameaquiInboundQueue } from '../queue'
 import { createWorker } from './base'
 import { processEmailInbound } from './email-inbound'
 import { processEmailOutbound } from './email-outbound'
@@ -7,6 +7,8 @@ import { processWhatsAppOutbound } from './whatsapp-outbound'
 import { processSlaCheck } from './sla-check'
 import { processAiAgent } from './ai-agent'
 import { processDocumentProcessing } from './document-processor'
+import { processReclameAquiInbound } from './reclameaqui-inbound'
+import { processReclameAquiOutbound } from './reclameaqui-outbound'
 import { logger } from "@/lib/logger";
 
 logger.info('Starting workers...')
@@ -33,6 +35,18 @@ slaCheckQueue.upsertJobScheduler(
   logger.error('[sla-check] Failed to schedule repeatable job:', err)
 })
 
+// Set up repeatable job for Reclame Aqui inbound polling (every 5 minutes)
+// RA API has strict rate limits (10 req/min), so we poll less frequently than email
+reclameaquiInboundQueue.upsertJobScheduler(
+  'reclameaqui-inbound-poll',
+  { every: 5 * 60 * 1000 },
+  { name: 'poll-reclameaqui' }
+).then(() => {
+  logger.info('[reclameaqui-inbound] Repeatable poll job scheduled (every 5 min)')
+}).catch((err) => {
+  logger.error('[reclameaqui-inbound] Failed to schedule repeatable job:', err)
+})
+
 const emailInboundWorker = createWorker(QUEUE_NAMES.EMAIL_INBOUND, processEmailInbound, 2)
 
 const emailOutboundWorker = createWorker(QUEUE_NAMES.EMAIL_OUTBOUND, processEmailOutbound, 2)
@@ -47,6 +61,11 @@ const aiAgentWorker = createWorker(QUEUE_NAMES.AI_AGENT, processAiAgent, 2)
 
 const documentProcessingWorker = createWorker(QUEUE_NAMES.DOCUMENT_PROCESSING, processDocumentProcessing)
 
+const reclameaquiInboundWorker = createWorker(QUEUE_NAMES.RECLAMEAQUI_INBOUND, processReclameAquiInbound)
+
+// Concurrency 1 for outbound RA — rate limit sensitive (10 req/min)
+const reclameaquiOutboundWorker = createWorker(QUEUE_NAMES.RECLAMEAQUI_OUTBOUND, processReclameAquiOutbound, 1)
+
 const workers = [
   emailInboundWorker,
   emailOutboundWorker,
@@ -55,6 +74,8 @@ const workers = [
   slaCheckWorker,
   aiAgentWorker,
   documentProcessingWorker,
+  reclameaquiInboundWorker,
+  reclameaquiOutboundWorker,
 ]
 
 async function shutdown() {

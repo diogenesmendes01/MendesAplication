@@ -1,6 +1,4 @@
 
-"use server";
-
 import { DEFAULT_MODELS } from "./pricing";
 import { logger } from "@/lib/logger";
 

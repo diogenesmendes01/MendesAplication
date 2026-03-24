@@ -91,6 +91,47 @@ export const RESPOND_EMAIL = defineTool({
   },
 });
 
+export const RESPOND_RECLAMEAQUI = defineTool({
+  name: "RESPOND_RECLAMEAQUI",
+  description:
+    "Gera resposta dual para reclamacao no Reclame Aqui. Voce DEVE fornecer uma mensagem privada (enviada so ao consumidor) e uma mensagem publica (visivel para TODOS na internet). A mensagem publica e PERMANENTE — NUNCA inclua dados pessoais, CPF, email, telefone ou valores financeiros nela. Classifique o tipo da reclamacao.",
+  parameters: {
+    type: "object",
+    properties: {
+      privateMessage: {
+        type: "string",
+        description:
+          "Mensagem privada para o consumidor. Pode conter dados pessoais e detalhes especificos do caso.",
+      },
+      publicMessage: {
+        type: "string",
+        description:
+          "Mensagem publica visivel para TODOS. NUNCA inclua dados pessoais (CPF, email, telefone, valores). Seja profissional e empatico.",
+      },
+      detectedType: {
+        type: "string",
+        description:
+          "Tipo da reclamacao detectado: boleto_nao_solicitado, cobranca_indevida, reembolso, servico_nao_entregue, qualidade_servico, trabalhista, outro",
+        enum: [
+          "boleto_nao_solicitado",
+          "cobranca_indevida",
+          "reembolso",
+          "servico_nao_entregue",
+          "qualidade_servico",
+          "trabalhista",
+          "outro",
+        ],
+      },
+      confidence: {
+        type: "number",
+        description:
+          "Nivel de confianca na classificacao (0.0 a 1.0)",
+      },
+    },
+    required: ["privateMessage", "publicMessage", "detectedType", "confidence"],
+  },
+});
+
 export const ESCALATE = defineTool({
   name: "ESCALATE",
   description:
@@ -131,6 +172,7 @@ export type GetClientInfoArgs = InferToolArgs<typeof GET_CLIENT_INFO>;
 export type GetHistoryArgs = InferToolArgs<typeof GET_HISTORY>;
 export type RespondArgs = InferToolArgs<typeof RESPOND>;
 export type RespondEmailArgs = InferToolArgs<typeof RESPOND_EMAIL>;
+export type RespondReclameAquiArgs = InferToolArgs<typeof RESPOND_RECLAMEAQUI>;
 export type EscalateArgs = InferToolArgs<typeof ESCALATE>;
 export type CreateNoteArgs = InferToolArgs<typeof CREATE_NOTE>;
 
@@ -143,6 +185,7 @@ export type ToolName =
   | typeof GET_HISTORY.name
   | typeof RESPOND.name
   | typeof RESPOND_EMAIL.name
+  | typeof RESPOND_RECLAMEAQUI.name
   | typeof ESCALATE.name
   | typeof CREATE_NOTE.name;
 
@@ -179,9 +222,21 @@ export const EMAIL_TOOLS: AnyAiToolDefinition[] = [
   RESPOND_EMAIL,
 ];
 
+export const RECLAMEAQUI_TOOLS: AnyAiToolDefinition[] = [
+  ...SHARED_TOOLS,
+  RESPOND_RECLAMEAQUI,
+];
+
 /**
  * Returns the appropriate tool set for a given channel.
  */
-export function getToolsForChannel(channel: "WHATSAPP" | "EMAIL"): AnyAiToolDefinition[] {
-  return channel === "EMAIL" ? EMAIL_TOOLS : WHATSAPP_TOOLS;
+export function getToolsForChannel(channel: "WHATSAPP" | "EMAIL" | "RECLAMEAQUI"): AnyAiToolDefinition[] {
+  switch (channel) {
+    case "EMAIL":
+      return EMAIL_TOOLS;
+    case "RECLAMEAQUI":
+      return RECLAMEAQUI_TOOLS;
+    default:
+      return WHATSAPP_TOOLS;
+  }
 }

@@ -24,6 +24,7 @@ import {
 } from "@/components/charts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getTicketDashboard, type TicketDashboard } from "./dashboard-actions";
+import { RaReputationCard } from "./ra-reputation-card";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -179,50 +180,56 @@ export function TicketDashboardKpis({ companyId }: { companyId: string }) {
 
   return (
     <div className="space-y-6">
-      {/* KPI Cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard
-          title="Abertos"
-          value={data.openCount}
-          icon={Inbox}
-        />
-        <KpiCard
-          title="Em Andamento"
-          value={data.inProgressCount}
-          icon={Clock}
-        />
-        <KpiCard
-          title="Aguardando Cliente"
-          value={data.waitingClientCount}
-          icon={UserCheck}
-        />
-        <KpiCard
-          title="Resolvidos Hoje"
-          value={data.resolvedTodayCount}
-          icon={CheckCircle2}
-        />
-        <KpiCard
-          title="SLA Estourado"
-          value={data.slaBreachedCount}
-          icon={AlertOctagon}
-          className="border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950"
-        />
-        <KpiCard
-          title="SLA em Risco"
-          value={data.slaAtRiskCount}
-          icon={AlertTriangle}
-          className="border-yellow-200 bg-yellow-50 dark:border-yellow-900 dark:bg-yellow-950"
-        />
-        <KpiCard
-          title="Reembolsos Pendentes"
-          value={data.pendingRefundsCount}
-          icon={Coins}
-        />
-        <KpiCard
-          title="Tempo Médio Resposta"
-          value={formatMinutes(data.avgResponseTimeMinutes)}
-          icon={Timer}
-        />
+      {/* Reclame Aqui Reputation + KPI Cards */}
+      <div className="grid gap-4 lg:grid-cols-[1fr_2fr]">
+        {/* RA Reputation Card — renders null if no RA channel */}
+        <RaReputationCard companyId={companyId} />
+
+        {/* KPI Cards */}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <KpiCard
+            title="Abertos"
+            value={data.openCount}
+            icon={Inbox}
+          />
+          <KpiCard
+            title="Em Andamento"
+            value={data.inProgressCount}
+            icon={Clock}
+          />
+          <KpiCard
+            title="Aguardando Cliente"
+            value={data.waitingClientCount}
+            icon={UserCheck}
+          />
+          <KpiCard
+            title="Resolvidos Hoje"
+            value={data.resolvedTodayCount}
+            icon={CheckCircle2}
+          />
+          <KpiCard
+            title="SLA Estourado"
+            value={data.slaBreachedCount}
+            icon={AlertOctagon}
+            className="border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950"
+          />
+          <KpiCard
+            title="SLA em Risco"
+            value={data.slaAtRiskCount}
+            icon={AlertTriangle}
+            className="border-yellow-200 bg-yellow-50 dark:border-yellow-900 dark:bg-yellow-950"
+          />
+          <KpiCard
+            title="Reembolsos Pendentes"
+            value={data.pendingRefundsCount}
+            icon={Coins}
+          />
+          <KpiCard
+            title="Tempo Médio Resposta"
+            value={formatMinutes(data.avgResponseTimeMinutes)}
+            icon={Timer}
+          />
+        </div>
       </div>
 
       {/* Charts */}

@@ -28,6 +28,7 @@ vi.mock("@/lib/rbac", () => ({
 vi.mock("@/lib/ai/provider", () => ({
   chatCompletion: (...args: unknown[]) => mockChatCompletion(...args),
   getEnvProviderConfig: vi.fn(),
+  defineTool: <T>(tool: T) => tool,
 }));
 
 vi.mock("@/lib/encryption", () => ({
@@ -76,6 +77,11 @@ const baseConfig = {
   emailEnabled: false,
   emailPersona: null,
   emailSignature: null,
+    raEnabled: false,
+    raMode: "suggest",
+    raPrivateBeforePublic: true,
+    raAutoRequestEvaluation: false,
+    raEscalationKeywords: ["processo", "advogado", "procon"],
 };
 
 // ─── testAiConnection ─────────────────────────────────────────────────────────
@@ -188,8 +194,10 @@ describe("listAvailableModels", () => {
     vi.stubGlobal("fetch", vi.fn());
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     vi.unstubAllGlobals();
+    const { clearModelCache } = await import("@/lib/ai/model-discovery");
+    clearModelCache();
   });
 
   it("returns HARDCODED_MODELS for anthropic provider (no HTTP call)", async () => {
@@ -341,6 +349,11 @@ describe("updateAiConfig", () => {
     emailEnabled: false,
     emailPersona: null,
     emailSignature: null,
+    raEnabled: false,
+    raMode: "suggest",
+    raPrivateBeforePublic: true,
+    raAutoRequestEvaluation: false,
+    raEscalationKeywords: ["processo", "advogado", "procon"],
   };
 
   beforeEach(() => {
@@ -532,6 +545,11 @@ describe("Provider parity — frontend ↔ backend", () => {
         emailEnabled: false,
         emailPersona: "",
         emailSignature: "",
+        raEnabled: false,
+        raMode: "suggest",
+        raPrivateBeforePublic: true,
+        raAutoRequestEvaluation: false,
+        raEscalationKeywords: [],
         dailySpendLimitBrl: null,
         temperature: 0.7,
       });
