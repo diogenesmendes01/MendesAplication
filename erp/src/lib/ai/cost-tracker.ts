@@ -230,7 +230,7 @@ interface LogUsageParams {
   companyId: string;
   provider: string;
   model: string;
-  channel: "WHATSAPP" | "EMAIL";
+  channel: "WHATSAPP" | "EMAIL" | "RECLAMEAQUI";
   inputTokens: number;
   outputTokens: number;
   ticketId?: string;
