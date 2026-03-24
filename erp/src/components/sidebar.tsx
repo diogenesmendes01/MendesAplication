@@ -292,7 +292,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
         })}
       </nav>
 
-      {/* Footer com Avatar + Logout (expanded) */}
+      {/* Footer com Avatar + Logout */}
       {!collapsed && (
         <div className="border-t border-border-subtle p-3">
           <DropdownMenu>
