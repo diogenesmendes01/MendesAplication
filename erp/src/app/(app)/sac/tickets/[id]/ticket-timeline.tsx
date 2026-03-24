@@ -55,6 +55,7 @@ import {
 } from "../actions";
 import { getWhatsAppStatus } from "../../../configuracoes/canais/actions";
 import { useEventStream } from "@/hooks/use-event-stream";
+import RaSuggestionCard from "./ra-suggestion-card";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -182,12 +183,31 @@ function EventIcon({ event }: { event: TimelineEvent }) {
 // Timeline Event Item (Todos tab)
 // ---------------------------------------------------------------------------
 
-function TimelineItem({ event }: { event: TimelineEvent }) {
+function TimelineItem({ event, channelType, companyId, onActionComplete }: { event: TimelineEvent; channelType?: string | null; companyId: string; onActionComplete?: () => void }) {
+  // AI-generated suggestion pending approval → render SuggestionCard
+  if (event.isAiGenerated && (event as any).deliveryStatus === "PENDING_APPROVAL") {
+    return (
+      <div className="flex gap-3">
+        <EventIcon event={event} />
+        <div className="flex-1 min-w-0">
+          <RaSuggestionCard
+            messageId={event.id}
+            companyId={companyId}
+            content={event.content}
+            createdAt={event.createdAt}
+            onActionComplete={onActionComplete}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  const isDiscarded = (event as any).deliveryStatus === "DISCARDED";
   const origin = originLabel(event);
   const isNote = event.type === "internal_note";
 
   return (
-    <div className={`flex gap-3 ${isNote ? "rounded-lg bg-yellow-50 p-3" : ""}`}>
+    <div className={`flex gap-3 ${isNote ? "rounded-lg bg-yellow-50 p-3" : ""} ${isDiscarded ? "opacity-50" : ""}`}>
       <EventIcon event={event} />
       <div className="flex-1 min-w-0">
         {/* Header */}
@@ -236,6 +256,16 @@ function TimelineItem({ event }: { event: TimelineEvent }) {
               IA
             </Badge>
           )}
+          {channelType === "RECLAMEAQUI" && event.type === "message" && !event.isAiGenerated && (
+            <Badge variant="outline" className="text-xs px-1.5 py-0 border-orange-300 text-orange-700">
+              {(event as any).isInternal ? "📨 Privada" : "📢 Pública"}
+            </Badge>
+          )}
+          {isDiscarded && (
+            <Badge variant="outline" className="text-xs px-1.5 py-0 border-gray-300 text-gray-500">
+              Descartada
+            </Badge>
+          )}
         </div>
 
         {/* Content */}
@@ -262,7 +292,7 @@ function TimelineItem({ event }: { event: TimelineEvent }) {
             )}
           </div>
         ) : (
-          <p className="mt-1 text-sm whitespace-pre-wrap leading-relaxed">
+          <p className={`mt-1 text-sm whitespace-pre-wrap leading-relaxed ${isDiscarded ? "line-through" : ""}`}>
             {event.content}
           </p>
         )}
@@ -1007,7 +1037,15 @@ export default function TicketTimeline({
                   Nenhum evento ainda.
                 </p>
               ) : (
-                events.map((evt) => <TimelineItem key={evt.id} event={evt} />)
+                events.map((evt) => (
+                  <TimelineItem
+                    key={evt.id}
+                    event={evt}
+                    channelType={channelType}
+                    companyId={companyId}
+                    onActionComplete={loadEvents}
+                  />
+                ))
               )}
               <div ref={timelineEndRef} />
             </div>

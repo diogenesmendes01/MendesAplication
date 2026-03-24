@@ -419,6 +419,7 @@ export interface TicketDetail {
   contact: { id: string; name: string; role: string | null } | null;
   channelType: ChannelType | null;
   aiEnabled: boolean;
+  raCanEvaluate: boolean;
 }
 
 async function _getTicketByIdInternal(
@@ -462,6 +463,7 @@ async function _getTicketByIdInternal(
     contact: ticket.contact,
     channelType: ticket.channel?.type ?? null,
     aiEnabled: ticket.aiEnabled,
+    raCanEvaluate: ticket.raCanEvaluate ?? false,
   };
 }
 
@@ -783,6 +785,7 @@ export interface TimelineEvent {
   refundAmount: string | null;
   refundStatus: RefundStatus | null;
   oldStatus: string | null;
+  deliveryStatus: string | null;
   newStatus: string | null;
 }
 
@@ -861,6 +864,7 @@ export async function listTimelineEvents(
       isInternal: m.isInternal,
       sentViaEmail: m.sentViaEmail,
       isAiGenerated: m.isAiGenerated,
+      deliveryStatus: m.deliveryStatus ?? null,
       sender: m.sender,
       contactName: m.contact?.name ?? null,
       contactRole: m.contact?.role ?? null,
@@ -890,6 +894,7 @@ export async function listTimelineEvents(
       isInternal: false,
       sentViaEmail: false,
       isAiGenerated: false,
+      deliveryStatus: null,
       sender: null,
       contactName: null,
       contactRole: null,
@@ -919,6 +924,7 @@ export async function listTimelineEvents(
       sentViaEmail: false,
       isAiGenerated: false,
       sender: null,
+      deliveryStatus: null,
       contactName: null,
       contactRole: null,
       attachments: [],
