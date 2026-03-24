@@ -200,16 +200,27 @@ export async function approveSuggestion(
       },
     });
 
-    // Enqueue outbound job
-    await reclameaquiOutboundQueue.add("RA_SEND_DUAL", {
-      messageId,
-      ticketId: message.ticket.id,
-      raExternalId: message.ticket.raExternalId,
-      companyId,
-      publicMessage,
-      privateMessage,
-      email: clientEmail,
-    });
+    // Enqueue outbound job — fall back to RA_SEND_PUBLIC if no client email
+    if (clientEmail && privateMessage) {
+      await reclameaquiOutboundQueue.add("RA_SEND_DUAL", {
+        messageId,
+        ticketId: message.ticket.id,
+        raExternalId: message.ticket.raExternalId,
+        companyId,
+        publicMessage,
+        privateMessage,
+        email: clientEmail,
+      });
+    } else {
+      // No email available — can only send public message
+      await reclameaquiOutboundQueue.add("RA_SEND_PUBLIC", {
+        messageId,
+        ticketId: message.ticket.id,
+        raExternalId: message.ticket.raExternalId,
+        companyId,
+        message: publicMessage,
+      });
+    }
 
     await logAuditEvent({
       userId: session.userId,
@@ -226,7 +237,7 @@ export async function approveSuggestion(
 
     return { success: true };
   } catch (err) {
-    logger.error("[ra-actions] approveSuggestion error:", err);
+    logger.error({ err }, "[ra-actions] approveSuggestion error");
     return { success: false, error: mapRaError(err) };
   }
 }
@@ -280,7 +291,7 @@ export async function discardSuggestion(
 
     return { success: true };
   } catch (err) {
-    logger.error("[ra-actions] discardSuggestion error:", err);
+    logger.error({ err }, "[ra-actions] discardSuggestion error");
     return { success: false, error: mapRaError(err) };
   }
 }
@@ -358,7 +369,7 @@ export async function sendRaResponse(
 
     return { success: true };
   } catch (err) {
-    logger.error("[ra-actions] sendRaResponse error:", err);
+    logger.error({ err }, "[ra-actions] sendRaResponse error");
     return { success: false, error: mapRaError(err) };
   }
 }
@@ -416,7 +427,7 @@ export async function requestRaEvaluation(
 
     return { success: true };
   } catch (err) {
-    logger.error("[ra-actions] requestRaEvaluation error:", err);
+    logger.error({ err }, "[ra-actions] requestRaEvaluation error");
     return { success: false, error: mapRaError(err) };
   }
 }
@@ -438,7 +449,7 @@ export async function requestRaModeration(
     if (!VALID_MODERATION_REASONS.has(reason)) {
       return {
         success: false,
-        error: `Motivo de moderação inválido. Valores aceitos: ${[...VALID_MODERATION_REASONS].join(", ")}`,
+        error: `Motivo de moderação inválido. Valores aceitos: ${Array.from(VALID_MODERATION_REASONS).join(", ")}`,
       };
     }
 
@@ -492,7 +503,7 @@ export async function requestRaModeration(
 
     return { success: true };
   } catch (err) {
-    logger.error("[ra-actions] requestRaModeration error:", err);
+    logger.error({ err }, "[ra-actions] requestRaModeration error");
     return { success: false, error: mapRaError(err) };
   }
 }
@@ -539,7 +550,7 @@ export async function getRaReputation(
 
     return { success: true, data };
   } catch (err) {
-    logger.error("[ra-actions] getRaReputation error:", err);
+    logger.error({ err }, "[ra-actions] getRaReputation error");
     return { success: false, error: mapRaError(err) };
   }
 }

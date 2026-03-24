@@ -9,13 +9,46 @@ import type { RaClientConfig } from "@/lib/reclameaqui/types";
 // Types
 // ---------------------------------------------------------------------------
 
+export interface RaSendPublicJobData {
+  ticketId: string;
+  message: string;
+}
+
+export interface RaSendPrivateJobData {
+  ticketId: string;
+  message: string;
+  email: string;
+}
+
+export interface RaSendDualJobData {
+  ticketId: string;
+  privateMessage: string;
+  publicMessage: string;
+  email: string;
+}
+
+export interface RaRequestEvaluationJobData {
+  ticketId: string;
+}
+
+export interface RaRequestModerationJobData {
+  ticketId: string;
+  reason: number;
+  message: string;
+  migrateTO?: number;
+}
+
+export interface RaFinishPrivateJobData {
+  ticketId: string;
+}
+
 export type RaOutboundJobData =
-  | { type: "RA_SEND_PUBLIC"; ticketId: string; message: string }
-  | { type: "RA_SEND_PRIVATE"; ticketId: string; message: string; email: string }
-  | { type: "RA_REQUEST_EVALUATION"; ticketId: string }
-  | { type: "RA_REQUEST_MODERATION"; ticketId: string; reason: number; message: string; migrateTO?: number }
-  | { type: "RA_FINISH_PRIVATE"; ticketId: string }
-  | { type: "RA_SEND_DUAL"; ticketId: string; privateMessage: string; publicMessage: string; email: string };
+  | RaSendPublicJobData
+  | RaSendPrivateJobData
+  | RaSendDualJobData
+  | RaRequestEvaluationJobData
+  | RaRequestModerationJobData
+  | RaFinishPrivateJobData;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -137,9 +170,10 @@ async function handleSendPublic(ticketId: string, message: string): Promise<void
       deliveryStatus: "FAILED",
     }).catch(() => {}); // Don't mask original error
 
-    logger.error(`[reclameaqui-outbound] Failed to send public message for ticket ${ticket.id}`, {
-      error: err instanceof ReclameAquiError ? { code: err.code, message: err.message } : String(err),
-    });
+    logger.error(
+      { error: err instanceof ReclameAquiError ? { code: err.code, message: err.message } : String(err) },
+      `[reclameaqui-outbound] Failed to send public message for ticket ${ticket.id}`
+    );
     throw err;
   }
 }
@@ -178,9 +212,10 @@ async function handleSendPrivate(ticketId: string, message: string, email: strin
       deliveryStatus: "FAILED",
     }).catch(() => {});
 
-    logger.error(`[reclameaqui-outbound] Failed to send private message for ticket ${ticket.id}`, {
-      error: err instanceof ReclameAquiError ? { code: err.code, message: err.message } : String(err),
-    });
+    logger.error(
+      { error: err instanceof ReclameAquiError ? { code: err.code, message: err.message } : String(err) },
+      `[reclameaqui-outbound] Failed to send private message for ticket ${ticket.id}`
+    );
     throw err;
   }
 }
@@ -228,9 +263,10 @@ async function handleSendDual(
         deliveryStatus: "FAILED",
       }).catch(() => {});
 
-      logger.error(`[reclameaqui-outbound] Dual: failed to send private message for ticket ${ticket.id}`, {
-        error: err instanceof ReclameAquiError ? { code: err.code, message: err.message } : String(err),
-      });
+      logger.error(
+        { error: err instanceof ReclameAquiError ? { code: err.code, message: err.message } : String(err) },
+        `[reclameaqui-outbound] Dual: failed to send private message for ticket ${ticket.id}`
+      );
     }
   }
 
@@ -268,9 +304,10 @@ async function handleSendDual(
         deliveryStatus: "FAILED",
       }).catch(() => {});
 
-      logger.error(`[reclameaqui-outbound] Dual: failed to send public message for ticket ${ticket.id}`, {
-        error: err instanceof ReclameAquiError ? { code: err.code, message: err.message } : String(err),
-      });
+      logger.error(
+        { error: err instanceof ReclameAquiError ? { code: err.code, message: err.message } : String(err) },
+        `[reclameaqui-outbound] Dual: failed to send public message for ticket ${ticket.id}`
+      );
 
       // Only throw if both failed
       if (privateFailed) {
@@ -319,9 +356,10 @@ async function handleRequestEvaluation(ticketId: string): Promise<void> {
       deliveryStatus: "FAILED",
     }).catch(() => {});
 
-    logger.error(`[reclameaqui-outbound] Failed to request evaluation for ticket ${ticket.id}`, {
-      error: err instanceof ReclameAquiError ? { code: err.code, message: err.message } : String(err),
-    });
+    logger.error(
+      { error: err instanceof ReclameAquiError ? { code: err.code, message: err.message } : String(err) },
+      `[reclameaqui-outbound] Failed to request evaluation for ticket ${ticket.id}`
+    );
     throw err;
   }
 }
@@ -359,9 +397,10 @@ async function handleRequestModeration(
       deliveryStatus: "FAILED",
     }).catch(() => {});
 
-    logger.error(`[reclameaqui-outbound] Failed to request moderation for ticket ${ticket.id}`, {
-      error: err instanceof ReclameAquiError ? { code: err.code, message: err.message } : String(err),
-    });
+    logger.error(
+      { error: err instanceof ReclameAquiError ? { code: err.code, message: err.message } : String(err) },
+      `[reclameaqui-outbound] Failed to request moderation for ticket ${ticket.id}`
+    );
     throw err;
   }
 }
@@ -400,9 +439,10 @@ async function handleFinishPrivate(ticketId: string): Promise<void> {
       deliveryStatus: "FAILED",
     }).catch(() => {});
 
-    logger.error(`[reclameaqui-outbound] Failed to finish private messaging for ticket ${ticket.id}`, {
-      error: err instanceof ReclameAquiError ? { code: err.code, message: err.message } : String(err),
-    });
+    logger.error(
+      { error: err instanceof ReclameAquiError ? { code: err.code, message: err.message } : String(err) },
+      `[reclameaqui-outbound] Failed to finish private messaging for ticket ${ticket.id}`
+    );
     throw err;
   }
 }
@@ -413,31 +453,44 @@ async function handleFinishPrivate(ticketId: string): Promise<void> {
 
 export async function processReclameAquiOutbound(job: Job<RaOutboundJobData>): Promise<void> {
   const data = job.data;
+  const jobType = job.name;
 
-  logger.info(`[reclameaqui-outbound] Processing job ${job.id}: type=${data.type}, ticketId=${data.ticketId}`);
+  logger.info(`[reclameaqui-outbound] Processing job ${job.id}: type=${jobType}, ticketId=${data.ticketId}`);
 
-  switch (data.type) {
+  switch (jobType) {
     case "RA_SEND_PUBLIC":
-      return handleSendPublic(data.ticketId, data.message);
+      return handleSendPublic(data.ticketId, (data as RaSendPublicJobData).message);
 
     case "RA_SEND_PRIVATE":
-      return handleSendPrivate(data.ticketId, data.message, data.email);
+      return handleSendPrivate(
+        data.ticketId,
+        (data as RaSendPrivateJobData).message,
+        (data as RaSendPrivateJobData).email
+      );
 
     case "RA_SEND_DUAL":
-      return handleSendDual(data.ticketId, data.privateMessage, data.publicMessage, data.email);
+      return handleSendDual(
+        data.ticketId,
+        (data as RaSendDualJobData).privateMessage,
+        (data as RaSendDualJobData).publicMessage,
+        (data as RaSendDualJobData).email
+      );
 
     case "RA_REQUEST_EVALUATION":
       return handleRequestEvaluation(data.ticketId);
 
     case "RA_REQUEST_MODERATION":
-      return handleRequestModeration(data.ticketId, data.reason, data.message, data.migrateTO);
+      return handleRequestModeration(
+        data.ticketId,
+        (data as RaRequestModerationJobData).reason,
+        (data as RaRequestModerationJobData).message,
+        (data as RaRequestModerationJobData).migrateTO
+      );
 
     case "RA_FINISH_PRIVATE":
       return handleFinishPrivate(data.ticketId);
 
-    default: {
-      const _exhaustive: never = data;
-      throw new Error(`[reclameaqui-outbound] Unknown job type: ${(_exhaustive as RaOutboundJobData).type}`);
-    }
+    default:
+      throw new Error(`[reclameaqui-outbound] Unknown job type: ${jobType}`);
   }
 }

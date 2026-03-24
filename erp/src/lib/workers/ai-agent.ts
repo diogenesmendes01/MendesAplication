@@ -142,17 +142,6 @@ export async function processAiAgent(job: Job<AiAgentJobData>) {
           return;
         }
 
-        // Enqueue the dual send job
-        const jobData: Record<string, unknown> = {
-          ticketId,
-          companyId,
-          privateMessage,
-          publicMessage,
-          detectedType,
-          confidence,
-          privateFirst: aiConfig?.raPrivateBeforePublic ?? true,
-        };
-
         // If trabalhista → suggest moderation instead of auto-send
         if (suggestModeration) {
           logger.info(
@@ -162,11 +151,38 @@ export async function processAiAgent(job: Job<AiAgentJobData>) {
           return;
         }
 
-        await reclameaquiOutboundQueue.add("RA_SEND_DUAL", jobData);
+        // Fetch client email for private message
+        const ticketWithClient = await prisma.ticket.findUnique({
+          where: { id: ticketId },
+          include: { client: { select: { email: true } } },
+        });
+        const clientEmail = ticketWithClient?.client?.email;
 
-        logger.info(
-          `[ai-agent] RA auto-mode: enqueued RA_SEND_DUAL for ticket ${ticketId} (type=${detectedType}, confidence=${confidence})`
-        );
+        if (clientEmail) {
+          // Enqueue dual send (public + private)
+          await reclameaquiOutboundQueue.add("RA_SEND_DUAL", {
+            ticketId,
+            companyId,
+            privateMessage,
+            publicMessage,
+            email: clientEmail,
+          });
+
+          logger.info(
+            `[ai-agent] RA auto-mode: enqueued RA_SEND_DUAL for ticket ${ticketId} (type=${detectedType}, confidence=${confidence})`
+          );
+        } else {
+          // No client email — fall back to public only
+          await reclameaquiOutboundQueue.add("RA_SEND_PUBLIC", {
+            ticketId,
+            companyId,
+            message: publicMessage,
+          });
+
+          logger.warn(
+            `[ai-agent] RA auto-mode: no client email for ticket ${ticketId}, falling back to RA_SEND_PUBLIC`
+          );
+        }
 
         // Also request evaluation if configured
         if (aiConfig?.raAutoRequestEvaluation) {
