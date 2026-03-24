@@ -419,6 +419,9 @@ export interface TicketDetail {
   contact: { id: string; name: string; role: string | null } | null;
   channelType: ChannelType | null;
   aiEnabled: boolean;
+  raExternalId: string | null;
+  raStatusName: string | null;
+  raRating: string | null;
   raCanEvaluate: boolean;
 }
 
@@ -463,6 +466,9 @@ async function _getTicketByIdInternal(
     contact: ticket.contact,
     channelType: ticket.channel?.type ?? null,
     aiEnabled: ticket.aiEnabled,
+    raExternalId: ticket.raExternalId ?? null,
+    raStatusName: ticket.raStatusName ?? null,
+    raRating: ticket.raRating ?? null,
     raCanEvaluate: ticket.raCanEvaluate ?? false,
   };
 }

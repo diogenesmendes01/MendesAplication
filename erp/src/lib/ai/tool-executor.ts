@@ -342,7 +342,7 @@ async function executeRespondEmail(
 
 async function executeRespondReclameAqui(
   args: Record<string, unknown>,
-  context: ToolContext
+  _context: ToolContext
 ): Promise<string> {
   const privateMessage = args.privateMessage as string;
   const publicMessage = args.publicMessage as string;

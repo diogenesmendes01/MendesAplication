@@ -8,7 +8,6 @@ import { executeTool } from "./tool-executor";
 import type { ToolContext, ReclameAquiResponse } from "./tool-executor";
 import { decrypt } from "@/lib/encryption";
 import {
-  getTodaySpend,
   logUsage,
   checkAndReserveSpend,
   rollbackSpendReservation,

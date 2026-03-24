@@ -122,7 +122,7 @@ export async function processAiAgent(job: Job<AiAgentJobData>) {
 
     // Handle the RA response based on mode
     if (result.responded && result.raResponse) {
-      const { privateMessage, publicMessage, detectedType, confidence, suggestModeration, moderationReason } =
+      const { privateMessage, publicMessage, detectedType, confidence, suggestModeration, moderationReason: _moderationReason } =
         result.raResponse;
 
       if (raMode === "auto") {

@@ -358,7 +358,7 @@ export async function processReclameAquiInbound(_job: Job): Promise<void> {
       config = decryptConfig(
         ch.config as Record<string, unknown>
       ) as unknown as ReclameAquiChannelConfig;
-    } catch (err) {
+    } catch (_err) {
       logger.error(
         `[reclameaqui-inbound] Failed to decrypt config for channel ${ch.id}`
       );
@@ -405,7 +405,7 @@ export async function processReclameAquiInbound(_job: Job): Promise<void> {
         for (const raTicket of tickets) {
           try {
             await processRaTicket(raTicket, ch.companyId, ch.id, summary);
-          } catch (err) {
+          } catch (_err) {
             summary.errors++;
             logger.error(
               `[reclameaqui-inbound] Error processing RA ticket ${raTicket.source_external_id}`
@@ -441,7 +441,7 @@ export async function processReclameAquiInbound(_job: Job): Promise<void> {
           `total=${summary.total}, created=${summary.created}, ` +
           `updated=${summary.updated}, errors=${summary.errors}`
       );
-    } catch (err) {
+    } catch (_err) {
       logger.error(
         `[reclameaqui-inbound] Error syncing channel ${ch.id}`
       );

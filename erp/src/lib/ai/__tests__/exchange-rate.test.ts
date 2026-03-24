@@ -115,7 +115,7 @@ describe("exchange-rate", () => {
 
   it("falls back when fetch exceeds 5 s timeout", async () => {
     fetchSpy.mockImplementationOnce(
-      (_url: any, init: any) =>
+      (_url: string, init: RequestInit) =>
         new Promise<Response>((_resolve, reject) => {
           init?.signal?.addEventListener("abort", () => {
             reject(new DOMException("The operation was aborted.", "AbortError"));

@@ -6,6 +6,7 @@
 // Falls back to InMemoryRateLimiter when Redis is unavailable.
 
 import Redis from "ioredis";
+import { logger } from "@/lib/logger";
 
 // ─── Interface ────────────────────────────────────────────────────────────────
 
@@ -105,14 +106,14 @@ function getRedisClient(): Redis | null {
         enableOfflineQueue: false,
       });
       redis.on("error", (err) => {
-        console.error("[rate-limiter] Redis error:", err.message);
+        logger.error({ err: err.message }, "[rate-limiter] Redis error");
         redisAvailable = false;
       });
       redis.on("connect", () => {
         redisAvailable = true;
       });
       redis.connect().catch((err) => {
-        console.error("[rate-limiter] Redis connect failed:", err.message);
+        logger.error({ err: err.message }, "[rate-limiter] Redis connect failed");
         redisAvailable = false;
       });
     } catch {
@@ -186,10 +187,7 @@ export class RedisRateLimiter implements AsyncRateLimiter {
         retryAfterMs: 0,
       };
     } catch (err) {
-      console.error(
-        "[rate-limiter] Redis op failed, falling back to in-memory:",
-        err instanceof Error ? err.message : err,
-      );
+      logger.error({ err: err instanceof Error ? err.message : String(err) }, "[rate-limiter] Redis op failed, falling back to in-memory");
       redisAvailable = false;
       return this.fallback.check(key);
     }

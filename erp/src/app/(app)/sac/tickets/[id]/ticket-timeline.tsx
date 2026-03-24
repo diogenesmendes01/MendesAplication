@@ -185,7 +185,7 @@ function EventIcon({ event }: { event: TimelineEvent }) {
 
 function TimelineItem({ event, channelType, companyId, onActionComplete }: { event: TimelineEvent; channelType?: string | null; companyId: string; onActionComplete?: () => void }) {
   // AI-generated suggestion pending approval → render SuggestionCard
-  if (event.isAiGenerated && (event as any).deliveryStatus === "PENDING_APPROVAL") {
+  if (event.isAiGenerated && event.deliveryStatus === "PENDING_APPROVAL") {
     return (
       <div className="flex gap-3">
         <EventIcon event={event} />
@@ -202,7 +202,7 @@ function TimelineItem({ event, channelType, companyId, onActionComplete }: { eve
     );
   }
 
-  const isDiscarded = (event as any).deliveryStatus === "DISCARDED";
+  const isDiscarded = event.deliveryStatus === "DISCARDED";
   const origin = originLabel(event);
   const isNote = event.type === "internal_note";
 
@@ -258,7 +258,7 @@ function TimelineItem({ event, channelType, companyId, onActionComplete }: { eve
           )}
           {channelType === "RECLAMEAQUI" && event.type === "message" && !event.isAiGenerated && (
             <Badge variant="outline" className="text-xs px-1.5 py-0 border-orange-300 text-orange-700">
-              {(event as any).isInternal ? "📨 Privada" : "📢 Pública"}
+              {event.isInternal ? "📨 Privada" : "📢 Pública"}
             </Badge>
           )}
           {isDiscarded && (

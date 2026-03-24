@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { Prisma, type PrismaClient } from "@prisma/client";
+import { type PrismaClient } from "@prisma/client";
 import Decimal from "decimal.js";
 import type { FiscalConfigData } from "@/app/(app)/configuracoes/fiscal/actions";
 

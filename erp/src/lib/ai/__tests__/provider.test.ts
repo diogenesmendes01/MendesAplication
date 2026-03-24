@@ -25,7 +25,6 @@ import {
   isGlobalFallbackBlocked,
   getEnvProviderConfig,
   chatCompletion,
-  type ProviderConfig,
   type AiMessage,
   type AiToolDefinition,
 } from "@/lib/ai/provider";
@@ -195,7 +194,7 @@ describe("Anthropic completion", () => {
       undefined, { provider: "anthropic", apiKey: "k" });
     const body = JSON.parse(mockFetch.mock.calls[0][1].body);
     expect(body.system).toBe("Helpful");
-    expect(body.messages.every((m: any) => m.role !== "system")).toBe(true);
+    expect(body.messages.every((m: Record<string, unknown>) => m.role !== "system")).toBe(true);
   });
 
   it("sends anthropic-version header", async () => {
@@ -213,7 +212,7 @@ describe("Anthropic completion", () => {
       { role: "tool", content: "res", tool_call_id: "tc1" },
     ], undefined, { provider: "anthropic", apiKey: "k" });
     const body = JSON.parse(mockFetch.mock.calls[0][1].body);
-    const tm = body.messages.find((m: any) => Array.isArray(m.content) && m.content.some((c: any) => c.type === "tool_result"));
+    const tm = body.messages.find((m: Record<string, unknown>) => Array.isArray(m.content) && (m.content as Record<string, unknown>[]).some((c: Record<string, unknown>) => c.type === "tool_result"));
     expect(tm).toBeDefined();
     expect(tm.role).toBe("user");
   });

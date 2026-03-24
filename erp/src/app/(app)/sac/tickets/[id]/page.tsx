@@ -1284,7 +1284,7 @@ export default function TicketDetailPage() {
           )}
 
           {/* RA Info Panel */}
-          {ticket.channelType === "RECLAMEAQUI" && ((ticket as any).raExternalId || (ticket as any).raStatusName || (ticket as any).raRating != null) && (
+          {ticket.channelType === "RECLAMEAQUI" && (ticket.raExternalId || ticket.raStatusName || ticket.raRating != null) && (
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
@@ -1292,30 +1292,30 @@ export default function TicketDetailPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                {(ticket as any).raExternalId && (
+                {ticket.raExternalId && (
                   <div className="flex items-start gap-3">
                     <ExternalLink className="mt-0.5 h-4 w-4 text-muted-foreground" />
                     <div>
                       <p className="text-xs font-medium text-muted-foreground">ID Externo</p>
-                      <p className="text-sm font-mono">{(ticket as any).raExternalId}</p>
+                      <p className="text-sm font-mono">{ticket.raExternalId}</p>
                     </div>
                   </div>
                 )}
-                {(ticket as any).raStatusName && (
+                {ticket.raStatusName && (
                   <div className="flex items-start gap-3">
                     <Globe className="mt-0.5 h-4 w-4 text-muted-foreground" />
                     <div>
                       <p className="text-xs font-medium text-muted-foreground">Status RA</p>
-                      <p className="text-sm">{(ticket as any).raStatusName}</p>
+                      <p className="text-sm">{ticket.raStatusName}</p>
                     </div>
                   </div>
                 )}
-                {(ticket as any).raRating != null && (
+                {ticket.raRating != null && (
                   <div className="flex items-start gap-3">
                     <span className="mt-0.5 text-base">⭐</span>
                     <div>
                       <p className="text-xs font-medium text-muted-foreground">Avaliação</p>
-                      <p className="text-sm font-semibold">{(ticket as any).raRating}/10</p>
+                      <p className="text-sm font-semibold">{ticket.raRating}/10</p>
                     </div>
                   </div>
                 )}
@@ -1332,7 +1332,7 @@ export default function TicketDetailPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                {(ticket as any).raCanEvaluate === true && (
+                {ticket.raCanEvaluate === true && (
                   <Button
                     variant="outline"
                     className="w-full border-yellow-300 text-yellow-800 hover:bg-yellow-50"

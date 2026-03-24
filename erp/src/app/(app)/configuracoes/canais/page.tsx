@@ -64,7 +64,7 @@ function channelIcon(type: string) {
   return <MessageSquare className="h-5 w-5" />;
 }
 
-function channelLabel(type: string): string {
+function _channelLabel(type: string): string {
   if (type === "EMAIL") return "Email";
   if (type === "RECLAMEAQUI") return "Reclame Aqui";
   return "WhatsApp";
