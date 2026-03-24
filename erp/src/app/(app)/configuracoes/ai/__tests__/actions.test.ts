@@ -28,6 +28,7 @@ vi.mock("@/lib/rbac", () => ({
 vi.mock("@/lib/ai/provider", () => ({
   chatCompletion: (...args: unknown[]) => mockChatCompletion(...args),
   getEnvProviderConfig: vi.fn(),
+  defineTool: <T>(tool: T) => tool,
 }));
 
 vi.mock("@/lib/encryption", () => ({
@@ -193,8 +194,10 @@ describe("listAvailableModels", () => {
     vi.stubGlobal("fetch", vi.fn());
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     vi.unstubAllGlobals();
+    const { clearModelCache } = await import("@/lib/ai/model-discovery");
+    clearModelCache();
   });
 
   it("returns HARDCODED_MODELS for anthropic provider (no HTTP call)", async () => {
