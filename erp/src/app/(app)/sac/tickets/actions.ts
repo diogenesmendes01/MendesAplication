@@ -38,6 +38,8 @@ export interface ListTicketsParams {
   priority?: TicketPriority;
   clientId?: string;
   assigneeId?: string;
+  channelType?: ChannelType;
+  hasPendingSuggestion?: boolean;
 }
 
 export interface CreateTicketInput {
@@ -70,6 +72,10 @@ export interface TicketRow {
     id: string;
     name: string;
   } | null;
+  raExternalId: string | null;
+  raStatusName: string | null;
+  raRating: string | null;
+  hasPendingSuggestion: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -141,6 +147,9 @@ async function _listTicketsInternal(
   if (params.assigneeId && tab !== "my_tickets") {
     where.assigneeId = params.assigneeId;
   }
+  if (params.channelType) {
+    where.channel = { type: params.channelType };
+  }
 
   // Fetch SLA alert configs for at-risk calculation (cached)
   const slaConfigs = await fetchSlaConfigs(params.companyId);
@@ -166,6 +175,16 @@ async function _listTicketsInternal(
         },
         channel: {
           select: { type: true },
+        },
+        _count: {
+          select: {
+            messages: {
+              where: {
+                isAiGenerated: true,
+                deliveryStatus: "PENDING_APPROVAL",
+              },
+            },
+          },
         },
       },
     }),
@@ -210,15 +229,24 @@ async function _listTicketsInternal(
       tags: r.tags,
       client: r.client,
       assignee: r.assignee,
+      raExternalId: r.raExternalId ?? null,
+      raStatusName: r.raStatusName ?? null,
+      raRating: r.raRating ?? null,
+      hasPendingSuggestion: (r._count?.messages ?? 0) > 0,
     };
   });
 
+  // Post-filter for pending suggestions (computed field)
+  const filteredData = params.hasPendingSuggestion
+    ? data.filter((d) => d.hasPendingSuggestion)
+    : data;
+
   return {
-    data,
-    total,
+    data: filteredData,
+    total: params.hasPendingSuggestion ? filteredData.length : total,
     page,
     pageSize,
-    totalPages: Math.ceil(total / pageSize),
+    totalPages: Math.ceil((params.hasPendingSuggestion ? filteredData.length : total) / pageSize),
   };
 }
 

@@ -30,4 +30,9 @@ export const DEFAULT_CONFIG: AiConfigData = {
   emailSignature: "",
   dailySpendLimitBrl: null,
   temperature: 0.7,
+  raEnabled: false,
+  raMode: "suggest",
+  raPrivateBeforePublic: true,
+  raAutoRequestEvaluation: false,
+  raEscalationKeywords: ["processo", "advogado", "procon", "judicial", "indenização"],
 };

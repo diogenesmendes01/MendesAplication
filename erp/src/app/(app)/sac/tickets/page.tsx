@@ -13,6 +13,9 @@ import {
   Globe,
   Tag,
   AlertTriangle,
+  Bot,
+  Star,
+  Filter,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,6 +46,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { useCompany } from "@/contexts/company-context";
 import {
   createTicket,
@@ -53,6 +57,7 @@ import {
   type TicketRow,
   type TicketTab,
 } from "./actions";
+import type { ChannelType } from "@prisma/client";
 import { TicketDashboardKpis } from "./ticket-dashboard";
 import type { TicketPriority } from "@prisma/client";
 
@@ -128,8 +133,31 @@ function channelIcon(channelType: string | null) {
       return <Mail className="h-4 w-4 text-blue-600" />;
     case "WHATSAPP":
       return <MessageSquare className="h-4 w-4 text-green-600" />;
+    case "RECLAMEAQUI":
+      return null; // RA badge handles this
     default:
       return <Globe className="h-4 w-4 text-gray-500" />;
+  }
+}
+
+function raStatusColor(statusName: string | null): string {
+  switch (statusName) {
+    case "Não respondido":
+      return "bg-red-100 text-red-800";
+    case "Respondido":
+      return "bg-green-100 text-green-800";
+    case "Réplica":
+    case "Réplica consumidor":
+    case "Réplica empresa":
+      return "bg-yellow-100 text-yellow-800";
+    case "Avaliado Resolvido":
+      return "bg-emerald-100 text-emerald-800";
+    case "Avaliado Não Resolvido":
+      return "bg-red-100 text-red-800";
+    case "Congelado":
+      return "bg-gray-100 text-gray-700";
+    default:
+      return "bg-gray-100 text-gray-600";
   }
 }
 
@@ -163,6 +191,8 @@ export default function TicketsPage() {
   const [activeTab, setActiveTab] = useState<TicketTab>("all");
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
+  const [channelFilter, setChannelFilter] = useState<ChannelType | "">("");
+  const [pendingSuggestionFilter, setPendingSuggestionFilter] = useState(false);
   const [tabCounts, setTabCounts] = useState<{
     slaCritical: number;
     refunds: number;
@@ -200,6 +230,8 @@ export default function TicketsPage() {
           page,
           tab: activeTab,
           search: search || undefined,
+          channelType: channelFilter || undefined,
+          hasPendingSuggestion: pendingSuggestionFilter || undefined,
         });
       setTickets(result);
       setTabCounts(counts);
@@ -211,7 +243,7 @@ export default function TicketsPage() {
     } finally {
       setLoading(false);
     }
-  }, [selectedCompanyId, page, activeTab, search]);
+  }, [selectedCompanyId, page, activeTab, search, channelFilter, pendingSuggestionFilter]);
 
   useEffect(() => {
     loadTickets();
@@ -412,6 +444,46 @@ export default function TicketsPage() {
         </form>
       </div>
 
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-4">
+        <div className="flex items-center gap-2">
+          <Filter className="h-4 w-4 text-muted-foreground" />
+          <Label className="text-sm font-medium">Canal:</Label>
+          <Select
+            value={channelFilter || "__all__"}
+            onValueChange={(v) => {
+              setChannelFilter(v === "__all__" ? "" : v as ChannelType);
+              setPage(1);
+            }}
+          >
+            <SelectTrigger className="w-[160px] h-8 text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">Todos</SelectItem>
+              <SelectItem value="EMAIL">Email</SelectItem>
+              <SelectItem value="WHATSAPP">WhatsApp</SelectItem>
+              <SelectItem value="RECLAMEAQUI">Reclame Aqui</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Switch
+            id="pending-suggestion"
+            checked={pendingSuggestionFilter}
+            onCheckedChange={(checked) => {
+              setPendingSuggestionFilter(!!checked);
+              setPage(1);
+            }}
+          />
+          <Label htmlFor="pending-suggestion" className="text-sm cursor-pointer">
+            <Bot className="inline h-4 w-4 mr-1" />
+            Com sugestão pendente
+          </Label>
+        </div>
+      </div>
+
       {/* Table */}
       <div className="rounded-md border">
         <Table>
@@ -450,8 +522,17 @@ export default function TicketsPage() {
                 >
                   {/* Canal */}
                   <TableCell>
-                    <div className="flex items-center justify-center" title={row.channelType ?? "Web"}>
-                      {channelIcon(row.channelType)}
+                    <div className="flex items-center gap-1.5" title={row.channelType ?? "Web"}>
+                      {row.channelType === "RECLAMEAQUI" ? (
+                        <Badge className="bg-purple-100 text-purple-800 text-[10px] px-1.5 py-0 font-bold">
+                          RA
+                        </Badge>
+                      ) : (
+                        channelIcon(row.channelType)
+                      )}
+                      {row.hasPendingSuggestion && (
+                        <span title="Sugestão IA pendente" className="text-sm">🤖</span>
+                      )}
                     </div>
                   </TableCell>
                   {/* Cliente */}
@@ -459,8 +540,16 @@ export default function TicketsPage() {
                     {row.client.name}
                   </TableCell>
                   {/* Assunto */}
-                  <TableCell className="max-w-[200px] truncate">
-                    {row.subject}
+                  <TableCell className="max-w-[200px]">
+                    <div className="flex items-center gap-2">
+                      <span className="truncate">{row.subject}</span>
+                      {row.channelType === "RECLAMEAQUI" && row.raRating && (
+                        <span className="inline-flex items-center gap-0.5 text-xs font-medium text-yellow-700 whitespace-nowrap" title="Nota RA">
+                          <Star className="h-3 w-3 fill-yellow-500 text-yellow-500" />
+                          {row.raRating}
+                        </span>
+                      )}
+                    </div>
                   </TableCell>
                   {/* Prioridade */}
                   <TableCell>
@@ -472,11 +561,20 @@ export default function TicketsPage() {
                   </TableCell>
                   {/* Status */}
                   <TableCell>
-                    <span
-                      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusColor(row.status)}`}
-                    >
-                      {statusLabel(row.status)}
-                    </span>
+                    <div className="flex flex-col gap-1">
+                      <span
+                        className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusColor(row.status)}`}
+                      >
+                        {statusLabel(row.status)}
+                      </span>
+                      {row.channelType === "RECLAMEAQUI" && row.raStatusName && (
+                        <span
+                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${raStatusColor(row.raStatusName)}`}
+                        >
+                          {row.raStatusName}
+                        </span>
+                      )}
+                    </div>
                   </TableCell>
                   {/* SLA */}
                   <TableCell>
