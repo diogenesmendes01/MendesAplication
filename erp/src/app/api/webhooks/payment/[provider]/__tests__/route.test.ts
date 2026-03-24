@@ -158,7 +158,8 @@ describe("POST /api/webhooks/payment/[provider]", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Reset the $transaction mock for each test
-    mockedPrisma.$transaction.mockImplementation(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (mockedPrisma.$transaction as any).mockImplementation(
       async (fn: (tx: typeof mockTx) => Promise<unknown>) => fn(mockTx),
     );
   });
@@ -314,7 +315,7 @@ describe("POST /api/webhooks/payment/[provider]", () => {
     const auditCalls = mockedLogAudit.mock.calls;
     const overpaidCall = auditCalls.find(
       (call) => {
-        const arg = call[0] as Record<string, Record<string, unknown>>;
+        const arg = call[0] as unknown as Record<string, Record<string, unknown>>;
         return arg.dataAfter && arg.dataAfter.alert === "OVERPAID";
       },
     );

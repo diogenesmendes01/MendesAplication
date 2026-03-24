@@ -359,7 +359,7 @@ export async function testAiConnection(
             .replace(/sk-[^\s"]+/g, "sk-[REDACTED]")
             .replace(/[a-zA-Z0-9]{32,}/g, "[REDACTED]")
         : String(err);
-    logger.error("[testAiConnection] provider error:", safeErr);
+    logger.error({ err: safeErr }, "[testAiConnection] provider error:");
 
     // Map common provider error patterns to safe, generic messages for the frontend.
     // Raw provider messages can expose partial API keys ("sk-proj-xxx...") or internal details.

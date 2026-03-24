@@ -1155,7 +1155,7 @@ export async function sendEmailReply(
       attachmentIds,
     });
   } catch (err) {
-    logger.error("Failed to enqueue email-outbound job:", err);
+    logger.error({ err: err }, "Failed to enqueue email-outbound job:");
   }
 
   await logAuditEvent({
@@ -1425,7 +1425,7 @@ export async function sendWhatsAppMessage(
       attachmentIds,
     });
   } catch (err) {
-    logger.error("Failed to enqueue whatsapp-outbound job:", err);
+    logger.error({ err: err }, "Failed to enqueue whatsapp-outbound job:");
   }
 
   await logAuditEvent({

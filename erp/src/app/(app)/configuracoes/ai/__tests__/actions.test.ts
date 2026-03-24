@@ -76,6 +76,11 @@ const baseConfig = {
   emailEnabled: false,
   emailPersona: null,
   emailSignature: null,
+    raEnabled: false,
+    raMode: "suggest",
+    raPrivateBeforePublic: true,
+    raAutoRequestEvaluation: false,
+    raEscalationKeywords: ["processo", "advogado", "procon"],
 };
 
 // ─── testAiConnection ─────────────────────────────────────────────────────────
@@ -341,6 +346,11 @@ describe("updateAiConfig", () => {
     emailEnabled: false,
     emailPersona: null,
     emailSignature: null,
+    raEnabled: false,
+    raMode: "suggest",
+    raPrivateBeforePublic: true,
+    raAutoRequestEvaluation: false,
+    raEscalationKeywords: ["processo", "advogado", "procon"],
   };
 
   beforeEach(() => {
@@ -532,6 +542,11 @@ describe("Provider parity — frontend ↔ backend", () => {
         emailEnabled: false,
         emailPersona: "",
         emailSignature: "",
+        raEnabled: false,
+        raMode: "suggest",
+        raPrivateBeforePublic: true,
+        raAutoRequestEvaluation: false,
+        raEscalationKeywords: [],
         dailySpendLimitBrl: null,
         temperature: 0.7,
       });

@@ -73,7 +73,7 @@ describe("tool definitions — structure", () => {
   });
 
   it("GET_CLIENT_INFO has no required parameters", () => {
-    const required = GET_CLIENT_INFO.parameters.required as string[];
+    const required = GET_CLIENT_INFO.parameters.required as unknown as string[];
     expect(required).toEqual([]);
   });
 });

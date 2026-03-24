@@ -110,10 +110,7 @@ export async function processDocumentProcessing(
       `[document-processing] Document ${documentId} processed successfully: ${chunks.length} chunks with embeddings`
     );
   } catch (error) {
-    logger.error(
-      `[document-processing] Failed to process document ${documentId}:`,
-      error
-    );
+    logger.error({ err: error }, `[document-processing] Failed to process document ${documentId}`);
 
     // Update document status to ERROR
     await prisma.document.update({

@@ -269,7 +269,7 @@ export async function sendProposalEmail(
       },
     });
   } catch (eventErr) {
-    logger.error("[ProposalEvent] Falha ao registrar evento EMAIL_SENT:", eventErr);
+    logger.error({ err: eventErr }, "[ProposalEvent] Falha ao registrar evento EMAIL_SENT:");
   }
 
   return { success: true };
@@ -414,7 +414,7 @@ export async function sendBoletoEmail(
       },
     });
   } catch (eventErr) {
-    logger.error("[ProposalEvent] Falha ao registrar evento BOLETO_SENT:", eventErr);
+    logger.error({ err: eventErr }, "[ProposalEvent] Falha ao registrar evento BOLETO_SENT:");
   }
 
   return { success: true };

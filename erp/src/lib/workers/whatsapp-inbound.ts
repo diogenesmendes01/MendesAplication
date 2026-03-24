@@ -170,7 +170,7 @@ async function downloadAndSaveMedia(
 
     return { storagePath, fileSize: buffer.length };
   } catch (err) {
-    logger.error("[whatsapp-inbound] Failed to save media:", err);
+    logger.error({ err: err }, "[whatsapp-inbound] Failed to save media:");
     return null;
   }
 }
@@ -195,7 +195,7 @@ async function saveBase64Media(
 
     return { storagePath, fileSize: buffer.length };
   } catch (err) {
-    logger.error("[whatsapp-inbound] Failed to save base64 media:", err);
+    logger.error({ err: err }, "[whatsapp-inbound] Failed to save base64 media:");
     return null;
   }
 }

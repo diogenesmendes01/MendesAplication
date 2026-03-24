@@ -10,12 +10,12 @@ export function createWorker(
   const worker = new Worker(
     queueName,
     async (job: Job) => {
-      logger.info(`[${queueName}] Processing job ${job.id}:`, job.name, job.data)
+      logger.info({ jobName: job.name, jobData: job.data }, `[${queueName}] Processing job ${job.id}`)
       try {
         await processor(job)
         logger.info(`[${queueName}] Job ${job.id} completed`)
       } catch (error) {
-        logger.error(`[${queueName}] Job ${job.id} failed:`, error)
+        logger.error({ err: error }, `[${queueName}] Job ${job.id} failed:`)
         throw error
       }
     },
@@ -30,10 +30,7 @@ export function createWorker(
   worker.on('failed', (job, err) => {
     const attemptsMade = job?.attemptsMade ?? 0
     const maxAttempts = job?.opts?.attempts ?? 1
-    logger.error(
-      `[${queueName}] Job ${job?.id} failed (attempt ${attemptsMade}/${maxAttempts}):`,
-      err.message
-    )
+    logger.error({ err }, `[${queueName}] Job ${job?.id} failed (attempt ${attemptsMade}/${maxAttempts})`)
   })
 
   worker.on('stalled', (jobId) => {

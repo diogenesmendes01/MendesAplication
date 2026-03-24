@@ -151,7 +151,7 @@ describe("OpenAI-compatible completion", () => {
 
   it("includes tools in request", async () => {
     mockFetch.mockResolvedValueOnce(makeOpenAiResponse("done"));
-    const tools: AiToolDefinition[] = [{ name: "SEARCH", description: "Search", parameters: { type: "object" } }];
+    const tools: AiToolDefinition[] = [{ name: "SEARCH", description: "Search", parameters: { type: "object", properties: {}, required: [] as const } }];
     await chatCompletion([{ role: "user", content: "find" }], tools, { provider: "openai", apiKey: "k" });
     const body = JSON.parse(mockFetch.mock.calls[0][1].body);
     expect(body.tools).toHaveLength(1);
@@ -238,7 +238,7 @@ describe("Anthropic completion", () => {
   it("uses input_schema for tools", async () => {
     mockFetch.mockResolvedValueOnce(makeAnthropicResponse([{ type: "text", text: "ok" }]));
     await chatCompletion([{ role: "user", content: "t" }],
-      [{ name: "R", description: "Reply", parameters: { type: "object" } }],
+      [{ name: "R", description: "Reply", parameters: { type: "object", properties: {}, required: [] as const } }],
       { provider: "anthropic", apiKey: "k" });
     const body = JSON.parse(mockFetch.mock.calls[0][1].body);
     expect(body.tools[0].input_schema).toBeDefined();

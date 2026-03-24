@@ -40,7 +40,7 @@ export async function POST(
   try {
     rawBody = await request.text();
   } catch (err) {
-    logger.error("[webhook] Failed to read request body:", err);
+    logger.error({ err: err }, "[webhook] Failed to read request body:");
     return NextResponse.json({ error: "body_read_failed" }, { status: 500 });
   }
 
@@ -104,10 +104,7 @@ export async function POST(
         break;
       }
     } catch (err) {
-      logger.error(
-        `[webhook] Error validating with provider ${prov.id}:`,
-        err
-      );
+      logger.error({ err }, `[webhook] Error validating with provider ${prov.id}`);
       // Continue trying other providers
     }
   }
@@ -125,7 +122,7 @@ export async function POST(
   try {
     event = gateway.parseWebhookEvent(rawBody);
   } catch (err) {
-    logger.error("[webhook] Failed to parse webhook event:", err);
+    logger.error({ err: err }, "[webhook] Failed to parse webhook event:");
     return NextResponse.json({ received: true, error: "parse_error" }, { status: 200 });
   }
 

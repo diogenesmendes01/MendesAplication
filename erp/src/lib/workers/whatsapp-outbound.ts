@@ -66,7 +66,7 @@ export async function processWhatsAppOutbound(job: Job<WhatsAppOutboundJobData>)
       where: { id: messageId },
       data: { deliveryStatus: "FAILED" },
     }).catch(() => {}); // Don't let status update failure mask the original error
-    logger.error(`[whatsapp-outbound] Failed to send WhatsApp for message ${messageId}:`, err);
+    logger.error({ err: err }, `[whatsapp-outbound] Failed to send WhatsApp for message ${messageId}:`);
     throw err; // Let BullMQ retry
   }
 }

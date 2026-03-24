@@ -949,10 +949,7 @@ export class SantanderProvider implements PaymentGateway {
     }
 
     // Log raw event for debugging (always, regardless of outcome)
-    logger.info(
-      "[santander-webhook] Raw event received:",
-      JSON.stringify(payload).slice(0, 2000),
-    );
+    logger.info({ payload: JSON.stringify(payload).slice(0, 2000) }, "[santander-webhook] Raw event received");
 
     // Extract status/event type from payload
     // Santander may use different field names; try multiple possibilities

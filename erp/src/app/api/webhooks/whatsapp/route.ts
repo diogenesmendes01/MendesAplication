@@ -34,7 +34,7 @@ export async function POST(request: Request) {
     const jobName = event === "message.media" ? "process-media" : "process-inbound";
     await whatsappInboundQueue.add(jobName, data);
   } catch (err) {
-    logger.error("[webhook/whatsapp] Failed to enqueue:", err);
+    logger.error({ err: err }, "[webhook/whatsapp] Failed to enqueue:");
     return NextResponse.json(
       { error: "Failed to enqueue message" },
       { status: 500 }

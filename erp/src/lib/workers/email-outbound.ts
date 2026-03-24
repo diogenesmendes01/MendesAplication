@@ -85,7 +85,7 @@ export async function processEmailOutbound(job: Job<EmailOutboundJobData>) {
 
     logger.info(`[email-outbound] Email sent to ${to}, messageId: ${externalId}`);
   } catch (err) {
-    logger.error(`[email-outbound] Failed to send email for message ${messageId}:`, err);
+    logger.error({ err: err }, `[email-outbound] Failed to send email for message ${messageId}:`);
     throw err; // Let BullMQ retry
   }
 }

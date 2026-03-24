@@ -53,14 +53,14 @@ function getRedis(): Redis {
       lazyConnect: true,
     });
     redis.on("error", (err) => {
-      logger.error("[rate-limit] Redis connection error:", err.message);
+      logger.error({ err }, "[rate-limit] Redis connection error");
       redisAvailable = false;
     });
     redis.on("connect", () => {
       redisAvailable = true;
     });
     redis.connect().catch((err) => {
-      logger.error("[rate-limit] Redis initial connection failed:", err.message);
+      logger.error({ err }, "[rate-limit] Redis initial connection failed");
       redisAvailable = false;
     });
   }
@@ -140,10 +140,7 @@ export async function checkRateLimit(
 
       return { allowed: true, retryAfterMs: 0 };
     } catch (err) {
-      logger.error(
-        "[rate-limit] Redis operation failed, falling back to in-memory:",
-        err instanceof Error ? err.message : err
-      );
+      logger.error({ err }, "[rate-limit] Redis operation failed, falling back to in-memory");
       redisAvailable = false;
     }
   }

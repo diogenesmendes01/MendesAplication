@@ -32,7 +32,7 @@ async function createProposalEvent(
     });
   } catch (err) {
     // Não propagar erro de log — o evento principal não deve falhar por causa do log
-    logger.error("[ProposalEvent] Falha ao registrar evento:", err);
+    logger.error({ err: err }, "[ProposalEvent] Falha ao registrar evento:");
   }
 }
 
@@ -827,7 +827,7 @@ export async function generateBoletosForProposal(
           await gateway.cancelBoleto(gid);
           logger.info(`[Payment] Compensação: boleto ${gid} cancelado no gateway`);
         } catch (cancelErr) {
-          logger.error(`[Payment] Falha ao cancelar boleto órfão ${gid}:`, cancelErr);
+          logger.error({ err: cancelErr }, `[Payment] Falha ao cancelar boleto órfão ${gid}:`);
         }
       }
 
@@ -849,7 +849,7 @@ export async function generateBoletosForProposal(
           });
           logger.info(`[Payment] Compensação DB: ${compensatedBoletoIds.length} boleto(s) e receivables marcados como CANCELLED`);
         } catch (dbErr) {
-          logger.error("[Payment] Falha ao compensar registros no DB:", dbErr);
+          logger.error({ err: dbErr }, "[Payment] Falha ao compensar registros no DB:");
         }
         // Clear createdBoletos to avoid returning phantom boletos
         createdBoletos.length = 0;
@@ -1075,7 +1075,7 @@ export async function updateBoletoStatus(
       }
     } catch (err) {
       // If auto-emit fails, create PENDING invoice for manual resolution
-      logger.error("Auto-emit NFS-e failed:", err);
+      logger.error({ err: err }, "Auto-emit NFS-e failed:");
       try {
         const boletoData = await prisma.boleto.findFirst({
           where: { id: boletoId, companyId },
@@ -1110,7 +1110,7 @@ export async function updateBoletoStatus(
           }
         }
       } catch (fallbackErr) {
-        logger.error("Failed to create PENDING invoice:", fallbackErr);
+        logger.error({ err: fallbackErr }, "Failed to create PENDING invoice:");
       }
     }
   }

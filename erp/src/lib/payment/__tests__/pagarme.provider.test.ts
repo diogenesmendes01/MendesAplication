@@ -188,7 +188,7 @@ describe("PagarmeProvider", () => {
       globalThis.fetch = vi.fn(async () => ({
         ok: true, status: 200,
         json: async () => ({ id: "ch_123", status: "paid", paid_at: "2026-03-20T10:00:00Z", paid_amount: 10000 }),
-      })) as typeof fetch;
+      })) as unknown as typeof fetch;
 
       const result = await provider.getBoletoStatus("ch_123");
       expect(result.status).toBe("paid");
@@ -203,7 +203,7 @@ describe("PagarmeProvider", () => {
 
     it("retorna success: true no cancelamento", async () => {
       const provider = new PagarmeProvider({ apiKey: "sk_test_abc" });
-      globalThis.fetch = vi.fn(async () => ({ ok: true, status: 204 })) as typeof fetch;
+      globalThis.fetch = vi.fn(async () => ({ ok: true, status: 204 })) as unknown as typeof fetch;
       expect((await provider.cancelBoleto("ch_123")).success).toBe(true);
     });
 
@@ -211,7 +211,7 @@ describe("PagarmeProvider", () => {
       const provider = new PagarmeProvider({ apiKey: "sk_test_abc" });
       globalThis.fetch = vi.fn(async () => ({
         ok: false, status: 404, statusText: "Not Found", json: async () => ({ message: "Charge not found" }),
-      })) as typeof fetch;
+      })) as unknown as typeof fetch;
       await expect(provider.cancelBoleto("ch_nope")).rejects.toThrow("falha ao cancelar");
     });
   });
@@ -222,7 +222,7 @@ describe("PagarmeProvider", () => {
 
     it("retorna ok: true quando API responde", async () => {
       const provider = new PagarmeProvider({ apiKey: "sk_test_abc" });
-      globalThis.fetch = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ data: [] }) })) as typeof fetch;
+      globalThis.fetch = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ data: [] }) })) as unknown as typeof fetch;
       expect((await provider.testConnection()).ok).toBe(true);
     });
 
@@ -230,7 +230,7 @@ describe("PagarmeProvider", () => {
       const provider = new PagarmeProvider({ apiKey: "sk_test_abc" });
       globalThis.fetch = vi.fn(async () => ({
         ok: false, status: 401, statusText: "Unauthorized", json: async () => ({ message: "Invalid key" }),
-      })) as typeof fetch;
+      })) as unknown as typeof fetch;
       const result = await provider.testConnection();
       expect(result.ok).toBe(false);
       expect(result.message).toContain("Falha");

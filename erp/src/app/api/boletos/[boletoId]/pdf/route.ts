@@ -142,7 +142,7 @@ export async function GET(
 
     return NextResponse.json({ link: result.link });
   } catch (err) {
-    logger.error("[api/boletos/pdf] Error:", err);
+    logger.error({ err: err }, "[api/boletos/pdf] Error:");
     const message =
       err instanceof Error ? err.message : "Erro ao obter PDF do boleto";
     return NextResponse.json({ error: message }, { status: 500 });
