@@ -24,6 +24,7 @@ export const QUEUE_NAMES = {
   SLA_CHECK: 'sla-check',
   AI_AGENT: 'ai-agent',
   DOCUMENT_PROCESSING: 'document-processing',
+  RECLAMEAQUI_INBOUND: 'reclameaqui-inbound',
 } as const
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES]
@@ -42,3 +43,4 @@ export const whatsappOutboundQueue = new Queue(QUEUE_NAMES.WHATSAPP_OUTBOUND, { 
 export const slaCheckQueue = new Queue(QUEUE_NAMES.SLA_CHECK, { connection })
 export const aiAgentQueue = new Queue(QUEUE_NAMES.AI_AGENT, { connection, defaultJobOptions })
 export const documentProcessingQueue = new Queue(QUEUE_NAMES.DOCUMENT_PROCESSING, { connection, defaultJobOptions })
+export const reclameaquiInboundQueue = new Queue(QUEUE_NAMES.RECLAMEAQUI_INBOUND, { connection, defaultJobOptions })
