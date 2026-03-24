@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { searchDocuments } from "./embeddings";
+import { searchDocuments, searchDocumentsByChannel } from "./embeddings";
 import { sendTextMessage } from "@/lib/whatsapp-api";
 import { emailOutboundQueue } from "@/lib/queue";
 import { sanitizeEmailHtml } from "./sanitize-utils";
@@ -13,8 +13,19 @@ export interface ToolContext {
   companyId: string;
   clientId: string;
   contactPhone: string; // Digits-only phone for WhatsApp replies
-  channel?: "WHATSAPP" | "EMAIL"; // Originating channel — used for audit logs
+  channel?: "WHATSAPP" | "EMAIL" | "RECLAMEAQUI"; // Originating channel — used for audit logs
   dryRun?: boolean;     // When true, tools return results without side effects
+}
+
+// ─── Reclame Aqui response type ──────────────────────────────────────────────
+
+export interface ReclameAquiResponse {
+  privateMessage: string;
+  publicMessage: string;
+  detectedType: string;
+  confidence: number;
+  suggestModeration?: boolean;
+  moderationReason?: number;
 }
 
 // ─── Main dispatcher ─────────────────────────────────────────────────────────
@@ -40,6 +51,9 @@ export async function executeTool(
       case "RESPOND_EMAIL":
         if (context.dryRun) return executeDryRunRespondEmail(args);
         return await executeRespondEmail(args, context);
+      case "RESPOND_RECLAMEAQUI":
+        if (context.dryRun) return executeDryRunRespondReclameAqui(args);
+        return await executeRespondReclameAqui(args, context);
       case "ESCALATE":
         if (context.dryRun) return executeDryRunEscalate(args);
         return await executeEscalate(args, context);
@@ -74,7 +88,10 @@ async function executeSearchDocuments(
 
   // SEARCH_DOCUMENTS works the same in dry-run — it reads from the real
   // knowledge base so the simulation accurately reflects actual behaviour.
-  const results = await searchDocuments(query, context.companyId);
+  // For RECLAMEAQUI, filter to RA-specific + general (null channel) documents.
+  const results = context.channel === "RECLAMEAQUI"
+    ? await searchDocumentsByChannel(query, context.companyId, "RECLAMEAQUI")
+    : await searchDocuments(query, context.companyId);
 
   if (results.length === 0) {
     return "Nenhum documento relevante encontrado na base de conhecimento.";
@@ -321,6 +338,54 @@ async function executeRespondEmail(
   return `Email enfileirado para envio ao destinatario ${recipientEmail} com assunto "${subject}".`;
 }
 
+// ─── RESPOND_RECLAMEAQUI ─────────────────────────────────────────────────────
+
+async function executeRespondReclameAqui(
+  args: Record<string, unknown>,
+  context: ToolContext
+): Promise<string> {
+  const privateMessage = args.privateMessage as string;
+  const publicMessage = args.publicMessage as string;
+  const detectedType = args.detectedType as string;
+  const confidence = args.confidence as number;
+
+  if (!privateMessage) return "Erro: privateMessage nao fornecida.";
+  if (!publicMessage) return "Erro: publicMessage nao fornecida.";
+  if (!detectedType) return "Erro: detectedType nao fornecido.";
+
+  const validTypes = [
+    "boleto_nao_solicitado",
+    "cobranca_indevida",
+    "reembolso",
+    "servico_nao_entregue",
+    "qualidade_servico",
+    "trabalhista",
+    "outro",
+  ];
+  if (!validTypes.includes(detectedType)) {
+    return `Erro: detectedType invalido. Valores aceitos: ${validTypes.join(", ")}`;
+  }
+
+  // Build the dual response payload
+  const raResponse: ReclameAquiResponse = {
+    privateMessage,
+    publicMessage,
+    detectedType,
+    confidence: typeof confidence === "number" ? Math.min(1, Math.max(0, confidence)) : 0.5,
+  };
+
+  // Flag trabalhista complaints for moderation
+  if (detectedType === "trabalhista") {
+    raResponse.suggestModeration = true;
+    raResponse.moderationReason = 16;
+  }
+
+  // Store as JSON in content field — the worker (ai-agent.ts) will parse and route
+  // The tool does NOT send to RA directly; that's the outbound worker's job.
+  // We return the structured response so the agent loop can capture it.
+  return JSON.stringify(raResponse);
+}
+
 // ─── ESCALATE ────────────────────────────────────────────────────────────────
 
 async function executeEscalate(
@@ -413,6 +478,30 @@ function executeDryRunRespondEmail(args: Record<string, unknown>): string {
   if (!subject) return "Erro: assunto (subject) nao fornecido.";
   if (!message) return "Erro: mensagem (message) nao fornecida.";
   return `[SIMULAÇÃO] Email que seria enviado — Assunto: "${subject}" | Corpo: "${message}"`;
+}
+
+function executeDryRunRespondReclameAqui(args: Record<string, unknown>): string {
+  const privateMessage = args.privateMessage as string;
+  const publicMessage = args.publicMessage as string;
+  const detectedType = args.detectedType as string;
+  const confidence = args.confidence as number;
+
+  if (!privateMessage) return "Erro: privateMessage nao fornecida.";
+  if (!publicMessage) return "Erro: publicMessage nao fornecida.";
+
+  const raResponse: ReclameAquiResponse = {
+    privateMessage,
+    publicMessage,
+    detectedType: detectedType || "outro",
+    confidence: typeof confidence === "number" ? confidence : 0.5,
+  };
+
+  if (detectedType === "trabalhista") {
+    raResponse.suggestModeration = true;
+    raResponse.moderationReason = 16;
+  }
+
+  return JSON.stringify(raResponse);
 }
 
 function executeDryRunEscalate(args: Record<string, unknown>): string {
