@@ -4,6 +4,7 @@ import { PagarmeProvider } from "./providers/pagarme.provider";
 import { SantanderProvider } from "./providers/santander.provider";
 import { CobreFacilProvider } from "./providers/cobrefacil.provider";
 import { LytexProvider } from "./providers/lytex.provider";
+import { VindiProvider } from "./providers/vindi.provider";
 import type { SantanderCredentials } from "./providers/santander-auth";
 
 // ---------------------------------------------------------------------------
@@ -205,6 +206,29 @@ const GATEWAY_FACTORIES: Record<string, GatewayFactory> = {
       webhookSecret,
     );
   },
+
+  vindi: (decryptedCredentials, metadata, webhookSecret, options) => {
+    const apiKey = decryptedCredentials.apiKey;
+
+    if (!apiKey || typeof apiKey !== "string") {
+      throw new Error(
+        "Vindi: campo 'apiKey' é obrigatório e deve ser uma string válida",
+      );
+    }
+
+    return new VindiProvider(
+      { apiKey, sandbox: options?.sandbox ?? false },
+      metadata
+        ? {
+            defaultPaymentMethodCode:
+              typeof metadata.defaultPaymentMethodCode === "string"
+                ? metadata.defaultPaymentMethodCode
+                : undefined,
+          }
+        : null,
+      webhookSecret,
+    );
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -221,7 +245,7 @@ const GATEWAY_FACTORIES: Record<string, GatewayFactory> = {
  * Now async to support dynamic imports (e.g. MockProvider is lazy-loaded
  * so it never ends up in the production bundle).
  *
- * @param providerType - Tipo do provider ("pagarme" | "pinbank" | "santander" | "cobrefacil" | "lytex" | "mock")
+ * @param providerType - Tipo do provider ("pagarme" | "pinbank" | "santander" | "cobrefacil" | "lytex" | "vindi" | "mock")
  * @param decryptedCredentials - Credentials já decriptadas (JSON parseado)
  * @param metadata - Config comportamental (juros, multa, instruções, etc.)
  * @param webhookSecret - Secret para validação de webhooks (opcional)

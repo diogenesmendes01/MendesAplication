@@ -425,6 +425,36 @@ export const PRODUCTION_PROVIDER_REGISTRY: Record<string, ProviderDefinition> = 
       },
     ],
   },
+  vindi: {
+    id: "vindi",
+    name: "Vindi Recorrência",
+    configSchema: [
+      {
+        key: "apiKey",
+        label: "API Key",
+        type: "password",
+        required: true,
+        helpText:
+          "Painel Vindi → Configurações → API. Formato: chave alfanumérica.",
+        group: "credentials",
+      },
+    ],
+    settingsSchema: [
+      {
+        key: "defaultPaymentMethodCode",
+        label: "Método de Pagamento Padrão",
+        type: "select",
+        required: false,
+        options: [
+          { value: "bank_slip", label: "Boleto Bancário" },
+          { value: "pix", label: "PIX" },
+          { value: "credit_card", label: "Cartão de Crédito" },
+        ],
+        helpText: "Código do método de pagamento na Vindi.",
+        group: "settings",
+      },
+    ],
+  },
 };
 
 /**
@@ -443,7 +473,7 @@ export const DEV_PROVIDER_REGISTRY: Record<string, ProviderDefinition> = {
 
 /**
  * Registro central de todos os providers disponíveis.
- * Em produção: apenas pagarme, pinbank, santander, cobrefacil e lytex.
+ * Em produção: apenas pagarme, pinbank, santander, cobrefacil, lytex e vindi.
  * Em dev/test: inclui mock.
  * O frontend consulta isso pra saber quais bancos existem e quais campos mostrar.
  */
