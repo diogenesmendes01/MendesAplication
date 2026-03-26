@@ -196,7 +196,8 @@ describe("CobreFacilProvider", () => {
         return mockResponse({ success: true, data: {} });
       });
 
-      const customerId = await provider.ensureCustomer({
+      const customerId = await // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (provider as any).ensureCustomer({
         name: "João",
         document: "12345678901",
         documentType: "cpf",
@@ -231,7 +232,8 @@ describe("CobreFacilProvider", () => {
         return mockResponse({ success: true, data: {} });
       });
 
-      const customerId = await provider.ensureCustomer({
+      const customerId = await // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (provider as any).ensureCustomer({
         name: "Maria LTDA",
         document: "12345678000199",
         documentType: "cnpj",
@@ -276,7 +278,8 @@ describe("CobreFacilProvider", () => {
         return mockResponse({ success: true, data: {} });
       });
 
-      await provider.ensureCustomer({
+      await // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (provider as any).ensureCustomer({
         name: "Sem Endereço",
         document: "11122233344",
         documentType: "cpf",

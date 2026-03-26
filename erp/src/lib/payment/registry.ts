@@ -321,6 +321,7 @@ export const PRODUCTION_PROVIDER_REGISTRY: Record<string, ProviderDefinition> = 
         label: "Dias antecedência p/ desconto",
         type: "number",
         required: false,
+        helpText: "Dias antes do vencimento para desconto. 0 ou vazio = desconto válido até a data de vencimento.",
         group: "settings",
       },
     ],
