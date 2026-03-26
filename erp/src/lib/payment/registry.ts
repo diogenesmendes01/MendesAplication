@@ -325,6 +325,105 @@ export const PRODUCTION_PROVIDER_REGISTRY: Record<string, ProviderDefinition> = 
       },
     ],
   },
+  lytex: {
+    id: "lytex",
+    name: "Lytex Pagamentos",
+    configSchema: [
+      {
+        key: "clientId",
+        label: "Client ID",
+        type: "text",
+        required: true,
+        helpText: "Painel Lytex → Configurações → Integrações e API",
+        group: "credentials",
+      },
+      {
+        key: "clientSecret",
+        label: "Client Secret",
+        type: "password",
+        required: true,
+        group: "credentials",
+      },
+    ],
+    settingsSchema: [
+      {
+        key: "defaultPaymentMethod",
+        label: "Método de Pagamento Padrão",
+        type: "select",
+        required: false,
+        options: [
+          { value: "boleto", label: "Boleto" },
+          { value: "pix", label: "PIX" },
+          { value: "creditCard", label: "Cartão de Crédito" },
+        ],
+        group: "settings",
+      },
+      {
+        key: "cancelOverdueDays",
+        label: "Dias para cancelar após vencimento",
+        type: "number",
+        required: false,
+        placeholder: "29",
+        group: "settings",
+      },
+      {
+        key: "overduePaymentDays",
+        label: "Dias para expirar após vencimento",
+        type: "number",
+        required: false,
+        placeholder: "100",
+        group: "settings",
+      },
+      {
+        key: "enableMulctAndInterest",
+        label: "Habilitar multa e juros",
+        type: "boolean",
+        required: false,
+        group: "settings",
+      },
+      {
+        key: "mulctPercentage",
+        label: "Multa (%)",
+        type: "number",
+        required: false,
+        placeholder: "2",
+        group: "settings",
+      },
+      {
+        key: "interestPercentage",
+        label: "Juros ao mês (%)",
+        type: "number",
+        required: false,
+        placeholder: "1",
+        group: "settings",
+      },
+      {
+        key: "enableSerasa",
+        label: "Habilitar negativação Serasa",
+        type: "boolean",
+        required: false,
+        helpText: "Negativação automática de inadimplentes",
+        group: "settings",
+      },
+      {
+        key: "serasaNegativityDays",
+        label: "Dias para negativação Serasa",
+        type: "number",
+        required: false,
+        placeholder: "30",
+        helpText: "Após quantos dias de atraso negativar",
+        group: "settings",
+      },
+      {
+        key: "billingRuleId",
+        label: "Régua de Cobrança (ID)",
+        type: "text",
+        required: false,
+        helpText: "ID da régua criada no painel Lytex",
+        group: "settings",
+      },
+    ],
+  },
 };
 
 /**
@@ -343,7 +442,7 @@ export const DEV_PROVIDER_REGISTRY: Record<string, ProviderDefinition> = {
 
 /**
  * Registro central de todos os providers disponíveis.
- * Em produção: apenas pagarme, pinbank, santander e cobrefacil.
+ * Em produção: apenas pagarme, pinbank, santander, cobrefacil e lytex.
  * Em dev/test: inclui mock.
  * O frontend consulta isso pra saber quais bancos existem e quais campos mostrar.
  */
