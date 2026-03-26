@@ -277,8 +277,13 @@ export class CobreFacilProvider implements PaymentGateway {
     }
 
     if (this.metadata?.discountPercentage) {
+      const discountDays = this.metadata?.discountDays ?? 0;
+      // discountDays = 0 means discount valid until due date itself
+      // discountDays > 0 means discount valid until N days before due date
       const limitDate = new Date(input.dueDate);
-      limitDate.setDate(limitDate.getDate() - (this.metadata?.discountDays ?? 0));
+      if (discountDays > 0) {
+        limitDate.setDate(limitDate.getDate() - discountDays);
+      }
       settings.discount = {
         mode: "percentage",
         value: this.metadata.discountPercentage,
