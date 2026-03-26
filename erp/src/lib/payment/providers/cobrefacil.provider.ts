@@ -159,7 +159,7 @@ export class CobreFacilProvider implements PaymentGateway {
    * Searches by CPF/CNPJ first; creates if not found.
    * Address is REQUIRED by the Cobre Fácil API.
    */
-  async ensureCustomer(
+  private async ensureCustomer(
     customer: CreateBoletoInput["customer"],
   ): Promise<string> {
     const cleanDoc = customer.document.replace(/\D/g, "");
@@ -183,6 +183,8 @@ export class CobreFacilProvider implements PaymentGateway {
     }
 
     // Build address (required by API)
+    // TODO: Placeholder address — tornar configurável via metadata por empresa
+    // Endereço default de SP pode ser incorreto pra empresas de outras regiões
     const address = customer.address
       ? {
           description: "Principal",
@@ -275,10 +277,12 @@ export class CobreFacilProvider implements PaymentGateway {
     }
 
     if (this.metadata?.discountPercentage) {
+      const limitDate = new Date(input.dueDate);
+      limitDate.setDate(limitDate.getDate() - (this.metadata?.discountDays ?? 0));
       settings.discount = {
         mode: "percentage",
         value: this.metadata.discountPercentage,
-        limit_date: this.metadata.discountDays ?? 0,
+        limit_date: limitDate.toISOString().split("T")[0], // YYYY-MM-DD
       };
     }
 
@@ -330,7 +334,7 @@ export class CobreFacilProvider implements PaymentGateway {
       logger.info(`[CobreFacil] Cancelled invoice: ${gatewayId}`);
       return { success: true };
     } catch (err) {
-      logger.error({ err }, "[CobreFacil] cancelBoleto failed");
+      logger.error({ err, gatewayId }, "[CobreFacil] cancelBoleto failed");
       return { success: false };
     }
   }
@@ -339,6 +343,9 @@ export class CobreFacilProvider implements PaymentGateway {
     _headers: Record<string, string>,
     body: string,
   ): boolean {
+    // TODO: Cobre Fácil não documenta HMAC/signature para webhooks
+    // Validação apenas por estrutura do payload — adicionar verificação criptográfica quando disponível
+
     // Cobre Fácil does not document HMAC webhook signatures.
     // Validation is done by checking the payload structure has required fields.
     // In production, consider also validating by IP origin or custom secret in URL.
