@@ -43,6 +43,9 @@ export const REQUEST_TIMEOUT_MS = 15_000;
 // Token Cache (module-level, survives across calls within same process)
 // ---------------------------------------------------------------------------
 
+// TODO: Race condition — concurrent requests with expired token will both call /authenticate
+// Same pattern as santander-auth.ts — fix both together with pending-promise pattern
+
 const tokenCache = new Map<string, CachedToken>();
 
 /**

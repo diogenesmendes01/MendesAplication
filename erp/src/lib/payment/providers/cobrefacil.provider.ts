@@ -159,7 +159,7 @@ export class CobreFacilProvider implements PaymentGateway {
    * Searches by CPF/CNPJ first; creates if not found.
    * Address is REQUIRED by the Cobre Fácil API.
    */
-  async ensureCustomer(
+  private async ensureCustomer(
     customer: CreateBoletoInput["customer"],
   ): Promise<string> {
     const cleanDoc = customer.document.replace(/\D/g, "");
@@ -181,6 +181,9 @@ export class CobreFacilProvider implements PaymentGateway {
       );
       return searchJson.data[0].id;
     }
+
+    // TODO: Placeholder address — tornar configurável via metadata por empresa
+    // Issue: endereço default de SP pode ser incorreto pra empresas de outras regiões
 
     // Build address (required by API)
     const address = customer.address
@@ -275,11 +278,17 @@ export class CobreFacilProvider implements PaymentGateway {
     }
 
     if (this.metadata?.discountPercentage) {
-      settings.discount = {
+      const discount: Record<string, unknown> = {
         mode: "percentage",
         value: this.metadata.discountPercentage,
-        limit_date: this.metadata.discountDays ?? 0,
       };
+
+      // Calculate limit_date as actual date: dueDate - discountDays
+      const limitDate = new Date(input.dueDate);
+      limitDate.setDate(limitDate.getDate() - (this.metadata?.discountDays ?? 0));
+      discount.limit_date = limitDate.toISOString().split("T")[0];
+
+      settings.discount = discount;
     }
 
     if (Object.keys(settings).length > 0) {
@@ -330,7 +339,7 @@ export class CobreFacilProvider implements PaymentGateway {
       logger.info(`[CobreFacil] Cancelled invoice: ${gatewayId}`);
       return { success: true };
     } catch (err) {
-      logger.error({ err }, "[CobreFacil] cancelBoleto failed");
+      logger.error({ err, gatewayId }, "[CobreFacil] cancelBoleto failed");
       return { success: false };
     }
   }
@@ -339,7 +348,9 @@ export class CobreFacilProvider implements PaymentGateway {
     _headers: Record<string, string>,
     body: string,
   ): boolean {
-    // Cobre Fácil does not document HMAC webhook signatures.
+    // TODO: Cobre Fácil não documenta HMAC/signature para webhooks
+    // Validação apenas por estrutura do payload — adicionar verificação criptográfica quando disponível
+
     // Validation is done by checking the payload structure has required fields.
     // In production, consider also validating by IP origin or custom secret in URL.
     try {
