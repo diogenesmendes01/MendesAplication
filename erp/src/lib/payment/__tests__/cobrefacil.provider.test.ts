@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { CobreFacilProvider } from "@/lib/payment/providers/cobrefacil.provider";
 import {
   clearTokenCache,
-  TOKEN_REFRESH_MARGIN_MS,
 } from "@/lib/payment/providers/cobrefacil-auth";
 import { makeCreateBoletoInput } from "./helpers";
 
