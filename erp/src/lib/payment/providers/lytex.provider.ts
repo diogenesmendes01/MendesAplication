@@ -87,7 +87,9 @@ export class LytexProvider implements PaymentGateway {
   private readonly clientSecret: string;
   private readonly sandbox: boolean;
   private readonly metadata: LytexMetadata | null;
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  // TODO: Lytex não documenta HMAC validation atualmente.
+  // Quando disponível, implementar verificação com this.webhookSecret
+  // Ref: https://docs-pay.lytex.com.br — seção Webhooks
   private readonly webhookSecret?: string;
 
   constructor(
@@ -208,9 +210,8 @@ export class LytexProvider implements PaymentGateway {
 
     // Serasa (negativação)
     if (this.metadata?.enableSerasa) {
-      invoiceData.serasa = {
-        negativityDays: this.metadata.serasaNegativityDays ?? 30,
-      };
+      const negativityDays = Math.max(1, this.metadata.serasaNegativityDays ?? 30);
+      invoiceData.serasa = { negativityDays };
     }
 
     // Régua de cobrança
@@ -269,7 +270,8 @@ export class LytexProvider implements PaymentGateway {
     _headers: Record<string, string>,
     body: string,
   ): boolean {
-    // Lytex não documenta HMAC — validar por estrutura do payload
+    // Validação por estrutura apenas — Lytex não oferece HMAC/signature
+    // A verificação criptográfica será adicionada quando a Lytex documentar
     try {
       const parsed = JSON.parse(body) as Partial<LytexWebhookPayload>;
       return !!(parsed._hashId || parsed._id) && !!parsed.status;
@@ -293,6 +295,7 @@ export class LytexProvider implements PaymentGateway {
       };
 
       const eventType = statusToEvent[parsed.status];
+      // Note: waiting_payment status is intentionally not mapped — only terminal states trigger ERP updates
       if (!eventType) return null;
 
       return {

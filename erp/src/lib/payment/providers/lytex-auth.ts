@@ -46,6 +46,9 @@ export const REQUEST_TIMEOUT_MS = 15_000;
 // Token Cache (module-level, survives across calls within same process)
 // ---------------------------------------------------------------------------
 
+// TODO: Race condition — concurrent requests with expired token may duplicate refresh calls
+// With 5min TTL this is more likely than other providers
+// Fix: implement pending-promise pattern (mutex) for getAuthToken
 const authCache = new Map<string, CachedAuth>();
 
 /**
@@ -196,7 +199,7 @@ export async function getAuthToken(
 // ---------------------------------------------------------------------------
 
 /**
- * Wrapper de fetch que injeta automaticamente o token Bearer
+ * Wrapper de fetch que injeta automaticamente o token
  * e faz auto-retry em caso de 401/410 (token expirado entre cache e request).
  */
 export async function authenticatedFetch(
@@ -207,27 +210,29 @@ export async function authenticatedFetch(
   sandbox: boolean = false,
 ): Promise<Response> {
   const baseUrl = getBaseUrl(sandbox);
-  let token = await getAuthToken(clientId, clientSecret, sandbox);
+  let accessToken = await getAuthToken(clientId, clientSecret, sandbox);
 
-  const makeRequest = (bearerToken: string): Promise<Response> =>
+  const makeRequest = (token: string): Promise<Response> =>
     fetch(`${baseUrl}${path}`, {
       ...options,
       headers: {
         "Content-Type": "application/json",
-        Authorization: bearerToken,
+        // Lytex usa token raw no Authorization header (sem prefix "Bearer")
+        // Ref: docs-pay.lytex.com.br/documentacao/v2 — seção "Criando a cobrança"
+        Authorization: token,
         ...(options.headers as Record<string, string> | undefined),
       },
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
 
-  let response = await makeRequest(token);
+  let response = await makeRequest(accessToken);
 
   // Token expirou entre cache e request — invalidar e retry uma vez
   if (response.status === 401 || response.status === 410) {
     logger.info("[Lytex] Token expired mid-request, refreshing");
     invalidateToken(clientId, clientSecret);
-    token = await getAuthToken(clientId, clientSecret, sandbox);
-    response = await makeRequest(token);
+    accessToken = await getAuthToken(clientId, clientSecret, sandbox);
+    response = await makeRequest(accessToken);
   }
 
   return response;
