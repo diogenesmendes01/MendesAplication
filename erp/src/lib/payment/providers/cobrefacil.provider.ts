@@ -330,7 +330,7 @@ export class CobreFacilProvider implements PaymentGateway {
       logger.info(`[CobreFacil] Cancelled invoice: ${gatewayId}`);
       return { success: true };
     } catch (err) {
-      logger.error("[CobreFacil] cancelBoleto failed:", err);
+      logger.error({ err }, "[CobreFacil] cancelBoleto failed");
       return { success: false };
     }
   }
@@ -385,7 +385,7 @@ export class CobreFacilProvider implements PaymentGateway {
         rawEvent: parsed,
       };
     } catch (err) {
-      logger.error("[CobreFacil] Failed to parse webhook event:", err);
+      logger.error({ err }, "[CobreFacil] Failed to parse webhook event");
       return null;
     }
   }
