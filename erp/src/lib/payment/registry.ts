@@ -258,6 +258,73 @@ export const PRODUCTION_PROVIDER_REGISTRY: Record<string, ProviderDefinition> = 
       },
     ],
   },
+  cobrefacil: {
+    id: "cobrefacil",
+    name: "Cobre Fácil",
+    configSchema: [
+      {
+        key: "appId",
+        label: "App ID",
+        type: "text",
+        required: true,
+        placeholder: "meuapp_...",
+        helpText:
+          "Encontre em Cobre Fácil → Configurações → Integrações",
+        group: "credentials",
+      },
+      {
+        key: "secret",
+        label: "Secret",
+        type: "password",
+        required: true,
+        placeholder: "eba5893f...",
+        helpText: "Chave secreta da aplicação",
+        group: "credentials",
+      },
+    ],
+    settingsSchema: [
+      {
+        key: "defaultPaymentMethod",
+        label: "Método de Pagamento Padrão",
+        type: "select",
+        required: false,
+        options: [
+          { value: "bankslip", label: "Boleto" },
+          { value: "pix", label: "PIX" },
+          { value: "credit_card", label: "Cartão de Crédito" },
+        ],
+        group: "settings",
+      },
+      {
+        key: "finePercentage",
+        label: "Multa (%)",
+        type: "number",
+        required: false,
+        group: "settings",
+      },
+      {
+        key: "interestPercentage",
+        label: "Juros ao mês (%)",
+        type: "number",
+        required: false,
+        group: "settings",
+      },
+      {
+        key: "discountPercentage",
+        label: "Desconto antecipação (%)",
+        type: "number",
+        required: false,
+        group: "settings",
+      },
+      {
+        key: "discountDays",
+        label: "Dias antecedência p/ desconto",
+        type: "number",
+        required: false,
+        group: "settings",
+      },
+    ],
+  },
 };
 
 /**
@@ -276,7 +343,7 @@ export const DEV_PROVIDER_REGISTRY: Record<string, ProviderDefinition> = {
 
 /**
  * Registro central de todos os providers disponíveis.
- * Em produção: apenas pagarme, pinbank e santander.
+ * Em produção: apenas pagarme, pinbank, santander e cobrefacil.
  * Em dev/test: inclui mock.
  * O frontend consulta isso pra saber quais bancos existem e quais campos mostrar.
  */

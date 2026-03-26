@@ -2,6 +2,7 @@ import type { PaymentGateway } from "./types";
 import { PROVIDER_REGISTRY } from "./registry";
 import { PagarmeProvider } from "./providers/pagarme.provider";
 import { SantanderProvider } from "./providers/santander.provider";
+import { CobreFacilProvider } from "./providers/cobrefacil.provider";
 import type { SantanderCredentials } from "./providers/santander-auth";
 
 // ---------------------------------------------------------------------------
@@ -93,6 +94,54 @@ const GATEWAY_FACTORIES: Record<string, GatewayFactory> = {
       companyId,
     );
   },
+
+  cobrefacil: (decryptedCredentials, metadata, webhookSecret) => {
+    const appId = decryptedCredentials.appId;
+    const secret = decryptedCredentials.secret;
+
+    if (!appId || typeof appId !== "string") {
+      throw new Error(
+        "Cobre Fácil: campo 'appId' é obrigatório e deve ser uma string válida",
+      );
+    }
+    if (!secret || typeof secret !== "string") {
+      throw new Error(
+        "Cobre Fácil: campo 'secret' é obrigatório e deve ser uma string válida",
+      );
+    }
+
+    return new CobreFacilProvider(
+      { appId, secret },
+      metadata
+        ? {
+            defaultPaymentMethod:
+              typeof metadata.defaultPaymentMethod === "string"
+                ? (metadata.defaultPaymentMethod as
+                    | "bankslip"
+                    | "pix"
+                    | "credit_card")
+                : undefined,
+            finePercentage:
+              typeof metadata.finePercentage === "number"
+                ? metadata.finePercentage
+                : undefined,
+            interestPercentage:
+              typeof metadata.interestPercentage === "number"
+                ? metadata.interestPercentage
+                : undefined,
+            discountPercentage:
+              typeof metadata.discountPercentage === "number"
+                ? metadata.discountPercentage
+                : undefined,
+            discountDays:
+              typeof metadata.discountDays === "number"
+                ? metadata.discountDays
+                : undefined,
+          }
+        : null,
+      webhookSecret,
+    );
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -109,7 +158,7 @@ const GATEWAY_FACTORIES: Record<string, GatewayFactory> = {
  * Now async to support dynamic imports (e.g. MockProvider is lazy-loaded
  * so it never ends up in the production bundle).
  *
- * @param providerType - Tipo do provider ("pagarme" | "pinbank" | "santander" | "mock")
+ * @param providerType - Tipo do provider ("pagarme" | "pinbank" | "santander" | "cobrefacil" | "mock")
  * @param decryptedCredentials - Credentials já decriptadas (JSON parseado)
  * @param metadata - Config comportamental (juros, multa, instruções, etc.)
  * @param webhookSecret - Secret para validação de webhooks (opcional)
