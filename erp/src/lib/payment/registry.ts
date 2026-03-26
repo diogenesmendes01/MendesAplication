@@ -453,6 +453,14 @@ export const PRODUCTION_PROVIDER_REGISTRY: Record<string, ProviderDefinition> = 
         helpText: "Código do método de pagamento na Vindi.",
         group: "settings",
       },
+      {
+        key: "defaultProductId",
+        label: "ID do Produto Padrão",
+        type: "number",
+        required: false,
+        helpText: "ID do produto na Vindi. Opcional para cobranças avulsas, obrigatório se a conta Vindi exigir produto.",
+        group: "settings",
+      },
     ],
   },
 };

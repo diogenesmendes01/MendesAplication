@@ -42,6 +42,7 @@ interface VindiCredentials {
 
 interface VindiMetadata {
   defaultPaymentMethodCode?: string; // "bank_slip" | "pix" | "credit_card"
+  defaultProductId?: number;
 }
 
 /** Shape returned by GET/POST /bills */
@@ -163,6 +164,8 @@ export class VindiProvider implements PaymentGateway {
     );
 
     if (searchResult.customers?.length > 0) {
+      // TODO: Se Vindi retornar múltiplos customers com mesmo CPF/CNPJ (duplicatas),
+      // pega o primeiro. Monitorar se isso causa problemas em produção.
       return searchResult.customers[0].id;
     }
 
@@ -216,6 +219,10 @@ export class VindiProvider implements PaymentGateway {
     // IMPORTANT: Vindi uses REAIS (float, not centavos) — divide by 100
     const amountInReais = input.amount / 100;
 
+    // TODO: Sem idempotency key — se request timeout mas bill foi criada, retry cria duplicata
+    // Fase 2: usar metadata.referenceId como check de idempotência
+
+    // product_id: null works for one-off bills. Some Vindi accounts require a product — configure defaultProductId in settings.
     const result = await this.api<{ bill: VindiBill }>("/bills", {
       method: "POST",
       body: JSON.stringify({
@@ -223,7 +230,7 @@ export class VindiProvider implements PaymentGateway {
         payment_method_code: paymentMethodCode,
         bill_items: [
           {
-            product_id: null,
+            product_id: this.metadata?.defaultProductId ?? null,
             amount: amountInReais,
             description: input.description ?? "Cobrança",
             quantity: 1,
@@ -296,6 +303,9 @@ export class VindiProvider implements PaymentGateway {
     headers: Record<string, string>,
     body: string,
   ): boolean {
+    // ⚠️ PRODUCTION: sempre configurar webhookSecret (HTTP Basic Auth)
+    // O fallback por estrutura (event.type + event.data) é inseguro — usar apenas em dev/sandbox
+
     // Vindi supports HTTP Basic Auth on webhook URL
     // If webhookSecret is configured, validate the Authorization header
     if (this.webhookSecret) {

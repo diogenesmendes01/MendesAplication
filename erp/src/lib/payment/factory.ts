@@ -224,6 +224,10 @@ const GATEWAY_FACTORIES: Record<string, GatewayFactory> = {
               typeof metadata.defaultPaymentMethodCode === "string"
                 ? metadata.defaultPaymentMethodCode
                 : undefined,
+            defaultProductId:
+              typeof metadata.defaultProductId === "number"
+                ? metadata.defaultProductId
+                : undefined,
           }
         : null,
       webhookSecret,
