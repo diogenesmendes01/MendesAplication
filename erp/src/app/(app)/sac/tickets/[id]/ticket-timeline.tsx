@@ -183,7 +183,7 @@ function EventIcon({ event }: { event: TimelineEvent }) {
 // Timeline Event Item (Todos tab)
 // ---------------------------------------------------------------------------
 
-function TimelineItem({ event, channelType, companyId, onActionComplete }: { event: TimelineEvent; channelType?: string | null; companyId: string; onActionComplete?: () => void }) {
+function TimelineItem({ event, channelType, companyId, onActionComplete, isGrouped }: { event: TimelineEvent; channelType?: string | null; companyId: string; onActionComplete?: () => void; isGrouped?: boolean }) {
   // AI-generated suggestion pending approval → render SuggestionCard
   if (event.isAiGenerated && event.deliveryStatus === "PENDING_APPROVAL") {
     return (
@@ -197,6 +197,70 @@ function TimelineItem({ event, channelType, companyId, onActionComplete }: { eve
             createdAt={event.createdAt}
             onActionComplete={onActionComplete}
           />
+        </div>
+      </div>
+    );
+  }
+
+  // WhatsApp message in Todos tab → bubble layout
+  if (event.channel === "WHATSAPP" && event.type === "message" && !event.isAiGenerated) {
+    return <WhatsAppBubble event={event} />;
+  }
+
+  // Email message in Todos tab → compact email header
+  if (event.channel === "EMAIL" && event.type === "message") {
+    const isInbound = event.direction === "INBOUND";
+    const senderName = isInbound
+      ? event.contactName ?? "Remetente desconhecido"
+      : event.sender?.name ?? "Atendente";
+    return (
+      <div className={`flex gap-3 ${isGrouped ? "pl-11 -mt-2" : ""} ${event.deliveryStatus === "DISCARDED" ? "opacity-50" : ""}`}>
+        {!isGrouped && <EventIcon event={event} />}
+        {isGrouped && <div className="w-8 shrink-0" />}
+        <div className="flex-1 min-w-0 rounded-lg border bg-blue-50/40 p-3">
+          {!isGrouped && (
+            <div className="text-xs text-muted-foreground space-y-0.5 border-b border-blue-100 pb-2 mb-2">
+              <div className="flex items-center gap-1.5">
+                <span className="font-medium w-10 shrink-0">De:</span>
+                <span className="font-semibold text-foreground">{senderName}</span>
+                {isInbound && (
+                  <span className="ml-1 rounded-full bg-green-100 px-1.5 py-0.5 text-[10px] text-green-700">Recebido</span>
+                )}
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="font-medium w-10 shrink-0">Para:</span>
+                <span>{isInbound ? "Suporte" : event.contactName ?? "Cliente"}</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="font-medium w-10 shrink-0">Data:</span>
+                <span className="text-muted-foreground">{dateFmt.format(new Date(event.createdAt))}</span>
+                {event.isAiGenerated && (
+                  <span className="ml-1 rounded-full bg-purple-100 px-1.5 py-0.5 text-[10px] text-purple-700">IA</span>
+                )}
+              </div>
+            </div>
+          )}
+          {isGrouped && (
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xs text-muted-foreground">{dateFmt.format(new Date(event.createdAt))}</span>
+            </div>
+          )}
+          <p className="text-sm whitespace-pre-wrap leading-relaxed">
+            {event.content}
+          </p>
+          {event.attachments.length > 0 && (
+            <div className="mt-2 space-y-1">
+              {event.attachments.map((att) => (
+                <a key={att.id} href={att.url} target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-2 text-xs text-primary hover:underline">
+                  <Paperclip className="h-3 w-3" />
+                  <span>{att.fileName}</span>
+                  <span className="text-muted-foreground">({formatFileSize(att.fileSize)})</span>
+                  <Download className="h-3 w-3" />
+                </a>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     );
@@ -431,8 +495,8 @@ function WhatsAppBubble({ event }: { event: TimelineEvent }) {
       <div
         className={`max-w-[75%] rounded-2xl px-4 py-2.5 ${
           isOutbound
-            ? "rounded-br-md bg-green-100 text-green-900"
-            : "rounded-bl-md bg-white border text-foreground"
+            ? "rounded-br-md bg-white border text-foreground shadow-sm"
+            : "rounded-bl-md bg-green-50 text-green-900"
         }`}
       >
         {/* Sender */}
@@ -484,11 +548,20 @@ function WhatsAppBubble({ event }: { event: TimelineEvent }) {
           </div>
         )}
 
-        {/* Timestamp */}
-        <div className="flex justify-end mt-1">
+        {/* Timestamp + delivery status */}
+        <div className="flex justify-end items-center gap-1 mt-1">
           <span className="text-[10px] text-muted-foreground">
             {dateFmt.format(new Date(event.createdAt))}
           </span>
+          {isOutbound && event.deliveryStatus && event.deliveryStatus !== "DISCARDED" && (
+            <span className="text-[10px] text-muted-foreground" title={event.deliveryStatus}>
+              {event.deliveryStatus === "SENT" ? "✓" :
+               event.deliveryStatus === "DELIVERED" ? "✓✓" :
+               event.deliveryStatus === "READ" ? (
+                <span className="text-blue-500">✓✓</span>
+               ) : null}
+            </span>
+          )}
         </div>
       </div>
     </div>
@@ -1037,15 +1110,32 @@ export default function TicketTimeline({
                   Nenhum evento ainda.
                 </p>
               ) : (
-                events.map((evt) => (
-                  <TimelineItem
-                    key={evt.id}
-                    event={evt}
-                    channelType={channelType}
-                    companyId={companyId}
-                    onActionComplete={loadEvents}
-                  />
-                ))
+                events.map((evt, idx) => {
+                  const prev = idx > 0 ? events[idx - 1] : null;
+                  // Group consecutive email messages from same sender
+                  const isGrouped =
+                    evt.channel === "EMAIL" &&
+                    evt.type === "message" &&
+                    prev !== null &&
+                    prev.channel === "EMAIL" &&
+                    prev.type === "message" &&
+                    (
+                      (evt.direction === "INBOUND" && prev.direction === "INBOUND" &&
+                        evt.contactName === prev.contactName) ||
+                      (evt.direction === "OUTBOUND" && prev.direction === "OUTBOUND" &&
+                        evt.sender?.id === prev.sender?.id)
+                    );
+                  return (
+                    <TimelineItem
+                      key={evt.id}
+                      event={evt}
+                      channelType={channelType}
+                      companyId={companyId}
+                      onActionComplete={loadEvents}
+                      isGrouped={isGrouped}
+                    />
+                  );
+                })
               )}
               <div ref={timelineEndRef} />
             </div>
