@@ -288,6 +288,23 @@ export interface RaTicket {
   rating: string | null;
   interactions: RaInteraction[];
   moderation: RaModeration | null;
+
+  // Campos adicionais da doc
+  ra_reason: string | null;
+  ra_feeling: string | null;
+  categories: Array<{ id: number; code: number; description: string; creation_date: string }>;
+  consumer_consideration: string | null;
+  consumer_consideration_date: string | null;
+  company_consideration: string | null;
+  company_consideration_date: string | null;
+  public_treatment_time: string | null;
+  private_treatment_time: string | null;
+  rating_date: string | null;
+  comments_count: number;
+  interactions_not_readed_count: number;
+  whatsapp: { sent: boolean; evaluated: boolean } | null;
+  active: boolean;
+  frozen: boolean;
 }
 
 // ──────────────────────────────────────────────

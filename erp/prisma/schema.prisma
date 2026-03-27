@@ -486,6 +486,20 @@ model Ticket {
   raFrozen                  Boolean    @default(false)
   raConsumerConsideration   String?    @db.Text
   raCompanyConsideration    String?    @db.Text
+
+  // Campos RA enriquecidos (v2)
+  raReason                  String?
+  raFeeling                 String?
+  raCategories              String[]   @default([])
+  raPublicTreatmentTime     String?
+  raPrivateTreatmentTime    String?
+  raRatingDate              DateTime?
+  raCommentsCount           Int        @default(0)
+  raUnreadCount             Int        @default(0)
+  raWhatsappEvalSent        Boolean?
+  raWhatsappEvalDone        Boolean?
+  raActive                  Boolean    @default(true)
+  raModerationStatus        String?
   aiEnabled      Boolean        @default(true)
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
