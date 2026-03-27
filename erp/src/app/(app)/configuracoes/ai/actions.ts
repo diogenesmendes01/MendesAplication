@@ -618,7 +618,3 @@ export async function simulateAiResponse(
   };
 }
 
-// ---------------------------------------------------------------------------
-// Re-export resolveAiConfig from shared module for backward compatibility
-// ---------------------------------------------------------------------------
-export { resolveAiConfig };
