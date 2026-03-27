@@ -528,8 +528,8 @@ export async function processWhatsAppInbound(job: Job<any>) {
   );
 
   invalidateKpiCache(companyId);
-  sseBus.publish(`company:${companyId}`, "timeline-update", { ticketId, timestamp: Date.now() });
-  sseBus.publish(`company:${companyId}`, "sla-update", { timestamp: Date.now() });
+  sseBus.publish(`company:${companyId}:sac`, "timeline-update", { ticketId, timestamp: Date.now() });
+  sseBus.publish(`company:${companyId}:sac`, "sla-update", { timestamp: Date.now() });
 
   // Enqueue AI agent job for inbound messages with text content
   if (direction === "INBOUND" && content) {

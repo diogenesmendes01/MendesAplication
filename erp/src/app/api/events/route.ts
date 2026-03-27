@@ -4,6 +4,8 @@ import { sseBus } from "@/lib/sse";
 
 export const dynamic = "force-dynamic";
 
+const ALLOWED_NAMESPACES = ["sac", "dashboard", "financial", "fiscal", "commercial", "system"];
+
 export async function GET(request: Request) {
   const session = await getSession();
   if (!session) {
@@ -25,20 +27,35 @@ export async function GET(request: Request) {
     return new Response("Forbidden", { status: 403 });
   }
 
+  // Parse namespace param — fallback to "system" for backward compat
+  const nsParam = url.searchParams.get("ns");
+  const namespaces = nsParam
+    ? nsParam.split(",").filter((ns) => ALLOWED_NAMESPACES.includes(ns))
+    : ["system"];
+
+  if (namespaces.length === 0) {
+    return new Response("No valid namespaces", { status: 400 });
+  }
+
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     start(controller) {
       // Send initial heartbeat
       controller.enqueue(encoder.encode(": heartbeat\n\n"));
 
-      const unsubscribe = sseBus.subscribe(
-        `company:${companyId}`,
-        (event, data) => {
-          controller.enqueue(
-            encoder.encode(`event: ${event}\ndata: ${data}\n\n`)
-          );
-        }
-      );
+      // Subscribe to each namespace channel
+      const unsubscribes: (() => void)[] = [];
+      for (const ns of namespaces) {
+        const unsub = sseBus.subscribe(
+          `company:${companyId}:${ns}`,
+          (event, data) => {
+            controller.enqueue(
+              encoder.encode(`event: ${ns}:${event}\ndata: ${data}\n\n`)
+            );
+          }
+        );
+        unsubscribes.push(unsub);
+      }
 
       // Heartbeat every 30s to keep connection alive
       const heartbeat = setInterval(() => {
@@ -51,7 +68,7 @@ export async function GET(request: Request) {
 
       // Cleanup on disconnect
       request.signal.addEventListener("abort", () => {
-        unsubscribe();
+        unsubscribes.forEach((unsub) => unsub());
         clearInterval(heartbeat);
         try {
           controller.close();
