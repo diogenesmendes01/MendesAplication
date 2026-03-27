@@ -22,6 +22,10 @@ import {
   Landmark,
   X,
   LogOut,
+  LayoutGrid,
+  Mail,
+  MessageCircle,
+  Star,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -52,7 +56,17 @@ interface NavItem {
 const navItems: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Comercial", href: "/comercial", icon: ShoppingCart },
-  { label: "SAC", href: "/sac", icon: Headphones },
+  {
+    label: "SAC",
+    href: "/sac",
+    icon: Headphones,
+    children: [
+      { label: "Visão Geral", href: "/sac", icon: LayoutGrid },
+      { label: "Email", href: "/sac/email", icon: Mail },
+      { label: "WhatsApp", href: "/sac/whatsapp", icon: MessageCircle },
+      { label: "Reclame Aqui", href: "/sac/reclameaqui", icon: Star },
+    ],
+  },
   { label: "Financeiro", href: "/financeiro", icon: DollarSign },
   { label: "Fiscal", href: "/fiscal", icon: FileText },
   {
