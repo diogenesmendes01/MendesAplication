@@ -5,6 +5,7 @@ import { searchDocuments, searchDocumentsByChannel } from "./embeddings";
 import { sendTextMessage } from "@/lib/whatsapp-api";
 import { emailOutboundQueue } from "@/lib/queue";
 import { sanitizeEmailHtml } from "./sanitize-utils";
+import { isValidCnpj } from "./cnpj-utils";
 
 // ─── Context ─────────────────────────────────────────────────────────────────
 
@@ -60,6 +61,16 @@ export async function executeTool(
       case "CREATE_NOTE":
         if (context.dryRun) return executeDryRunCreateNote(args);
         return await executeCreateNote(args, context);
+      // ─── v2 tools ──────────────────────────────────────────────────────
+      case "LOOKUP_CLIENT_BY_CNPJ":
+        if (context.dryRun) return executeDryRunLookupClientByCnpj(args);
+        return await executeLookupClientByCnpj(args, context);
+      case "LINK_TICKET_TO_CLIENT":
+        if (context.dryRun) return executeDryRunLinkTicketToClient(args);
+        return await executeLinkTicketToClient(args, context);
+      case "READ_ATTACHMENT":
+        if (context.dryRun) return executeDryRunReadAttachment(args);
+        return await executeReadAttachment(args, context);
       default:
         return `Ferramenta "${toolName}" nao disponivel.`;
     }
@@ -210,6 +221,23 @@ async function executeGetHistory(
       isAiGenerated: true,
       isInternal: true,
       createdAt: true,
+      // v2: include attachments with extraction summaries
+      attachments: {
+        select: {
+          id: true,
+          fileName: true,
+          fileSize: true,
+          mimeType: true,
+          extraction: {
+            select: {
+              status: true,
+              summary: true,
+              metadata: true,
+              tokenCount: true,
+            },
+          },
+        },
+      },
     },
   });
 
@@ -227,7 +255,40 @@ async function executeGetHistory(
           : m.isAiGenerated
             ? "AI"
             : "Atendente";
-      return `[${sender}]: ${m.content.substring(0, 300)}`;
+
+      let line = `[${sender}]: ${m.content.substring(0, 300)}`;
+
+      // v2: inline attachment summaries
+      if (m.attachments && m.attachments.length > 0) {
+        for (const att of m.attachments) {
+          const sizeKb = Math.round(att.fileSize / 1024);
+
+          if (att.extraction?.status === "completed") {
+            const summary = att.extraction.summary || "Sem resumo";
+            const metadata = (att.extraction.metadata as Record<string, unknown>) || {};
+
+            const metaParts: string[] = [];
+            const cnpjs = metadata.cnpjs as string[] | undefined;
+            const values = metadata.values as string[] | undefined;
+            const dates = metadata.dates as string[] | undefined;
+
+            if (cnpjs?.length) metaParts.push(`CNPJ: ${cnpjs.join(", ")}`);
+            if (values?.length) metaParts.push(`Valor: ${values.join(", ")}`);
+            if (dates?.length) metaParts.push(`Data: ${dates.join(", ")}`);
+
+            const metaStr = metaParts.length > 0 ? ` | ${metaParts.join(" | ")}` : "";
+            line += `\n  📎 ${att.fileName} (${sizeKb}KB) [id:${att.id}] — ${summary}${metaStr}`;
+          } else if (att.extraction?.status === "processing") {
+            line += `\n  📎 ${att.fileName} (${sizeKb}KB) [id:${att.id}] — [processando...]`;
+          } else if (att.extraction?.status === "failed") {
+            line += `\n  📎 ${att.fileName} (${sizeKb}KB) [id:${att.id}] — [extracao falhou — peca informacao por texto]`;
+          } else {
+            line += `\n  📎 ${att.fileName} (${sizeKb}KB) [id:${att.id}] — [aguardando processamento]`;
+          }
+        }
+      }
+
+      return line;
     })
     .join("\n");
 }
@@ -442,6 +503,260 @@ async function executeCreateNote(
   return "Nota interna criada com sucesso.";
 }
 
+// ─── LOOKUP_CLIENT_BY_CNPJ (v2) ─────────────────────────────────────────────
+
+async function executeLookupClientByCnpj(
+  args: Record<string, unknown>,
+  context: ToolContext
+): Promise<string> {
+  const rawCnpj = args.cnpj as string;
+  if (!rawCnpj) return "Erro: CNPJ/CPF nao fornecido.";
+
+  const cnpj = rawCnpj.replace(/\D/g, "");
+  if (cnpj.length !== 11 && cnpj.length !== 14) {
+    return "Erro: CNPJ deve ter 14 digitos ou CPF 11 digitos.";
+  }
+
+  if (cnpj.length === 14 && !isValidCnpj(cnpj)) {
+    return "Erro: CNPJ invalido — digitos verificadores nao conferem.";
+  }
+
+  const client = await prisma.client.findFirst({
+    where: { cpfCnpj: cnpj, companyId: context.companyId },
+    include: {
+      additionalContacts: true,
+      accountsReceivable: {
+        where: { status: { in: ["PENDING", "OVERDUE"] } },
+        orderBy: { dueDate: "asc" },
+        take: 10,
+      },
+    },
+  });
+
+  if (!client) {
+    return `Nenhum cliente encontrado com ${cnpj.length === 14 ? "CNPJ" : "CPF"}: ${cnpj}`;
+  }
+
+  const lines: string[] = [
+    `Cliente encontrado:`,
+    `  ID: ${client.id}`,
+    `  Nome: ${client.name}`,
+    `  Razao Social: ${client.razaoSocial || "—"}`,
+    `  CPF/CNPJ: ${client.cpfCnpj}`,
+    `  Email: ${client.email || "—"}`,
+    `  Telefone: ${client.telefone || "—"}`,
+    `  Tipo: ${client.type}`,
+  ];
+
+  if (client.additionalContacts.length > 0) {
+    lines.push(`\nContatos adicionais (${client.additionalContacts.length}):`);
+    for (const c of client.additionalContacts) {
+      lines.push(
+        `  - ${c.name} (${c.role || "sem cargo"}) | Email: ${c.email || "—"} | WhatsApp: ${c.whatsapp || "—"}`
+      );
+    }
+  }
+
+  if (client.accountsReceivable.length > 0) {
+    const total = client.accountsReceivable.reduce(
+      (s, ar) => s + Number(ar.value),
+      0
+    );
+    lines.push(
+      `\nTitulos pendentes/vencidos: ${client.accountsReceivable.length} (R$ ${total.toFixed(2)})`
+    );
+    for (const ar of client.accountsReceivable.slice(0, 5)) {
+      const status = ar.status === "OVERDUE" ? "⚠️ VENCIDO" : "Pendente";
+      lines.push(
+        `  - ${ar.description}: R$ ${Number(ar.value).toFixed(2)} (venc: ${formatDate(ar.dueDate)}) [${status}]`
+      );
+    }
+  }
+
+  return lines.join("\n");
+}
+
+// ─── LINK_TICKET_TO_CLIENT (v2) ──────────────────────────────────────────────
+
+async function executeLinkTicketToClient(
+  args: Record<string, unknown>,
+  context: ToolContext
+): Promise<string> {
+  const cnpj = (args.cnpj as string)?.replace(/\D/g, "");
+  if (!cnpj || (cnpj.length !== 11 && cnpj.length !== 14)) {
+    return "Erro: CNPJ (14 digitos) ou CPF (11 digitos) invalido.";
+  }
+
+  if (cnpj.length === 14 && !isValidCnpj(cnpj)) {
+    return "Erro: CNPJ invalido — digitos verificadores nao conferem.";
+  }
+
+  // Find client
+  let client = await prisma.client.findFirst({
+    where: { cpfCnpj: cnpj, companyId: context.companyId },
+    include: { additionalContacts: true },
+  });
+
+  // Create if not found
+  if (!client) {
+    const contactName = args.contactName as string;
+    client = await prisma.client.create({
+      data: {
+        name: contactName || `Empresa ${cnpj}`,
+        cpfCnpj: cnpj,
+        type: cnpj.length === 14 ? "PJ" : "PF",
+        companyId: context.companyId,
+        email: (args.contactEmail as string) || undefined,
+        telefone: (args.contactPhone as string) || undefined,
+      },
+      include: { additionalContacts: true },
+    });
+  }
+
+  // Link ticket to client
+  const currentTicket = await prisma.ticket.findUnique({
+    where: { id: context.ticketId },
+    select: { clientId: true },
+  });
+
+  const oldClientId = currentTicket?.clientId;
+
+  await prisma.ticket.update({
+    where: { id: context.ticketId },
+    data: { clientId: client.id },
+  });
+
+  // Create AdditionalContact if contact data provided and not existing
+  let contactCreated = false;
+  const contactName = args.contactName as string;
+  const contactEmail = args.contactEmail as string;
+  const contactPhone = args.contactPhone as string;
+
+  if (contactName || contactEmail || contactPhone) {
+    const existingContact = client.additionalContacts.find(
+      (c) =>
+        (contactEmail && c.email === contactEmail) ||
+        (contactPhone && c.whatsapp === contactPhone)
+    );
+
+    if (!existingContact && (contactName || contactEmail)) {
+      await prisma.additionalContact.create({
+        data: {
+          clientId: client.id,
+          name: contactName || contactEmail || contactPhone || "Contato",
+          email: contactEmail || undefined,
+          whatsapp: contactPhone || undefined,
+        },
+      });
+      contactCreated = true;
+    }
+  }
+
+  // Clean up orphan "unknown" client if it was the previous one
+  if (oldClientId && oldClientId !== client.id) {
+    const oldClient = await prisma.client.findUnique({
+      where: { id: oldClientId },
+      select: { cpfCnpj: true, _count: { select: { tickets: true } } },
+    });
+    if (
+      oldClient?.cpfCnpj === "DESCONHECIDO" &&
+      oldClient._count.tickets <= 1
+    ) {
+      await prisma.client.delete({ where: { id: oldClientId } });
+    }
+  }
+
+  const parts = [
+    `Ticket vinculado ao cliente "${client.name}" (${client.cpfCnpj}).`,
+  ];
+  if (contactCreated) parts.push(`Novo contato adicional criado.`);
+  return parts.join(" ");
+}
+
+// ─── READ_ATTACHMENT (v2) ────────────────────────────────────────────────────
+
+async function executeReadAttachment(
+  args: Record<string, unknown>,
+  context: ToolContext
+): Promise<string> {
+  const attachmentId = args.attachmentId as string;
+  if (!attachmentId) return "Erro: attachmentId nao fornecido.";
+
+  const extraction = await prisma.attachmentExtraction.findUnique({
+    where: { attachmentId },
+    include: {
+      attachment: {
+        select: {
+          fileName: true,
+          mimeType: true,
+          ticketId: true,
+          ticketMessage: { select: { ticketId: true } },
+        },
+      },
+    },
+  });
+
+  if (!extraction) {
+    return "Anexo nao encontrado ou ainda nao processado. Tente novamente em alguns segundos.";
+  }
+
+  if (extraction.status === "processing") {
+    return "Anexo ainda esta sendo processado. Tente novamente em alguns segundos.";
+  }
+
+  if (extraction.status === "failed") {
+    return `Nao foi possivel extrair o conteudo deste anexo (${extraction.errorMessage || "erro desconhecido"}). Peca ao cliente para enviar a informacao por texto.`;
+  }
+
+  // Security: verify attachment belongs to a ticket in the same company
+  const ticketId =
+    extraction.attachment.ticketId ||
+    extraction.attachment.ticketMessage?.ticketId;
+  if (ticketId) {
+    const ticket = await prisma.ticket.findUnique({
+      where: { id: ticketId },
+      select: { companyId: true },
+    });
+    if (ticket?.companyId !== context.companyId) {
+      return "Erro: anexo nao pertence a esta empresa.";
+    }
+  }
+
+  const query = args.query as string;
+
+  if (!query) {
+    // Return full text
+    if (extraction.tokenCount > 5000) {
+      return `⚠️ Anexo grande (${extraction.tokenCount} tokens). Considere usar query para busca especifica.\n\n---\n\n${extraction.rawText}`;
+    }
+    return extraction.rawText || "Anexo sem conteudo de texto extraido.";
+  }
+
+  // Query-based search — simple keyword match with context window
+  const lines = extraction.rawText.split("\n");
+  const queryLower = query.toLowerCase();
+  const relevantLines: string[] = [];
+  const contextWindow = 3;
+
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].toLowerCase().includes(queryLower)) {
+      const start = Math.max(0, i - contextWindow);
+      const end = Math.min(lines.length - 1, i + contextWindow);
+      for (let j = start; j <= end; j++) {
+        if (!relevantLines.includes(lines[j])) {
+          relevantLines.push(lines[j]);
+        }
+      }
+    }
+  }
+
+  if (relevantLines.length === 0) {
+    return `Nenhum trecho encontrado para "${query}" neste anexo. O documento contem ${extraction.tokenCount} tokens. Tente outra busca ou chame sem query para ver o texto completo.`;
+  }
+
+  return `Trechos relevantes para "${query}" em ${extraction.attachment.fileName}:\n\n${relevantLines.join("\n")}`;
+}
+
 // ─── Dry-run tool implementations ────────────────────────────────────────────
 // These return simulated results without any side effects.
 
@@ -513,4 +828,47 @@ function executeDryRunCreateNote(args: Record<string, unknown>): string {
   const content = args.content as string;
   if (!content) return "Erro: conteudo da nota nao fornecido.";
   return `[SIMULAÇÃO] Nota interna que seria criada: "${content}"`;
+}
+
+// ─── v2 dry-run implementations ──────────────────────────────────────────────
+
+function executeDryRunLookupClientByCnpj(args: Record<string, unknown>): string {
+  const rawCnpj = args.cnpj as string;
+  if (!rawCnpj) return "Erro: CNPJ/CPF nao fornecido.";
+  const cnpj = rawCnpj.replace(/\D/g, "");
+  if (cnpj.length !== 11 && cnpj.length !== 14) {
+    return "Erro: CNPJ deve ter 14 digitos ou CPF 11 digitos.";
+  }
+  if (cnpj.length === 14 && !isValidCnpj(cnpj)) {
+    return "Erro: CNPJ invalido — digitos verificadores nao conferem.";
+  }
+  return [
+    `[SIMULAÇÃO] Busca por ${cnpj.length === 14 ? "CNPJ" : "CPF"}: ${cnpj}`,
+    "Cliente encontrado:",
+    "  ID: sim_client_001",
+    "  Nome: Empresa Simulação Ltda",
+    `  CPF/CNPJ: ${cnpj}`,
+    "  Tipo: PJ",
+  ].join("\n");
+}
+
+function executeDryRunLinkTicketToClient(args: Record<string, unknown>): string {
+  const cnpj = (args.cnpj as string)?.replace(/\D/g, "");
+  if (!cnpj || (cnpj.length !== 11 && cnpj.length !== 14)) {
+    return "Erro: CNPJ (14 digitos) ou CPF (11 digitos) invalido.";
+  }
+  if (cnpj.length === 14 && !isValidCnpj(cnpj)) {
+    return "Erro: CNPJ invalido — digitos verificadores nao conferem.";
+  }
+  return `[SIMULAÇÃO] Ticket seria vinculado ao cliente com ${cnpj.length === 14 ? "CNPJ" : "CPF"}: ${cnpj}`;
+}
+
+function executeDryRunReadAttachment(args: Record<string, unknown>): string {
+  const attachmentId = args.attachmentId as string;
+  if (!attachmentId) return "Erro: attachmentId nao fornecido.";
+  const query = args.query as string;
+  if (query) {
+    return `[SIMULAÇÃO] Busca por "${query}" no anexo ${attachmentId}: Nenhum conteudo disponivel em modo simulacao.`;
+  }
+  return `[SIMULAÇÃO] Conteudo do anexo ${attachmentId}: Nenhum conteudo disponivel em modo simulacao.`;
 }

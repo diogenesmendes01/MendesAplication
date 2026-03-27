@@ -41,7 +41,7 @@ export const GET_CLIENT_INFO = defineTool({
 export const GET_HISTORY = defineTool({
   name: "GET_HISTORY",
   description:
-    "Busca o historico recente de mensagens da conversa do ticket atual. Util para entender o contexto da conversa antes de responder.",
+    "Busca o historico recente de mensagens da conversa do ticket atual. Util para entender o contexto da conversa antes de responder. Anexos aparecem com summary e metadata inline.",
   parameters: {
     type: "object",
     properties: {
@@ -165,6 +165,77 @@ export const CREATE_NOTE = defineTool({
   },
 });
 
+// ─── v2 CNPJ Tools ──────────────────────────────────────────────────────────
+
+export const LOOKUP_CLIENT_BY_CNPJ = defineTool({
+  name: "LOOKUP_CLIENT_BY_CNPJ",
+  description:
+    "Busca um cliente pelo CNPJ ou CPF. Retorna dados do cliente, contatos adicionais e titulos pendentes. Use quando identificar um CNPJ/CPF na conversa ou em anexos e precisar vincular ao cliente correto.",
+  parameters: {
+    type: "object",
+    properties: {
+      cnpj: {
+        type: "string",
+        description: "CNPJ (14 digitos) ou CPF (11 digitos), apenas numeros",
+      },
+    },
+    required: ["cnpj"],
+  },
+});
+
+export const LINK_TICKET_TO_CLIENT = defineTool({
+  name: "LINK_TICKET_TO_CLIENT",
+  description:
+    "Vincula o ticket atual a um cliente identificado por CNPJ/CPF. Se o contato (nome, email, telefone) nao existir como AdditionalContact, cria automaticamente. Use apos identificar o CNPJ do cliente via LOOKUP_CLIENT_BY_CNPJ ou pergunta direta.",
+  parameters: {
+    type: "object",
+    properties: {
+      cnpj: {
+        type: "string",
+        description: "CNPJ (14 digitos) ou CPF (11 digitos), apenas numeros",
+      },
+      contactName: {
+        type: "string",
+        description:
+          "Nome da pessoa que esta em contato (opcional — cria AdditionalContact se fornecido)",
+      },
+      contactEmail: {
+        type: "string",
+        description: "Email da pessoa em contato (opcional)",
+      },
+      contactPhone: {
+        type: "string",
+        description: "Telefone/WhatsApp da pessoa em contato (opcional)",
+      },
+    },
+    required: ["cnpj"],
+  },
+});
+
+// ─── v2 Attachment Tools ─────────────────────────────────────────────────────
+
+export const READ_ATTACHMENT = defineTool({
+  name: "READ_ATTACHMENT",
+  description:
+    "Le o conteudo extraido de um anexo. Sem query, retorna o texto completo. Com query, busca informacao especifica dentro do texto do anexo. Prefira usar query quando o summary no historico nao for suficiente.",
+  parameters: {
+    type: "object",
+    properties: {
+      attachmentId: {
+        type: "string",
+        description:
+          "ID do anexo (mostrado no historico junto ao icone 📎)",
+      },
+      query: {
+        type: "string",
+        description:
+          "Busca especifica dentro do texto do anexo (opcional — ex: 'valor do boleto', 'clausula de rescisao')",
+      },
+    },
+    required: ["attachmentId"],
+  },
+});
+
 // ─── Inferred argument types (re-export for consumers) ───────────────────────
 
 export type SearchDocumentsArgs = InferToolArgs<typeof SEARCH_DOCUMENTS>;
@@ -175,6 +246,9 @@ export type RespondEmailArgs = InferToolArgs<typeof RESPOND_EMAIL>;
 export type RespondReclameAquiArgs = InferToolArgs<typeof RESPOND_RECLAMEAQUI>;
 export type EscalateArgs = InferToolArgs<typeof ESCALATE>;
 export type CreateNoteArgs = InferToolArgs<typeof CREATE_NOTE>;
+export type LookupClientByCnpjArgs = InferToolArgs<typeof LOOKUP_CLIENT_BY_CNPJ>;
+export type LinkTicketToClientArgs = InferToolArgs<typeof LINK_TICKET_TO_CLIENT>;
+export type ReadAttachmentArgs = InferToolArgs<typeof READ_ATTACHMENT>;
 
 // ─── Tool name union type ────────────────────────────────────────────────────
 
@@ -187,7 +261,10 @@ export type ToolName =
   | typeof RESPOND_EMAIL.name
   | typeof RESPOND_RECLAMEAQUI.name
   | typeof ESCALATE.name
-  | typeof CREATE_NOTE.name;
+  | typeof CREATE_NOTE.name
+  | typeof LOOKUP_CLIENT_BY_CNPJ.name
+  | typeof LINK_TICKET_TO_CLIENT.name
+  | typeof READ_ATTACHMENT.name;
 
 // ─── All Tools (legacy — includes WhatsApp RESPOND) ─────────────────────────
 
@@ -200,6 +277,17 @@ export const ALL_TOOLS: AnyAiToolDefinition[] = [
   CREATE_NOTE,
 ];
 
+// ─── v2 tool groups ──────────────────────────────────────────────────────────
+
+export const CNPJ_TOOLS: AnyAiToolDefinition[] = [
+  LOOKUP_CLIENT_BY_CNPJ,
+  LINK_TICKET_TO_CLIENT,
+];
+
+export const ATTACHMENT_TOOLS: AnyAiToolDefinition[] = [
+  READ_ATTACHMENT,
+];
+
 // ─── Shared (non-terminal) tools ─────────────────────────────────────────────
 
 const SHARED_TOOLS: AnyAiToolDefinition[] = [
@@ -208,6 +296,8 @@ const SHARED_TOOLS: AnyAiToolDefinition[] = [
   GET_HISTORY,
   ESCALATE,
   CREATE_NOTE,
+  ...CNPJ_TOOLS,
+  ...ATTACHMENT_TOOLS,
 ];
 
 // ─── Channel-specific tool sets ──────────────────────────────────────────────

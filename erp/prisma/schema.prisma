@@ -185,6 +185,7 @@ model Client {
 
   @@unique([cpfCnpj, companyId])
   @@index([companyId])
+  @@index([cpfCnpj])
   @@index([companyId, createdAt])
   @@map("clients")
 }
@@ -548,10 +549,33 @@ model Attachment {
   createdAt       DateTime       @default(now())
 
   ticketMessage TicketMessage? @relation("TicketMessageAttachments", fields: [ticketMessageId], references: [id], onDelete: Cascade)
+  extraction    AttachmentExtraction?
   ticket        Ticket?        @relation("TicketAttachments", fields: [ticketId], references: [id], onDelete: Cascade)
 
   @@index([ticketId])
   @@map("attachments")
+}
+
+model AttachmentExtraction {
+  id           String   @id @default(cuid())
+  attachmentId String   @unique
+  method       String   // "pdf-parse" | "ocr" | "vision" | "direct" | "spreadsheet"
+  status       String   @default("pending") // "pending" | "processing" | "completed" | "failed"
+  rawText      String   @db.Text
+  summary      String?  @db.Text
+  metadata     Json?
+  confidence   Float    @default(0)
+  tokenCount   Int      @default(0)
+  errorMessage String?
+  processingMs Int?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  attachment Attachment @relation(fields: [attachmentId], references: [id], onDelete: Cascade)
+
+  @@index([attachmentId])
+  @@index([status])
+  @@map("attachment_extractions")
 }
 
 model Refund {
