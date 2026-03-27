@@ -9,8 +9,12 @@ import type { TicketRow } from "../tickets/actions";
 // Helpers
 // ---------------------------------------------------------------------------
 
-function relativeTime(isoString: string): string {
-  const diffMs = Date.now() - new Date(isoString).getTime();
+function relativeTime(dateStr: string): string {
+  if (!dateStr) return "—";
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return "—";
+
+  const diffMs = Date.now() - date.getTime();
   const diffSec = Math.floor(diffMs / 1000);
   if (diffSec < 60) return "agora";
   const diffMin = Math.floor(diffSec / 60);
@@ -18,6 +22,10 @@ function relativeTime(isoString: string): string {
   const diffH = Math.floor(diffMin / 60);
   if (diffH < 24) return `há ${diffH}h`;
   const diffD = Math.floor(diffH / 24);
+  // Cap: if more than 365 days, show the date string instead
+  if (diffD > 365) {
+    return date.toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" });
+  }
   return `há ${diffD}d`;
 }
 

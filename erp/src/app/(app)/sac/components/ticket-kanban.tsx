@@ -3,7 +3,11 @@
 import { useState, useEffect, useCallback } from "react";
 import { Inbox } from "lucide-react";
 import { useCompany } from "@/contexts/company-context";
-import { listTickets, type TicketRow } from "../tickets/actions";
+import {
+  getKanbanBootstrap,
+  type TicketRow,
+  type KanbanBootstrapResult,
+} from "../tickets/actions";
 import { TicketCard } from "./ticket-card";
 import type { ChannelType, TicketStatus } from "@prisma/client";
 
@@ -46,10 +50,14 @@ function SkeletonCard() {
 interface ColumnProps {
   column: KanbanColumn;
   tickets: TicketRow[];
+  total: number;
   loading: boolean;
 }
 
-function KanbanColumnView({ column, tickets, loading }: ColumnProps) {
+function KanbanColumnView({ column, tickets, total, loading }: ColumnProps) {
+  // When total > tickets displayed, show asterisk hint
+  const isTruncated = !loading && total > tickets.length;
+
   return (
     <div className="flex flex-col min-w-[260px] max-w-[280px] shrink-0">
       {/* Column header */}
@@ -60,13 +68,19 @@ function KanbanColumnView({ column, tickets, loading }: ColumnProps) {
         <span className="text-xs font-semibold uppercase tracking-wide">
           {column.label}
         </span>
-        <span className="text-xs font-bold tabular-nums">
-          {loading ? "—" : tickets.length}
+        <span
+          className="text-xs font-bold tabular-nums"
+          title={isTruncated ? `${total} tickets no total; exibindo primeiros ${tickets.length}` : undefined}
+        >
+          {loading ? "—" : total}
+          {isTruncated && (
+            <span className="ml-0.5 opacity-60 text-[10px]">*</span>
+          )}
         </span>
       </div>
 
-      {/* Cards list */}
-      <div className="flex-1 h-[calc(100vh-280px)] overflow-y-auto space-y-2 pr-0.5">
+      {/* Cards list — Fix 3: use min/max height instead of fixed calc */}
+      <div className="flex-1 min-h-[400px] max-h-[calc(100vh-200px)] overflow-y-auto space-y-2 pr-0.5">
         {loading ? (
           <>
             <SkeletonCard />
@@ -94,43 +108,29 @@ interface TicketKanbanProps {
   channelType?: ChannelType;
 }
 
+type ColumnDataMap = Pick<KanbanBootstrapResult, TicketStatus>;
+
+const EMPTY_DATA: ColumnDataMap = {
+  OPEN: { data: [], total: 0 },
+  IN_PROGRESS: { data: [], total: 0 },
+  WAITING_CLIENT: { data: [], total: 0 },
+  RESOLVED: { data: [], total: 0 },
+  CLOSED: { data: [], total: 0 },
+};
+
 export function TicketKanban({ channelType }: TicketKanbanProps) {
   const { selectedCompanyId } = useCompany();
 
-  const [data, setData] = useState<Record<TicketStatus, TicketRow[]>>({
-    OPEN: [],
-    IN_PROGRESS: [],
-    WAITING_CLIENT: [],
-    RESOLVED: [],
-    CLOSED: [],
-  });
+  const [columnData, setColumnData] = useState<ColumnDataMap>(EMPTY_DATA);
   const [loading, setLoading] = useState(true);
 
   const loadAll = useCallback(async () => {
     if (!selectedCompanyId) return;
     setLoading(true);
     try {
-      const results = await Promise.all(
-        COLUMNS.map((col) =>
-          listTickets({
-            companyId: selectedCompanyId,
-            status: col.status,
-            channelType,
-            pageSize: 100,
-          })
-        )
-      );
-      const next: Record<TicketStatus, TicketRow[]> = {
-        OPEN: [],
-        IN_PROGRESS: [],
-        WAITING_CLIENT: [],
-        RESOLVED: [],
-        CLOSED: [],
-      };
-      COLUMNS.forEach((col, i) => {
-        next[col.status] = results[i].data;
-      });
-      setData(next);
+      // Fix 4: single auth check + parallel status queries via getKanbanBootstrap
+      const result = await getKanbanBootstrap(selectedCompanyId, channelType);
+      setColumnData(result);
     } catch {
       // silently fail — table view still works
     } finally {
@@ -148,7 +148,8 @@ export function TicketKanban({ channelType }: TicketKanbanProps) {
         <KanbanColumnView
           key={col.status}
           column={col}
-          tickets={data[col.status]}
+          tickets={columnData[col.status].data}
+          total={columnData[col.status].total}
           loading={loading}
         />
       ))}
