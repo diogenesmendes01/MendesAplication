@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { runAgent } from "@/lib/ai/agent";
 import { reclameaquiOutboundQueue } from "@/lib/queue";
 import { logger } from "@/lib/logger";
+import { resolveAiConfigSelect } from "@/lib/ai/resolve-config";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -27,35 +28,7 @@ const RA_DEFAULT_ESCALATION_KEYWORDS = [
   "indenização",
 ];
 
-// ---------------------------------------------------------------------------
-// Helper: resolve AI config for a company + channel with fallback to global
-// ---------------------------------------------------------------------------
 
-/**
- * Finds the effective AI config for a given company and channel.
- * Tries channel-specific config first, falls back to global (channel=null).
- *
- * @param select - Prisma select clause to narrow the returned fields
- */
-async function resolveAiConfigForChannel<T extends Record<string, boolean>>(
-  companyId: string,
-  channel: "WHATSAPP" | "EMAIL" | "RECLAMEAQUI",
-  select: T,
-) {
-  // Try channel-specific config first
-  const channelConfig = await prisma.aiConfig.findFirst({
-    where: { companyId, channel },
-    select,
-  });
-
-  if (channelConfig) return channelConfig;
-
-  // Fall back to global config (channel=null)
-  return prisma.aiConfig.findFirst({
-    where: { companyId, channel: null },
-    select,
-  });
-}
 
 // ---------------------------------------------------------------------------
 // Main processor
@@ -86,7 +59,7 @@ export async function processAiAgent(job: Job<AiAgentJobData>) {
 
   // 2. For RECLAMEAQUI: check raMode before running the agent
   if (channel === "RECLAMEAQUI") {
-    const aiConfig = await resolveAiConfigForChannel(companyId, channel, {
+    const aiConfig = await resolveAiConfigSelect(companyId, channel, {
       raMode: true,
       raEscalationKeywords: true,
       raPrivateBeforePublic: true,

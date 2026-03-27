@@ -818,7 +818,7 @@ model AiConfig {
   company   Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
   usageLogs AiUsageLog[]
 
-  @@unique([companyId, channel])
+  @@unique([companyId, channel]) // For non-null channels; see migration for NULL partial index
   @@map("ai_config")
 }
 

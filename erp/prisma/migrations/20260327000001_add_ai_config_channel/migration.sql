@@ -5,6 +5,11 @@ ALTER TABLE "ai_config" ADD COLUMN "channel" "ChannelType";
 DROP INDEX IF EXISTS "ai_config_companyId_key";
 
 -- CreateIndex: composite unique on (companyId, channel)
--- Note: PostgreSQL treats NULL as distinct in unique constraints by default,
--- so (companyId, NULL) is unique per company (one global config per company).
+-- Handles uniqueness for non-NULL channel values.
 CREATE UNIQUE INDEX "ai_config_companyId_channel_key" ON "ai_config"("companyId", "channel");
+
+-- CreateIndex: partial unique index for the NULL channel case.
+-- PostgreSQL treats NULLs as distinct in unique indexes, so the composite
+-- index above does NOT prevent duplicate (companyId, NULL) rows.
+-- This partial index ensures at most one global config per company.
+CREATE UNIQUE INDEX "ai_config_company_global_unique" ON "ai_config" ("companyId") WHERE "channel" IS NULL;

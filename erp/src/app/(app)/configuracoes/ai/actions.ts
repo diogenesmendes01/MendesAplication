@@ -13,6 +13,7 @@ import { runAgentDryRun, type DryRunResult } from "@/lib/ai/agent";
 import type { Prisma, ChannelType } from "@prisma/client";
 import { createAsyncRateLimiter } from "@/lib/rate-limiter";
 import { logger } from "@/lib/logger";
+import { resolveAiConfig } from "@/lib/ai/resolve-config";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -205,38 +206,7 @@ export async function getAiConfig(
 ): Promise<AiConfigData> {
   await requireCompanyAccess(companyId);
 
-  if (channel) {
-    // Look for channel-specific config first
-    const channelConfig = await prisma.aiConfig.findUnique({
-      where: {
-        companyId_channel: { companyId, channel },
-      },
-    });
-
-    if (channelConfig) {
-      return configToData(channelConfig);
-    }
-
-    // Fall back to global config
-    const globalConfig = await prisma.aiConfig.findUnique({
-      where: {
-        companyId_channel: { companyId, channel: null as unknown as ChannelType },
-      },
-    });
-
-    if (globalConfig) {
-      return configToData(globalConfig);
-    }
-
-    return { ...DEFAULT_AI_CONFIG };
-  }
-
-  // No channel specified — return global config
-  // Use findFirst with channel: null since composite unique with null
-  // requires special handling in Prisma
-  const config = await prisma.aiConfig.findFirst({
-    where: { companyId, channel: null },
-  });
+  const config = await resolveAiConfig(companyId, channel);
 
   if (!config) {
     return { ...DEFAULT_AI_CONFIG };
@@ -368,22 +338,24 @@ export async function updateAiConfig(
     ? { ...baseData, apiKey: apiKeyToStore, apiKeyHint: apiKeyHintToStore }
     : baseData;
 
-  // Find existing config for this company + channel combination
-  const existing = await prisma.aiConfig.findFirst({
-    where: { companyId, channel: resolvedChannel },
-    select: { id: true },
-  });
+  // Wrap in transaction to prevent TOCTOU race condition
+  await prisma.$transaction(async (tx) => {
+    const existing = await tx.aiConfig.findFirst({
+      where: { companyId, channel: resolvedChannel },
+      select: { id: true },
+    });
 
-  if (existing) {
-    await prisma.aiConfig.update({
-      where: { id: existing.id },
-      data: updateData,
-    });
-  } else {
-    await prisma.aiConfig.create({
-      data: createData,
-    });
-  }
+    if (existing) {
+      await tx.aiConfig.update({
+        where: { id: existing.id },
+        data: updateData,
+      });
+    } else {
+      await tx.aiConfig.create({
+        data: createData,
+      });
+    }
+  });
 
   // Audit log — redact apiKey from the logged data
   const auditData = {
@@ -416,9 +388,7 @@ export async function testAiConnection(
     return { ok: false, error: "Limite de testes atingido (máx 5/min). Aguarde um momento." };
   }
 
-  const config = await prisma.aiConfig.findFirst({
-    where: { companyId, channel: null },
-  });
+  const config = await resolveAiConfig(companyId);
 
   if (!config?.apiKey) {
     return { ok: false, error: "API key não configurada" };
@@ -488,9 +458,7 @@ export async function listAvailableModels(
     throw new Error(`provider must be one of: ${VALID_PROVIDERS.join(", ")}`);
   }
 
-  const config = await prisma.aiConfig.findFirst({
-    where: { companyId, channel: null },
-  });
+  const config = await resolveAiConfig(companyId);
 
   const provider = providerOverride ?? config?.provider ?? "openai";
 
@@ -651,29 +619,6 @@ export async function simulateAiResponse(
 }
 
 // ---------------------------------------------------------------------------
-// Helper: get AI config for a channel with fallback to global
-// (Used by workers and agent code)
+// Re-export resolveAiConfig from shared module for backward compatibility
 // ---------------------------------------------------------------------------
-
-/**
- * Resolve the effective AI config for a company + channel.
- * Tries channel-specific first, falls back to global (channel=null).
- * Returns null if no config exists at all.
- */
-export async function resolveAiConfig(
-  companyId: string,
-  channel?: ChannelType | null,
-) {
-  if (channel) {
-    // Try channel-specific config first
-    const channelConfig = await prisma.aiConfig.findFirst({
-      where: { companyId, channel },
-    });
-    if (channelConfig) return channelConfig;
-  }
-
-  // Fall back to global config
-  return prisma.aiConfig.findFirst({
-    where: { companyId, channel: null },
-  });
-}
+export { resolveAiConfig };
