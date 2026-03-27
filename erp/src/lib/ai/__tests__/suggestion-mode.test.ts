@@ -107,6 +107,48 @@ describe("calculateConfidence", () => {
   });
 });
 
+describe("calculateConfidence — read-only tools", () => {
+  it("returns > 0.2 when read-only search tools executed successfully", () => {
+    const result = calculateConfidence({
+      searchResultsFound: true,
+      toolsExecuted: ["SEARCH_DOCUMENTS"],
+    });
+    // 0.2 (base) + 0.1 (searchResultsFound) = 0.3
+    expect(result).toBeGreaterThan(0.2);
+    expect(result).toBe(0.3);
+  });
+
+  it("returns > 0.2 when client info tool executed", () => {
+    const result = calculateConfidence({
+      clientIdentified: true,
+      toolsExecuted: ["GET_CLIENT_INFO"],
+    });
+    // 0.2 (base) + 0.15 (clientIdentified) + 0.05 (GET_CLIENT_INFO in toolsExecuted) = 0.4
+    expect(result).toBeGreaterThan(0.2);
+    expect(result).toBe(0.4);
+  });
+
+  it("returns > 0.2 with multiple read-only tools", () => {
+    const result = calculateConfidence({
+      searchResultsFound: true,
+      clientIdentified: true,
+      historyAvailable: true,
+      toolsExecuted: ["SEARCH_DOCUMENTS", "GET_CLIENT_INFO", "GET_HISTORY"],
+    });
+    // 0.2 + 0.1 + 0.15 + 0.1 + 0.05 = 0.6
+    expect(result).toBeGreaterThan(0.2);
+    expect(result).toBe(0.6);
+  });
+
+  it("returns base 0.2 when no tools executed (empty toolsExecuted)", () => {
+    const result = calculateConfidence({
+      toolsExecuted: [],
+    });
+    expect(result).toBe(0.2);
+  });
+});
+
+
 describe("shouldRunAsSuggestion", () => {
   it("returns false for auto mode", () => {
     expect(shouldRunAsSuggestion("auto")).toBe(false);
@@ -374,6 +416,104 @@ describe("approveSuggestion", () => {
     const result2 = await approveSuggestion("sug-1", "user-2");
     expect(result2.success).toBe(false);
     expect(result2.error).toContain("already processed");
+  });
+});
+
+
+describe("approveSuggestion — PROCESSING status (claim flow)", () => {
+  const baseSuggestion = {
+    id: "sug-1",
+    status: "PENDING",
+    ticketId: "ticket-1",
+    companyId: "company-1",
+    channel: "WHATSAPP",
+    suggestedResponse: "Hello!",
+    suggestedSubject: null,
+    suggestedActions: [
+      { toolName: "RESPOND", args: { message: "Hello!" }, order: 0 },
+    ],
+    ticket: {
+      id: "ticket-1",
+      clientId: "client-1",
+      companyId: "company-1",
+      contact: { whatsapp: "5511999999999" },
+      client: { telefone: null },
+    },
+  };
+
+  it("transitions from PENDING to PROCESSING during claim", async () => {
+    const updateManyMock = vi.fn().mockResolvedValue({ count: 1 });
+    mockPrismaTransaction.mockImplementation(async (fn: Function) => {
+      const tx = {
+        aiSuggestion: {
+          updateMany: updateManyMock,
+          findUnique: vi.fn().mockResolvedValue(baseSuggestion),
+          update: vi.fn(),
+        },
+      };
+      return fn(tx);
+    });
+    mockExecuteTool.mockResolvedValue("Ok");
+    mockPrismaAiSuggestionUpdate.mockResolvedValue({});
+
+    const result = await approveSuggestion("sug-1", "user-1");
+    expect(result.success).toBe(true);
+
+    // Verify the claim step: PENDING → PROCESSING
+    expect(updateManyMock).toHaveBeenCalledWith({
+      where: { id: "sug-1", status: "PENDING" },
+      data: { status: "PROCESSING" },
+    });
+  });
+
+  it("rejects second claim when first already set PROCESSING", async () => {
+    // First call succeeds (count=1), second fails (count=0, already PROCESSING)
+    let callCount = 0;
+    mockPrismaTransaction.mockImplementation(async (fn: Function) => {
+      callCount++;
+      const tx = {
+        aiSuggestion: {
+          updateMany: vi.fn().mockResolvedValue({ count: callCount === 1 ? 1 : 0 }),
+          findUnique: vi.fn().mockResolvedValue(baseSuggestion),
+          update: vi.fn(),
+        },
+      };
+      return fn(tx);
+    });
+    mockExecuteTool.mockResolvedValue("Ok");
+    mockPrismaAiSuggestionUpdate.mockResolvedValue({});
+
+    const result1 = await approveSuggestion("sug-1", "user-1");
+    expect(result1.success).toBe(true);
+
+    // Second user tries to approve — PROCESSING blocks them
+    const result2 = await approveSuggestion("sug-1", "user-2");
+    expect(result2.success).toBe(false);
+    expect(result2.error).toContain("already processed");
+  });
+
+  it("rolls back PROCESSING to PENDING on tenant isolation failure", async () => {
+    const updateFn = vi.fn().mockResolvedValue({});
+    mockPrismaTransaction.mockImplementation(async (fn: Function) => {
+      const tx = {
+        aiSuggestion: {
+          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+          findUnique: vi.fn().mockResolvedValue(baseSuggestion),
+          update: updateFn,
+        },
+      };
+      return fn(tx);
+    });
+
+    const result = await approveSuggestion("sug-1", "user-1", undefined, undefined, "other-company");
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("Access denied");
+
+    // Verify rollback: status set back to PENDING
+    expect(updateFn).toHaveBeenCalledWith({
+      where: { id: "sug-1" },
+      data: { status: "PENDING" },
+    });
   });
 });
 

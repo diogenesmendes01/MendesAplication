@@ -45,6 +45,8 @@ export interface AgentResult {
   raResponse?: ReclameAquiResponse;
   /** Write tools captured in suggestion mode */
   capturedActions?: CapturedAction[];
+  /** All tools executed during the agent loop (read + write) */
+  toolsExecuted?: string[];
 }
 
 export interface DryRunResult {
@@ -72,6 +74,8 @@ interface AgentLoopResult {
   raResponse?: ReclameAquiResponse;
   /** Write tools captured in suggestion mode */
   capturedActions?: CapturedAction[];
+  /** All tools executed during the agent loop (read + write) */
+  toolsExecuted?: string[];
 }
 
 // ─── Core agent loop ──────────────────────────────────────────────────────────
@@ -124,6 +128,7 @@ log,
   let finalResponse = "";
   let raResponse: ReclameAquiResponse | undefined;
   const capturedActions: CapturedAction[] = [];
+  const allToolsExecuted: string[] = [];
   let actionOrder = 0;
 
   for (let iteration = 0; iteration < maxIterations; iteration++) {
@@ -140,6 +145,7 @@ log,
         totalOutputTokens,
         raResponse,
         capturedActions,
+        toolsExecuted: allToolsExecuted,
       };
     }
 
@@ -158,6 +164,7 @@ log,
           totalOutputTokens,
           raResponse,
         capturedActions,
+        toolsExecuted: allToolsExecuted,
         };
       }
     }
@@ -198,6 +205,7 @@ log,
           }
 
           const result = await executeTool(toolName, args, toolContext);
+          allToolsExecuted.push(toolName);
 
           // Capture write tool calls in suggestion mode
           if (toolContext.suggestionMode && !isReadOnlyTool(toolName)) {
@@ -246,6 +254,7 @@ log,
             totalOutputTokens,
             raResponse,
         capturedActions,
+        toolsExecuted: allToolsExecuted,
           };
         }
 
@@ -308,6 +317,7 @@ log,
           totalOutputTokens,
           raResponse,
         capturedActions,
+        toolsExecuted: allToolsExecuted,
         };
 
       // ── Empty response ─────────────────────────────────────────────────
@@ -325,6 +335,7 @@ log,
           totalOutputTokens,
           raResponse,
         capturedActions,
+        toolsExecuted: allToolsExecuted,
         };
       }
     } catch (error) {
@@ -351,6 +362,7 @@ log,
     totalOutputTokens,
     raResponse,
         capturedActions,
+        toolsExecuted: allToolsExecuted,
   };
 }
 
@@ -600,6 +612,7 @@ log,
     error: loopResult.error,
     raResponse: loopResult.raResponse,
     capturedActions: loopResult.capturedActions,
+    toolsExecuted: loopResult.toolsExecuted,
   };
 }
 

@@ -48,9 +48,10 @@ function computeConfidenceFromResult(result: AgentResult): number {
     return result.raResponse.confidence;
   }
 
-  // For WhatsApp/Email, derive confidence from captured actions
-  const actions = result.capturedActions || [];
-  const toolsExecuted = actions.map((a) => a.toolName);
+  // For WhatsApp/Email, derive confidence from ALL executed tools (read + write)
+  // result.toolsExecuted includes read-only tools (SEARCH_DOCUMENTS, GET_CLIENT_INFO, etc.)
+  // that capturedActions misses (it only tracks write tools)
+  const toolsExecuted = result.toolsExecuted || [];
 
   return calculateConfidence({
     searchResultsFound: toolsExecuted.includes("SEARCH_DOCUMENTS"),

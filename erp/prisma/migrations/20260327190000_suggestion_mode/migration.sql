@@ -59,3 +59,6 @@ ALTER TABLE "ai_suggestions" ADD CONSTRAINT "ai_suggestions_ticketId_fkey" FOREI
 ALTER TABLE "ai_suggestions" ADD CONSTRAINT "ai_suggestions_messageId_fkey" FOREIGN KEY ("messageId") REFERENCES "ticket_messages"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 ALTER TABLE "ai_suggestions" ADD CONSTRAINT "ai_suggestions_companyId_fkey" FOREIGN KEY ("companyId") REFERENCES "companies"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "ai_suggestions" ADD CONSTRAINT "ai_suggestions_reviewedBy_fkey" FOREIGN KEY ("reviewedBy") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- ─── Add PROCESSING status to AiSuggestionStatus enum ────────────────────────
+ALTER TYPE "AiSuggestionStatus" ADD VALUE 'PROCESSING';
