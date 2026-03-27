@@ -283,6 +283,19 @@ export class ReclameAquiClient {
   }
 
   /**
+   * Check Reading API (ticket) availability.
+   * Returns true if available, false otherwise.
+   */
+  async checkTicketAvailability(): Promise<boolean> {
+    try {
+      const result = await this.request<{ message: string }>("GET", "/ticket/availability", { skipAuth: true });
+      return result?.message === "Ticket API";
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Retrieve tickets with optional filters.
    */
   async getTickets(
