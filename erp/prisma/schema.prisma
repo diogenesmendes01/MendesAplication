@@ -86,7 +86,7 @@ model Company {
   refunds            Refund[]
   baileysAuthStates  BaileysAuthState[]
   lidMappings        LidMapping[]
-  aiConfig           AiConfig?
+  aiConfigs          AiConfig[]
   aiUsageLogs        AiUsageLog[]
   documents          Document[]
   fiscalConfig       FiscalConfig?
@@ -784,7 +784,8 @@ model LidMapping {
 
 model AiConfig {
   id                 String   @id @default(cuid())
-  companyId          String   @unique
+  companyId          String
+  channel            ChannelType?  // NULL = global default, set = channel-specific override
 
   // --- Existentes ---
   enabled            Boolean  @default(false)
@@ -824,6 +825,7 @@ model AiConfig {
   company   Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
   usageLogs AiUsageLog[]
 
+  @@unique([companyId, channel]) // For non-null channels; see migration for NULL partial index
   @@map("ai_config")
 }
 

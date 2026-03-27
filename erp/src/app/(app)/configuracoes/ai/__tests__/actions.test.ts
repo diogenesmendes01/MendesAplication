@@ -40,7 +40,10 @@ vi.mock("@/lib/prisma", () => ({
   prisma: {
     aiConfig: {
       findUnique: (...args: unknown[]) => mockFindUnique(...args),
+      findFirst: (...args: unknown[]) => mockFindUnique(...args),
       upsert: (...args: unknown[]) => mockUpsert(...args),
+      update: (...args: unknown[]) => mockUpsert(...args),
+      create: (...args: unknown[]) => mockUpsert(...args),
     },
     aiUsageLog: {
       groupBy: vi.fn().mockResolvedValue([]),
@@ -376,11 +379,10 @@ describe("updateAiConfig", () => {
     // encrypt() must have been called with the plain key
     expect(mockEncrypt).toHaveBeenCalledWith(plainKey);
 
-    // upsert must have been called with the encrypted value in the create path
+    // update/create must have been called with the encrypted value
     expect(mockUpsert).toHaveBeenCalledWith(
       expect.objectContaining({
-        create: expect.objectContaining({ apiKey: `encrypted:${plainKey}` }),
-        update: expect.objectContaining({ apiKey: `encrypted:${plainKey}` }),
+        data: expect.objectContaining({ apiKey: `encrypted:${plainKey}` }),
       })
     );
   });
@@ -396,9 +398,9 @@ describe("updateAiConfig", () => {
     // encrypt() must NOT have been called — masked key means "keep existing"
     expect(mockEncrypt).not.toHaveBeenCalled();
 
-    // The upsert update payload must NOT include apiKey (preserves existing DB value)
-    const upsertCall = mockUpsert.mock.calls[0][0] as Record<string, unknown>;
-    const updatePayload = upsertCall.update as Record<string, unknown>;
+    // The update payload must NOT include apiKey (preserves existing DB value)
+    const updateCall = mockUpsert.mock.calls[0][0] as Record<string, unknown>;
+    const updatePayload = updateCall.data as Record<string, unknown>;
     expect(updatePayload).not.toHaveProperty("apiKey");
   });
 
@@ -411,8 +413,8 @@ describe("updateAiConfig", () => {
 
     // Empty string → no encrypt call, no apiKey in update
     expect(mockEncrypt).not.toHaveBeenCalled();
-    const upsertCall = mockUpsert.mock.calls[0][0] as Record<string, unknown>;
-    const updatePayload = upsertCall.update as Record<string, unknown>;
+    const updateCall = mockUpsert.mock.calls[0][0] as Record<string, unknown>;
+    const updatePayload = updateCall.data as Record<string, unknown>;
     expect(updatePayload).not.toHaveProperty("apiKey");
   });
 
@@ -466,14 +468,11 @@ describe("updateAiConfig", () => {
     // encrypt() must NOT have been called — null means clear the key
     expect(mockEncrypt).not.toHaveBeenCalled();
 
-    // upsert must set apiKey to null (clearing it)
-    const upsertCall = mockUpsert.mock.calls[0][0] as Record<string, unknown>;
-    const updatePayload = upsertCall.update as Record<string, unknown>;
+    // update must set apiKey to null (clearing it)
+    const updateCall = mockUpsert.mock.calls[0][0] as Record<string, unknown>;
+    const updatePayload = updateCall.data as Record<string, unknown>;
     expect(updatePayload).toHaveProperty("apiKey", null);
     expect(updatePayload).toHaveProperty("apiKeyHint", null);
-
-    const createPayload = upsertCall.create as Record<string, unknown>;
-    expect(createPayload).toHaveProperty("apiKey", null);
   });
 
   it("throws when dailySpendLimitBrl is negative", async () => {

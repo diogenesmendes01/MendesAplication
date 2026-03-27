@@ -340,10 +340,10 @@ export async function runAgent(
   // Create child logger with traceId for this entire request
   const log = createChildLogger({ companyId, ticketId });
 
-  // Load AI config for the company
-  const aiConfig = await prisma.aiConfig.findUnique({
-    where: { companyId },
-  });
+  // Load AI config — try channel-specific first, fall back to global (channel=null)
+  const aiConfig =
+    (await prisma.aiConfig.findFirst({ where: { companyId, channel } })) ??
+    (await prisma.aiConfig.findFirst({ where: { companyId, channel: null } }));
 
   if (!aiConfig || !aiConfig.enabled) {
     return { responded: false, escalated: false, iterations: 0, error: "AI not enabled" };
@@ -594,8 +594,8 @@ export async function runAgentDryRun(
   // Create child logger with traceId for this dry-run request
   const log = createChildLogger({ companyId, ticketId: "simulation" });
 
-  const aiConfig = await prisma.aiConfig.findUnique({
-    where: { companyId },
+  const aiConfig = await prisma.aiConfig.findFirst({
+    where: { companyId, channel: null },
   });
 
   if (!aiConfig) {

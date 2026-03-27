@@ -566,8 +566,8 @@ export async function toggleTicketAi(
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function _getAiConfigEnabledInternal(companyId: string, _session: JwtPayload): Promise<boolean> {
-  const config = await prisma.aiConfig.findUnique({
-    where: { companyId },
+  const config = await prisma.aiConfig.findFirst({
+    where: { companyId, channel: null },
     select: { enabled: true },
   });
 

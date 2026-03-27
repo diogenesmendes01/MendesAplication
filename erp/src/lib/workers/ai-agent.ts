@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { runAgent } from "@/lib/ai/agent";
 import { reclameaquiOutboundQueue } from "@/lib/queue";
 import { logger } from "@/lib/logger";
+import { resolveAiConfigSelect } from "@/lib/ai/resolve-config";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -26,6 +27,8 @@ const RA_DEFAULT_ESCALATION_KEYWORDS = [
   "judicial",
   "indenização",
 ];
+
+
 
 // ---------------------------------------------------------------------------
 // Main processor
@@ -56,14 +59,11 @@ export async function processAiAgent(job: Job<AiAgentJobData>) {
 
   // 2. For RECLAMEAQUI: check raMode before running the agent
   if (channel === "RECLAMEAQUI") {
-    const aiConfig = await prisma.aiConfig.findUnique({
-      where: { companyId },
-      select: {
-        raMode: true,
-        raEscalationKeywords: true,
-        raPrivateBeforePublic: true,
-        raAutoRequestEvaluation: true,
-      },
+    const aiConfig = await resolveAiConfigSelect(companyId, channel, {
+      raMode: true,
+      raEscalationKeywords: true,
+      raPrivateBeforePublic: true,
+      raAutoRequestEvaluation: true,
     });
 
     const raMode = aiConfig?.raMode || "suggest";

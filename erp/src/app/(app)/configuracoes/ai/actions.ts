@@ -10,9 +10,10 @@ import { getTodaySpend, getUsageSummary, type UsageSummary } from "@/lib/ai/cost
 import { suggestModel } from "@/lib/ai/model-suggester";
 import { discoverModels } from "@/lib/ai/model-discovery";
 import { runAgentDryRun, type DryRunResult } from "@/lib/ai/agent";
-import type { Prisma } from "@prisma/client";
+import type { Prisma, ChannelType } from "@prisma/client";
 import { createAsyncRateLimiter } from "@/lib/rate-limiter";
 import { logger } from "@/lib/logger";
+import { resolveAiConfig } from "@/lib/ai/resolve-config";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -67,6 +68,12 @@ export interface SimulationResult {
 export type { UsageSummary };
 
 // ---------------------------------------------------------------------------
+// Channel type for frontend consumption (matches Prisma ChannelType enum)
+// ---------------------------------------------------------------------------
+
+export type AiConfigChannel = ChannelType | null;
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -85,6 +92,75 @@ function maskApiKey(key: string | null | undefined, hint?: string | null): strin
   if (hint) return `****${hint}`;
   return "****";
 }
+
+function configToData(config: {
+  enabled: boolean;
+  persona: string;
+  welcomeMessage: string | null;
+  escalationKeywords: string[];
+  maxIterations: number;
+  provider: string;
+  apiKey: string | null;
+  apiKeyHint: string | null;
+  model: string | null;
+  whatsappEnabled: boolean;
+  emailEnabled: boolean;
+  emailPersona: string | null;
+  emailSignature: string | null;
+  dailySpendLimitBrl: Prisma.Decimal | number | null;
+  raEnabled: boolean;
+  raMode: string;
+  raPrivateBeforePublic: boolean;
+  raAutoRequestEvaluation: boolean;
+  raEscalationKeywords: string[];
+  temperature: number;
+}): AiConfigData {
+  return {
+    enabled: config.enabled,
+    persona: config.persona,
+    welcomeMessage: config.welcomeMessage ?? "",
+    escalationKeywords: config.escalationKeywords,
+    maxIterations: config.maxIterations,
+    provider: config.provider,
+    apiKey: maskApiKey(config.apiKey, config.apiKeyHint),
+    model: config.model ?? "",
+    whatsappEnabled: config.whatsappEnabled,
+    emailEnabled: config.emailEnabled,
+    emailPersona: config.emailPersona ?? "",
+    emailSignature: config.emailSignature ?? "",
+    dailySpendLimitBrl: config.dailySpendLimitBrl
+      ? Number(config.dailySpendLimitBrl)
+      : null,
+    raEnabled: config.raEnabled,
+    raMode: config.raMode,
+    raPrivateBeforePublic: config.raPrivateBeforePublic,
+    raAutoRequestEvaluation: config.raAutoRequestEvaluation,
+    raEscalationKeywords: config.raEscalationKeywords,
+    temperature: config.temperature,
+  };
+}
+
+const DEFAULT_AI_CONFIG: AiConfigData = {
+  enabled: false,
+  persona: "",
+  welcomeMessage: "",
+  escalationKeywords: [],
+  maxIterations: 5,
+  provider: "openai",
+  apiKey: "",
+  model: "",
+  whatsappEnabled: true,
+  emailEnabled: false,
+  emailPersona: "",
+  emailSignature: "",
+  dailySpendLimitBrl: null,
+  temperature: 0.7,
+  raEnabled: false,
+  raMode: "suggest",
+  raPrivateBeforePublic: true,
+  raAutoRequestEvaluation: false,
+  raEscalationKeywords: ["processo", "advogado", "procon", "judicial", "indenização"],
+};
 
 // ---------------------------------------------------------------------------
 // Rate limiters — Redis-backed with in-memory fallback.
@@ -118,60 +194,25 @@ async function checkSimulationRateLimit(companyId: string): Promise<boolean> {
 // Server Actions
 // ---------------------------------------------------------------------------
 
-export async function getAiConfig(companyId: string): Promise<AiConfigData> {
+/**
+ * Get AI config for a company, optionally for a specific channel.
+ * When channel is provided: looks for channel-specific config first,
+ * falls back to global config (channel=null).
+ * When channel is null/undefined: returns the global config.
+ */
+export async function getAiConfig(
+  companyId: string,
+  channel?: ChannelType | null,
+): Promise<AiConfigData> {
   await requireCompanyAccess(companyId);
 
-  const config = await prisma.aiConfig.findUnique({
-    where: { companyId },
-  });
+  const config = await resolveAiConfig(companyId, channel);
 
   if (!config) {
-    return {
-      enabled: false,
-      persona: "",
-      welcomeMessage: "",
-      escalationKeywords: [],
-      maxIterations: 5,
-      provider: "openai",
-      apiKey: "",
-      model: "",
-      whatsappEnabled: true,
-      emailEnabled: false,
-      emailPersona: "",
-      emailSignature: "",
-      dailySpendLimitBrl: null,
-      temperature: 0.7,
-      raEnabled: false,
-      raMode: "suggest",
-      raPrivateBeforePublic: true,
-      raAutoRequestEvaluation: false,
-      raEscalationKeywords: ["processo", "advogado", "procon", "judicial", "indenização"],
-    };
+    return { ...DEFAULT_AI_CONFIG };
   }
 
-  return {
-    enabled: config.enabled,
-    persona: config.persona,
-    welcomeMessage: config.welcomeMessage ?? "",
-    escalationKeywords: config.escalationKeywords,
-    maxIterations: config.maxIterations,
-    provider: config.provider,
-    apiKey: maskApiKey(config.apiKey, config.apiKeyHint),
-    model: config.model ?? "",
-    whatsappEnabled: config.whatsappEnabled,
-    emailEnabled: config.emailEnabled,
-    emailPersona: config.emailPersona ?? "",
-    emailSignature: config.emailSignature ?? "",
-    dailySpendLimitBrl: config.dailySpendLimitBrl
-      ? Number(config.dailySpendLimitBrl)
-      : null,
-    raEnabled: config.raEnabled,
-    raMode: config.raMode,
-    raPrivateBeforePublic: config.raPrivateBeforePublic,
-    raAutoRequestEvaluation: config.raAutoRequestEvaluation,
-    raEscalationKeywords: config.raEscalationKeywords,
-    temperature: config.temperature,
-  };
+  return configToData(config);
 }
 
 const VALID_PROVIDERS = ["openai", "anthropic", "grok", "qwen", "deepseek"] as const;
@@ -184,9 +225,15 @@ const VALID_PROVIDERS = ["openai", "anthropic", "grok", "qwen", "deepseek"] as c
  */
 const MASKED_API_KEY_PATTERN = /^\*{4}/;
 
+/**
+ * Update (upsert) AI config for a company, optionally for a specific channel.
+ * When channel is provided: upserts the channel-specific config row.
+ * When channel is null/undefined: upserts the global config row.
+ */
 export async function updateAiConfig(
   companyId: string,
   data: AiConfigData,
+  channel?: ChannelType | null,
 ): Promise<void> {
   const session = await requireAdmin();
   await requireCompanyAccess(companyId);
@@ -256,6 +303,8 @@ export async function updateAiConfig(
     apiKeyHintToStore = data.apiKey.trim().slice(-4);
   }
 
+  const resolvedChannel = channel ?? null;
+
   const baseData = {
     enabled: data.enabled,
     persona: data.persona,
@@ -279,6 +328,7 @@ export async function updateAiConfig(
 
   const createData = {
     companyId,
+    channel: resolvedChannel,
     ...baseData,
     apiKey: apiKeyToStore ?? null,
     ...(apiKeyHintToStore !== undefined && { apiKeyHint: apiKeyHintToStore }),
@@ -288,15 +338,29 @@ export async function updateAiConfig(
     ? { ...baseData, apiKey: apiKeyToStore, apiKeyHint: apiKeyHintToStore }
     : baseData;
 
-  await prisma.aiConfig.upsert({
-    where: { companyId },
-    create: createData,
-    update: updateData,
+  // Wrap in transaction to prevent TOCTOU race condition
+  await prisma.$transaction(async (tx) => {
+    const existing = await tx.aiConfig.findFirst({
+      where: { companyId, channel: resolvedChannel },
+      select: { id: true },
+    });
+
+    if (existing) {
+      await tx.aiConfig.update({
+        where: { id: existing.id },
+        data: updateData,
+      });
+    } else {
+      await tx.aiConfig.create({
+        data: createData,
+      });
+    }
   });
 
   // Audit log — redact apiKey from the logged data
   const auditData = {
     ...data,
+    channel: resolvedChannel,
     apiKey: data.apiKey === null ? "(cleared)" : data.apiKey ? "(redacted)" : "(empty)",
   };
 
@@ -312,6 +376,7 @@ export async function updateAiConfig(
 
 /**
  * Test the AI connection for a company by making a minimal API call.
+ * Uses the global config (channel=null) for connection testing.
  */
 export async function testAiConnection(
   companyId: string,
@@ -323,9 +388,7 @@ export async function testAiConnection(
     return { ok: false, error: "Limite de testes atingido (máx 5/min). Aguarde um momento." };
   }
 
-  const config = await prisma.aiConfig.findUnique({
-    where: { companyId },
-  });
+  const config = await resolveAiConfig(companyId);
 
   if (!config?.apiKey) {
     return { ok: false, error: "API key não configurada" };
@@ -382,6 +445,7 @@ export async function testAiConnection(
 
 /**
  * List available models for the company's configured provider.
+ * Uses the global config (channel=null) for model discovery.
  */
 export async function listAvailableModels(
   companyId: string,
@@ -394,9 +458,7 @@ export async function listAvailableModels(
     throw new Error(`provider must be one of: ${VALID_PROVIDERS.join(", ")}`);
   }
 
-  const config = await prisma.aiConfig.findUnique({
-    where: { companyId },
-  });
+  const config = await resolveAiConfig(companyId);
 
   const provider = providerOverride ?? config?.provider ?? "openai";
 
@@ -555,3 +617,8 @@ export async function simulateAiResponse(
       "mas NÃO aparece na tab 'Consumo de IA' nem consome seu limite de gastos diário.",
   };
 }
+
+// ---------------------------------------------------------------------------
+// Re-export resolveAiConfig from shared module for backward compatibility
+// ---------------------------------------------------------------------------
+export { resolveAiConfig };

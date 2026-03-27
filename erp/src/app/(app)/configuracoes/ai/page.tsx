@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import {
   Save,
   Zap,
@@ -9,6 +10,7 @@ import {
   Loader2,
   FlaskConical,
   ShieldAlert,
+  Globe,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -24,6 +26,25 @@ import {
   TabReclameAqui,
 } from "./components";
 import { useAiConfig } from "./hooks";
+import type { ChannelType } from "@prisma/client";
+
+// ---------------------------------------------------------------------------
+// Channel tab definitions
+// ---------------------------------------------------------------------------
+
+type ChannelTab = {
+  id: string;
+  label: string;
+  icon: React.ReactNode;
+  channel: ChannelType | null;
+};
+
+const CHANNEL_TABS: ChannelTab[] = [
+  { id: "global", label: "Geral", icon: <Globe className="h-4 w-4" />, channel: null },
+  { id: "whatsapp", label: "WhatsApp", icon: <MessageSquare className="h-4 w-4" />, channel: "WHATSAPP" },
+  { id: "email", label: "Email", icon: <Mail className="h-4 w-4" />, channel: "EMAIL" },
+  { id: "reclameaqui", label: "Reclame Aqui", icon: <ShieldAlert className="h-4 w-4" />, channel: "RECLAMEAQUI" },
+];
 
 // ---------------------------------------------------------------------------
 // Page
@@ -31,6 +52,11 @@ import { useAiConfig } from "./hooks";
 
 export default function AiConfigPage() {
   const { selectedCompanyId } = useCompany();
+  const [activeChannelTab, setActiveChannelTab] = useState("global");
+
+  // Resolve the channel for the active tab
+  const activeChannel = CHANNEL_TABS.find((t) => t.id === activeChannelTab)?.channel ?? null;
+
   const {
     config,
     setConfig,
@@ -38,7 +64,7 @@ export default function AiConfigPage() {
     saving,
     hasUnsavedChanges,
     handleSave,
-  } = useAiConfig(selectedCompanyId);
+  } = useAiConfig(selectedCompanyId, activeChannel);
 
   // ── Guards ────────────────────────────────────────────────────────────────────────
   if (!selectedCompanyId) {
@@ -93,7 +119,31 @@ export default function AiConfigPage() {
         </div>
       </div>
 
-      {/* Tabs */}
+      {/* Channel Tabs — top-level selector for per-channel config */}
+      <Tabs value={activeChannelTab} onValueChange={setActiveChannelTab} className="space-y-4">
+        <TabsList>
+          {CHANNEL_TABS.map((tab) => (
+            <TabsTrigger key={tab.id} value={tab.id} className="gap-1.5">
+              {tab.icon}
+              {tab.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+
+        {activeChannel === null && (
+          <p className="text-xs text-muted-foreground">
+            Configuração padrão aplicada a todos os canais sem configuração específica.
+          </p>
+        )}
+        {activeChannel !== null && (
+          <p className="text-xs text-muted-foreground">
+            Configuração específica para o canal <strong>{CHANNEL_TABS.find((t) => t.channel === activeChannel)?.label}</strong>.
+            Campos não preenchidos herdam da configuração Geral.
+          </p>
+        )}
+      </Tabs>
+
+      {/* Config Tabs — sections within the active channel config */}
       <Tabs defaultValue="geral" className="space-y-4">
         <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="geral" className="gap-1.5">

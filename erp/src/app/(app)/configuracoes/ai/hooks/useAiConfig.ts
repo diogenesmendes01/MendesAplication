@@ -4,8 +4,9 @@ import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
 import { getAiConfig, updateAiConfig } from "../actions";
 import { DEFAULT_CONFIG, type AiConfigData } from "../components/types";
+import type { ChannelType } from "@prisma/client";
 
-export function useAiConfig(companyId: string | null) {
+export function useAiConfig(companyId: string | null, channel?: ChannelType | null) {
   const [config, setConfig] = useState<AiConfigData>(DEFAULT_CONFIG);
   const [savedConfig, setSavedConfig] = useState<AiConfigData>(DEFAULT_CONFIG);
   const [loading, setLoading] = useState(true);
@@ -14,11 +15,13 @@ export function useAiConfig(companyId: string | null) {
   const hasUnsavedChanges =
     !loading && JSON.stringify(config) !== JSON.stringify(savedConfig);
 
+  const resolvedChannel = channel ?? null;
+
   const loadData = useCallback(async () => {
     if (!companyId) return;
     setLoading(true);
     try {
-      const data = await getAiConfig(companyId);
+      const data = await getAiConfig(companyId, resolvedChannel);
       setConfig(data);
       setSavedConfig(data);
     } catch (err) {
@@ -28,7 +31,7 @@ export function useAiConfig(companyId: string | null) {
     } finally {
       setLoading(false);
     }
-  }, [companyId]);
+  }, [companyId, resolvedChannel]);
 
   useEffect(() => {
     loadData();
@@ -44,7 +47,7 @@ export function useAiConfig(companyId: string | null) {
 
     setSaving(true);
     try {
-      await updateAiConfig(companyId, config);
+      await updateAiConfig(companyId, config, resolvedChannel);
       setSavedConfig(config);
       toast.success("Configurações do Agente IA salvas com sucesso");
     } catch (err) {
@@ -52,7 +55,7 @@ export function useAiConfig(companyId: string | null) {
     } finally {
       setSaving(false);
     }
-  }, [companyId, config]);
+  }, [companyId, config, resolvedChannel]);
 
   return {
     config,
