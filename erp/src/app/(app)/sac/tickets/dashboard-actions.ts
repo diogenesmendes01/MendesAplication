@@ -79,6 +79,7 @@ export async function getTicketDashboard(
       pendingRefundsCount,
       urgentTickets,
       priorityGroups,
+      slaAtRiskCount,
       ticketsForAvg,
     ] = await Promise.all([
       prisma.ticket.count({ where: { ...channelWhere, status: "OPEN" } }),
@@ -122,6 +123,14 @@ export async function getTicketDashboard(
         where: { ...channelWhere, status: { in: [...activeStatuses] } },
         _count: true,
       }),
+      // SLA at risk
+      prisma.ticket.count({
+        where: {
+          ...channelWhere,
+          slaAtRisk: true,
+          status: { notIn: ["RESOLVED", "CLOSED"] },
+        },
+      }),
       // Avg response time
       prisma.ticket.findMany({
         where: { ...channelWhere, messages: { some: {} } },
@@ -155,7 +164,7 @@ export async function getTicketDashboard(
       waitingClientCount,
       resolvedTodayCount,
       slaBreachedCount,
-      slaAtRiskCount: 0, // not calculated in channel-filtered view
+      slaAtRiskCount,
       pendingRefundsCount,
       avgResponseTimeMinutes,
       ticketsByChannel: [{ channel: channelType, count: openCount + inProgressCount + waitingClientCount }],

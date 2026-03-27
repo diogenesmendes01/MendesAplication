@@ -37,6 +37,8 @@ function channelLabel(channel: string) {
       return "Email";
     case "WHATSAPP":
       return "WhatsApp";
+    case "RECLAMEAQUI":
+      return "Reclame Aqui";
     default:
       return "Web/Manual";
   }
@@ -48,8 +50,10 @@ function channelColor(channel: string) {
       return "#3b82f6";
     case "WHATSAPP":
       return "#22c55e";
-    default:
+    case "RECLAMEAQUI":
       return "#8b5cf6";
+    default:
+      return "#94a3b8";
   }
 }
 
