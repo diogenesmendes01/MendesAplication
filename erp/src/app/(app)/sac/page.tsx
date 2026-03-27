@@ -1,13 +1,10 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import { Mail, MessageSquare, Globe } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useCompany } from "@/contexts/company-context";
-import { TicketDashboardKpis } from "./tickets/ticket-dashboard";
-import { ViewToggle, type ViewMode } from "./components/view-toggle";
-import { TicketTable } from "./components/ticket-table";
+import { MasterDashboard } from "./components/master-dashboard";
 
 const channels = [
   {
@@ -35,7 +32,6 @@ const channels = [
 
 export default function SacOverviewPage() {
   const { selectedCompanyId } = useCompany();
-  const [viewMode, setViewMode] = useState<ViewMode>("table");
 
   if (!selectedCompanyId) {
     return (
@@ -48,20 +44,17 @@ export default function SacOverviewPage() {
   return (
     <div className="space-y-6">
       {/* Page header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">SAC — Overview</h1>
-          <p className="text-sm text-muted-foreground">
-            Visão geral de todos os canais de atendimento
-          </p>
-        </div>
-        <ViewToggle onChange={setViewMode} />
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">SAC — Overview</h1>
+        <p className="text-sm text-muted-foreground">
+          Visão geral de todos os canais de atendimento
+        </p>
       </div>
 
-      {/* Dashboard KPIs (all channels) */}
-      <TicketDashboardKpis companyId={selectedCompanyId} />
+      {/* Master Dashboard — KPIs + bar chart + urgent tickets */}
+      <MasterDashboard />
 
-      {/* Channel cards */}
+      {/* Channel navigation cards */}
       <div className="grid gap-4 sm:grid-cols-3">
         {channels.map(({ href, label, icon: Icon, color, bg }) => (
           <Link key={href} href={href}>
@@ -81,15 +74,6 @@ export default function SacOverviewPage() {
           </Link>
         ))}
       </div>
-
-      {/* All-channels ticket table or kanban */}
-      {viewMode === "table" ? (
-        <TicketTable />
-      ) : (
-        <div className="flex h-64 items-center justify-center rounded-lg border border-dashed text-muted-foreground">
-          🚧 Kanban view coming soon
-        </div>
-      )}
     </div>
   );
 }

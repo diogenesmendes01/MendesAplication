@@ -5,6 +5,7 @@ import type { LucideIcon } from "lucide-react";
 import type { ChannelType } from "@prisma/client";
 import { useCompany } from "@/contexts/company-context";
 import { TicketDashboardKpis } from "../tickets/ticket-dashboard";
+import { ChannelDashboard } from "../components/channel-dashboard";
 import { TicketTable } from "../components/ticket-table";
 import { ViewToggle, type ViewMode } from "../components/view-toggle";
 
@@ -48,8 +49,14 @@ export function TicketListPage({
         <ViewToggle onChange={setViewMode} />
       </div>
 
-      {/* Dashboard KPIs */}
-      <TicketDashboardKpis companyId={selectedCompanyId} />
+      {/* Channel-specific dashboard (above the view toggle area) */}
+      <ChannelDashboard channelType={channelType} />
+
+      {/* Channel-filtered KPI summary — fix for PR #362 Tech Lead note */}
+      <TicketDashboardKpis
+        companyId={selectedCompanyId}
+        channelType={channelType}
+      />
 
       {/* Content */}
       {viewMode === "table" ? (
