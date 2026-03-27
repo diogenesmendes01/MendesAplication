@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
-import Link from "next/link";
 import { toast } from "sonner";
 import {
   ArrowLeft,
