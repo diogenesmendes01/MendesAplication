@@ -27,6 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { VirtualTable, VIRTUAL_SCROLL_THRESHOLD } from "@/components/ui/virtual-table";
 import {
   listAuditLogs,
   exportAuditLogsCsv,
@@ -59,6 +60,58 @@ const ACTION_BADGE_COLORS: Record<string, string> = {
   LOGOUT: "bg-gray-100 text-gray-800",
   STATUS_CHANGE: "bg-yellow-100 text-yellow-800",
 };
+
+const AUDIT_COL_COUNT = 5;
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function formatDateTime(date: Date): string {
+  return new Date(date).toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
+function getActionLabel(action: string): string {
+  return ACTION_TYPES.find((a) => a.value === action)?.label ?? action;
+}
+
+// ---------------------------------------------------------------------------
+// Row cells renderer (shared between normal and virtual table)
+// ---------------------------------------------------------------------------
+
+function AuditRowCells({ log }: { log: AuditLogEntry }) {
+  return (
+    <>
+      <TableCell className="whitespace-nowrap text-sm">
+        {formatDateTime(log.createdAt)}
+      </TableCell>
+      <TableCell>{log.userName}</TableCell>
+      <TableCell>
+        <span
+          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+            ACTION_BADGE_COLORS[log.action] ?? "bg-gray-100 text-gray-800"
+          }`}
+        >
+          {getActionLabel(log.action)}
+        </span>
+      </TableCell>
+      <TableCell>
+        <span className="text-sm">{log.entity}</span>
+        <span className="ml-1 text-xs text-muted-foreground">
+          #{log.entityId.slice(0, 8)}
+        </span>
+      </TableCell>
+      <TableCell>{log.companyName ?? "—"}</TableCell>
+    </>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Page
@@ -172,22 +225,22 @@ export default function AuditoriaPage() {
     }
   }
 
-  // Format date/time
-  function formatDateTime(date: Date): string {
-    return new Date(date).toLocaleString("pt-BR", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    });
-  }
+  // ---------------------------------------------------------------------------
+  // Shared header row
+  // ---------------------------------------------------------------------------
 
-  // Action label in Portuguese
-  function getActionLabel(action: string): string {
-    return ACTION_TYPES.find((a) => a.value === action)?.label ?? action;
-  }
+  const tableHeader = (
+    <TableRow>
+      <TableHead>Data/Hora</TableHead>
+      <TableHead>Usuário</TableHead>
+      <TableHead>Ação</TableHead>
+      <TableHead>Entidade</TableHead>
+      <TableHead>Empresa</TableHead>
+    </TableRow>
+  );
+
+  const rows = logs?.data ?? [];
+  const useVirtual = !loading && rows.length > VIRTUAL_SCROLL_THRESHOLD;
 
   return (
     <div className="space-y-6">
@@ -235,7 +288,13 @@ export default function AuditoriaPage() {
             {/* User filter */}
             <div className="space-y-2">
               <Label>Usuário</Label>
-              <Select value={filterUserId} onValueChange={(v) => { setFilterUserId(v === "__all__" ? "" : v); setPage(1); }}>
+              <Select
+                value={filterUserId}
+                onValueChange={(v) => {
+                  setFilterUserId(v === "__all__" ? "" : v);
+                  setPage(1);
+                }}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Todos os usuários" />
                 </SelectTrigger>
@@ -253,7 +312,13 @@ export default function AuditoriaPage() {
             {/* Action filter */}
             <div className="space-y-2">
               <Label>Ação</Label>
-              <Select value={filterAction} onValueChange={(v) => { setFilterAction(v === "__all__" ? "" : v); setPage(1); }}>
+              <Select
+                value={filterAction}
+                onValueChange={(v) => {
+                  setFilterAction(v === "__all__" ? "" : v);
+                  setPage(1);
+                }}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Todas as ações" />
                 </SelectTrigger>
@@ -271,7 +336,13 @@ export default function AuditoriaPage() {
             {/* Entity filter */}
             <div className="space-y-2">
               <Label>Entidade</Label>
-              <Select value={filterEntity} onValueChange={(v) => { setFilterEntity(v === "__all__" ? "" : v); setPage(1); }}>
+              <Select
+                value={filterEntity}
+                onValueChange={(v) => {
+                  setFilterEntity(v === "__all__" ? "" : v);
+                  setPage(1);
+                }}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Todas as entidades" />
                 </SelectTrigger>
@@ -289,7 +360,13 @@ export default function AuditoriaPage() {
             {/* Company filter */}
             <div className="space-y-2">
               <Label>Empresa</Label>
-              <Select value={filterCompanyId} onValueChange={(v) => { setFilterCompanyId(v === "__all__" ? "" : v); setPage(1); }}>
+              <Select
+                value={filterCompanyId}
+                onValueChange={(v) => {
+                  setFilterCompanyId(v === "__all__" ? "" : v);
+                  setPage(1);
+                }}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Todas as empresas" />
                 </SelectTrigger>
@@ -310,7 +387,10 @@ export default function AuditoriaPage() {
               <Input
                 type="date"
                 value={filterDateFrom}
-                onChange={(e) => { setFilterDateFrom(e.target.value); setPage(1); }}
+                onChange={(e) => {
+                  setFilterDateFrom(e.target.value);
+                  setPage(1);
+                }}
               />
             </div>
 
@@ -320,7 +400,10 @@ export default function AuditoriaPage() {
               <Input
                 type="date"
                 value={filterDateTo}
-                onChange={(e) => { setFilterDateTo(e.target.value); setPage(1); }}
+                onChange={(e) => {
+                  setFilterDateTo(e.target.value);
+                  setPage(1);
+                }}
               />
             </div>
           </div>
@@ -328,59 +411,55 @@ export default function AuditoriaPage() {
       )}
 
       {/* Table */}
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Data/Hora</TableHead>
-              <TableHead>Usuário</TableHead>
-              <TableHead>Ação</TableHead>
-              <TableHead>Entidade</TableHead>
-              <TableHead>Empresa</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loading ? (
+      {loading ? (
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>{tableHeader}</TableHeader>
+            <TableBody>
               <TableRow>
-                <TableCell colSpan={5} className="h-24 text-center">
+                <TableCell colSpan={AUDIT_COL_COUNT} className="h-24 text-center">
                   Carregando...
                 </TableCell>
               </TableRow>
-            ) : !logs?.data.length ? (
+            </TableBody>
+          </Table>
+        </div>
+      ) : rows.length === 0 ? (
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>{tableHeader}</TableHeader>
+            <TableBody>
               <TableRow>
-                <TableCell colSpan={5} className="h-24 text-center">
+                <TableCell colSpan={AUDIT_COL_COUNT} className="h-24 text-center">
                   Nenhum registro de auditoria encontrado.
                 </TableCell>
               </TableRow>
-            ) : (
-              logs.data.map((log) => (
+            </TableBody>
+          </Table>
+        </div>
+      ) : useVirtual ? (
+        <VirtualTable
+          data={rows}
+          colCount={AUDIT_COL_COUNT}
+          estimateSize={52}
+          containerHeight="calc(100vh - 380px)"
+          renderHeader={() => tableHeader}
+          renderRow={(log) => <AuditRowCells log={log} />}
+        />
+      ) : (
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>{tableHeader}</TableHeader>
+            <TableBody>
+              {rows.map((log) => (
                 <TableRow key={log.id}>
-                  <TableCell className="whitespace-nowrap text-sm">
-                    {formatDateTime(log.createdAt)}
-                  </TableCell>
-                  <TableCell>{log.userName}</TableCell>
-                  <TableCell>
-                    <span
-                      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                        ACTION_BADGE_COLORS[log.action] ?? "bg-gray-100 text-gray-800"
-                      }`}
-                    >
-                      {getActionLabel(log.action)}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <span className="text-sm">{log.entity}</span>
-                    <span className="ml-1 text-xs text-muted-foreground">
-                      #{log.entityId.slice(0, 8)}
-                    </span>
-                  </TableCell>
-                  <TableCell>{log.companyName ?? "—"}</TableCell>
+                  <AuditRowCells log={log} />
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
 
       {/* Pagination */}
       {logs && logs.totalPages > 1 && (

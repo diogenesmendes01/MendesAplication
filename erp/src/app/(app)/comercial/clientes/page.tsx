@@ -38,6 +38,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { VirtualTable, VIRTUAL_SCROLL_THRESHOLD } from "@/components/ui/virtual-table";
 import { useCompany } from "@/contexts/company-context";
 import { isValidCpf } from "@/lib/cpf";
 import { isValidCnpj } from "@/lib/cnpj";
@@ -92,6 +93,53 @@ const emptyForm: ClientInput = {
   endereco: "",
   type: "PF",
 };
+
+const CLIENT_COL_COUNT = 5;
+
+// ---------------------------------------------------------------------------
+// Row cells renderer (shared between normal and virtual table)
+// ---------------------------------------------------------------------------
+
+function ClientRowCells({
+  client,
+  onEdit,
+  onView,
+}: {
+  client: ClientRow;
+  onEdit: (e: React.MouseEvent) => void;
+  onView: (e: React.MouseEvent) => void;
+}) {
+  return (
+    <>
+      <TableCell className="font-medium">{client.name}</TableCell>
+      <TableCell className="font-mono text-xs">{client.cpfCnpj}</TableCell>
+      <TableCell>{client.email ?? "—"}</TableCell>
+      <TableCell>
+        <Badge variant="outline">{client.type === "PJ" ? "PJ" : "PF"}</Badge>
+      </TableCell>
+      <TableCell className="text-right">
+        <div className="flex items-center justify-end gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onView}
+            title="Ver detalhes"
+          >
+            <Eye className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onEdit}
+            title="Editar cliente"
+          >
+            <Pencil className="h-4 w-4" />
+          </Button>
+        </div>
+      </TableCell>
+    </>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Page
@@ -254,6 +302,19 @@ export default function ClientesPage() {
     );
   }
 
+  const rows = clients?.data ?? [];
+  const useVirtual = !loading && rows.length > VIRTUAL_SCROLL_THRESHOLD;
+
+  const tableHeader = (
+    <TableRow>
+      <TableHead>Nome</TableHead>
+      <TableHead>CPF/CNPJ</TableHead>
+      <TableHead>Email</TableHead>
+      <TableHead>Tipo</TableHead>
+      <TableHead className="text-right">Ações</TableHead>
+    </TableRow>
+  );
+
   return (
     <div className="space-y-6">
       {/* Page header */}
@@ -282,32 +343,63 @@ export default function ClientesPage() {
       </div>
 
       {/* Table */}
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Nome</TableHead>
-              <TableHead>CPF/CNPJ</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Tipo</TableHead>
-              <TableHead className="text-right">Ações</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loading ? (
+      {loading ? (
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>{tableHeader}</TableHeader>
+            <TableBody>
               <TableRow>
-                <TableCell colSpan={5} className="h-24 text-center">
+                <TableCell colSpan={CLIENT_COL_COUNT} className="h-24 text-center">
                   Carregando...
                 </TableCell>
               </TableRow>
-            ) : !clients?.data.length ? (
+            </TableBody>
+          </Table>
+        </div>
+      ) : rows.length === 0 ? (
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>{tableHeader}</TableHeader>
+            <TableBody>
               <TableRow>
-                <TableCell colSpan={5} className="h-24 text-center">
+                <TableCell colSpan={CLIENT_COL_COUNT} className="h-24 text-center">
                   Nenhum cliente encontrado.
                 </TableCell>
               </TableRow>
-            ) : (
-              clients.data.map((client) => (
+            </TableBody>
+          </Table>
+        </div>
+      ) : useVirtual ? (
+        <VirtualTable
+          data={rows}
+          colCount={CLIENT_COL_COUNT}
+          estimateSize={52}
+          containerHeight="calc(100vh - 360px)"
+          renderHeader={() => tableHeader}
+          renderRow={(client) => (
+            <ClientRowCells
+              client={client}
+              onView={(e) => {
+                e.stopPropagation();
+                router.push(`/comercial/clientes/${client.id}`);
+              }}
+              onEdit={(e) => {
+                e.stopPropagation();
+                openEditDialog(client.id);
+              }}
+            />
+          )}
+          getRowProps={(client) => ({
+            className: "cursor-pointer",
+            onClick: () => router.push(`/comercial/clientes/${client.id}`),
+          })}
+        />
+      ) : (
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>{tableHeader}</TableHeader>
+            <TableBody>
+              {rows.map((client) => (
                 <TableRow
                   key={client.id}
                   className="cursor-pointer"
@@ -315,48 +407,23 @@ export default function ClientesPage() {
                     router.push(`/comercial/clientes/${client.id}`)
                   }
                 >
-                  <TableCell className="font-medium">{client.name}</TableCell>
-                  <TableCell className="font-mono text-xs">
-                    {client.cpfCnpj}
-                  </TableCell>
-                  <TableCell>{client.email ?? "—"}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline">
-                      {client.type === "PJ" ? "PJ" : "PF"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          router.push(`/comercial/clientes/${client.id}`);
-                        }}
-                        title="Ver detalhes"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openEditDialog(client.id);
-                        }}
-                        title="Editar cliente"
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
+                  <ClientRowCells
+                    client={client}
+                    onView={(e) => {
+                      e.stopPropagation();
+                      router.push(`/comercial/clientes/${client.id}`);
+                    }}
+                    onEdit={(e) => {
+                      e.stopPropagation();
+                      openEditDialog(client.id);
+                    }}
+                  />
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
 
       {/* Pagination */}
       {clients && clients.totalPages > 1 && (
