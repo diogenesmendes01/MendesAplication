@@ -1,5 +1,3 @@
-"use server";
-
 import { prisma } from "@/lib/prisma";
 import { executeTool } from "./tool-executor";
 import type { ToolContext, ReclameAquiResponse } from "./tool-executor";
@@ -76,33 +74,65 @@ export async function createAiSuggestion(
   return suggestion.id;
 }
 
-// ─── Approve suggestion ──────────────────────────────────────────────────────
+// ─── Approve suggestion (with race condition protection) ─────────────────────
 
 export async function approveSuggestion(
   suggestionId: string,
   userId: string,
   editedResponse?: string,
   editedSubject?: string,
+  companyId?: string,
 ): Promise<{ success: boolean; error?: string }> {
-  const suggestion = await prisma.aiSuggestion.findUnique({
-    where: { id: suggestionId },
-    include: {
-      ticket: {
-        select: {
-          id: true,
-          clientId: true,
-          companyId: true,
-          contact: { select: { whatsapp: true } },
-          client: { select: { telefone: true } },
+  // Use a transaction with atomic status check to prevent race conditions
+  // (two users approving the same suggestion simultaneously)
+  const result = await prisma.$transaction(async (tx) => {
+    // Atomically claim the suggestion by updating PENDING → processing
+    const claimed = await tx.aiSuggestion.updateMany({
+      where: { id: suggestionId, status: "PENDING" },
+      data: { status: "PROCESSING" },
+    });
+
+    if (claimed.count === 0) {
+      return { success: false as const, error: "Suggestion not found or already processed" };
+    }
+
+    const suggestion = await tx.aiSuggestion.findUnique({
+      where: { id: suggestionId },
+      include: {
+        ticket: {
+          select: {
+            id: true,
+            clientId: true,
+            companyId: true,
+            contact: { select: { whatsapp: true } },
+            client: { select: { telefone: true } },
+          },
         },
       },
-    },
+    });
+
+    if (!suggestion) {
+      return { success: false as const, error: "Suggestion not found" };
+    }
+
+    // Tenant isolation: validate companyId matches the suggestion's ticket
+    if (companyId && suggestion.ticket.companyId !== companyId) {
+      // Rollback status
+      await tx.aiSuggestion.update({
+        where: { id: suggestionId },
+        data: { status: "PENDING" },
+      });
+      return { success: false as const, error: "Access denied: suggestion belongs to another company" };
+    }
+
+    return { success: true as const, suggestion };
   });
 
-  if (!suggestion || suggestion.status !== "PENDING") {
-    return { success: false, error: "Suggestion not found or already processed" };
+  if (!result.success) {
+    return { success: false, error: result.error };
   }
 
+  const suggestion = result.suggestion;
   const finalResponse = editedResponse || suggestion.suggestedResponse;
   const finalSubject = editedSubject || suggestion.suggestedSubject;
   const status = editedResponse ? "EDITED" : "APPROVED";
@@ -154,8 +184,8 @@ export async function approveSuggestion(
     }
 
     try {
-      const result = await executeTool(action.toolName, args, context);
-      toolResults.push({ tool: action.toolName, result, success: true });
+      const toolResult = await executeTool(action.toolName, args, context);
+      toolResults.push({ tool: action.toolName, result: toolResult, success: true });
     } catch (error) {
       toolResults.push({
         tool: action.toolName,
@@ -192,35 +222,62 @@ export async function approveSuggestion(
   return { success: allSuccess };
 }
 
-// ─── Reject suggestion ───────────────────────────────────────────────────────
+// ─── Reject suggestion (with race condition protection) ──────────────────────
 
 export async function rejectSuggestion(
   suggestionId: string,
   userId: string,
   reason?: string,
+  companyId?: string,
 ): Promise<{ success: boolean; error?: string }> {
-  const suggestion = await prisma.aiSuggestion.findUnique({
-    where: { id: suggestionId },
-    select: { id: true, status: true },
+  // Atomic update: only reject if still PENDING (prevents race condition)
+  const result = await prisma.$transaction(async (tx) => {
+    // Fetch suggestion to validate tenant isolation
+    if (companyId) {
+      const suggestion = await tx.aiSuggestion.findUnique({
+        where: { id: suggestionId },
+        select: {
+          id: true,
+          status: true,
+          ticket: { select: { companyId: true } },
+        },
+      });
+
+      if (!suggestion) {
+        return { success: false as const, error: "Suggestion not found or already processed" };
+      }
+
+      if (suggestion.ticket.companyId !== companyId) {
+        return { success: false as const, error: "Access denied: suggestion belongs to another company" };
+      }
+
+      if (suggestion.status !== "PENDING") {
+        return { success: false as const, error: "Suggestion not found or already processed" };
+      }
+    }
+
+    const updated = await tx.aiSuggestion.updateMany({
+      where: { id: suggestionId, status: "PENDING" },
+      data: {
+        status: "REJECTED",
+        reviewedBy: userId,
+        reviewedAt: new Date(),
+        rejectionReason: reason || null,
+      },
+    });
+
+    if (updated.count === 0) {
+      return { success: false as const, error: "Suggestion not found or already processed" };
+    }
+
+    return { success: true as const };
   });
 
-  if (!suggestion || suggestion.status !== "PENDING") {
-    return { success: false, error: "Suggestion not found or already processed" };
+  if (result.success) {
+    logger.info({ suggestionId, reason }, "AI suggestion rejected");
   }
 
-  await prisma.aiSuggestion.update({
-    where: { id: suggestionId },
-    data: {
-      status: "REJECTED",
-      reviewedBy: userId,
-      reviewedAt: new Date(),
-      rejectionReason: reason || null,
-    },
-  });
-
-  logger.info({ suggestionId, reason }, "AI suggestion rejected");
-
-  return { success: true };
+  return result;
 }
 
 // ─── Confidence calculator ───────────────────────────────────────────────────

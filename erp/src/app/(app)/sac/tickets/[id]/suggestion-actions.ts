@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { requireSession } from "@/lib/session";
+import { requireCompanyAccess } from "@/lib/rbac";
 import {
   approveSuggestion,
   rejectSuggestion,
@@ -9,11 +9,11 @@ import {
 
 // ─── List suggestions for a ticket ──────────────────────────────────────────
 
-export async function getSuggestions(ticketId: string) {
-  await requireSession();
+export async function getSuggestions(ticketId: string, companyId: string) {
+  await requireCompanyAccess(companyId);
 
   return prisma.aiSuggestion.findMany({
-    where: { ticketId },
+    where: { ticketId, companyId },
     orderBy: { createdAt: "desc" },
     include: {
       reviewer: { select: { id: true, name: true } },
@@ -23,45 +23,53 @@ export async function getSuggestions(ticketId: string) {
 
 // ─── Get single suggestion ──────────────────────────────────────────────────
 
-export async function getSuggestion(suggestionId: string) {
-  await requireSession();
+export async function getSuggestion(suggestionId: string, companyId: string) {
+  await requireCompanyAccess(companyId);
 
-  return prisma.aiSuggestion.findUnique({
+  const suggestion = await prisma.aiSuggestion.findUnique({
     where: { id: suggestionId },
     include: {
       reviewer: { select: { id: true, name: true } },
-      ticket: { select: { id: true, subject: true } },
+      ticket: { select: { id: true, subject: true, companyId: true } },
     },
   });
+
+  if (!suggestion || suggestion.ticket.companyId !== companyId) {
+    return null;
+  }
+
+  return suggestion;
 }
 
 // ─── Approve suggestion ─────────────────────────────────────────────────────
 
 export async function approveSuggestionAction(
   suggestionId: string,
+  companyId: string,
   editedResponse?: string,
   editedSubject?: string,
 ) {
-  const session = await requireSession();
+  const session = await requireCompanyAccess(companyId);
 
-  return approveSuggestion(suggestionId, session.userId, editedResponse, editedSubject);
+  return approveSuggestion(suggestionId, session.userId, editedResponse, editedSubject, companyId);
 }
 
 // ─── Reject suggestion ──────────────────────────────────────────────────────
 
 export async function rejectSuggestionAction(
   suggestionId: string,
+  companyId: string,
   reason?: string,
 ) {
-  const session = await requireSession();
+  const session = await requireCompanyAccess(companyId);
 
-  return rejectSuggestion(suggestionId, session.userId, reason);
+  return rejectSuggestion(suggestionId, session.userId, reason, companyId);
 }
 
 // ─── Pending suggestions count for company ──────────────────────────────────
 
 export async function getPendingSuggestionsCount(companyId: string) {
-  await requireSession();
+  await requireCompanyAccess(companyId);
 
   return prisma.aiSuggestion.count({
     where: { companyId, status: "PENDING" },
@@ -71,7 +79,7 @@ export async function getPendingSuggestionsCount(companyId: string) {
 // ─── Pending suggestions list for company ───────────────────────────────────
 
 export async function getPendingSuggestions(companyId: string) {
-  await requireSession();
+  await requireCompanyAccess(companyId);
 
   return prisma.aiSuggestion.findMany({
     where: { companyId, status: "PENDING" },

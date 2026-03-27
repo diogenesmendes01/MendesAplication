@@ -6,6 +6,7 @@ import { reclameaquiOutboundQueue } from "@/lib/queue";
 import { logger } from "@/lib/logger";
 import { resolveAiConfigSelect } from "@/lib/ai/resolve-config";
 import {
+  calculateConfidence,
   createAiSuggestion,
   shouldRunAsSuggestion,
   shouldAutoExecuteHybrid,
@@ -37,7 +38,30 @@ const RA_DEFAULT_ESCALATION_KEYWORDS = [
   "indenização",
 ];
 
+// ---------------------------------------------------------------------------
+// Helper: compute confidence from agent result for non-RA channels
+// ---------------------------------------------------------------------------
 
+function computeConfidenceFromResult(result: AgentResult): number {
+  // For RA channels, use the RA response confidence directly
+  if (result.raResponse?.confidence !== undefined) {
+    return result.raResponse.confidence;
+  }
+
+  // For WhatsApp/Email, derive confidence from captured actions
+  const actions = result.capturedActions || [];
+  const toolsExecuted = actions.map((a) => a.toolName);
+
+  return calculateConfidence({
+    searchResultsFound: toolsExecuted.includes("SEARCH_DOCUMENTS"),
+    clientIdentified: toolsExecuted.includes("GET_CLIENT_INFO") ||
+      toolsExecuted.includes("LOOKUP_CLIENT_BY_CNPJ"),
+    historyAvailable: toolsExecuted.includes("GET_HISTORY"),
+    toolsExecuted,
+    // High similarity match heuristic: if agent found docs AND responded, likely good match
+    highSimilarityMatch: toolsExecuted.includes("SEARCH_DOCUMENTS") && result.responded,
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Main processor
@@ -154,9 +178,10 @@ export async function processAiAgent(job: Job<AiAgentJobData>) {
 
       // For suggest/hybrid modes → use new AiSuggestion system
       if (effectiveMode === "suggest") {
-        await createSuggestionFromResult(ticketId, companyId, "RECLAMEAQUI", result, messageId);
+        const computedConfidence = computeConfidenceFromResult(result);
+        await createSuggestionFromResult(ticketId, companyId, "RECLAMEAQUI", result, messageId, computedConfidence);
         logger.info(
-          `[ai-agent] RA suggest-mode: saved AiSuggestion for ticket ${ticketId} (type=${detectedType}, confidence=${confidence})`
+          `[ai-agent] RA suggest-mode: saved AiSuggestion for ticket ${ticketId} (type=${detectedType}, confidence=${computedConfidence})`
         );
         return;
       }
@@ -165,17 +190,18 @@ export async function processAiAgent(job: Job<AiAgentJobData>) {
         const threshold = aiConfig?.hybridThreshold ?? 0.8;
         const alwaysApprove = aiConfig?.alwaysRequireApproval || [];
         const capturedActions = result.capturedActions || [];
+        const computedConfidence = computeConfidenceFromResult(result);
 
-        if (shouldAutoExecuteHybrid(confidence, threshold, capturedActions, alwaysApprove)) {
+        if (shouldAutoExecuteHybrid(computedConfidence, threshold, capturedActions, alwaysApprove)) {
           // High confidence + no sensitive actions → fall through to auto execution
           logger.info(
-            `[ai-agent] RA hybrid-mode: auto-executing for ticket ${ticketId} (confidence=${confidence} >= threshold=${threshold})`
+            `[ai-agent] RA hybrid-mode: auto-executing for ticket ${ticketId} (confidence=${computedConfidence} >= threshold=${threshold})`
           );
           // Fall through to auto mode below
         } else {
-          await createSuggestionFromResult(ticketId, companyId, "RECLAMEAQUI", result, messageId);
+          await createSuggestionFromResult(ticketId, companyId, "RECLAMEAQUI", result, messageId, computedConfidence);
           logger.info(
-            `[ai-agent] RA hybrid-mode: saved AiSuggestion for ticket ${ticketId} (confidence=${confidence} < threshold=${threshold})`
+            `[ai-agent] RA hybrid-mode: saved AiSuggestion for ticket ${ticketId} (confidence=${computedConfidence} < threshold=${threshold})`
           );
           return;
         }
@@ -277,9 +303,10 @@ export async function processAiAgent(job: Job<AiAgentJobData>) {
 
   if (operationMode === "suggest") {
     if (result.responded || (result.capturedActions && result.capturedActions.length > 0)) {
-      await createSuggestionFromResult(ticketId, companyId, channel, result, messageId);
+      const confidence = computeConfidenceFromResult(result);
+      await createSuggestionFromResult(ticketId, companyId, channel, result, messageId, confidence);
       logger.info(
-        `[ai-agent] suggest-mode: saved AiSuggestion for ticket ${ticketId}`
+        `[ai-agent] suggest-mode: saved AiSuggestion for ticket ${ticketId} (confidence=${confidence})`
       );
     }
     return;
@@ -289,7 +316,7 @@ export async function processAiAgent(job: Job<AiAgentJobData>) {
     const threshold = aiConfig?.hybridThreshold ?? 0.8;
     const alwaysApprove = aiConfig?.alwaysRequireApproval || [];
     const capturedActions = result.capturedActions || [];
-    const confidence = result.raResponse?.confidence ?? 0.5;
+    const confidence = computeConfidenceFromResult(result);
 
     if (capturedActions.length === 0) {
       // No write actions captured — nothing to suggest
@@ -299,14 +326,14 @@ export async function processAiAgent(job: Job<AiAgentJobData>) {
     if (shouldAutoExecuteHybrid(confidence, threshold, capturedActions, alwaysApprove)) {
       // High confidence → create suggestion and immediately approve it (auto-execute)
       const suggestionId = await createSuggestionFromResult(
-        ticketId, companyId, channel, result, messageId
+        ticketId, companyId, channel, result, messageId, confidence
       );
       await executeSuggestionActions(suggestionId, "system");
       logger.info(
         `[ai-agent] hybrid-mode: auto-executed for ticket ${ticketId} (confidence=${confidence} >= threshold=${threshold})`
       );
     } else {
-      await createSuggestionFromResult(ticketId, companyId, channel, result, messageId);
+      await createSuggestionFromResult(ticketId, companyId, channel, result, messageId, confidence);
       logger.info(
         `[ai-agent] hybrid-mode: saved AiSuggestion for ticket ${ticketId} (confidence=${confidence} < threshold=${threshold})`
       );
@@ -325,6 +352,7 @@ async function createSuggestionFromResult(
   channel: "WHATSAPP" | "EMAIL" | "RECLAMEAQUI",
   result: AgentResult,
   messageId?: string,
+  confidence?: number,
 ): Promise<string> {
   const capturedActions = result.capturedActions || [];
 
@@ -349,6 +377,9 @@ async function createSuggestionFromResult(
     }
   }
 
+  // Use provided confidence or compute from result
+  const finalConfidence = confidence ?? computeConfidenceFromResult(result);
+
   return createAiSuggestion({
     ticketId,
     companyId,
@@ -367,7 +398,7 @@ async function createSuggestionFromResult(
     raPublicMessage: result.raResponse?.publicMessage,
     raDetectedType: result.raResponse?.detectedType,
     raSuggestModeration: result.raResponse?.suggestModeration,
-    confidence: result.raResponse?.confidence ?? 0.5,
+    confidence: finalConfidence,
   });
 }
 

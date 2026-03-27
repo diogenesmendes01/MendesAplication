@@ -6,6 +6,8 @@
  * - Hybrid auto-execute decision
  * - AiSuggestion creation
  * - Approve / Reject flows
+ * - Tenant isolation
+ * - Race condition protection
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
@@ -14,7 +16,9 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const mockPrismaAiSuggestionCreate = vi.fn();
 const mockPrismaAiSuggestionFindUnique = vi.fn();
 const mockPrismaAiSuggestionUpdate = vi.fn();
+const mockPrismaAiSuggestionUpdateMany = vi.fn();
 const mockPrismaTicketMessageUpdate = vi.fn();
+const mockPrismaTransaction = vi.fn();
 const mockExecuteTool = vi.fn();
 
 vi.mock("@/lib/prisma", () => ({
@@ -23,10 +27,12 @@ vi.mock("@/lib/prisma", () => ({
       create: (...a: unknown[]) => mockPrismaAiSuggestionCreate(...a),
       findUnique: (...a: unknown[]) => mockPrismaAiSuggestionFindUnique(...a),
       update: (...a: unknown[]) => mockPrismaAiSuggestionUpdate(...a),
+      updateMany: (...a: unknown[]) => mockPrismaAiSuggestionUpdateMany(...a),
     },
     ticketMessage: {
       update: (...a: unknown[]) => mockPrismaTicketMessageUpdate(...a),
     },
+    $transaction: (...a: unknown[]) => mockPrismaTransaction(...a),
   },
 }));
 
@@ -203,43 +209,55 @@ describe("createAiSuggestion", () => {
 });
 
 describe("approveSuggestion", () => {
-  it("rejects if suggestion not found", async () => {
-    mockPrismaAiSuggestionFindUnique.mockResolvedValue(null);
+  const baseSuggestion = {
+    id: "sug-1",
+    status: "PENDING",
+    ticketId: "ticket-1",
+    companyId: "company-1",
+    channel: "WHATSAPP",
+    suggestedResponse: "Hello!",
+    suggestedSubject: null,
+    suggestedActions: [
+      { toolName: "RESPOND", args: { message: "Hello!" }, order: 0 },
+    ],
+    ticket: {
+      id: "ticket-1",
+      clientId: "client-1",
+      companyId: "company-1",
+      contact: { whatsapp: "5511999999999" },
+      client: { telefone: null },
+    },
+  };
+
+  it("rejects if suggestion not found or already processed (race condition)", async () => {
+    // Transaction simulates: updateMany returns 0 rows (already processed)
+    mockPrismaTransaction.mockImplementation(async (fn: Function) => {
+      const tx = {
+        aiSuggestion: {
+          updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+          findUnique: vi.fn(),
+          update: vi.fn(),
+        },
+      };
+      return fn(tx);
+    });
 
     const result = await approveSuggestion("sug-missing", "user-1");
     expect(result.success).toBe(false);
-    expect(result.error).toContain("not found");
-  });
-
-  it("rejects if suggestion already processed", async () => {
-    mockPrismaAiSuggestionFindUnique.mockResolvedValue({
-      id: "sug-1",
-      status: "APPROVED",
-    });
-
-    const result = await approveSuggestion("sug-1", "user-1");
-    expect(result.success).toBe(false);
+    expect(result.error).toContain("not found or already processed");
   });
 
   it("executes captured actions and marks as APPROVED", async () => {
-    mockPrismaAiSuggestionFindUnique.mockResolvedValue({
-      id: "sug-1",
-      status: "PENDING",
-      ticketId: "ticket-1",
-      companyId: "company-1",
-      channel: "WHATSAPP",
-      suggestedResponse: "Hello!",
-      suggestedSubject: null,
-      suggestedActions: [
-        { toolName: "RESPOND", args: { message: "Hello!" }, order: 0 },
-      ],
-      ticket: {
-        id: "ticket-1",
-        clientId: "client-1",
-        companyId: "company-1",
-        contact: { whatsapp: "5511999999999" },
-        client: { telefone: null },
-      },
+    // Transaction claims the suggestion
+    mockPrismaTransaction.mockImplementation(async (fn: Function) => {
+      const tx = {
+        aiSuggestion: {
+          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+          findUnique: vi.fn().mockResolvedValue(baseSuggestion),
+          update: vi.fn(),
+        },
+      };
+      return fn(tx);
     });
     mockExecuteTool.mockResolvedValue("Mensagem enviada ao cliente com sucesso.");
     mockPrismaAiSuggestionUpdate.mockResolvedValue({});
@@ -259,24 +277,22 @@ describe("approveSuggestion", () => {
   });
 
   it("marks as EDITED when editedResponse is provided", async () => {
-    mockPrismaAiSuggestionFindUnique.mockResolvedValue({
-      id: "sug-1",
-      status: "PENDING",
-      ticketId: "ticket-1",
-      companyId: "company-1",
-      channel: "WHATSAPP",
-      suggestedResponse: "Original",
-      suggestedSubject: null,
-      suggestedActions: [
-        { toolName: "RESPOND", args: { message: "Original" }, order: 0 },
-      ],
-      ticket: {
-        id: "ticket-1",
-        clientId: "client-1",
-        companyId: "company-1",
-        contact: null,
-        client: { telefone: "5511988888888" },
-      },
+    mockPrismaTransaction.mockImplementation(async (fn: Function) => {
+      const tx = {
+        aiSuggestion: {
+          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+          findUnique: vi.fn().mockResolvedValue({
+            ...baseSuggestion,
+            ticket: {
+              ...baseSuggestion.ticket,
+              contact: null,
+              client: { telefone: "5511988888888" },
+            },
+          }),
+          update: vi.fn(),
+        },
+      };
+      return fn(tx);
     });
     mockExecuteTool.mockResolvedValue("Ok");
     mockPrismaAiSuggestionUpdate.mockResolvedValue({});
@@ -297,33 +313,156 @@ describe("approveSuggestion", () => {
       })
     );
   });
+
+  it("rejects when companyId does not match (tenant isolation)", async () => {
+    mockPrismaTransaction.mockImplementation(async (fn: Function) => {
+      const tx = {
+        aiSuggestion: {
+          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+          findUnique: vi.fn().mockResolvedValue(baseSuggestion),
+          update: vi.fn().mockResolvedValue({}),
+        },
+      };
+      return fn(tx);
+    });
+
+    const result = await approveSuggestion("sug-1", "user-1", undefined, undefined, "other-company");
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("Access denied");
+  });
+
+  it("allows approval when companyId matches", async () => {
+    mockPrismaTransaction.mockImplementation(async (fn: Function) => {
+      const tx = {
+        aiSuggestion: {
+          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+          findUnique: vi.fn().mockResolvedValue(baseSuggestion),
+          update: vi.fn(),
+        },
+      };
+      return fn(tx);
+    });
+    mockExecuteTool.mockResolvedValue("Ok");
+    mockPrismaAiSuggestionUpdate.mockResolvedValue({});
+
+    const result = await approveSuggestion("sug-1", "user-1", undefined, undefined, "company-1");
+    expect(result.success).toBe(true);
+  });
+
+  it("prevents double approval via race condition (atomic updateMany)", async () => {
+    // Simulate: first call claims (count=1), second call finds count=0
+    let callCount = 0;
+    mockPrismaTransaction.mockImplementation(async (fn: Function) => {
+      callCount++;
+      const tx = {
+        aiSuggestion: {
+          updateMany: vi.fn().mockResolvedValue({ count: callCount === 1 ? 1 : 0 }),
+          findUnique: vi.fn().mockResolvedValue(baseSuggestion),
+          update: vi.fn(),
+        },
+      };
+      return fn(tx);
+    });
+    mockExecuteTool.mockResolvedValue("Ok");
+    mockPrismaAiSuggestionUpdate.mockResolvedValue({});
+
+    // First approval succeeds
+    const result1 = await approveSuggestion("sug-1", "user-1");
+    expect(result1.success).toBe(true);
+
+    // Second approval fails (already claimed)
+    const result2 = await approveSuggestion("sug-1", "user-2");
+    expect(result2.success).toBe(false);
+    expect(result2.error).toContain("already processed");
+  });
 });
 
 describe("rejectSuggestion", () => {
-  it("rejects if suggestion not found", async () => {
-    mockPrismaAiSuggestionFindUnique.mockResolvedValue(null);
+  it("rejects if suggestion not found or already processed", async () => {
+    mockPrismaTransaction.mockImplementation(async (fn: Function) => {
+      const tx = {
+        aiSuggestion: {
+          findUnique: vi.fn().mockResolvedValue(null),
+          updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+        },
+      };
+      return fn(tx);
+    });
 
     const result = await rejectSuggestion("sug-missing", "user-1");
     expect(result.success).toBe(false);
   });
 
   it("marks as REJECTED with reason", async () => {
-    mockPrismaAiSuggestionFindUnique.mockResolvedValue({
-      id: "sug-1",
-      status: "PENDING",
+    mockPrismaTransaction.mockImplementation(async (fn: Function) => {
+      const tx = {
+        aiSuggestion: {
+          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        },
+      };
+      return fn(tx);
     });
-    mockPrismaAiSuggestionUpdate.mockResolvedValue({});
 
     const result = await rejectSuggestion("sug-1", "user-1", "Resposta inadequada");
     expect(result.success).toBe(true);
-    expect(mockPrismaAiSuggestionUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: "sug-1" },
-        data: expect.objectContaining({
-          status: "REJECTED",
-          rejectionReason: "Resposta inadequada",
-        }),
-      })
-    );
+  });
+
+  it("rejects when companyId does not match (tenant isolation)", async () => {
+    mockPrismaTransaction.mockImplementation(async (fn: Function) => {
+      const tx = {
+        aiSuggestion: {
+          findUnique: vi.fn().mockResolvedValue({
+            id: "sug-1",
+            status: "PENDING",
+            ticket: { companyId: "company-1" },
+          }),
+          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        },
+      };
+      return fn(tx);
+    });
+
+    const result = await rejectSuggestion("sug-1", "user-1", "reason", "other-company");
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("Access denied");
+  });
+
+  it("allows rejection when companyId matches", async () => {
+    mockPrismaTransaction.mockImplementation(async (fn: Function) => {
+      const tx = {
+        aiSuggestion: {
+          findUnique: vi.fn().mockResolvedValue({
+            id: "sug-1",
+            status: "PENDING",
+            ticket: { companyId: "company-1" },
+          }),
+          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        },
+      };
+      return fn(tx);
+    });
+
+    const result = await rejectSuggestion("sug-1", "user-1", "reason", "company-1");
+    expect(result.success).toBe(true);
+  });
+
+  it("prevents double rejection (race condition)", async () => {
+    // First call succeeds, second gets count=0
+    let callCount = 0;
+    mockPrismaTransaction.mockImplementation(async (fn: Function) => {
+      callCount++;
+      const tx = {
+        aiSuggestion: {
+          updateMany: vi.fn().mockResolvedValue({ count: callCount === 1 ? 1 : 0 }),
+        },
+      };
+      return fn(tx);
+    });
+
+    const result1 = await rejectSuggestion("sug-1", "user-1", "reason");
+    expect(result1.success).toBe(true);
+
+    const result2 = await rejectSuggestion("sug-1", "user-2", "reason");
+    expect(result2.success).toBe(false);
   });
 });

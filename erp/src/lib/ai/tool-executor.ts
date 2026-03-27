@@ -1,5 +1,3 @@
-"use server";
-
 import { prisma } from "@/lib/prisma";
 import { searchDocuments, searchDocumentsByChannel } from "./embeddings";
 import { sendTextMessage } from "@/lib/whatsapp-api";

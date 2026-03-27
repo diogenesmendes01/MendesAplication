@@ -1,6 +1,7 @@
 /**
  * Unit tests for ai-agent.ts worker — suggestion mode routing.
- * Verifies that the worker correctly routes based on operationMode.
+ * Verifies that the worker correctly routes based on operationMode
+ * and computes confidence via calculateConfidence.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Job } from "bullmq";
@@ -13,6 +14,7 @@ const mockCreateAiSuggestion = vi.fn().mockResolvedValue("sug-123");
 const mockShouldRunAsSuggestion = vi.fn();
 const mockShouldAutoExecuteHybrid = vi.fn();
 const mockApproveSuggestion = vi.fn().mockResolvedValue({ success: true });
+const mockCalculateConfidence = vi.fn().mockReturnValue(0.65);
 
 const mockPrismaTicketFindUnique = vi.fn();
 const mockPrismaTicketUpdate = vi.fn();
@@ -39,6 +41,7 @@ vi.mock("@/lib/ai/resolve-config", () => ({
 }));
 
 vi.mock("@/lib/ai/suggestion-mode", () => ({
+  calculateConfidence: (...args: unknown[]) => mockCalculateConfidence(...args),
   createAiSuggestion: (...args: unknown[]) => mockCreateAiSuggestion(...args),
   shouldRunAsSuggestion: (...args: unknown[]) => mockShouldRunAsSuggestion(...args),
   shouldAutoExecuteHybrid: (...args: unknown[]) => mockShouldAutoExecuteHybrid(...args),
@@ -102,6 +105,9 @@ beforeEach(() => {
 
   // Default: no suggestion mode
   mockShouldRunAsSuggestion.mockReturnValue(false);
+
+  // Default confidence
+  mockCalculateConfidence.mockReturnValue(0.65);
 });
 
 describe("processAiAgent — suggestion mode routing", () => {
@@ -172,7 +178,6 @@ describe("processAiAgent — suggestion mode routing", () => {
       escalated: false,
       iterations: 1,
       capturedActions: [{ toolName: "RESPOND", args: { message: "Hi" }, order: 0 }],
-      raResponse: { confidence: 0.9 },
     });
 
     await processAiAgent(makeJob({}));
@@ -197,7 +202,6 @@ describe("processAiAgent — suggestion mode routing", () => {
       escalated: false,
       iterations: 1,
       capturedActions: [{ toolName: "RESPOND", args: { message: "Hi" }, order: 0 }],
-      raResponse: { confidence: 0.3 },
     });
 
     await processAiAgent(makeJob({}));
@@ -205,5 +209,61 @@ describe("processAiAgent — suggestion mode routing", () => {
     // Should create suggestion but NOT approve
     expect(mockCreateAiSuggestion).toHaveBeenCalledOnce();
     expect(mockApproveSuggestion).not.toHaveBeenCalled();
+  });
+});
+
+describe("processAiAgent — confidence calculation", () => {
+  it("uses calculateConfidence for suggest mode (not hardcoded 0.5)", async () => {
+    mockResolveAiConfigSelect.mockResolvedValue({
+      operationMode: "suggest",
+      hybridThreshold: 0.8,
+      alwaysRequireApproval: [],
+      raMode: "auto",
+      raEscalationKeywords: [],
+    });
+    mockShouldRunAsSuggestion.mockReturnValue(true);
+    mockCalculateConfidence.mockReturnValue(0.45);
+    mockRunAgent.mockResolvedValue({
+      responded: true,
+      escalated: false,
+      iterations: 2,
+      capturedActions: [
+        { toolName: "SEARCH_DOCUMENTS", args: { query: "boleto" }, order: 0 },
+        { toolName: "RESPOND", args: { message: "Resposta" }, order: 1 },
+      ],
+    });
+
+    await processAiAgent(makeJob({}));
+
+    expect(mockCreateAiSuggestion).toHaveBeenCalledOnce();
+    // Verify the confidence passed to createAiSuggestion is the calculated value, not 0.5
+    const suggestionData = mockCreateAiSuggestion.mock.calls[0][0];
+    expect(suggestionData.confidence).toBe(0.45);
+  });
+
+  it("uses calculateConfidence for hybrid mode decisions", async () => {
+    mockResolveAiConfigSelect.mockResolvedValue({
+      operationMode: "hybrid",
+      hybridThreshold: 0.8,
+      alwaysRequireApproval: [],
+      raMode: "auto",
+      raEscalationKeywords: [],
+    });
+    mockShouldRunAsSuggestion.mockReturnValue(true);
+    mockShouldAutoExecuteHybrid.mockReturnValue(false);
+    mockCalculateConfidence.mockReturnValue(0.35);
+    mockRunAgent.mockResolvedValue({
+      responded: true,
+      escalated: false,
+      iterations: 1,
+      capturedActions: [{ toolName: "RESPOND", args: { message: "Hi" }, order: 0 }],
+    });
+
+    await processAiAgent(makeJob({}));
+
+    // shouldAutoExecuteHybrid should receive the calculated confidence
+    expect(mockShouldAutoExecuteHybrid).toHaveBeenCalledWith(
+      0.35, 0.8, expect.any(Array), expect.any(Array)
+    );
   });
 });

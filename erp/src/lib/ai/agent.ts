@@ -1,5 +1,3 @@
-"use server";
-
 import { prisma } from "@/lib/prisma";
 import { chatCompletion, getEnvProviderConfig } from "./provider";
 import type { AiMessage, ProviderConfig } from "./provider";
@@ -497,6 +495,7 @@ export async function runAgent(
     contactPhone: contactPhone ? contactPhone.replace(/\D/g, "") : "",
     channel,
     dryRun: false,
+    suggestionMode: options?.suggestionMode ?? false,
   };
 
   // Load recent message history for prompt context
