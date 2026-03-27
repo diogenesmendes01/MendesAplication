@@ -213,6 +213,7 @@ export async function listChartOfAccounts(
 
   const accounts = await prisma.chartOfAccounts.findMany({
     where: { companyId },
+    take: 500,
     orderBy: { code: "asc" },
     select: {
       id: true,
@@ -257,6 +258,7 @@ export async function listParentOptions(
 
   const accounts = await prisma.chartOfAccounts.findMany({
     where: { companyId },
+    take: 500,
     orderBy: { code: "asc" },
     select: { id: true, code: true, name: true, level: true, parentId: true },
   });

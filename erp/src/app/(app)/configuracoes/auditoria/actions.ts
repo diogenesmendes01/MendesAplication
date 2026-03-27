@@ -156,7 +156,7 @@ export async function exportAuditLogsCsv(
   const logs = await prisma.auditLog.findMany({
     where,
     orderBy: { createdAt: "desc" },
-    take: 10000,
+    take: 500,
     include: {
       user: { select: { name: true } },
       company: { select: { nomeFantasia: true } },

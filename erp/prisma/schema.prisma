@@ -159,6 +159,7 @@ model AuditLog {
   user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   company Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
 
+  @@index([companyId, createdAt])
   @@map("audit_logs")
 }
 
@@ -184,6 +185,7 @@ model Client {
 
   @@unique([cpfCnpj, companyId])
   @@index([companyId])
+  @@index([companyId, createdAt])
   @@map("clients")
 }
 
@@ -200,6 +202,7 @@ model AdditionalContact {
   tickets        Ticket[]
   ticketMessages TicketMessage[] @relation("TicketMessageContact")
 
+  @@index([clientId])
   @@map("additional_contacts")
 }
 
@@ -579,6 +582,7 @@ model Refund {
 
   @@index([companyId, status])
   @@index([ticketId])
+  @@index([companyId, status, requestedAt])
   @@map("refunds")
 }
 
@@ -620,6 +624,7 @@ model Proposal {
   events   ProposalEvent[]
 
   @@index([companyId, status])
+  @@index([companyId, status, createdAt])
   @@map("proposals")
 }
 
@@ -705,6 +710,7 @@ model Invoice {
   taxEntries      TaxEntry[]
 
   @@index([companyId, status])
+  @@index([companyId, status, createdAt])
   @@map("invoices")
 }
 
@@ -723,6 +729,7 @@ model TaxEntry {
   invoice Invoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
 
   @@index([companyId, invoiceId])
+  @@index([companyId, status, dueDate])
   @@map("tax_entries")
 }
 
@@ -841,6 +848,7 @@ model AiUsageLog {
   @@index([companyId, createdAt])
   @@index([aiConfigId, createdAt])
   @@index([isSimulation])
+  @@index([companyId, isSimulation])
   @@map("ai_usage_logs")
 }
 
@@ -859,6 +867,7 @@ model Document {
   company Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
   chunks  DocumentChunk[]
 
+  @@index([companyId, createdAt])
   @@map("documents")
 }
 
@@ -893,6 +902,7 @@ model FiscalConfig {
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
+  @@index([companyId])
   @@map("fiscal_configs")
 }
 
@@ -906,6 +916,7 @@ model DocumentChunk {
 
   document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
 
+  @@index([documentId])
   @@map("document_chunks")
 }
 

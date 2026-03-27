@@ -110,6 +110,7 @@ export async function getTaxDashboardData(): Promise<TaxDashboardData> {
       where: { status: "ACTIVE" },
       select: { id: true, nomeFantasia: true, cnpj: true },
       orderBy: { nomeFantasia: "asc" },
+      take: 500,
     });
   } else {
     const assignments = await prisma.userCompany.findMany({
@@ -161,6 +162,7 @@ export async function getTaxDashboardData(): Promise<TaxDashboardData> {
         status: "PENDING",
       },
       orderBy: { dueDate: "asc" },
+      take: 500,
     });
 
     companySummaries.push({
@@ -206,6 +208,7 @@ export async function getTaxDashboardData(): Promise<TaxDashboardData> {
       },
     },
     orderBy: { dueDate: "asc" },
+    take: 500,
   });
 
   const overdueRaw = await prisma.taxEntry.findMany({
@@ -215,6 +218,7 @@ export async function getTaxDashboardData(): Promise<TaxDashboardData> {
       dueDate: { lt: now },
     },
     orderBy: { dueDate: "asc" },
+    take: 500,
   });
 
   const mapEntry = (e: typeof upcomingRaw[number]): TaxEntryRow => ({
