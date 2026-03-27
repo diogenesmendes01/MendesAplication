@@ -1,10 +1,8 @@
-"use server";
-
 import { prisma } from "@/lib/prisma";
 import { chatCompletion, getEnvProviderConfig } from "./provider";
 import type { AiMessage, ProviderConfig } from "./provider";
 import { getToolsForChannel } from "./tools";
-import { executeTool } from "./tool-executor";
+import { executeTool, isReadOnlyTool } from "./tool-executor";
 import type { ToolContext, ReclameAquiResponse } from "./tool-executor";
 import { decrypt } from "@/lib/encryption";
 import {
@@ -29,6 +27,15 @@ const ESTIMATED_COST_PER_ITERATION_BRL = 0.05;
 
 // ─── Result types ─────────────────────────────────────────────────────────────
 
+
+// ─── Suggestion mode types ────────────────────────────────────────────────────
+
+export interface CapturedAction {
+  toolName: string;
+  args: Record<string, unknown>;
+  order: number;
+}
+
 export interface AgentResult {
   responded: boolean;
   escalated: boolean;
@@ -36,6 +43,10 @@ export interface AgentResult {
   error?: string;
   /** Reclame Aqui dual response — only present when channel is RECLAMEAQUI */
   raResponse?: ReclameAquiResponse;
+  /** Write tools captured in suggestion mode */
+  capturedActions?: CapturedAction[];
+  /** All tools executed during the agent loop (read + write) */
+  toolsExecuted?: string[];
 }
 
 export interface DryRunResult {
@@ -61,6 +72,10 @@ interface AgentLoopResult {
   totalOutputTokens: number;
   /** Reclame Aqui dual response — only present when channel is RECLAMEAQUI */
   raResponse?: ReclameAquiResponse;
+  /** Write tools captured in suggestion mode */
+  capturedActions?: CapturedAction[];
+  /** All tools executed during the agent loop (read + write) */
+  toolsExecuted?: string[];
 }
 
 // ─── Core agent loop ──────────────────────────────────────────────────────────
@@ -112,6 +127,9 @@ log,
   let totalOutputTokens = 0;
   let finalResponse = "";
   let raResponse: ReclameAquiResponse | undefined;
+  const capturedActions: CapturedAction[] = [];
+  const allToolsExecuted: string[] = [];
+  let actionOrder = 0;
 
   for (let iteration = 0; iteration < maxIterations; iteration++) {
     // ── Global timeout guard ───────────────────────────────────────────────
@@ -126,6 +144,8 @@ log,
         totalInputTokens,
         totalOutputTokens,
         raResponse,
+        capturedActions,
+        toolsExecuted: allToolsExecuted,
       };
     }
 
@@ -143,6 +163,8 @@ log,
           totalInputTokens,
           totalOutputTokens,
           raResponse,
+        capturedActions,
+        toolsExecuted: allToolsExecuted,
         };
       }
     }
@@ -183,6 +205,12 @@ log,
           }
 
           const result = await executeTool(toolName, args, toolContext);
+          allToolsExecuted.push(toolName);
+
+          // Capture write tool calls in suggestion mode
+          if (toolContext.suggestionMode && !isReadOnlyTool(toolName)) {
+            capturedActions.push({ toolName, args, order: actionOrder++ });
+          }
 
           messages.push({
             role: "tool",
@@ -225,6 +253,8 @@ log,
             totalInputTokens,
             totalOutputTokens,
             raResponse,
+        capturedActions,
+        toolsExecuted: allToolsExecuted,
           };
         }
 
@@ -256,6 +286,10 @@ log,
                 ? { subject: "Re: Atendimento", message: response.content }
                 : { message: response.content };
             await executeTool(respondTool, respondArgs, toolContext);
+            // Capture the implicit respond action in suggestion mode
+            if (toolContext.suggestionMode) {
+              capturedActions.push({ toolName: respondTool, args: respondArgs, order: actionOrder++ });
+            }
           }
         } else {
           // Dry-run: handle RECLAMEAQUI text response
@@ -282,6 +316,8 @@ log,
           totalInputTokens,
           totalOutputTokens,
           raResponse,
+        capturedActions,
+        toolsExecuted: allToolsExecuted,
         };
 
       // ── Empty response ─────────────────────────────────────────────────
@@ -298,6 +334,8 @@ log,
           totalInputTokens,
           totalOutputTokens,
           raResponse,
+        capturedActions,
+        toolsExecuted: allToolsExecuted,
         };
       }
     } catch (error) {
@@ -323,6 +361,8 @@ log,
     totalInputTokens,
     totalOutputTokens,
     raResponse,
+        capturedActions,
+        toolsExecuted: allToolsExecuted,
   };
 }
 
@@ -332,7 +372,8 @@ export async function runAgent(
   ticketId: string,
   companyId: string,
   incomingMessage: string,
-  channel: "WHATSAPP" | "EMAIL" | "RECLAMEAQUI" = "WHATSAPP"
+  channel: "WHATSAPP" | "EMAIL" | "RECLAMEAQUI" = "WHATSAPP",
+  options?: { suggestionMode?: boolean },
 ): Promise<AgentResult> {
   const startTime = Date.now();
   const timeout = parseInt(process.env.AI_TIMEOUT || "30000", 10);
@@ -466,6 +507,7 @@ export async function runAgent(
     contactPhone: contactPhone ? contactPhone.replace(/\D/g, "") : "",
     channel,
     dryRun: false,
+    suggestionMode: options?.suggestionMode ?? false,
   };
 
   // Load recent message history for prompt context
@@ -569,6 +611,8 @@ log,
     iterations: loopResult.iterations,
     error: loopResult.error,
     raResponse: loopResult.raResponse,
+    capturedActions: loopResult.capturedActions,
+    toolsExecuted: loopResult.toolsExecuted,
   };
 }
 
