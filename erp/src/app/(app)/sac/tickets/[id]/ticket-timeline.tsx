@@ -655,8 +655,8 @@ export default function TicketTimeline({
   }, [ticketId, companyId]);
 
   // SSE-driven timeline updates — instant push for all channels
-  useEventStream(companyId, {
-    "timeline-update": (data: unknown) => {
+  useEventStream(companyId, ["sac"], {
+    "sac:timeline-update": (data: unknown) => {
       const event = data as { ticketId: string; timestamp: number };
       if (event.ticketId === ticketId) {
         pollNewEvents();

@@ -110,8 +110,8 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
     fetchBadge();
   }, [selectedCompany, fetchBadge]);
 
-  useEventStream(selectedCompany?.id ?? null, {
-    "sla-update": () => {
+  useEventStream(selectedCompany?.id ?? null, ["sac"], {
+    "sac:sla-update": () => {
       fetchBadge();
     },
   });

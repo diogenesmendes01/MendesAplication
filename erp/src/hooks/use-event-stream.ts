@@ -6,15 +6,20 @@ type EventHandler = (data: unknown) => void;
 
 export function useEventStream(
   companyId: string | null,
+  namespaces: string[],
   handlers: Record<string, EventHandler>
 ) {
   const handlersRef = useRef(handlers);
   handlersRef.current = handlers;
 
+  const namespacesKey = namespaces.join(",");
+
   const connect = useCallback(() => {
     if (!companyId) return undefined;
 
-    const es = new EventSource(`/api/events?companyId=${companyId}`);
+    const es = new EventSource(
+      `/api/events?companyId=${companyId}&ns=${namespacesKey}`
+    );
 
     // Register handlers for each event type
     for (const eventName of Object.keys(handlersRef.current)) {
@@ -36,7 +41,7 @@ export function useEventStream(
     };
 
     return es;
-  }, [companyId]);
+  }, [companyId, namespacesKey]);
 
   useEffect(() => {
     const es = connect();

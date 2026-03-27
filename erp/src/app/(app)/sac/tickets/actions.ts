@@ -353,7 +353,7 @@ export async function createTicket(input: CreateTicketInput) {
   });
 
   invalidateKpiCache(input.companyId);
-  sseBus.publish(`company:${input.companyId}`, "sla-update", { timestamp: Date.now() });
+  sseBus.publish(`company:${input.companyId}:sac`, "sla-update", { timestamp: Date.now() });
 
   return { id: ticket.id };
 }
@@ -527,8 +527,8 @@ export async function updateTicketStatus(
   });
 
   invalidateKpiCache(companyId);
-  sseBus.publish(`company:${companyId}`, "sla-update", { timestamp: Date.now() });
-  sseBus.publish(`company:${companyId}`, "timeline-update", { ticketId, timestamp: Date.now() });
+  sseBus.publish(`company:${companyId}:sac`, "sla-update", { timestamp: Date.now() });
+  sseBus.publish(`company:${companyId}:sac`, "timeline-update", { ticketId, timestamp: Date.now() });
 
   return { status: updated.status };
 }
@@ -748,7 +748,7 @@ export async function createTicketReply(input: CreateTicketReplyInput) {
     companyId: input.companyId,
   });
 
-  sseBus.publish(`company:${input.companyId}`, "timeline-update", { ticketId: input.ticketId, timestamp: Date.now() });
+  sseBus.publish(`company:${input.companyId}:sac`, "timeline-update", { ticketId: input.ticketId, timestamp: Date.now() });
 
   return {
     id: message.id,
@@ -1006,7 +1006,7 @@ export async function createInternalNote(
     companyId,
   });
 
-  sseBus.publish(`company:${companyId}`, "timeline-update", { ticketId, timestamp: Date.now() });
+  sseBus.publish(`company:${companyId}:sac`, "timeline-update", { ticketId, timestamp: Date.now() });
 
   return { id: message.id, createdAt: message.createdAt.toISOString() };
 }
@@ -1179,7 +1179,7 @@ export async function sendEmailReply(
     companyId,
   });
 
-  sseBus.publish(`company:${companyId}`, "timeline-update", { ticketId, timestamp: Date.now() });
+  sseBus.publish(`company:${companyId}:sac`, "timeline-update", { ticketId, timestamp: Date.now() });
 
   return { id: message.id, createdAt: message.createdAt.toISOString() };
 }
@@ -1448,7 +1448,7 @@ export async function sendWhatsAppMessage(
     companyId,
   });
 
-  sseBus.publish(`company:${companyId}`, "timeline-update", { ticketId, timestamp: Date.now() });
+  sseBus.publish(`company:${companyId}:sac`, "timeline-update", { ticketId, timestamp: Date.now() });
 
   return { id: message.id, createdAt: message.createdAt.toISOString() };
 }
@@ -1974,8 +1974,8 @@ export async function requestRefund(
   });
 
   invalidateKpiCache(companyId);
-  sseBus.publish(`company:${companyId}`, "sla-update", { timestamp: Date.now() });
-  sseBus.publish(`company:${companyId}`, "timeline-update", { ticketId, timestamp: Date.now() });
+  sseBus.publish(`company:${companyId}:sac`, "sla-update", { timestamp: Date.now() });
+  sseBus.publish(`company:${companyId}:sac`, "timeline-update", { ticketId, timestamp: Date.now() });
 
   return {
     id: refund.id,
@@ -2082,8 +2082,8 @@ export async function approveRefund(refundId: string, companyId: string) {
   });
 
   invalidateKpiCache(companyId);
-  sseBus.publish(`company:${companyId}`, "sla-update", { timestamp: Date.now() });
-  sseBus.publish(`company:${companyId}`, "timeline-update", { ticketId: refund.ticketId, timestamp: Date.now() });
+  sseBus.publish(`company:${companyId}:sac`, "sla-update", { timestamp: Date.now() });
+  sseBus.publish(`company:${companyId}:sac`, "timeline-update", { ticketId: refund.ticketId, timestamp: Date.now() });
 
   return { success: true };
 }
@@ -2154,8 +2154,8 @@ export async function rejectRefund(
   });
 
   invalidateKpiCache(companyId);
-  sseBus.publish(`company:${companyId}`, "sla-update", { timestamp: Date.now() });
-  sseBus.publish(`company:${companyId}`, "timeline-update", { ticketId: refund.ticketId, timestamp: Date.now() });
+  sseBus.publish(`company:${companyId}:sac`, "sla-update", { timestamp: Date.now() });
+  sseBus.publish(`company:${companyId}:sac`, "timeline-update", { ticketId: refund.ticketId, timestamp: Date.now() });
 
   return { success: true };
 }
@@ -2420,8 +2420,8 @@ export async function executeRefund(
   });
 
   invalidateKpiCache(companyId);
-  sseBus.publish(`company:${companyId}`, "sla-update", { timestamp: Date.now() });
-  sseBus.publish(`company:${companyId}`, "timeline-update", { ticketId: refund.ticketId, timestamp: Date.now() });
+  sseBus.publish(`company:${companyId}:sac`, "sla-update", { timestamp: Date.now() });
+  sseBus.publish(`company:${companyId}:sac`, "timeline-update", { ticketId: refund.ticketId, timestamp: Date.now() });
 
   return { success: true };
 }
@@ -2673,8 +2673,8 @@ export async function requestCancellation(
   });
 
   invalidateKpiCache(companyId);
-  sseBus.publish(`company:${companyId}`, "sla-update", { timestamp: Date.now() });
-  sseBus.publish(`company:${companyId}`, "timeline-update", { ticketId, timestamp: Date.now() });
+  sseBus.publish(`company:${companyId}:sac`, "sla-update", { timestamp: Date.now() });
+  sseBus.publish(`company:${companyId}:sac`, "timeline-update", { ticketId, timestamp: Date.now() });
 
   return { success: true };
 }
@@ -2807,8 +2807,8 @@ export async function approveCancellation(
   });
 
   invalidateKpiCache(companyId);
-  sseBus.publish(`company:${companyId}`, "sla-update", { timestamp: Date.now() });
-  sseBus.publish(`company:${companyId}`, "timeline-update", { ticketId, timestamp: Date.now() });
+  sseBus.publish(`company:${companyId}:sac`, "sla-update", { timestamp: Date.now() });
+  sseBus.publish(`company:${companyId}:sac`, "timeline-update", { ticketId, timestamp: Date.now() });
 
   return { success: true };
 }
