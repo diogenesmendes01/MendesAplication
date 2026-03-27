@@ -1,45 +1,45 @@
 "use client";
 
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { RaTicketContext } from "./ra-actions"; // We'll need to export this from ra-actions.ts
+import type { RaTicketContext } from "../tickets/ra-actions";
 
 // Helper function to get emoji for feeling
 const getFeelingEmoji = (feeling: string | null): string => {
   if (!feeling) return "";
-  
+
   const normalized = feeling.toLowerCase();
   if (normalized.includes("irritado") || normalized.includes("raiva")) return "😡";
   if (normalized.includes("triste") || normalized.includes("decepcionado")) return "😢";
   if (normalized.includes("neutro")) return "😐";
   if (normalized.includes("satisfeito")) return "😊";
-  
-  return feeling; // Return original text if no match
+
+  return feeling;
 };
 
-// Helper function to format time (assuming it's in minutes or hours)
+// Helper function to format time
 const formatTime = (time: string | null): string => {
   if (!time) return "-";
-  // Assuming time is in format like "2d 3h" or similar
   return time;
 };
 
 // Helper function to truncate long text with expand functionality
 const TruncatedText = ({ text, maxLength = 100 }: { text: string | null; maxLength?: number }) => {
   if (!text) return null;
-  
+
   const [isExpanded, setIsExpanded] = useState(false);
   const shouldTruncate = text.length > maxLength;
-  
+
   const displayText = isExpanded ? text : text.substring(0, maxLength) + (shouldTruncate ? "..." : "");
-  
+
   return (
     <div className="whitespace-pre-wrap">
       {displayText}
       {shouldTruncate && (
-        <button 
+        <button
           onClick={() => setIsExpanded(!isExpanded)}
           className="ml-1 text-blue-600 hover:text-blue-800 underline text-sm"
         >
@@ -49,8 +49,6 @@ const TruncatedText = ({ text, maxLength = 100 }: { text: string | null; maxLeng
     </div>
   );
 };
-
-import { useState } from "react";
 
 export function RaDetailPanel({ context }: { context: RaTicketContext }) {
   const {
@@ -239,13 +237,13 @@ export function RaDetailPanel({ context }: { context: RaTicketContext }) {
             )}
             {availableActions.some(a => a.action === "REQUEST_MODERATION") && (
               <div>
-                <Button 
+                <Button
                   size="sm"
                   disabled={!availableActions.find(a => a.action === "REQUEST_MODERATION")?.enabled}
                 >
                   Solicitar Moderação
                 </Button>
-                {!availableActions.find(a => a.action === "REQUEST_MODERATION")?.enabled && 
+                {!availableActions.find(a => a.action === "REQUEST_MODERATION")?.enabled &&
                  availableActions.find(a => a.action === "REQUEST_MODERATION")?.reason && (
                   <p className="mt-2 text-sm text-muted-foreground">
                     {availableActions.find(a => a.action === "REQUEST_MODERATION")?.reason}
@@ -319,3 +317,5 @@ export function RaDetailPanel({ context }: { context: RaTicketContext }) {
     </div>
   );
 }
+
+export default RaDetailPanel;
