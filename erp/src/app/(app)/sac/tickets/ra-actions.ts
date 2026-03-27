@@ -554,3 +554,60 @@ export async function getRaReputation(
     return { success: false, error: mapRaError(err) };
   }
 }
+
+// ---------------------------------------------------------------------------
+// 7. finishPrivateMessage
+// ---------------------------------------------------------------------------
+
+export async function finishPrivateMessage(
+  ticketId: string,
+  companyId: string
+): Promise<RaActionResult> {
+  try {
+    const session = await requireCompanyAccess(companyId);
+
+    const ticket = await prisma.ticket.findFirst({
+      where: { id: ticketId, companyId },
+      select: {
+        id: true,
+        raExternalId: true,
+        channel: { select: { type: true } },
+      },
+    });
+
+    if (!ticket) {
+      return { success: false, error: "Ticket não encontrado" };
+    }
+
+    if (ticket.channel?.type !== "RECLAMEAQUI") {
+      return { success: false, error: "Este ticket não pertence ao canal Reclame Aqui" };
+    }
+
+    if (!ticket.raExternalId) {
+      return { success: false, error: "Ticket sem ID externo do Reclame Aqui" };
+    }
+
+    await reclameaquiOutboundQueue.add("RA_FINISH_PRIVATE", {
+      ticketId: ticket.id,
+      raExternalId: ticket.raExternalId,
+      companyId,
+    });
+
+    await logAuditEvent({
+      userId: session.userId,
+      action: "UPDATE",
+      entity: "RaFinishPrivate",
+      entityId: ticketId,
+      dataAfter: {
+        action: "FINISH_PRIVATE_MESSAGE",
+        raExternalId: ticket.raExternalId,
+      } as unknown as Prisma.InputJsonValue,
+      companyId,
+    });
+
+    return { success: true };
+  } catch (err) {
+    logger.error({ err }, "[ra-actions] finishPrivateMessage error");
+    return { success: false, error: mapRaError(err) };
+  }
+}
