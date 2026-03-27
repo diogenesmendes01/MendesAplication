@@ -10,6 +10,10 @@ import type {
   RaTicket,
   RaInteraction,
 } from "@/lib/reclameaqui/types";
+import {
+  RA_INTERACTION_TYPES,
+  RA_DETAIL_TYPES,
+} from "@/lib/reclameaqui/types";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -75,10 +79,17 @@ function mapRaStatusToTicketStatus(raStatusId: number): TicketStatus {
  * Maps RA interaction type_id to ERP MessageDirection.
  *
  * INBOUND (consumer → company):  1, 6, 7, 11
- * OUTBOUND (company → consumer): 2, 3, 8, 9, 10
+ * OUTBOUND (company → consumer): 2, 3, 4, 5, 8, 9, 10, 151
+ *
+ * Type 151 (auto-moderation) is system-generated → treated as OUTBOUND.
  */
 function mapInteractionDirection(typeId: number): MessageDirection {
-  const inboundTypes = new Set([1, 6, 7, 11]);
+  const inboundTypes = new Set<number>([
+    RA_INTERACTION_TYPES.MANIFESTACAO,
+    RA_INTERACTION_TYPES.MENSAGEM_PRIVADA_CONSUMIDOR,
+    RA_INTERACTION_TYPES.COMENTARIO_TERCEIRO,
+    RA_INTERACTION_TYPES.AVALIACAO,
+  ]);
   return inboundTypes.has(typeId) ? "INBOUND" : "OUTBOUND";
 }
 
@@ -90,6 +101,31 @@ function defaultSyncDate(): string {
   const d = new Date();
   d.setDate(d.getDate() - 7);
   return d.toISOString();
+}
+
+/**
+ * Builds the message content for an interaction, handling auto-moderation
+ * (type 151) by prefixing with [Auto-Moderação] and appending the
+ * moderated title from detail_type 40 if present.
+ */
+function buildMessageContent(interaction: RaInteraction): string {
+  const typeId = interaction.ticket_interaction_type_id;
+  let content = interaction.message || "";
+
+  if (typeId === RA_INTERACTION_TYPES.AUTO_MODERACAO) {
+    // Extract moderated title from details (detail_type_id = 40)
+    const moderatedTitleDetail = interaction.details?.find(
+      (d) => d.ticket_detail_type_id === RA_DETAIL_TYPES.TITULO_MODERADO
+    );
+
+    const parts: string[] = [`[Auto-Moderação] ${content}`];
+    if (moderatedTitleDetail?.value) {
+      parts.push(`Título moderado: ${moderatedTitleDetail.value}`);
+    }
+    content = parts.join("\n");
+  }
+
+  return content;
 }
 
 // ---------------------------------------------------------------------------
@@ -210,6 +246,20 @@ async function createNewTicket(
         raResolvedIssue: raTicket.resolved_issue,
         raBackDoingBusiness: raTicket.back_doing_business,
         raFrozen: raStatusId === 10,
+        raReason: raTicket.ra_reason ?? null,
+        raFeeling: raTicket.ra_feeling ?? null,
+        raCategories: raTicket.categories?.map(c => c.description) ?? [],
+        raPublicTreatmentTime: raTicket.public_treatment_time ?? null,
+        raPrivateTreatmentTime: raTicket.private_treatment_time ?? null,
+        raRatingDate: raTicket.rating_date ? new Date(raTicket.rating_date) : null,
+        raCommentsCount: raTicket.comments_count ?? 0,
+        raUnreadCount: raTicket.interactions_not_readed_count ?? 0,
+        raWhatsappEvalSent: raTicket.whatsapp?.sent ?? null,
+        raWhatsappEvalDone: raTicket.whatsapp?.evaluated ?? null,
+        raActive: raTicket.active ?? true,
+        raModerationStatus: raTicket.moderation?.status ?? null,
+        raConsumerConsideration: raTicket.consumer_consideration ?? null,
+        raCompanyConsideration: raTicket.company_consideration ?? null,
         tags: ["reclame-aqui"],
       },
     });
@@ -260,6 +310,20 @@ async function updateExistingTicket(
       raResolvedIssue: raTicket.resolved_issue,
       raBackDoingBusiness: raTicket.back_doing_business,
       raFrozen: raStatusId === 10,
+      raReason: raTicket.ra_reason ?? null,
+      raFeeling: raTicket.ra_feeling ?? null,
+      raCategories: raTicket.categories?.map(c => c.description) ?? [],
+      raPublicTreatmentTime: raTicket.public_treatment_time ?? null,
+      raPrivateTreatmentTime: raTicket.private_treatment_time ?? null,
+      raRatingDate: raTicket.rating_date ? new Date(raTicket.rating_date) : null,
+      raCommentsCount: raTicket.comments_count ?? 0,
+      raUnreadCount: raTicket.interactions_not_readed_count ?? 0,
+      raWhatsappEvalSent: raTicket.whatsapp?.sent ?? null,
+      raWhatsappEvalDone: raTicket.whatsapp?.evaluated ?? null,
+      raActive: raTicket.active ?? true,
+      raModerationStatus: raTicket.moderation?.status ?? null,
+      raConsumerConsideration: raTicket.consumer_consideration ?? null,
+      raCompanyConsideration: raTicket.company_consideration ?? null,
     },
   });
 
@@ -314,13 +378,14 @@ async function createTicketMessage(
   const direction = mapInteractionDirection(
     interaction.ticket_interaction_type_id
   );
-  const isInternal = interaction.privacy === "true" || interaction.privacy === "1";
+  const isInternal = interaction.privacy === "true" || interaction.privacy === "1" || interaction.privacy === true;
+  const content = buildMessageContent(interaction);
 
   await tx.ticketMessage.create({
     data: {
       ticketId,
       senderId: null,
-      content: interaction.message || "",
+      content,
       channel: "RECLAMEAQUI",
       direction,
       origin: "SYSTEM",
@@ -377,6 +442,13 @@ export async function processReclameAquiInbound(_job: Job): Promise<void> {
       clientSecret: config.clientSecret,
       baseUrl: config.baseUrl,
     });
+
+    // Check ticket API availability before sync
+    const isAvailable = await client.checkTicketAvailability();
+    if (!isAvailable) {
+      logger.warn(`[reclameaqui-inbound] Ticket API indisponível, sync skipado para channel ${ch.id}`);
+      continue;
+    }
 
     const lastSyncDate = config.lastSyncDate || defaultSyncDate();
 

@@ -106,6 +106,7 @@ export const RA_STATUS = {
  *  4  = Arquivado
  * 15  = Inativo na origem
  * 16  = Na fila
+ * 17  = Redistribuição
  * 21  = Novo
  * 22  = Aguardando avaliação
  */
@@ -116,8 +117,75 @@ export const HUGME_STATUS = {
   ARQUIVADO: 4,
   INATIVO_ORIGEM: 15,
   NA_FILA: 16,
+  REDISTRIBUICAO: 17,
   NOVO: 21,
   AGUARDANDO_AVALIACAO: 22,
+} as const;
+
+// ──────────────────────────────────────────────
+// Interaction Types & Detail Types
+// ──────────────────────────────────────────────
+
+/**
+ * RA Interaction Type IDs (API v2.10.0):
+ *
+ * INBOUND (consumer → company):
+ *   1  = Manifestação (reclamação original)
+ *   6  = Mensagem privada - Consumidor
+ *   7  = Comentário de terceiro
+ *  11  = Avaliação
+ *
+ * OUTBOUND (company → consumer):
+ *   2  = Resposta (pública)
+ *   3  = Mensagem privada - Empresa
+ *   4  = Tweet
+ *   5  = Facebook Post
+ *   8  = Pedido de Mediação
+ *   9  = Resposta de Mediação
+ *  10  = Redistribuição
+ *
+ * SYSTEM (auto):
+ * 151  = Moderação automática
+ */
+export const RA_INTERACTION_TYPES = {
+  MANIFESTACAO: 1,
+  RESPOSTA: 2,
+  MENSAGEM_PRIVADA_EMPRESA: 3,
+  TWEET: 4,
+  FACEBOOK_POST: 5,
+  MENSAGEM_PRIVADA_CONSUMIDOR: 6,
+  COMENTARIO_TERCEIRO: 7,
+  PEDIDO_MEDIACAO: 8,
+  RESPOSTA_MEDIACAO: 9,
+  REDISTRIBUICAO: 10,
+  AVALIACAO: 11,
+  AUTO_MODERACAO: 151,
+} as const;
+
+/**
+ * RA Interaction Detail Type IDs.
+ */
+export const RA_DETAIL_TYPES = {
+  ASSUNTO: 1,
+  SENTIMENTO: 2,
+  CONTATO: 3,
+  RESOLVIDA: 4,
+  VOLTARIA_NEGOCIO: 5,
+  NOTA: 6,
+  SPECIAL_FIELDS: 7,
+  IP: 8,
+  MEDIACAO_MOTIVO: 9,
+  MEDIACAO_CASE_NUMBER: 10,
+  MEDIACAO_TRIAL_BODY: 11,
+  MEDIACAO_MOTIVO_ID: 12,
+  ACEITA: 13,
+  ASSUNTO_ID: 14,
+  ANEXO: 15,
+  ID_SITE_RA: 25,
+  ANEXO_2: 33,
+  EMAIL: 34,
+  MIGRAR: 36,
+  TITULO_MODERADO: 40,
 } as const;
 
 // ──────────────────────────────────────────────
@@ -129,15 +197,28 @@ export interface RaInteractionDetail {
   ticket_detail_type_id: number;
   name: string;
   value: string;
+  code?: string | null;
+  creation_date?: string;
+  modification_date?: string | null;
+  privacy?: boolean;
 }
 
 export interface RaInteraction {
   ticket_interaction_id: string;
   ticket_interaction_type_id: number;
   ticket_interaction_name: string;
+  customer_id?: string | null;
+  responsible_id?: number | null;
+  responsible_name?: string | null;
   message: string;
-  privacy: string;
+  privacy: string | boolean;
   creation_date: string;
+  modification_date?: string | null;
+  delivered?: boolean;
+  readed?: boolean;
+  visualized?: boolean;
+  video?: string | null;
+  picture?: string | null;
   details: RaInteractionDetail[];
 }
 
@@ -207,6 +288,23 @@ export interface RaTicket {
   rating: string | null;
   interactions: RaInteraction[];
   moderation: RaModeration | null;
+
+  // Campos adicionais da doc
+  ra_reason: string | null;
+  ra_feeling: string | null;
+  categories: Array<{ id: number; code: number; description: string; creation_date: string }>;
+  consumer_consideration: string | null;
+  consumer_consideration_date: string | null;
+  company_consideration: string | null;
+  company_consideration_date: string | null;
+  public_treatment_time: string | null;
+  private_treatment_time: string | null;
+  rating_date: string | null;
+  comments_count: number;
+  interactions_not_readed_count: number;
+  whatsapp: { sent: boolean; evaluated: boolean } | null;
+  active: boolean;
+  frozen: boolean;
 }
 
 // ──────────────────────────────────────────────

@@ -7,6 +7,7 @@ import { reclameaquiOutboundQueue } from "@/lib/queue";
 import { ReclameAquiClient, ReclameAquiError } from "@/lib/reclameaqui/client";
 import { RaModerationReason } from "@/lib/reclameaqui/types";
 import type { RaReputation, RaClientConfig } from "@/lib/reclameaqui/types";
+import { RA_ERROR_MESSAGES } from "@/lib/reclameaqui/errors";
 import { Prisma } from "@prisma/client";
 import { logger } from "@/lib/logger";
 
@@ -82,21 +83,6 @@ export interface RaTicketContext {
 // Error Mapping
 // ---------------------------------------------------------------------------
 
-const RA_ERROR_MESSAGES: Record<number, string> = {
-  4000: "Requisição inválida para o Reclame Aqui",
-  4010: "Autenticação com Reclame Aqui falhou — verifique as credenciais",
-  4030: "Sem permissão para esta ação no Reclame Aqui",
-  4040: "Ticket não encontrado no Reclame Aqui",
-  4050: "Ação não permitida pela API do Reclame Aqui",
-  4090: "Ticket inativo",
-  4091: "Ticket não permite esta ação no momento",
-  4095: "Ticket já foi avaliado",
-  4220: "Dados inválidos — verifique os campos enviados",
-  4290: "Limite de requisições excedido — tente novamente em alguns minutos",
-  5000: "Erro interno do Reclame Aqui — tente novamente",
-  5030: "Reclame Aqui temporariamente indisponível",
-  40930: "Mensagem duplicada — já foi enviada",
-};
 
 function mapRaError(err: unknown): string {
   if (err instanceof ReclameAquiError) {
@@ -712,6 +698,63 @@ export async function getRaReputation(
     return { success: true, data };
   } catch (err) {
     logger.error({ err }, "[ra-actions] getRaReputation error");
+    return { success: false, error: mapRaError(err) };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 7. finishPrivateMessage
+// ---------------------------------------------------------------------------
+
+export async function finishPrivateMessage(
+  ticketId: string,
+  companyId: string
+): Promise<RaActionResult> {
+  try {
+    const session = await requireCompanyAccess(companyId);
+
+    const ticket = await prisma.ticket.findFirst({
+      where: { id: ticketId, companyId },
+      select: {
+        id: true,
+        raExternalId: true,
+        channel: { select: { type: true } },
+      },
+    });
+
+    if (!ticket) {
+      return { success: false, error: "Ticket não encontrado" };
+    }
+
+    if (ticket.channel?.type !== "RECLAMEAQUI") {
+      return { success: false, error: "Este ticket não pertence ao canal Reclame Aqui" };
+    }
+
+    if (!ticket.raExternalId) {
+      return { success: false, error: "Ticket sem ID externo do Reclame Aqui" };
+    }
+
+    await reclameaquiOutboundQueue.add("RA_FINISH_PRIVATE", {
+      ticketId: ticket.id,
+      raExternalId: ticket.raExternalId,
+      companyId,
+    });
+
+    await logAuditEvent({
+      userId: session.userId,
+      action: "UPDATE",
+      entity: "RaFinishPrivate",
+      entityId: ticketId,
+      dataAfter: {
+        action: "FINISH_PRIVATE_MESSAGE",
+        raExternalId: ticket.raExternalId,
+      } as unknown as Prisma.InputJsonValue,
+      companyId,
+    });
+
+    return { success: true };
+  } catch (err) {
+    logger.error({ err }, "[ra-actions] finishPrivateMessage error");
     return { success: false, error: mapRaError(err) };
   }
 }
