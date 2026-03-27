@@ -47,6 +47,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { VirtualTable } from "@/components/ui/virtual-table";
 import { useCompany } from "@/contexts/company-context";
 import {
   createTicket,
@@ -171,6 +172,120 @@ function slaStatusColor(status: string | null) {
       return "";
   }
 }
+
+// ---------------------------------------------------------------------------
+// Row cell renderer (shared between normal table and VirtualTable)
+// ---------------------------------------------------------------------------
+
+function TicketRowCells({ row }: { row: TicketRow }) {
+  return (
+    <>
+      {/* Canal */}
+      <TableCell>
+        <div className="flex items-center gap-1.5" title={row.channelType ?? "Web"}>
+          {row.channelType === "RECLAMEAQUI" ? (
+            <Badge className="bg-purple-100 text-purple-800 text-[10px] px-1.5 py-0 font-bold">
+              RA
+            </Badge>
+          ) : (
+            channelIcon(row.channelType)
+          )}
+          {row.hasPendingSuggestion && (
+            <span title="Sugestão IA pendente" className="text-sm">🤖</span>
+          )}
+        </div>
+      </TableCell>
+      {/* Cliente */}
+      <TableCell className="font-medium">{row.client.name}</TableCell>
+      {/* Assunto */}
+      <TableCell className="max-w-[200px]">
+        <div className="flex items-center gap-2">
+          <span className="truncate">{row.subject}</span>
+          {row.channelType === "RECLAMEAQUI" && row.raRating && (
+            <span
+              className="inline-flex items-center gap-0.5 text-xs font-medium text-yellow-700 whitespace-nowrap"
+              title="Nota RA"
+            >
+              <Star className="h-3 w-3 fill-yellow-500 text-yellow-500" />
+              {row.raRating}
+            </span>
+          )}
+        </div>
+      </TableCell>
+      {/* Prioridade */}
+      <TableCell>
+        <span
+          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${priorityColor(row.priority)}`}
+        >
+          {priorityLabel(row.priority)}
+        </span>
+      </TableCell>
+      {/* Status */}
+      <TableCell>
+        <div className="flex flex-col gap-1">
+          <span
+            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusColor(row.status)}`}
+          >
+            {statusLabel(row.status)}
+          </span>
+          {row.channelType === "RECLAMEAQUI" && row.raStatusName && (
+            <span
+              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${raStatusColor(row.raStatusName)}`}
+            >
+              {row.raStatusName}
+            </span>
+          )}
+        </div>
+      </TableCell>
+      {/* SLA */}
+      <TableCell>
+        {row.slaStatus ? (
+          <span
+            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${slaStatusColor(row.slaStatus)}`}
+          >
+            {row.slaTimeLeft}
+          </span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        )}
+      </TableCell>
+      {/* Tags */}
+      <TableCell>
+        {row.tags.length > 0 ? (
+          <div className="flex flex-wrap gap-1">
+            {row.tags.slice(0, 2).map((tag) => (
+              <Badge
+                key={tag}
+                variant="secondary"
+                className="text-[10px] px-1.5 py-0"
+              >
+                <Tag className="mr-0.5 h-3 w-3" />
+                {tag}
+              </Badge>
+            ))}
+            {row.tags.length > 2 && (
+              <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                +{row.tags.length - 2}
+              </Badge>
+            )}
+          </div>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        )}
+      </TableCell>
+      {/* Responsável */}
+      <TableCell>
+        {row.assignee?.name ?? (
+          <span className="text-muted-foreground">—</span>
+        )}
+      </TableCell>
+      {/* Data */}
+      <TableCell>{dateFmt.format(new Date(row.createdAt))}</TableCell>
+    </>
+  );
+}
+
+const TICKET_COL_COUNT = 9;
 
 // ---------------------------------------------------------------------------
 // Props
@@ -339,10 +454,30 @@ export function TicketTable({ channelType: fixedChannel }: TicketTableProps) {
   }
 
   // ---------------------------------------------------
-  // Render
+  // Derived state for virtual vs normal table
   // ---------------------------------------------------
 
-  const colSpan = 9;
+  const rows = tickets?.data ?? [];
+  const useVirtual = !loading && rows.length > 50;
+
+  // Header row shared between virtual and normal table
+  const tableHeader = (
+    <TableRow>
+      <TableHead className="w-[40px]">Canal</TableHead>
+      <TableHead>Cliente</TableHead>
+      <TableHead>Assunto</TableHead>
+      <TableHead>Prioridade</TableHead>
+      <TableHead>Status</TableHead>
+      <TableHead>SLA</TableHead>
+      <TableHead>Tags</TableHead>
+      <TableHead>Responsável</TableHead>
+      <TableHead>Data</TableHead>
+    </TableRow>
+  );
+
+  // ---------------------------------------------------
+  // Render
+  // ---------------------------------------------------
 
   return (
     <div className="space-y-6">
@@ -361,7 +496,8 @@ export function TicketTable({ channelType: fixedChannel }: TicketTableProps) {
           <div className="flex flex-1 flex-wrap items-center gap-x-3 gap-y-1 text-sm">
             {slaAlerts.breached > 0 && (
               <span className="font-semibold text-red-700">
-                {slaAlerts.breached} {slaAlerts.breached === 1 ? "estourado" : "estourados"}
+                {slaAlerts.breached}{" "}
+                {slaAlerts.breached === 1 ? "estourado" : "estourados"}
               </span>
             )}
             {slaAlerts.breached > 0 && slaAlerts.atRisk > 0 && (
@@ -484,153 +620,64 @@ export function TicketTable({ channelType: fixedChannel }: TicketTableProps) {
         </div>
       </div>
 
-      {/* Table */}
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-[40px]">Canal</TableHead>
-              <TableHead>Cliente</TableHead>
-              <TableHead>Assunto</TableHead>
-              <TableHead>Prioridade</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>SLA</TableHead>
-              <TableHead>Tags</TableHead>
-              <TableHead>Responsável</TableHead>
-              <TableHead>Data</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loading ? (
+      {/* Table — loading/empty use normal table; large pages use VirtualTable */}
+      {loading ? (
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>{tableHeader}</TableHeader>
+            <TableBody>
               <TableRow>
-                <TableCell colSpan={colSpan} className="h-24 text-center">
+                <TableCell colSpan={TICKET_COL_COUNT} className="h-24 text-center">
                   Carregando...
                 </TableCell>
               </TableRow>
-            ) : !tickets?.data.length ? (
+            </TableBody>
+          </Table>
+        </div>
+      ) : rows.length === 0 ? (
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>{tableHeader}</TableHeader>
+            <TableBody>
               <TableRow>
-                <TableCell colSpan={colSpan} className="h-24 text-center">
+                <TableCell colSpan={TICKET_COL_COUNT} className="h-24 text-center">
                   Nenhum ticket encontrado.
                 </TableCell>
               </TableRow>
-            ) : (
-              tickets.data.map((row) => (
+            </TableBody>
+          </Table>
+        </div>
+      ) : useVirtual ? (
+        <VirtualTable
+          data={rows}
+          colCount={TICKET_COL_COUNT}
+          estimateSize={56}
+          containerHeight="calc(100vh - 420px)"
+          renderHeader={() => tableHeader}
+          renderRow={(row) => <TicketRowCells row={row} />}
+          getRowProps={(row) => ({
+            className: "cursor-pointer hover:bg-muted/50",
+            onClick: () => router.push(`/sac/tickets/${row.id}`),
+          })}
+        />
+      ) : (
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>{tableHeader}</TableHeader>
+            <TableBody>
+              {rows.map((row) => (
                 <TableRow
                   key={row.id}
                   className="cursor-pointer hover:bg-muted/50"
                   onClick={() => router.push(`/sac/tickets/${row.id}`)}
                 >
-                  {/* Canal */}
-                  <TableCell>
-                    <div className="flex items-center gap-1.5" title={row.channelType ?? "Web"}>
-                      {row.channelType === "RECLAMEAQUI" ? (
-                        <Badge className="bg-purple-100 text-purple-800 text-[10px] px-1.5 py-0 font-bold">
-                          RA
-                        </Badge>
-                      ) : (
-                        channelIcon(row.channelType)
-                      )}
-                      {row.hasPendingSuggestion && (
-                        <span title="Sugestão IA pendente" className="text-sm">🤖</span>
-                      )}
-                    </div>
-                  </TableCell>
-                  {/* Cliente */}
-                  <TableCell className="font-medium">
-                    {row.client.name}
-                  </TableCell>
-                  {/* Assunto */}
-                  <TableCell className="max-w-[200px]">
-                    <div className="flex items-center gap-2">
-                      <span className="truncate">{row.subject}</span>
-                      {row.channelType === "RECLAMEAQUI" && row.raRating && (
-                        <span className="inline-flex items-center gap-0.5 text-xs font-medium text-yellow-700 whitespace-nowrap" title="Nota RA">
-                          <Star className="h-3 w-3 fill-yellow-500 text-yellow-500" />
-                          {row.raRating}
-                        </span>
-                      )}
-                    </div>
-                  </TableCell>
-                  {/* Prioridade */}
-                  <TableCell>
-                    <span
-                      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${priorityColor(row.priority)}`}
-                    >
-                      {priorityLabel(row.priority)}
-                    </span>
-                  </TableCell>
-                  {/* Status */}
-                  <TableCell>
-                    <div className="flex flex-col gap-1">
-                      <span
-                        className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusColor(row.status)}`}
-                      >
-                        {statusLabel(row.status)}
-                      </span>
-                      {row.channelType === "RECLAMEAQUI" && row.raStatusName && (
-                        <span
-                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${raStatusColor(row.raStatusName)}`}
-                        >
-                          {row.raStatusName}
-                        </span>
-                      )}
-                    </div>
-                  </TableCell>
-                  {/* SLA */}
-                  <TableCell>
-                    {row.slaStatus ? (
-                      <span
-                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${slaStatusColor(row.slaStatus)}`}
-                      >
-                        {row.slaTimeLeft}
-                      </span>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                  </TableCell>
-                  {/* Tags */}
-                  <TableCell>
-                    {row.tags.length > 0 ? (
-                      <div className="flex flex-wrap gap-1">
-                        {row.tags.slice(0, 2).map((tag) => (
-                          <Badge
-                            key={tag}
-                            variant="secondary"
-                            className="text-[10px] px-1.5 py-0"
-                          >
-                            <Tag className="mr-0.5 h-3 w-3" />
-                            {tag}
-                          </Badge>
-                        ))}
-                        {row.tags.length > 2 && (
-                          <Badge
-                            variant="secondary"
-                            className="text-[10px] px-1.5 py-0"
-                          >
-                            +{row.tags.length - 2}
-                          </Badge>
-                        )}
-                      </div>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                  </TableCell>
-                  {/* Responsavel */}
-                  <TableCell>
-                    {row.assignee?.name ?? (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                  </TableCell>
-                  {/* Data */}
-                  <TableCell>
-                    {dateFmt.format(new Date(row.createdAt))}
-                  </TableCell>
+                  <TicketRowCells row={row} />
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
 
       {/* Pagination */}
       {tickets && tickets.totalPages > 1 && (
