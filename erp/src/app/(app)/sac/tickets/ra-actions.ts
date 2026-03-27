@@ -7,6 +7,7 @@ import { reclameaquiOutboundQueue } from "@/lib/queue";
 import { ReclameAquiClient, ReclameAquiError } from "@/lib/reclameaqui/client";
 import { RaModerationReason } from "@/lib/reclameaqui/types";
 import type { RaReputation, RaClientConfig } from "@/lib/reclameaqui/types";
+import { RA_ERROR_MESSAGES } from "@/lib/reclameaqui/errors";
 import { Prisma } from "@prisma/client";
 import { logger } from "@/lib/logger";
 
@@ -41,21 +42,6 @@ export interface RaReputationResult extends RaActionResult {
 // Error Mapping
 // ---------------------------------------------------------------------------
 
-const RA_ERROR_MESSAGES: Record<number, string> = {
-  4000: "Requisição inválida para o Reclame Aqui",
-  4010: "Autenticação com Reclame Aqui falhou — verifique as credenciais",
-  4030: "Sem permissão para esta ação no Reclame Aqui",
-  4040: "Ticket não encontrado no Reclame Aqui",
-  4050: "Ação não permitida pela API do Reclame Aqui",
-  4090: "Ticket inativo",
-  4091: "Ticket não permite esta ação no momento",
-  4095: "Ticket já foi avaliado",
-  4220: "Dados inválidos — verifique os campos enviados",
-  4290: "Limite de requisições excedido — tente novamente em alguns minutos",
-  5000: "Erro interno do Reclame Aqui — tente novamente",
-  5030: "Reclame Aqui temporariamente indisponível",
-  40930: "Mensagem duplicada — já foi enviada",
-};
 
 function mapRaError(err: unknown): string {
   if (err instanceof ReclameAquiError) {
