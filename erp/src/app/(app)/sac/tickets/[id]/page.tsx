@@ -81,6 +81,8 @@ import { generateTicketPdf } from "@/lib/ticket-pdf";
 import TicketTimeline from "./ticket-timeline";
 import RaModerationDialog from "./ra-moderation-dialog";
 import { requestRaEvaluation } from "../ra-actions";
+import { ChannelBreadcrumb } from "@/components/sac/channel-breadcrumb";
+import { ChannelBadge } from "@/components/sac/channel-badge";
 
 const RequestRefundDialog = dynamic(() =>
   import("./refund-dialogs").then((m) => ({ default: m.RequestRefundDialog })),
@@ -221,57 +223,8 @@ function SlaCard({ label, deadline, breached }: { label: string; deadline: strin
 
 
 // ---------------------------------------------------------------------------
-// Channel Helpers (S5)
+// Channel Helpers (S5) — moved to @/components/sac
 // ---------------------------------------------------------------------------
-
-function ChannelBreadcrumb({ channelType, ticketId }: { channelType: string | null; ticketId: string }) {
-  const channelInfo: Record<string, { label: string; href: string }> = {
-    EMAIL: { label: "Email", href: "/sac/email" },
-    WHATSAPP: { label: "WhatsApp", href: "/sac/whatsapp" },
-    RECLAMEAQUI: { label: "Reclame Aqui", href: "/sac/reclameaqui" },
-  };
-  const info = channelType ? channelInfo[channelType] : null;
-
-  return (
-    <nav className="flex items-center gap-1.5 text-sm text-muted-foreground mb-1">
-      <Link href="/sac" className="hover:text-foreground transition-colors">
-        SAC
-      </Link>
-      <span>›</span>
-      {info ? (
-        <Link href={info.href} className="hover:text-foreground transition-colors">
-          {info.label}
-        </Link>
-      ) : (
-        <Link href="/sac/tickets" className="hover:text-foreground transition-colors">
-          Tickets
-        </Link>
-      )}
-      <span>›</span>
-      <span className="text-foreground font-medium">#{ticketId.slice(-8)}</span>
-    </nav>
-  );
-}
-
-function ChannelBadge({ channelType }: { channelType: string | null }) {
-  if (!channelType) return null;
-  const config: Record<string, { icon: string; label: string; className: string }> = {
-    EMAIL: { icon: "mail", label: "Email", className: "bg-blue-100 text-blue-800" },
-    WHATSAPP: { icon: "whatsapp", label: "WhatsApp", className: "bg-green-100 text-green-800" },
-    RECLAMEAQUI: { icon: "globe", label: "Reclame Aqui", className: "bg-purple-100 text-purple-800" },
-  };
-  const cfg = config[channelType];
-  if (!cfg) return null;
-  const Icon = channelType === "EMAIL" ? Mail : channelType === "WHATSAPP" ? MessageSquare : Globe;
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-semibold ${cfg.className}`}
-    >
-      <Icon className="h-3.5 w-3.5" />
-      {cfg.label}
-    </span>
-  );
-}
 
 const STATUS_TRANSITIONS: Record<string, { value: TicketStatus; label: string }[]> = {
   OPEN: [{ value: "IN_PROGRESS", label: "Iniciar Atendimento" }],
@@ -902,14 +855,16 @@ export default function TicketDetailPage() {
                     {requestingEval ? "Enviando..." : "Pedir Avaliação"}
                   </Button>
                 )}
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => setRaModerationOpen(true)}
-                >
-                  <span className="mr-1.5">⚖️</span>
-                  Pedir Moderação
-                </Button>
+                {ticket.raCanModerate && (
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => setRaModerationOpen(true)}
+                  >
+                    <span className="mr-1.5">⚖️</span>
+                    Pedir Moderação
+                  </Button>
+                )}
               </CardContent>
             </Card>
           )}

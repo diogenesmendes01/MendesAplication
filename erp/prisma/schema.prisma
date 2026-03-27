@@ -384,6 +384,16 @@ enum MessageOrigin {
   EXTERNAL
 }
 
+enum MessageDeliveryStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  PENDING_APPROVAL
+  DISCARDED
+}
+
 enum SlaType {
   TICKET
   REFUND
@@ -514,7 +524,7 @@ model TicketMessage {
   contactId    String?
   isInternal      Boolean           @default(false)
   isAiGenerated   Boolean           @default(false)
-  deliveryStatus  String?           // QUEUED, SENT, DELIVERED, FAILED
+  deliveryStatus  MessageDeliveryStatus?
   createdAt       DateTime          @default(now())
 
   ticket      Ticket              @relation(fields: [ticketId], references: [id], onDelete: Cascade)

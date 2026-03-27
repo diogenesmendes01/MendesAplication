@@ -4,6 +4,7 @@ import { decryptConfig } from "@/lib/encryption";
 import { ReclameAquiClient, ReclameAquiError } from "@/lib/reclameaqui/client";
 import { logger } from "@/lib/logger";
 import type { RaClientConfig } from "@/lib/reclameaqui/types";
+import type { MessageDeliveryStatus } from "@prisma/client";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -111,7 +112,7 @@ async function createOutboundMessage(params: {
   ticketId: string;
   content: string;
   isInternal: boolean;
-  deliveryStatus: string;
+  deliveryStatus: MessageDeliveryStatus;
 }) {
   return prisma.ticketMessage.create({
     data: {
