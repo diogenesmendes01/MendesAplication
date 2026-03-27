@@ -81,8 +81,8 @@ import TicketTimeline from "./ticket-timeline";
 import RaModerationDialog from "./ra-moderation-dialog";
 import { ChannelBreadcrumb } from "@/components/sac/channel-breadcrumb";
 import { ChannelBadge } from "@/components/sac/channel-badge";
-import { getRaTicketContext } from "../ra-actions";
-import RaDetailPanel from "../components/ra-detail-panel";
+import { getRaTicketContext, requestRaEvaluation } from "../ra-actions";
+import RaDetailPanel from "../../components/ra-detail-panel";
 
 const RequestRefundDialog = dynamic(() =>
   import("./refund-dialogs").then((m) => ({ default: m.RequestRefundDialog })),
