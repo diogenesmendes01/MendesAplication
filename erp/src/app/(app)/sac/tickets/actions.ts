@@ -5,7 +5,7 @@ import { requireCompanyAccess } from "@/lib/rbac";
 import { logAuditEvent } from "@/lib/audit";
 import { sendEmail } from "@/lib/email";
 import { getSlaStatus, type SlaStatusValue } from "@/lib/sla";
-import { Prisma, type TicketStatus, type TicketPriority, type ChannelType, type MessageDirection, type MessageOrigin, type RefundStatus } from "@prisma/client";
+import { Prisma, type TicketStatus, type TicketPriority, type ChannelType, type MessageDirection, type MessageOrigin, type RefundStatus, type MessageDeliveryStatus } from "@prisma/client";
 import { getSharedCompanyIds } from "@/lib/shared-clients";
 import { createTaxEntriesForInvoice } from "@/lib/tax-entries";
 import { getCachedFiscalConfig } from "@/app/(app)/configuracoes/fiscal/actions";
@@ -423,6 +423,7 @@ export interface TicketDetail {
   raStatusName: string | null;
   raRating: string | null;
   raCanEvaluate: boolean;
+  raCanModerate: boolean;
 }
 
 async function _getTicketByIdInternal(
@@ -470,6 +471,7 @@ async function _getTicketByIdInternal(
     raStatusName: ticket.raStatusName ?? null,
     raRating: ticket.raRating ?? null,
     raCanEvaluate: ticket.raCanEvaluate ?? false,
+    raCanModerate: ticket.raCanModerate ?? false,
   };
 }
 
@@ -791,7 +793,7 @@ export interface TimelineEvent {
   refundAmount: string | null;
   refundStatus: RefundStatus | null;
   oldStatus: string | null;
-  deliveryStatus: string | null;
+  deliveryStatus: MessageDeliveryStatus | null;
   newStatus: string | null;
 }
 

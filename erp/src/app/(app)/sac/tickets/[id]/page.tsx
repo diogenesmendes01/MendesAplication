@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { toast } from "sonner";
 import {
   ArrowLeft,
@@ -21,7 +22,7 @@ import {
   DollarSign,
   ExternalLink,
   AlertTriangle,
-  Link,
+  Link as LinkIcon,
   UserPlus,
   Search,
   Loader2,
@@ -80,6 +81,8 @@ import { generateTicketPdf } from "@/lib/ticket-pdf";
 import TicketTimeline from "./ticket-timeline";
 import RaModerationDialog from "./ra-moderation-dialog";
 import { requestRaEvaluation } from "../ra-actions";
+import { ChannelBreadcrumb } from "@/components/sac/channel-breadcrumb";
+import { ChannelBadge } from "@/components/sac/channel-badge";
 
 const RequestRefundDialog = dynamic(() =>
   import("./refund-dialogs").then((m) => ({ default: m.RequestRefundDialog })),
@@ -217,6 +220,11 @@ function SlaCard({ label, deadline, breached }: { label: string; deadline: strin
     </div>
   );
 }
+
+
+// ---------------------------------------------------------------------------
+// Channel Helpers (S5) — moved to @/components/sac
+// ---------------------------------------------------------------------------
 
 const STATUS_TRANSITIONS: Record<string, { value: TicketStatus; label: string }[]> = {
   OPEN: [{ value: "IN_PROGRESS", label: "Iniciar Atendimento" }],
@@ -635,6 +643,9 @@ export default function TicketDetailPage() {
 
   return (
     <div className="space-y-6">
+      {/* Breadcrumb */}
+      <ChannelBreadcrumb channelType={ticket.channelType ?? null} ticketId={ticket.id} />
+
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-4">
@@ -650,13 +661,22 @@ export default function TicketDetailPage() {
             <h1 className="text-2xl font-bold tracking-tight">
               {ticket.subject}
             </h1>
-            <p className="text-sm text-muted-foreground">
-              Ticket #{ticket.id.slice(-8)}
-            </p>
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="text-sm text-muted-foreground">
+                Ticket #{ticket.id.slice(-8)}
+              </p>
+              {ticket.channelType === "RECLAMEAQUI" && ticket.raStatusName && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2 py-0.5 text-xs font-semibold text-purple-800">
+                  <Globe className="h-3 w-3" />
+                  {ticket.raStatusName}
+                </span>
+              )}
+            </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <ChannelBadge channelType={ticket.channelType ?? null} />
           <span
             className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold ${priorityColor(ticket.priority)}`}
           >
@@ -693,7 +713,7 @@ export default function TicketDetailPage() {
               className="border-amber-400 text-amber-800 hover:bg-amber-100"
               onClick={() => setLinkDialogOpen(true)}
             >
-              <Link className="mr-1.5 h-3.5 w-3.5" />
+              <LinkIcon className="mr-1.5 h-3.5 w-3.5" />
               Vincular
             </Button>
             <Button
@@ -770,6 +790,85 @@ export default function TicketDetailPage() {
 
         {/* Sidebar info */}
         <div className="space-y-6">
+          {/* RA cards — promoted to top when RECLAMEAQUI (S5) */}
+          {ticket.channelType === "RECLAMEAQUI" && (ticket.raExternalId || ticket.raStatusName || ticket.raRating != null) && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Globe className="h-4 w-4 text-purple-600" />
+                  Reclame Aqui — Info
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {ticket.raExternalId && (
+                  <div className="flex items-start gap-3">
+                    <ExternalLink className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground">ID Externo</p>
+                      <p className="text-sm font-mono">{ticket.raExternalId}</p>
+                    </div>
+                  </div>
+                )}
+                {ticket.raStatusName && (
+                  <div className="flex items-start gap-3">
+                    <Globe className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground">Status RA</p>
+                      <p className="text-sm font-semibold text-purple-700">{ticket.raStatusName}</p>
+                    </div>
+                  </div>
+                )}
+                {ticket.raRating != null && (
+                  <div className="flex items-start gap-3">
+                    <span className="mt-0.5 text-base">⭐</span>
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground">Avaliação</p>
+                      <p className="text-sm font-semibold">{ticket.raRating}/10</p>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {ticket.channelType === "RECLAMEAQUI" && (
+            <Card className="border-purple-200 bg-purple-50/30">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Globe className="h-4 w-4 text-purple-600" />
+                  Ações Reclame Aqui
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {ticket.raCanEvaluate === true && (
+                  <Button
+                    variant="outline"
+                    className="w-full border-yellow-300 text-yellow-800 hover:bg-yellow-50"
+                    onClick={handleRequestRaEvaluation}
+                    disabled={requestingEval}
+                  >
+                    {requestingEval ? (
+                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <span className="mr-1.5">⭐</span>
+                    )}
+                    {requestingEval ? "Enviando..." : "Pedir Avaliação"}
+                  </Button>
+                )}
+                {ticket.raCanModerate && (
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => setRaModerationOpen(true)}
+                  >
+                    <span className="mr-1.5">⚖️</span>
+                    Pedir Moderação
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           {/* Ticket info */}
           <Card>
             <CardHeader>
@@ -1279,82 +1378,6 @@ export default function TicketDetailPage() {
                     Solicitar Cancelamento
                   </Button>
                 )}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* RA Info Panel */}
-          {ticket.channelType === "RECLAMEAQUI" && (ticket.raExternalId || ticket.raStatusName || ticket.raRating != null) && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  📋 Reclame Aqui — Info
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {ticket.raExternalId && (
-                  <div className="flex items-start gap-3">
-                    <ExternalLink className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground">ID Externo</p>
-                      <p className="text-sm font-mono">{ticket.raExternalId}</p>
-                    </div>
-                  </div>
-                )}
-                {ticket.raStatusName && (
-                  <div className="flex items-start gap-3">
-                    <Globe className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground">Status RA</p>
-                      <p className="text-sm">{ticket.raStatusName}</p>
-                    </div>
-                  </div>
-                )}
-                {ticket.raRating != null && (
-                  <div className="flex items-start gap-3">
-                    <span className="mt-0.5 text-base">⭐</span>
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground">Avaliação</p>
-                      <p className="text-sm font-semibold">{ticket.raRating}/10</p>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* RA Actions (US-RA-009) */}
-          {ticket.channelType === "RECLAMEAQUI" && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  📢 Ações Reclame Aqui
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {ticket.raCanEvaluate === true && (
-                  <Button
-                    variant="outline"
-                    className="w-full border-yellow-300 text-yellow-800 hover:bg-yellow-50"
-                    onClick={handleRequestRaEvaluation}
-                    disabled={requestingEval}
-                  >
-                    {requestingEval ? (
-                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <span className="mr-1.5">⭐</span>
-                    )}
-                    {requestingEval ? "Enviando..." : "Pedir Avaliação"}
-                  </Button>
-                )}
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => setRaModerationOpen(true)}
-                >
-                  <span className="mr-1.5">⚖️</span>
-                  Pedir Moderação
-                </Button>
               </CardContent>
             </Card>
           )}
