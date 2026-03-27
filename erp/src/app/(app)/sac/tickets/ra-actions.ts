@@ -38,6 +38,47 @@ export interface RaReputationResult extends RaActionResult {
   data?: RaReputationData;
 }
 
+export interface RaAvailableAction {
+  action: "SEND_PUBLIC" | "SEND_PRIVATE" | "REQUEST_EVALUATION" | "REQUEST_MODERATION" | "FINISH_PRIVATE" | "APPROVE_SUGGESTION";
+  enabled: boolean;
+  reason: string | null;
+}
+
+export interface RaTicketContext {
+  ticketId: string;
+  raExternalId: string | null;
+  subject: string;
+  description: string;
+  erpStatus: string;
+  raStatusId: number | null;
+  raStatusName: string | null;
+  raReason: string | null;
+  raFeeling: string | null;
+  raCategories: string[];
+  raRating: string | null;
+  raResolvedIssue: boolean | null;
+  raBackDoingBusiness: boolean | null;
+  raPublicTreatmentTime: string | null;
+  raPrivateTreatmentTime: string | null;
+  raRatingDate: string | null;
+  raCommentsCount: number;
+  raUnreadCount: number;
+  raModerationStatus: string | null;
+  raFrozen: boolean;
+  raActive: boolean;
+  consumerConsideration: string | null;
+  companyConsideration: string | null;
+  whatsappEval: { sent: boolean | null; done: boolean | null } | null;
+  client: { name: string; email: string | null; phone: string | null };
+  availableActions: RaAvailableAction[];
+  recentMessages: Array<{
+    content: string;
+    direction: string;
+    createdAt: string;
+    isInternal: boolean;
+  }>;
+}
+
 // ---------------------------------------------------------------------------
 // Error Mapping
 // ---------------------------------------------------------------------------
@@ -106,6 +147,126 @@ async function getRaClientForCompany(companyId: string): Promise<{ client: Recla
       baseUrl: config.baseUrl,
     }),
     raCompanyId,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// getRaTicketContext — enriched context for the RA detail panel
+// ---------------------------------------------------------------------------
+
+export async function getRaTicketContext(
+  ticketId: string,
+  companyId: string
+): Promise<RaTicketContext | null> {
+  await requireCompanyAccess(companyId);
+
+  const ticket = await prisma.ticket.findFirst({
+    where: { id: ticketId, companyId },
+    select: {
+      id: true,
+      subject: true,
+      description: true,
+      status: true,
+      raExternalId: true,
+      raStatusId: true,
+      raStatusName: true,
+      raCanEvaluate: true,
+      raCanModerate: true,
+      raRating: true,
+      raResolvedIssue: true,
+      raBackDoingBusiness: true,
+      raFrozen: true,
+      raConsumerConsideration: true,
+      raCompanyConsideration: true,
+      client: { select: { name: true, email: true, telefone: true } },
+      channel: { select: { type: true } },
+      messages: {
+        orderBy: { createdAt: "desc" },
+        take: 5,
+        select: { content: true, direction: true, createdAt: true, isInternal: true },
+      },
+    },
+  });
+
+  if (!ticket || ticket.channel?.type !== "RECLAMEAQUI") return null;
+
+  const actions: RaAvailableAction[] = [
+    {
+      action: "SEND_PUBLIC",
+      enabled: !ticket.raFrozen,
+      reason: ticket.raFrozen ? "Ticket congelado" : null,
+    },
+    {
+      action: "SEND_PRIVATE",
+      enabled: !ticket.raFrozen,
+      reason: ticket.raFrozen ? "Ticket congelado" : null,
+    },
+    {
+      action: "REQUEST_EVALUATION",
+      enabled: ticket.raCanEvaluate ?? false,
+      reason: !ticket.raCanEvaluate ? "Avaliação indisponível" : null,
+    },
+    {
+      action: "REQUEST_MODERATION",
+      enabled: ticket.raCanModerate ?? false,
+      reason: !ticket.raCanModerate ? "Moderação indisponível" : null,
+    },
+    {
+      action: "FINISH_PRIVATE",
+      enabled: !ticket.raFrozen,
+      reason: ticket.raFrozen ? "Ticket congelado" : null,
+    },
+  ];
+
+  // Check for pending AI suggestion
+  const pendingSuggestion = await prisma.ticketMessage.findFirst({
+    where: { ticketId, deliveryStatus: "PENDING_APPROVAL" },
+    select: { id: true },
+  });
+  if (pendingSuggestion) {
+    actions.push({ action: "APPROVE_SUGGESTION", enabled: true, reason: null });
+  }
+
+  return {
+    ticketId: ticket.id,
+    raExternalId: ticket.raExternalId,
+    subject: ticket.subject ?? "",
+    description: ticket.description ?? "",
+    erpStatus: ticket.status,
+    raStatusId: ticket.raStatusId,
+    raStatusName: ticket.raStatusName,
+    raReason: (ticket as any).raReason ?? null,
+    raFeeling: (ticket as any).raFeeling ?? null,
+    raCategories: (ticket as any).raCategories ?? [],
+    raRating: ticket.raRating,
+    raResolvedIssue: ticket.raResolvedIssue,
+    raBackDoingBusiness: ticket.raBackDoingBusiness,
+    raPublicTreatmentTime: (ticket as any).raPublicTreatmentTime ?? null,
+    raPrivateTreatmentTime: (ticket as any).raPrivateTreatmentTime ?? null,
+    raRatingDate: (ticket as any).raRatingDate?.toISOString() ?? null,
+    raCommentsCount: (ticket as any).raCommentsCount ?? 0,
+    raUnreadCount: (ticket as any).raUnreadCount ?? 0,
+    raModerationStatus: (ticket as any).raModerationStatus ?? null,
+    raFrozen: ticket.raFrozen ?? false,
+    raActive: (ticket as any).raActive ?? true,
+    consumerConsideration: ticket.raConsumerConsideration,
+    companyConsideration: ticket.raCompanyConsideration,
+    whatsappEval: (ticket as any).raWhatsappEvalSent != null ? {
+      sent: (ticket as any).raWhatsappEvalSent,
+      done: (ticket as any).raWhatsappEvalDone,
+    } : null,
+    client: {
+      name: ticket.client?.name ?? "",
+      email: ticket.client?.email ?? null,
+      phone: ticket.client?.telefone ?? null,
+    },
+    availableActions: actions,
+    recentMessages: ticket.messages.map((m) => ({
+      content: m.content,
+      direction: m.direction,
+      createdAt: m.createdAt.toISOString(),
+      isInternal: m.isInternal,
+    })),
   };
 }
 

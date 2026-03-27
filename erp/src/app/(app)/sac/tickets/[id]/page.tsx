@@ -91,9 +91,10 @@ import type { TicketStatus } from "@prisma/client";
 import { generateTicketPdf } from "@/lib/ticket-pdf";
 import TicketTimeline from "./ticket-timeline";
 import RaModerationDialog from "./ra-moderation-dialog";
-import { requestRaEvaluation, finishPrivateMessage } from "../ra-actions";
 import { ChannelBreadcrumb } from "@/components/sac/channel-breadcrumb";
 import { ChannelBadge } from "@/components/sac/channel-badge";
+import { getRaTicketContext, requestRaEvaluation, finishPrivateMessage } from "../ra-actions";
+import RaDetailPanel from "../../components/ra-detail-panel";
 
 const RequestRefundDialog = dynamic(() =>
   import("./refund-dialogs").then((m) => ({ default: m.RequestRefundDialog })),
@@ -273,6 +274,8 @@ export default function TicketDetailPage() {
   const [newTag, setNewTag] = useState("");
   const [financial, setFinancial] = useState<ClientFinancialSummary | null>(null);
   const [aiConfigEnabled, setAiConfigEnabled] = useState(false);
+  const [raContext, setRaContext] = useState<any>(null);
+  const [loadingRaContext, setLoadingRaContext] = useState(false);
 
   // Contact linking state (US-081)
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
@@ -346,6 +349,20 @@ export default function TicketDetailPage() {
       setAiConfigEnabled(result.aiEnabled);
       setUsers(result.users);
       setUserRole(result.userRole);
+
+      // Load RA context if this is a Reclame Aqui ticket
+      if (result.ticket.channelType === "RECLAMEAQUI") {
+        setLoadingRaContext(true);
+        try {
+          const raCtx = await getRaTicketContext(ticketId, selectedCompanyId);
+          setRaContext(raCtx);
+        } catch (err) {
+          console.error("Failed to load RA context:", err);
+          toast.error("Erro ao carregar contexto do Reclame Aqui");
+        } finally {
+          setLoadingRaContext(false);
+        }
+      }
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : "Erro ao carregar ticket"
@@ -827,8 +844,13 @@ export default function TicketDetailPage() {
 
         {/* Sidebar info */}
         <div className="space-y-6">
-          {/* RA cards — promoted to top when RECLAMEAQUI (S5) */}
-          {ticket.channelType === "RECLAMEAQUI" && (ticket.raExternalId || ticket.raStatusName || ticket.raRating != null) && (
+          {/* RA Detail Panel - New component for Reclame Aqui tickets */}
+          {ticket.channelType === "RECLAMEAQUI" && raContext && (
+            <RaDetailPanel context={raContext} />
+          )}
+
+          {/* Existing RA cards — keep for non-ReclameAqui or when RA context fails to load */}
+          {ticket.channelType === "RECLAMEAQUI" && (!raContext || loadingRaContext) && (ticket.raExternalId || ticket.raStatusName || ticket.raRating != null) && (
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
@@ -868,7 +890,7 @@ export default function TicketDetailPage() {
             </Card>
           )}
 
-          {ticket.channelType === "RECLAMEAQUI" && (
+          {ticket.channelType === "RECLAMEAQUI" && (!raContext || loadingRaContext) && (
             <Card className="border-purple-200 bg-purple-50/30">
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
@@ -1482,6 +1504,7 @@ export default function TicketDetailPage() {
             <div className="flex items-center space-x-2">
               <Checkbox
                 id="export-notes"
+
                 checked={exportIncludeNotes}
                 onCheckedChange={(checked) => setExportIncludeNotes(checked === true)}
               />
