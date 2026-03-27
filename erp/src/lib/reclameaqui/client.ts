@@ -5,6 +5,7 @@
 // Uses native fetch — no axios.
 
 import { logger } from "@/lib/logger";
+import { RA_ERROR_MESSAGES } from "./errors";
 import type {
   RaClientConfig,
   RaAuthResponse,
@@ -23,28 +24,13 @@ import type {
 // Error Handling
 // ──────────────────────────────────────────────
 
-/** Map of known API error codes → user-friendly descriptions */
-const ERROR_CODE_MAP: Record<number, string> = {
-  4000: "Requisição inválida",
-  4010: "Token inválido ou expirado",
-  4030: "Acesso negado — verifique permissões",
-  4040: "Recurso não encontrado",
-  4050: "Método não permitido",
-  4090: "Conflito — ação já realizada ou duplicada",
-  4091: "Conflito de estado — ticket não permite esta ação",
-  4220: "Dados inválidos — verifique os campos enviados",
-  4290: "Rate limit excedido — aguarde antes de tentar novamente",
-  5000: "Erro interno do servidor Reclame Aqui",
-  5030: "Serviço temporariamente indisponível",
-};
-
 export class ReclameAquiError extends Error {
   public readonly code: number;
   public readonly httpStatus: number;
   public readonly originalMessage: string;
 
   constructor(message: string, code: number, httpStatus: number, originalMessage: string) {
-    const friendly = ERROR_CODE_MAP[code];
+    const friendly = RA_ERROR_MESSAGES[code];
     super(friendly ? `${friendly}: ${message}` : message);
     this.name = "ReclameAquiError";
     this.code = code;
