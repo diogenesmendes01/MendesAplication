@@ -92,6 +92,7 @@ model Company {
   fiscalConfig       FiscalConfig?
   paymentProviders   PaymentProvider[]
   santanderSequences SantanderSequence[]
+  aiSuggestions       AiSuggestion[]
 
   @@map("companies")
 }
@@ -115,6 +116,7 @@ model User {
   refundsApproved     Refund[]        @relation("RefundApprovedBy")
   refundsExecuted     Refund[]        @relation("RefundExecutedBy")
   refundAttachments   RefundAttachment[]
+  reviewedSuggestions  AiSuggestion[] @relation("SuggestionReviewer")
 
   @@map("users")
 }
@@ -500,6 +502,7 @@ model Ticket {
   messages    TicketMessage[]
   attachments Attachment[]        @relation("TicketAttachments")
   refunds     Refund[]
+  aiSuggestions AiSuggestion[]
 
   @@index([companyId, status])
   @@index([companyId, slaBreached])
@@ -532,6 +535,7 @@ model TicketMessage {
   sender      User?               @relation("TicketMessageSender", fields: [senderId], references: [id], onDelete: Cascade)
   contact     AdditionalContact?  @relation("TicketMessageContact", fields: [contactId], references: [id], onDelete: SetNull)
   attachments Attachment[]        @relation("TicketMessageAttachments")
+  aiSuggestions AiSuggestion[]
 
   @@index([ticketId, createdAt])
   @@unique([externalId, channel])
@@ -846,6 +850,12 @@ model AiConfig {
   raAutoRequestEvaluation  Boolean  @default(false)
   raEscalationKeywords     String[] @default(["processo", "advogado", "procon", "judicial", "indenização"])
 
+  // --- Modo de Operação (suggestion mode) ---
+  operationMode          String   @default("auto")   // "auto" | "suggest" | "hybrid"
+  hybridThreshold        Float    @default(0.8)       // Confidence threshold for hybrid mode (0.0-1.0)
+  alwaysRequireApproval  String[] @default([])         // Tool names that always require approval
+  suggestionTimeoutMin   Int      @default(60)         // Minutes until notification about unreviewed suggestion
+
   // --- Limites ---
   dailySpendLimitBrl Decimal? @db.Decimal(10, 2)
 
@@ -1014,4 +1024,69 @@ model SantanderSequence {
 
   @@unique([companyId, covenantCode])
   @@map("santander_sequences")
+}
+
+// ─── AI Suggestion Mode ──────────────────────────────────────────────────────
+
+enum AiSuggestionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  EDITED
+  EXPIRED
+}
+
+model AiSuggestion {
+  id                String              @id @default(cuid())
+  ticketId          String
+  messageId         String?             // Inbound TicketMessage that triggered the suggestion
+  companyId         String
+  channel           ChannelType         // WHATSAPP | EMAIL | RECLAMEAQUI
+
+  // ─── Agent analysis ───
+  analysis          Json                // { intent, toolsExecuted, iterationsUsed, searchResults, ... }
+
+  // ─── Suggested response ───
+  suggestedResponse String              @db.Text
+  suggestedSubject  String?             // Email subject (if channel=EMAIL)
+
+  // ─── Suggested actions ───
+  suggestedActions  Json                // Array of { toolName, args, order }
+
+  // ─── Reclame Aqui specific ───
+  raPrivateMessage  String?             @db.Text
+  raPublicMessage   String?             @db.Text
+  raDetectedType    String?
+  raSuggestModeration Boolean           @default(false)
+
+  // ─── Status ───
+  status            AiSuggestionStatus  @default(PENDING)
+  reviewedBy        String?
+  reviewedAt        DateTime?
+  editedResponse    String?             @db.Text
+  editedSubject     String?
+  rejectionReason   String?
+
+  // ─── Execution result ───
+  executionResult   Json?               // { success, toolResults, executedAt, error? }
+
+  // ─── Confidence ───
+  confidence        Float               @default(0.5)
+
+  // ─── Timestamps ───
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  expiresAt         DateTime?
+
+  // ─── Relations ───
+  ticket            Ticket              @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  message           TicketMessage?      @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  company           Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  reviewer          User?               @relation("SuggestionReviewer", fields: [reviewedBy], references: [id], onDelete: SetNull)
+
+  @@index([ticketId, status])
+  @@index([companyId, status, createdAt])
+  @@index([status, expiresAt])
+  @@index([reviewedBy])
+  @@map("ai_suggestions")
 }

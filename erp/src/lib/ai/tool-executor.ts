@@ -16,6 +16,7 @@ export interface ToolContext {
   contactPhone: string; // Digits-only phone for WhatsApp replies
   channel?: "WHATSAPP" | "EMAIL" | "RECLAMEAQUI"; // Originating channel — used for audit logs
   dryRun?: boolean;     // When true, tools return results without side effects
+  suggestionMode?: boolean; // When true, write tools are intercepted (captured, not executed)
 }
 
 // ─── Reclame Aqui response type ──────────────────────────────────────────────
@@ -29,6 +30,60 @@ export interface ReclameAquiResponse {
   moderationReason?: number;
 }
 
+
+// ─── Tool classification for suggestion mode ─────────────────────────────────
+
+/** Tools that only read data — always execute, even in suggestion mode */
+export const READ_ONLY_TOOLS = new Set([
+  "SEARCH_DOCUMENTS",
+  "GET_CLIENT_INFO",
+  "GET_HISTORY",
+  "LOOKUP_CLIENT_BY_CNPJ",
+  "READ_ATTACHMENT",
+]);
+
+/** Tools that write data or send messages — intercepted in suggestion mode */
+export const WRITE_TOOLS = new Set([
+  "RESPOND",
+  "RESPOND_EMAIL",
+  "RESPOND_RECLAMEAQUI",
+  "ESCALATE",
+  "CREATE_NOTE",
+  "LINK_TICKET_TO_CLIENT",
+]);
+
+export function isReadOnlyTool(toolName: string): boolean {
+  return READ_ONLY_TOOLS.has(toolName);
+}
+
+/** Returns a simulated result for write tools in suggestion mode */
+function executeSuggestionModeTool(
+  toolName: string,
+  args: Record<string, unknown>,
+): string {
+  switch (toolName) {
+    case "RESPOND":
+      return `[Sugestão registrada] Mensagem seria enviada ao cliente.`;
+    case "RESPOND_EMAIL":
+      return `[Sugestão registrada] Email seria enviado ao cliente.`;
+    case "RESPOND_RECLAMEAQUI":
+      return JSON.stringify({
+        privateMessage: args.privateMessage,
+        publicMessage: args.publicMessage,
+        detectedType: args.detectedType,
+        confidence: args.confidence,
+      });
+    case "ESCALATE":
+      return `[Sugestão registrada] Ticket seria escalado. Motivo: ${args.reason}`;
+    case "CREATE_NOTE":
+      return `[Sugestão registrada] Nota interna seria criada.`;
+    case "LINK_TICKET_TO_CLIENT":
+      return `[Sugestão registrada] Ticket seria vinculado ao cliente ${args.cnpj}.`;
+    default:
+      return `[Sugestão registrada] Ação ${toolName} seria executada.`;
+  }
+}
+
 // ─── Main dispatcher ─────────────────────────────────────────────────────────
 
 export async function executeTool(
@@ -36,6 +91,11 @@ export async function executeTool(
   args: Record<string, unknown>,
   context: ToolContext
 ): Promise<string> {
+  // Suggestion mode: read-only tools execute normally, write tools return simulated results
+  if (context.suggestionMode && !isReadOnlyTool(toolName)) {
+    return executeSuggestionModeTool(toolName, args);
+  }
+
   try {
     switch (toolName) {
       case "SEARCH_DOCUMENTS":

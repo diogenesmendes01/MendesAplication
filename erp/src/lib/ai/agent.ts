@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { chatCompletion, getEnvProviderConfig } from "./provider";
 import type { AiMessage, ProviderConfig } from "./provider";
 import { getToolsForChannel } from "./tools";
-import { executeTool } from "./tool-executor";
+import { executeTool, isReadOnlyTool } from "./tool-executor";
 import type { ToolContext, ReclameAquiResponse } from "./tool-executor";
 import { decrypt } from "@/lib/encryption";
 import {
@@ -29,6 +29,15 @@ const ESTIMATED_COST_PER_ITERATION_BRL = 0.05;
 
 // ─── Result types ─────────────────────────────────────────────────────────────
 
+
+// ─── Suggestion mode types ────────────────────────────────────────────────────
+
+export interface CapturedAction {
+  toolName: string;
+  args: Record<string, unknown>;
+  order: number;
+}
+
 export interface AgentResult {
   responded: boolean;
   escalated: boolean;
@@ -36,6 +45,8 @@ export interface AgentResult {
   error?: string;
   /** Reclame Aqui dual response — only present when channel is RECLAMEAQUI */
   raResponse?: ReclameAquiResponse;
+  /** Write tools captured in suggestion mode */
+  capturedActions?: CapturedAction[];
 }
 
 export interface DryRunResult {
@@ -61,6 +72,8 @@ interface AgentLoopResult {
   totalOutputTokens: number;
   /** Reclame Aqui dual response — only present when channel is RECLAMEAQUI */
   raResponse?: ReclameAquiResponse;
+  /** Write tools captured in suggestion mode */
+  capturedActions?: CapturedAction[];
 }
 
 // ─── Core agent loop ──────────────────────────────────────────────────────────
@@ -112,6 +125,8 @@ log,
   let totalOutputTokens = 0;
   let finalResponse = "";
   let raResponse: ReclameAquiResponse | undefined;
+  const capturedActions: CapturedAction[] = [];
+  let actionOrder = 0;
 
   for (let iteration = 0; iteration < maxIterations; iteration++) {
     // ── Global timeout guard ───────────────────────────────────────────────
@@ -126,6 +141,7 @@ log,
         totalInputTokens,
         totalOutputTokens,
         raResponse,
+        capturedActions,
       };
     }
 
@@ -143,6 +159,7 @@ log,
           totalInputTokens,
           totalOutputTokens,
           raResponse,
+        capturedActions,
         };
       }
     }
@@ -183,6 +200,11 @@ log,
           }
 
           const result = await executeTool(toolName, args, toolContext);
+
+          // Capture write tool calls in suggestion mode
+          if (toolContext.suggestionMode && !isReadOnlyTool(toolName)) {
+            capturedActions.push({ toolName, args, order: actionOrder++ });
+          }
 
           messages.push({
             role: "tool",
@@ -225,6 +247,7 @@ log,
             totalInputTokens,
             totalOutputTokens,
             raResponse,
+        capturedActions,
           };
         }
 
@@ -256,6 +279,10 @@ log,
                 ? { subject: "Re: Atendimento", message: response.content }
                 : { message: response.content };
             await executeTool(respondTool, respondArgs, toolContext);
+            // Capture the implicit respond action in suggestion mode
+            if (toolContext.suggestionMode) {
+              capturedActions.push({ toolName: respondTool, args: respondArgs, order: actionOrder++ });
+            }
           }
         } else {
           // Dry-run: handle RECLAMEAQUI text response
@@ -282,6 +309,7 @@ log,
           totalInputTokens,
           totalOutputTokens,
           raResponse,
+        capturedActions,
         };
 
       // ── Empty response ─────────────────────────────────────────────────
@@ -298,6 +326,7 @@ log,
           totalInputTokens,
           totalOutputTokens,
           raResponse,
+        capturedActions,
         };
       }
     } catch (error) {
@@ -323,6 +352,7 @@ log,
     totalInputTokens,
     totalOutputTokens,
     raResponse,
+        capturedActions,
   };
 }
 
@@ -332,7 +362,8 @@ export async function runAgent(
   ticketId: string,
   companyId: string,
   incomingMessage: string,
-  channel: "WHATSAPP" | "EMAIL" | "RECLAMEAQUI" = "WHATSAPP"
+  channel: "WHATSAPP" | "EMAIL" | "RECLAMEAQUI" = "WHATSAPP",
+  options?: { suggestionMode?: boolean },
 ): Promise<AgentResult> {
   const startTime = Date.now();
   const timeout = parseInt(process.env.AI_TIMEOUT || "30000", 10);
@@ -569,6 +600,7 @@ log,
     iterations: loopResult.iterations,
     error: loopResult.error,
     raResponse: loopResult.raResponse,
+    capturedActions: loopResult.capturedActions,
   };
 }
 
