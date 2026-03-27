@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
+import type { ChannelType } from "@prisma/client";
 import {
   Inbox,
   Loader2,
@@ -36,6 +37,8 @@ function channelLabel(channel: string) {
       return "Email";
     case "WHATSAPP":
       return "WhatsApp";
+    case "RECLAMEAQUI":
+      return "Reclame Aqui";
     default:
       return "Web/Manual";
   }
@@ -47,8 +50,10 @@ function channelColor(channel: string) {
       return "#3b82f6";
     case "WHATSAPP":
       return "#22c55e";
-    default:
+    case "RECLAMEAQUI":
       return "#8b5cf6";
+    default:
+      return "#94a3b8";
   }
 }
 
@@ -133,14 +138,23 @@ function ChartTooltip({
 // Component
 // ---------------------------------------------------------------------------
 
-export function TicketDashboardKpis({ companyId }: { companyId: string }) {
+interface TicketDashboardKpisProps {
+  companyId: string;
+  /** When provided, KPIs are filtered to this channel only (PR #362 fix) */
+  channelType?: ChannelType;
+}
+
+export function TicketDashboardKpis({
+  companyId,
+  channelType,
+}: TicketDashboardKpisProps) {
   const [data, setData] = useState<TicketDashboard | null>(null);
   const [loading, setLoading] = useState(true);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await getTicketDashboard(companyId);
+      const result = await getTicketDashboard(companyId, channelType);
       setData(result);
     } catch (err) {
       toast.error(
@@ -149,7 +163,7 @@ export function TicketDashboardKpis({ companyId }: { companyId: string }) {
     } finally {
       setLoading(false);
     }
-  }, [companyId]);
+  }, [companyId, channelType]);
 
   useEffect(() => {
     loadData();
@@ -178,14 +192,14 @@ export function TicketDashboardKpis({ companyId }: { companyId: string }) {
     color: priorityColor(item.priority),
   }));
 
+  // When showing a specific channel, omit the RA reputation card and bar chart
+  // (ChannelDashboard already handles those above)
+  const isChannelView = !!channelType;
+
   return (
     <div className="space-y-6">
-      {/* Reclame Aqui Reputation + KPI Cards */}
-      <div className="grid gap-4 lg:grid-cols-[1fr_2fr]">
-        {/* RA Reputation Card — renders null if no RA channel */}
-        <RaReputationCard companyId={companyId} />
-
-        {/* KPI Cards */}
+      {/* RA Reputation + KPI Cards — only show full layout in master view */}
+      {isChannelView ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <KpiCard
             title="Abertos"
@@ -211,29 +225,114 @@ export function TicketDashboardKpis({ companyId }: { companyId: string }) {
             title="SLA Estourado"
             value={data.slaBreachedCount}
             icon={AlertOctagon}
-            className="border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950"
-          />
-          <KpiCard
-            title="SLA em Risco"
-            value={data.slaAtRiskCount}
-            icon={AlertTriangle}
-            className="border-yellow-200 bg-yellow-50 dark:border-yellow-900 dark:bg-yellow-950"
-          />
-          <KpiCard
-            title="Reembolsos Pendentes"
-            value={data.pendingRefundsCount}
-            icon={Coins}
+            className={
+              data.slaBreachedCount > 0
+                ? "border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950"
+                : undefined
+            }
           />
           <KpiCard
             title="Tempo Médio Resposta"
             value={formatMinutes(data.avgResponseTimeMinutes)}
             icon={Timer}
           />
+          <KpiCard
+            title="Reembolsos Pendentes"
+            value={data.pendingRefundsCount}
+            icon={Coins}
+          />
+          {/* Priority chart inline for channel view */}
+          {priorityData.length > 0 && (
+            <Card className="sm:col-span-2 lg:col-span-1">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Por Prioridade
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer
+                  width="100%"
+                  height={priorityData.length * 36 + 16}
+                >
+                  <BarChart
+                    data={priorityData}
+                    layout="vertical"
+                    margin={{ top: 0, right: 16, left: 0, bottom: 0 }}
+                  >
+                    <XAxis type="number" allowDecimals={false} hide />
+                    <YAxis
+                      type="category"
+                      dataKey="label"
+                      width={60}
+                      tick={{ fontSize: 12 }}
+                    />
+                    <Tooltip content={<ChartTooltip />} />
+                    <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={20}>
+                      {priorityData.map((entry, i) => (
+                        <Cell key={i} fill={entry.color} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
         </div>
-      </div>
+      ) : (
+        <div className="grid gap-4 lg:grid-cols-[1fr_2fr]">
+          {/* RA Reputation Card — renders null if no RA channel */}
+          <RaReputationCard companyId={companyId} />
 
-      {/* Charts */}
-      {(channelData.length > 0 || priorityData.length > 0) && (
+          {/* KPI Cards */}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <KpiCard
+              title="Abertos"
+              value={data.openCount}
+              icon={Inbox}
+            />
+            <KpiCard
+              title="Em Andamento"
+              value={data.inProgressCount}
+              icon={Clock}
+            />
+            <KpiCard
+              title="Aguardando Cliente"
+              value={data.waitingClientCount}
+              icon={UserCheck}
+            />
+            <KpiCard
+              title="Resolvidos Hoje"
+              value={data.resolvedTodayCount}
+              icon={CheckCircle2}
+            />
+            <KpiCard
+              title="SLA Estourado"
+              value={data.slaBreachedCount}
+              icon={AlertOctagon}
+              className="border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950"
+            />
+            <KpiCard
+              title="SLA em Risco"
+              value={data.slaAtRiskCount}
+              icon={AlertTriangle}
+              className="border-yellow-200 bg-yellow-50 dark:border-yellow-900 dark:bg-yellow-950"
+            />
+            <KpiCard
+              title="Reembolsos Pendentes"
+              value={data.pendingRefundsCount}
+              icon={Coins}
+            />
+            <KpiCard
+              title="Tempo Médio Resposta"
+              value={formatMinutes(data.avgResponseTimeMinutes)}
+              icon={Timer}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Charts — only show in master view (channel view shows ChannelDashboard above) */}
+      {!isChannelView && (channelData.length > 0 || priorityData.length > 0) && (
         <div className="grid gap-4 sm:grid-cols-2">
           {/* By Channel */}
           {channelData.length > 0 && (
