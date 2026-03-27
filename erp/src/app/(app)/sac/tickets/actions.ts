@@ -2856,3 +2856,45 @@ export async function getTicketDetailBootstrap(
     userRole,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Kanban Bootstrap — single roundtrip for kanban view (SAC Evolution S3)
+// ---------------------------------------------------------------------------
+
+export interface KanbanColumnData {
+  data: TicketRow[];
+  total: number;
+}
+
+export type KanbanBootstrapResult = Record<TicketStatus, KanbanColumnData>;
+
+export async function getKanbanBootstrap(
+  companyId: string,
+  channelType?: ChannelType
+): Promise<KanbanBootstrapResult> {
+  const session = await requireCompanyAccess(companyId);
+
+  const statuses: TicketStatus[] = [
+    "OPEN",
+    "IN_PROGRESS",
+    "WAITING_CLIENT",
+    "RESOLVED",
+    "CLOSED",
+  ];
+
+  const results = await Promise.all(
+    statuses.map((status) =>
+      _listTicketsInternal(
+        { companyId, status, channelType, pageSize: 100 },
+        session
+      )
+    )
+  );
+
+  return Object.fromEntries(
+    statuses.map((status, i) => [
+      status,
+      { data: results[i].data, total: results[i].total },
+    ])
+  ) as KanbanBootstrapResult;
+}

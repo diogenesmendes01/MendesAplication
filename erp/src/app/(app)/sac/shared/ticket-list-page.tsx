@@ -6,6 +6,7 @@ import type { ChannelType } from "@prisma/client";
 import { useCompany } from "@/contexts/company-context";
 import { TicketDashboardKpis } from "../tickets/ticket-dashboard";
 import { TicketTable } from "../components/ticket-table";
+import { TicketKanban } from "../components/ticket-kanban";
 import { ViewToggle, type ViewMode } from "../components/view-toggle";
 
 interface TicketListPageProps {
@@ -52,12 +53,10 @@ export function TicketListPage({
       <TicketDashboardKpis companyId={selectedCompanyId} />
 
       {/* Content */}
-      {viewMode === "table" ? (
-        <TicketTable channelType={channelType} />
+      {viewMode === "kanban" ? (
+        <TicketKanban channelType={channelType} />
       ) : (
-        <div className="flex h-64 items-center justify-center rounded-lg border border-dashed text-muted-foreground">
-          🚧 Kanban view coming soon
-        </div>
+        <TicketTable channelType={channelType} />
       )}
     </div>
   );
