@@ -24,6 +24,8 @@ interface AiAgentJobData {
   messageContent: string;
   messageId?: string; // Inbound TicketMessage id that triggered the agent
   channel?: "WHATSAPP" | "EMAIL" | "RECLAMEAQUI";
+  /** Enriched RA ticket context for better AI suggestions */
+  raContext?: import("@/lib/reclameaqui/types").RaAiContext;
 }
 
 // ---------------------------------------------------------------------------
@@ -69,7 +71,7 @@ function computeConfidenceFromResult(result: AgentResult): number {
 // ---------------------------------------------------------------------------
 
 export async function processAiAgent(job: Job<AiAgentJobData>) {
-  const { ticketId, companyId, messageContent, messageId, channel = "WHATSAPP" } = job.data;
+  const { ticketId, companyId, messageContent, messageId, channel = "WHATSAPP", raContext } = job.data;
 
   // 1. Check ticket-level AI toggle before hitting the LLM.
   //    Note: company-level AI config (enabled, channel, spend limit, escalation
@@ -166,6 +168,7 @@ export async function processAiAgent(job: Job<AiAgentJobData>) {
 
     const result = await runAgent(ticketId, companyId, messageContent, "RECLAMEAQUI", {
       suggestionMode: useSuggestionMode,
+      raContext,
     });
 
     logger.info(
