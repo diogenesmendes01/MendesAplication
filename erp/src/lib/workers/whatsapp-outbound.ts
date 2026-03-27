@@ -43,10 +43,14 @@ export async function processWhatsAppOutbound(job: Job<WhatsAppOutboundJobData>)
       });
 
       for (const att of attachments) {
-        const mediaUrl = generateSignedFileUrl(att.storagePath, {
-          ttlSeconds: 15 * 60,
-        });
-        await sendMediaMessage(companyId, to, mediaUrl, att.fileName);
+        if (att.storagePath) {
+          const mediaUrl = generateSignedFileUrl(att.storagePath, {
+            ttlSeconds: 15 * 60,
+          });
+          await sendMediaMessage(companyId, to, mediaUrl, att.fileName);
+        } else if (att.externalUrl) {
+          await sendMediaMessage(companyId, to, att.externalUrl, att.fileName);
+        }
       }
     }
 

@@ -266,6 +266,13 @@ export const MODERATION_REASON_LABELS: Record<RaModerationReason, string> = {
 };
 
 // ──────────────────────────────────────────────
+
+export interface RaAttachment {
+  id: string;
+  type_detail_id: number;
+  name: string;
+  detail_description: string; // URL do anexo
+}
 // Ticket
 // ──────────────────────────────────────────────
 
@@ -305,6 +312,7 @@ export interface RaTicket {
   whatsapp: { sent: boolean; evaluated: boolean } | null;
   active: boolean;
   frozen: boolean;
+  attached?: RaAttachment[];
 }
 
 // ──────────────────────────────────────────────

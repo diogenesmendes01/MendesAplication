@@ -563,8 +563,10 @@ model Attachment {
   fileName        String
   fileSize        Int
   mimeType        String
-  storagePath     String
+  storagePath     String?
   createdAt       DateTime       @default(now())
+  externalId      String?
+  externalUrl     String?
 
   ticketMessage TicketMessage? @relation("TicketMessageAttachments", fields: [ticketMessageId], references: [id], onDelete: Cascade)
   extraction    AttachmentExtraction?
