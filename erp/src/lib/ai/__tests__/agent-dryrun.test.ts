@@ -55,12 +55,14 @@ vi.mock("@/lib/prisma", () => ({
   prisma: {
     aiConfig: {
       findUnique: (...args: unknown[]) => mockFindUnique(...args),
+      findFirst: (...args: unknown[]) => mockFindUnique(...args),
     },
     ticketMessage: {
       findMany: vi.fn().mockResolvedValue([]),
     },
     ticket: {
       findUnique: vi.fn(),
+      findFirst: vi.fn(),
     },
   },
 }));

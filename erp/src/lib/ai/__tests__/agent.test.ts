@@ -22,7 +22,7 @@ const mockPrismaTicketMessageCreate = vi.fn();
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
-    aiConfig: { findUnique: (...a: unknown[]) => mockPrismaAiConfigFindUnique(...a) },
+    aiConfig: { findUnique: (...a: unknown[]) => mockPrismaAiConfigFindUnique(...a), findFirst: (...a: unknown[]) => mockPrismaAiConfigFindUnique(...a) },
     ticket: {
       findUnique: (...a: unknown[]) => mockPrismaTicketFindUnique(...a),
       update: (...a: unknown[]) => mockPrismaTicketUpdate(...a),
