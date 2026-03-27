@@ -49,6 +49,16 @@ vi.mock("@/lib/prisma", () => ({
       groupBy: vi.fn().mockResolvedValue([]),
       findMany: vi.fn().mockResolvedValue([]),
     },
+    $transaction: async (cb: (tx: unknown) => Promise<unknown>) => {
+      const tx = {
+        aiConfig: {
+          findFirst: (...args: unknown[]) => mockFindUnique(...args),
+          update: (...args: unknown[]) => mockUpsert(...args),
+          create: (...args: unknown[]) => mockUpsert(...args),
+        },
+      };
+      return cb(tx);
+    },
   },
 }));
 
