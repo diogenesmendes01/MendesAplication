@@ -378,6 +378,13 @@ export async function processReclameAquiInbound(_job: Job): Promise<void> {
       baseUrl: config.baseUrl,
     });
 
+    // Check ticket API availability before sync
+    const isAvailable = await client.checkTicketAvailability();
+    if (!isAvailable) {
+      logger.warn(`[reclameaqui-inbound] Ticket API indisponível, sync skipado para channel ${ch.id}`);
+      continue;
+    }
+
     const lastSyncDate = config.lastSyncDate || defaultSyncDate();
 
     try {
