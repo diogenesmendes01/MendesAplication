@@ -573,7 +573,6 @@ model AttachmentExtraction {
 
   attachment Attachment @relation(fields: [attachmentId], references: [id], onDelete: Cascade)
 
-  @@index([attachmentId])
   @@index([status])
   @@map("attachment_extractions")
 }

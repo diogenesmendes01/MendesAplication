@@ -659,7 +659,7 @@ async function executeLinkTicketToClient(
       select: { cpfCnpj: true, _count: { select: { tickets: true } } },
     });
     if (
-      oldClient?.cpfCnpj === "DESCONHECIDO" &&
+      oldClient?.cpfCnpj === "00000000000" &&
       oldClient._count.tickets <= 1
     ) {
       await prisma.client.delete({ where: { id: oldClientId } });
@@ -720,6 +720,9 @@ async function executeReadAttachment(
     if (ticket?.companyId !== context.companyId) {
       return "Erro: anexo nao pertence a esta empresa.";
     }
+  } else {
+    // No ticket linked — cannot verify tenant ownership; block cross-tenant reads
+    return "Erro: anexo nao esta vinculado a nenhum ticket. Nao e possivel verificar permissao.";
   }
 
   const query = args.query as string;
@@ -735,7 +738,7 @@ async function executeReadAttachment(
   // Query-based search — simple keyword match with context window
   const lines = extraction.rawText.split("\n");
   const queryLower = query.toLowerCase();
-  const relevantLines: string[] = [];
+  const relevantLineIndices = new Set<number>();
   const contextWindow = 3;
 
   for (let i = 0; i < lines.length; i++) {
@@ -743,17 +746,16 @@ async function executeReadAttachment(
       const start = Math.max(0, i - contextWindow);
       const end = Math.min(lines.length - 1, i + contextWindow);
       for (let j = start; j <= end; j++) {
-        if (!relevantLines.includes(lines[j])) {
-          relevantLines.push(lines[j]);
-        }
+        relevantLineIndices.add(j);
       }
     }
   }
 
-  if (relevantLines.length === 0) {
+  if (relevantLineIndices.size === 0) {
     return `Nenhum trecho encontrado para "${query}" neste anexo. O documento contem ${extraction.tokenCount} tokens. Tente outra busca ou chame sem query para ver o texto completo.`;
   }
 
+  const relevantLines = [...relevantLineIndices].sort((a, b) => a - b).map((i) => lines[i]);
   return `Trechos relevantes para "${query}" em ${extraction.attachment.fileName}:\n\n${relevantLines.join("\n")}`;
 }
 
