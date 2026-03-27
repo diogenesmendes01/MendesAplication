@@ -93,7 +93,8 @@ import TicketTimeline from "./ticket-timeline";
 import RaModerationDialog from "./ra-moderation-dialog";
 import { ChannelBreadcrumb } from "@/components/sac/channel-breadcrumb";
 import { ChannelBadge } from "@/components/sac/channel-badge";
-import { getRaTicketContext, requestRaEvaluation, finishPrivateMessage } from "../ra-actions";
+import { getRaTicketContext, requestRaEvaluation, finishPrivateMessage, sendPrivateMessageWithAttachments } from "../ra-actions";
+import { RaFileUpload } from "../../components/ra-file-upload";
 import RaDetailPanel from "../../components/ra-detail-panel";
 
 const RequestRefundDialog = dynamic(() =>
@@ -327,6 +328,11 @@ export default function TicketDetailPage() {
   const [raModerationOpen, setRaModerationOpen] = useState(false);
   const [requestingEval, setRequestingEval] = useState(false);
   const [finishingPrivate, setFinishingPrivate] = useState(false);
+
+  // RA private message with attachments
+  const [raPrivateMessage, setRaPrivateMessage] = useState("");
+  const [raPrivateFiles, setRaPrivateFiles] = useState<File[]>([]);
+  const [sendingRaPrivate, setSendingRaPrivate] = useState(false);
 
   // ---------------------------------------------------
   // Load ticket
@@ -652,6 +658,42 @@ export default function TicketDetailPage() {
     }
   }
   // ---------------------------------------------------
+  // RA private message with attachments handler
+  // ---------------------------------------------------
+
+  async function handleSendRaPrivateMessage() {
+    if (!selectedCompanyId || !ticket || !raPrivateMessage.trim()) return;
+    setSendingRaPrivate(true);
+    try {
+      let formData: FormData | undefined;
+      if (raPrivateFiles.length > 0) {
+        formData = new FormData();
+        for (const file of raPrivateFiles) {
+          formData.append("files", file);
+        }
+      }
+      const result = await sendPrivateMessageWithAttachments(
+        ticketId,
+        selectedCompanyId,
+        raPrivateMessage.trim(),
+        formData
+      );
+      if (!result.success) {
+        toast.error(result.error ?? "Erro ao enviar mensagem privada");
+        return;
+      }
+      toast.success("Mensagem privada enviada com sucesso");
+      setRaPrivateMessage("");
+      setRaPrivateFiles([]);
+      loadTicket();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro inesperado");
+    } finally {
+      setSendingRaPrivate(false);
+    }
+  }
+
+  // ---------------------------------------------------
   // No company selected
   // ---------------------------------------------------
 
@@ -955,6 +997,43 @@ export default function TicketDetailPage() {
                     </AlertDialogFooter>
                   </AlertDialogContent>
                 </AlertDialog>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* RA Private Message with Attachments */}
+          {ticket.channelType === "RECLAMEAQUI" && (
+            <Card className="border-purple-200">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <MessageSquare className="h-4 w-4 text-purple-600" />
+                  Mensagem Privada RA
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <Textarea
+                  placeholder="Escreva uma mensagem privada para o consumidor..."
+                  value={raPrivateMessage}
+                  onChange={(e) => setRaPrivateMessage(e.target.value)}
+                  rows={3}
+                  disabled={sendingRaPrivate}
+                />
+                <RaFileUpload
+                  onChange={setRaPrivateFiles}
+                  disabled={sendingRaPrivate}
+                />
+                <Button
+                  className="w-full"
+                  onClick={handleSendRaPrivateMessage}
+                  disabled={sendingRaPrivate || !raPrivateMessage.trim()}
+                >
+                  {sendingRaPrivate ? (
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <MessageSquare className="mr-1.5 h-3.5 w-3.5" />
+                  )}
+                  {sendingRaPrivate ? "Enviando..." : raPrivateFiles.length > 0 ? `Enviar com ${raPrivateFiles.length} anexo(s)` : "Enviar Mensagem Privada"}
+                </Button>
               </CardContent>
             </Card>
           )}

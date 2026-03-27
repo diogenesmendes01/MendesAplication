@@ -758,3 +758,163 @@ export async function finishPrivateMessage(
     return { success: false, error: mapRaError(err) };
   }
 }
+
+// ---------------------------------------------------------------------------
+// 8. sendPrivateMessageWithAttachments
+// ---------------------------------------------------------------------------
+
+export async function sendPrivateMessageWithAttachments(
+  ticketId: string,
+  companyId: string,
+  message: string,
+  formData?: FormData
+): Promise<RaActionResult> {
+  try {
+    const session = await requireCompanyAccess(companyId);
+
+    const ticket = await prisma.ticket.findFirst({
+      where: { id: ticketId, companyId },
+      select: {
+        id: true,
+        raExternalId: true,
+        channel: { select: { type: true } },
+        client: { select: { email: true } },
+      },
+    });
+
+    if (!ticket?.raExternalId || ticket.channel?.type !== "RECLAMEAQUI") {
+      return { success: false, error: "Ticket inválido para Reclame Aqui" };
+    }
+
+    // Extract files from FormData
+    const filesBase64: string[] = [];
+    if (formData) {
+      const entries = formData.getAll("files");
+      for (const entry of entries) {
+        if (entry instanceof File) {
+          const buffer = Buffer.from(await entry.arrayBuffer());
+          filesBase64.push(buffer.toString("base64"));
+        }
+      }
+    }
+
+    // Enqueue with file buffers serialized as base64
+    await reclameaquiOutboundQueue.add("RA_SEND_PRIVATE", {
+      ticketId: ticket.id,
+      raExternalId: ticket.raExternalId,
+      message,
+      companyId,
+      email: ticket.client.email,
+      files: filesBase64.length > 0 ? filesBase64 : undefined,
+    });
+
+    await logAuditEvent({
+      userId: session.userId,
+      action: "CREATE",
+      entity: "RaPrivateMessage",
+      entityId: ticketId,
+      dataAfter: {
+        action: "SEND_PRIVATE_WITH_ATTACHMENTS",
+        attachmentCount: filesBase64.length,
+        raExternalId: ticket.raExternalId,
+      } as unknown as Prisma.InputJsonValue,
+      companyId,
+    });
+
+    return { success: true };
+  } catch (err) {
+    logger.error({ err }, "[ra-actions] sendPrivateMessageWithAttachments error");
+    return { success: false, error: mapRaError(err) };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 9. requestModerationWithAttachments
+// ---------------------------------------------------------------------------
+
+export async function requestModerationWithAttachments(
+  ticketId: string,
+  companyId: string,
+  reason: number,
+  message: string,
+  migrateTO?: number,
+  formData?: FormData
+): Promise<RaActionResult> {
+  try {
+    const session = await requireCompanyAccess(companyId);
+
+    if (!VALID_MODERATION_REASONS.has(reason)) {
+      return {
+        success: false,
+        error: `Motivo de moderação inválido. Valores aceitos: ${Array.from(VALID_MODERATION_REASONS).join(", ")}`,
+      };
+    }
+
+    if (!message?.trim()) {
+      return { success: false, error: "Mensagem de justificativa é obrigatória" };
+    }
+
+    if (reason === RaModerationReason.OUTRA_EMPRESA && !migrateTO) {
+      return { success: false, error: "ID da empresa destino é obrigatório para moderação por 'outra empresa'" };
+    }
+
+    const ticket = await prisma.ticket.findFirst({
+      where: { id: ticketId, companyId },
+      select: {
+        id: true,
+        raExternalId: true,
+        channel: { select: { type: true } },
+      },
+    });
+
+    if (!ticket) {
+      return { success: false, error: "Ticket não encontrado" };
+    }
+
+    if (ticket.channel?.type !== "RECLAMEAQUI") {
+      return { success: false, error: "Este ticket não pertence ao canal Reclame Aqui" };
+    }
+
+    // Extract files from FormData
+    const filesBase64: string[] = [];
+    if (formData) {
+      const entries = formData.getAll("files");
+      for (const entry of entries) {
+        if (entry instanceof File) {
+          const buffer = Buffer.from(await entry.arrayBuffer());
+          filesBase64.push(buffer.toString("base64"));
+        }
+      }
+    }
+
+    await reclameaquiOutboundQueue.add("RA_REQUEST_MODERATION", {
+      ticketId,
+      raExternalId: ticket.raExternalId,
+      companyId,
+      reason,
+      message: message.trim(),
+      migrateTO,
+      files: filesBase64.length > 0 ? filesBase64 : undefined,
+    });
+
+    await logAuditEvent({
+      userId: session.userId,
+      action: "CREATE",
+      entity: "RaModerationRequest",
+      entityId: ticketId,
+      dataAfter: {
+        action: "REQUEST_RA_MODERATION_WITH_ATTACHMENTS",
+        reason,
+        attachmentCount: filesBase64.length,
+        raExternalId: ticket.raExternalId,
+        migrateTO,
+      } as unknown as Prisma.InputJsonValue,
+      companyId,
+    });
+
+    return { success: true };
+  } catch (err) {
+    logger.error({ err }, "[ra-actions] requestModerationWithAttachments error");
+    return { success: false, error: mapRaError(err) };
+  }
+}

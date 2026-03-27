@@ -386,12 +386,19 @@ export class ReclameAquiClient {
   async sendPrivateMessage(
     ticketId: string,
     message: string,
-    email: string
+    email: string,
+    files?: Buffer[]
   ): Promise<unknown> {
     const formData = new FormData();
     formData.append("id", ticketId);
     formData.append("message", message);
     formData.append("email", email);
+
+    if (files?.length) {
+      for (const [i, file] of files.entries()) {
+        formData.append("file", new Blob([file]), `attachment-${i}`);
+      }
+    }
 
     return this.request("POST", "/ticket/v1/tickets/message/private", {
       formData,
@@ -418,7 +425,8 @@ export class ReclameAquiClient {
     ticketId: string,
     reason: number,
     message: string,
-    migrateTO?: number
+    migrateTO?: number,
+    files?: Buffer[]
   ): Promise<unknown> {
     const formData = new FormData();
     formData.append("id", ticketId);
@@ -427,6 +435,12 @@ export class ReclameAquiClient {
 
     if (migrateTO !== undefined) {
       formData.append("migrateTO", String(migrateTO));
+    }
+
+    if (files?.length) {
+      for (const [i, file] of files.entries()) {
+        formData.append("file", new Blob([file]), `attachment-${i}`);
+      }
     }
 
     return this.request("POST", "/ticket/v1/tickets/moderation", { formData });
