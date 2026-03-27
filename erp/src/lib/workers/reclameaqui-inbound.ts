@@ -84,7 +84,7 @@ function mapRaStatusToTicketStatus(raStatusId: number): TicketStatus {
  * Type 151 (auto-moderation) is system-generated → treated as OUTBOUND.
  */
 function mapInteractionDirection(typeId: number): MessageDirection {
-  const inboundTypes = new Set([
+  const inboundTypes = new Set<number>([
     RA_INTERACTION_TYPES.MANIFESTACAO,
     RA_INTERACTION_TYPES.MENSAGEM_PRIVADA_CONSUMIDOR,
     RA_INTERACTION_TYPES.COMENTARIO_TERCEIRO,
