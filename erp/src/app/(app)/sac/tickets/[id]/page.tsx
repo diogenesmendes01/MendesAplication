@@ -31,6 +31,7 @@ import {
   Banknote,
   Ban,
   FileDown,
+  MessageSquareX,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -51,6 +52,17 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogTrigger,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from "@/components/ui/alert-dialog";
 import { useCompany } from "@/contexts/company-context";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -79,7 +91,7 @@ import type { TicketStatus } from "@prisma/client";
 import { generateTicketPdf } from "@/lib/ticket-pdf";
 import TicketTimeline from "./ticket-timeline";
 import RaModerationDialog from "./ra-moderation-dialog";
-import { requestRaEvaluation } from "../ra-actions";
+import { requestRaEvaluation, finishPrivateMessage } from "../ra-actions";
 import { ChannelBreadcrumb } from "@/components/sac/channel-breadcrumb";
 import { ChannelBadge } from "@/components/sac/channel-badge";
 
@@ -311,6 +323,7 @@ export default function TicketDetailPage() {
   // RA actions state
   const [raModerationOpen, setRaModerationOpen] = useState(false);
   const [requestingEval, setRequestingEval] = useState(false);
+  const [finishingPrivate, setFinishingPrivate] = useState(false);
 
   // ---------------------------------------------------
   // Load ticket
@@ -596,6 +609,31 @@ export default function TicketDetailPage() {
     }
   }
 
+
+  // ---------------------------------------------------
+  // RA finish private message handler
+  // ---------------------------------------------------
+
+  async function handleFinishPrivate() {
+    if (!selectedCompanyId || !ticket) return;
+    setFinishingPrivate(true);
+    try {
+      const result = await finishPrivateMessage(ticketId, selectedCompanyId);
+      if (!result.success) {
+        const errorMsg = result.error?.includes("40925")
+          ? "Mensagem privada já encerrada ou não iniciada"
+          : (result.error ?? "Erro ao encerrar mensagem privada");
+        toast.error(errorMsg);
+        return;
+      }
+      toast.success("Mensagem privada encerrada");
+      loadTicket();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro inesperado");
+    } finally {
+      setFinishingPrivate(false);
+    }
+  }
   // ---------------------------------------------------
   // No company selected
   // ---------------------------------------------------
@@ -864,6 +902,37 @@ export default function TicketDetailPage() {
                     Pedir Moderação
                   </Button>
                 )}
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="w-full gap-1.5"
+                      disabled={finishingPrivate}
+                    >
+                      {finishingPrivate ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <MessageSquareX className="h-4 w-4" />
+                      )}
+                      {finishingPrivate ? "Encerrando..." : "Encerrar Msg Privada"}
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Encerrar mensagem privada?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Isso encerrará a sessão de mensagem privada com o consumidor.
+                        Novas mensagens privadas não poderão ser enviadas após o encerramento.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleFinishPrivate}>
+                        Encerrar
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               </CardContent>
             </Card>
           )}
