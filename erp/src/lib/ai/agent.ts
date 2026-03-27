@@ -757,6 +757,37 @@ function estimateCostBrl(
   return costUsd * getBrlUsdRateSync();
 }
 
+
+// ─── v2 shared prompt blocks ─────────────────────────────────────────────────
+
+const CNPJ_INSTRUCTIONS = `
+## Identificação do Cliente (CNPJ/CPF)
+
+Regra: ticket sem CNPJ/CPF identificado = ticket incompleto.
+
+1. Verifique se o cliente já foi identificado via GET_CLIENT_INFO
+2. Se CPF/CNPJ mostra "DESCONHECIDO" ou o cliente não foi identificado:
+   a. Verifique o histórico e anexos — pode haver CNPJ no summary dos anexos
+   b. Se encontrar CNPJ/CPF → use LOOKUP_CLIENT_BY_CNPJ para confirmar
+   c. Se confirmar → use LINK_TICKET_TO_CLIENT para vincular
+   d. Se não encontrar → pergunte naturalmente: "Para localizar sua empresa no sistema, pode me informar o CNPJ?"
+3. Formato aceito: XX.XXX.XXX/XXXX-XX ou apenas números
+4. Após vincular, continue o atendimento normalmente
+5. Se o cliente for pessoa física, pergunte o CPF
+6. Se o cliente não quiser informar, continue o atendimento mesmo assim — não insista mais de 1 vez
+`;
+
+const ATTACHMENT_INSTRUCTIONS = `
+## Anexos
+
+Anexos aparecem no histórico com ícone 📎, seguidos de summary e metadata.
+
+- Se o summary já contém a informação que você precisa → use diretamente, NÃO chame READ_ATTACHMENT
+- Se precisa de detalhes específicos → chame READ_ATTACHMENT(attachmentId, query="sua busca")
+- Se precisa do texto completo → chame READ_ATTACHMENT(attachmentId) sem query
+- Anexos em processamento mostram "[processando...]" — tente novamente em 10 segundos
+`;
+
 // ─── WhatsApp system prompt builder ──────────────────────────────────────────
 
 function buildWhatsAppSystemPrompt(
@@ -771,10 +802,13 @@ ${persona}
 ## SUAS FERRAMENTAS DISPONÍVEIS:
 - SEARCH_DOCUMENTS(query): Busca informações na base de conhecimento da empresa
 - GET_CLIENT_INFO(): Retorna dados do cliente vinculado ao ticket (financeiro, tickets anteriores)
-- GET_HISTORY(limit?): Retorna histórico de mensagens da conversa
+- GET_HISTORY(limit?): Retorna histórico de mensagens da conversa (inclui summaries de anexos)
 - RESPOND(message): Envia resposta ao cliente via WhatsApp
 - ESCALATE(reason): Escala para atendente humano
 - CREATE_NOTE(content): Cria nota interna no ticket
+- LOOKUP_CLIENT_BY_CNPJ(cnpj): Busca cliente por CNPJ/CPF
+- LINK_TICKET_TO_CLIENT(cnpj, contactName?, contactEmail?, contactPhone?): Vincula ticket ao cliente
+- READ_ATTACHMENT(attachmentId, query?): Lê conteúdo extraído de um anexo
 
 ## REGRAS:
 1. SEMPRE consulte a base de conhecimento antes de responder sobre valores, datas, produtos ou serviços
@@ -786,7 +820,7 @@ ${persona}
 7. Se não conseguir resolver em 3 tentativas de busca, escale para humano
 8. Pode usar várias ferramentas em sequência antes de responder
 9. Mensagens WhatsApp devem ser curtas e diretas — evite parágrafos longos
-
+${CNPJ_INSTRUCTIONS}${ATTACHMENT_INSTRUCTIONS}
 ## CONTEXTO ATUAL:
 - Canal: WhatsApp
 - Cliente: ${clientName}`;
@@ -813,10 +847,13 @@ ${persona}
 ## SUAS FERRAMENTAS DISPONÍVEIS:
 - SEARCH_DOCUMENTS(query): Busca informações na base de conhecimento da empresa
 - GET_CLIENT_INFO(): Retorna dados do cliente vinculado ao ticket (financeiro, tickets anteriores)
-- GET_HISTORY(limit?): Retorna histórico de mensagens da conversa
+- GET_HISTORY(limit?): Retorna histórico de mensagens da conversa (inclui summaries de anexos)
 - RESPOND_EMAIL(subject, message): Envia resposta ao cliente por email (suporta HTML simples)
 - ESCALATE(reason): Escala para atendente humano
 - CREATE_NOTE(content): Cria nota interna no ticket
+- LOOKUP_CLIENT_BY_CNPJ(cnpj): Busca cliente por CNPJ/CPF
+- LINK_TICKET_TO_CLIENT(cnpj, contactName?, contactEmail?, contactPhone?): Vincula ticket ao cliente
+- READ_ATTACHMENT(attachmentId, query?): Lê conteúdo extraído de um anexo
 
 ## REGRAS:
 1. SEMPRE consulte a base de conhecimento antes de responder sobre valores, datas, produtos ou serviços
@@ -833,7 +870,9 @@ ${persona}
     prompt += `\n10. SEMPRE inclua a seguinte assinatura ao final do email:\n\n${emailSignature}`;
   }
 
-  prompt += `\n\n## CONTEXTO ATUAL:
+  prompt += `
+${CNPJ_INSTRUCTIONS}${ATTACHMENT_INSTRUCTIONS}
+## CONTEXTO ATUAL:
 - Canal: Email
 - Cliente: ${clientName}`;
 
@@ -861,10 +900,13 @@ Você está respondendo uma reclamação no Reclame Aqui. Respostas públicas s�
 ## SUAS FERRAMENTAS DISPONÍVEIS:
 - SEARCH_DOCUMENTS(query): Busca informações na base de conhecimento da empresa (prioriza docs específicos do Reclame Aqui)
 - GET_CLIENT_INFO(): Retorna dados do cliente vinculado ao ticket (financeiro, tickets anteriores)
-- GET_HISTORY(limit?): Retorna histórico de mensagens/interações da reclamação
+- GET_HISTORY(limit?): Retorna histórico de mensagens/interações da reclamação (inclui summaries de anexos)
 - RESPOND_RECLAMEAQUI(privateMessage, publicMessage, detectedType, confidence): Gera resposta dual — privada + pública
 - ESCALATE(reason): Escala para atendente humano
 - CREATE_NOTE(content): Cria nota interna no ticket
+- LOOKUP_CLIENT_BY_CNPJ(cnpj): Busca cliente por CNPJ/CPF
+- LINK_TICKET_TO_CLIENT(cnpj, contactName?, contactEmail?, contactPhone?): Vincula ticket ao cliente
+- READ_ATTACHMENT(attachmentId, query?): Lê conteúdo extraído de um anexo
 
 ## REGRAS ESPECÍFICAS RECLAME AQUI:
 1. SEMPRE consulte a base de conhecimento ANTES de responder — busque por termos da reclamação
@@ -887,7 +929,7 @@ Você está respondendo uma reclamação no Reclame Aqui. Respostas públicas s�
 - qualidade_servico: Problemas com qualidade do serviço prestado
 - trabalhista: Questões trabalhistas (ex-funcionários, condições de trabalho)
 - outro: Não se encaixa nas categorias acima
-
+${CNPJ_INSTRUCTIONS}${ATTACHMENT_INSTRUCTIONS}
 ## CONTEXTO ATUAL:
 - Canal: Reclame Aqui
 - Reclamante: ${clientName}`;

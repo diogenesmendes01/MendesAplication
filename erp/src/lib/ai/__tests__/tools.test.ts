@@ -10,14 +10,21 @@ import {
   ALL_TOOLS,
   WHATSAPP_TOOLS,
   EMAIL_TOOLS,
+  RECLAMEAQUI_TOOLS,
+  CNPJ_TOOLS,
+  ATTACHMENT_TOOLS,
   getToolsForChannel,
   SEARCH_DOCUMENTS,
   GET_CLIENT_INFO,
   GET_HISTORY,
   RESPOND,
   RESPOND_EMAIL,
+  RESPOND_RECLAMEAQUI,
   ESCALATE,
   CREATE_NOTE,
+  LOOKUP_CLIENT_BY_CNPJ,
+  LINK_TICKET_TO_CLIENT,
+  READ_ATTACHMENT,
 } from "@/lib/ai/tools";
 
 // ─── Tool structure validation ─────────────────────────────────────────────────
@@ -29,8 +36,12 @@ describe("tool definitions — structure", () => {
     GET_HISTORY,
     RESPOND,
     RESPOND_EMAIL,
+    RESPOND_RECLAMEAQUI,
     ESCALATE,
     CREATE_NOTE,
+    LOOKUP_CLIENT_BY_CNPJ,
+    LINK_TICKET_TO_CLIENT,
+    READ_ATTACHMENT,
   ];
 
   it.each(allToolDefs.map((t) => [t.name, t]))(
@@ -78,6 +89,56 @@ describe("tool definitions — structure", () => {
   });
 });
 
+// ─── v2 tool structure ──────────────────────────────────────────────────────
+
+describe("v2 tool definitions — structure", () => {
+  it("LOOKUP_CLIENT_BY_CNPJ requires 'cnpj' parameter", () => {
+    expect(LOOKUP_CLIENT_BY_CNPJ.parameters.required).toContain("cnpj");
+  });
+
+  it("LINK_TICKET_TO_CLIENT requires 'cnpj' parameter", () => {
+    expect(LINK_TICKET_TO_CLIENT.parameters.required).toContain("cnpj");
+  });
+
+  it("LINK_TICKET_TO_CLIENT has optional contactName, contactEmail, contactPhone", () => {
+    const props = Object.keys(LINK_TICKET_TO_CLIENT.parameters.properties);
+    expect(props).toContain("contactName");
+    expect(props).toContain("contactEmail");
+    expect(props).toContain("contactPhone");
+    // These should NOT be required
+    expect(LINK_TICKET_TO_CLIENT.parameters.required).not.toContain("contactName");
+    expect(LINK_TICKET_TO_CLIENT.parameters.required).not.toContain("contactEmail");
+    expect(LINK_TICKET_TO_CLIENT.parameters.required).not.toContain("contactPhone");
+  });
+
+  it("READ_ATTACHMENT requires 'attachmentId' parameter", () => {
+    expect(READ_ATTACHMENT.parameters.required).toContain("attachmentId");
+  });
+
+  it("READ_ATTACHMENT has optional 'query' parameter", () => {
+    const props = Object.keys(READ_ATTACHMENT.parameters.properties);
+    expect(props).toContain("query");
+    expect(READ_ATTACHMENT.parameters.required).not.toContain("query");
+  });
+});
+
+// ─── v2 tool groups ─────────────────────────────────────────────────────────
+
+describe("v2 tool groups", () => {
+  it("CNPJ_TOOLS contains LOOKUP_CLIENT_BY_CNPJ and LINK_TICKET_TO_CLIENT", () => {
+    const names = CNPJ_TOOLS.map((t) => t.name);
+    expect(names).toContain("LOOKUP_CLIENT_BY_CNPJ");
+    expect(names).toContain("LINK_TICKET_TO_CLIENT");
+    expect(names).toHaveLength(2);
+  });
+
+  it("ATTACHMENT_TOOLS contains READ_ATTACHMENT", () => {
+    const names = ATTACHMENT_TOOLS.map((t) => t.name);
+    expect(names).toContain("READ_ATTACHMENT");
+    expect(names).toHaveLength(1);
+  });
+});
+
 // ─── Channel-based tool routing ───────────────────────────────────────────────
 
 describe("getToolsForChannel", () => {
@@ -89,6 +150,11 @@ describe("getToolsForChannel", () => {
   it("returns EMAIL_TOOLS for EMAIL channel", () => {
     const tools = getToolsForChannel("EMAIL");
     expect(tools).toBe(EMAIL_TOOLS);
+  });
+
+  it("returns RECLAMEAQUI_TOOLS for RECLAMEAQUI channel", () => {
+    const tools = getToolsForChannel("RECLAMEAQUI");
+    expect(tools).toBe(RECLAMEAQUI_TOOLS);
   });
 
   it("WHATSAPP_TOOLS includes RESPOND but not RESPOND_EMAIL", () => {
@@ -118,6 +184,24 @@ describe("getToolsForChannel", () => {
     for (const name of sharedToolNames) {
       expect(waNames, `WHATSAPP missing ${name}`).toContain(name);
       expect(emailNames, `EMAIL missing ${name}`).toContain(name);
+    }
+  });
+
+  it("all channels include v2 tools (LOOKUP_CLIENT_BY_CNPJ, LINK_TICKET_TO_CLIENT, READ_ATTACHMENT)", () => {
+    const v2ToolNames = [
+      "LOOKUP_CLIENT_BY_CNPJ",
+      "LINK_TICKET_TO_CLIENT",
+      "READ_ATTACHMENT",
+    ];
+
+    const waNames = WHATSAPP_TOOLS.map((t) => t.name);
+    const emailNames = EMAIL_TOOLS.map((t) => t.name);
+    const raNames = RECLAMEAQUI_TOOLS.map((t) => t.name);
+
+    for (const name of v2ToolNames) {
+      expect(waNames, `WHATSAPP missing ${name}`).toContain(name);
+      expect(emailNames, `EMAIL missing ${name}`).toContain(name);
+      expect(raNames, `RECLAMEAQUI missing ${name}`).toContain(name);
     }
   });
 });
