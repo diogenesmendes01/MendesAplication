@@ -38,7 +38,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { VirtualTable } from "@/components/ui/virtual-table";
+import { VirtualTable, VIRTUAL_SCROLL_THRESHOLD } from "@/components/ui/virtual-table";
 import { useCompany } from "@/contexts/company-context";
 import { isValidCpf } from "@/lib/cpf";
 import { isValidCnpj } from "@/lib/cnpj";
@@ -303,7 +303,7 @@ export default function ClientesPage() {
   }
 
   const rows = clients?.data ?? [];
-  const useVirtual = !loading && rows.length > 50;
+  const useVirtual = !loading && rows.length > VIRTUAL_SCROLL_THRESHOLD;
 
   const tableHeader = (
     <TableRow>

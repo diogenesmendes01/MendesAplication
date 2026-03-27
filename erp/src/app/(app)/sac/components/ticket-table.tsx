@@ -47,7 +47,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { VirtualTable } from "@/components/ui/virtual-table";
+import { VirtualTable, VIRTUAL_SCROLL_THRESHOLD } from "@/components/ui/virtual-table";
 import { useCompany } from "@/contexts/company-context";
 import {
   createTicket,
@@ -458,7 +458,7 @@ export function TicketTable({ channelType: fixedChannel }: TicketTableProps) {
   // ---------------------------------------------------
 
   const rows = tickets?.data ?? [];
-  const useVirtual = !loading && rows.length > 50;
+  const useVirtual = !loading && rows.length > VIRTUAL_SCROLL_THRESHOLD;
 
   // Header row shared between virtual and normal table
   const tableHeader = (

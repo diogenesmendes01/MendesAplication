@@ -3,6 +3,8 @@
 import { useRef } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 
+export const VIRTUAL_SCROLL_THRESHOLD = 50;
+
 interface VirtualTableProps<T> {
   data: T[];
   /** Number of columns — used for spacer row colSpan */
@@ -67,11 +69,17 @@ export function VirtualTable<T>({
       className="rounded-md border"
       style={{ height: containerHeight, overflowY: "auto" }}
     >
-      <table className="w-full caption-bottom text-sm">
-        <thead className="sticky top-0 z-10 bg-background [&_tr]:border-b">
+      <table
+        className="w-full caption-bottom text-sm"
+        aria-rowcount={data.length}
+      >
+        <thead
+          className="sticky top-0 z-10 bg-background [&_tr]:border-b"
+          aria-hidden="true"
+        >
           {renderHeader()}
         </thead>
-        <tbody>
+        <tbody role="rowgroup">
           {paddingTop > 0 && (
             <tr aria-hidden>
               <td
@@ -91,6 +99,7 @@ export function VirtualTable<T>({
                 key={virtualRow.key}
                 data-index={virtualRow.index}
                 ref={virtualizer.measureElement}
+                aria-rowindex={virtualRow.index + 1}
                 className={`border-b transition-colors ${rowClassName ?? ""}`}
                 {...restRowProps}
               >

@@ -27,7 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { VirtualTable } from "@/components/ui/virtual-table";
+import { VirtualTable, VIRTUAL_SCROLL_THRESHOLD } from "@/components/ui/virtual-table";
 import {
   listAuditLogs,
   exportAuditLogsCsv,
@@ -240,7 +240,7 @@ export default function AuditoriaPage() {
   );
 
   const rows = logs?.data ?? [];
-  const useVirtual = !loading && rows.length > 50;
+  const useVirtual = !loading && rows.length > VIRTUAL_SCROLL_THRESHOLD;
 
   return (
     <div className="space-y-6">
