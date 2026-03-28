@@ -7,6 +7,7 @@ import {
 } from "@/lib/ai/pricing";
 import { getBrlUsdRate } from "@/lib/ai/exchange-rate";
 import { logger } from "@/lib/logger";
+import { logInteraction } from "@/lib/ai/rate-limiter";
 import Redis from "ioredis";
 
 // ─── Redis singleton ──────────────────────────────────────────────────────────
@@ -286,6 +287,9 @@ export async function logUsage(params: LogUsageParams) {
   // Only for non-simulation records (simulations don't count against the limit).
   if (!params.isSimulation) {
     await atomicSpendIncrement(params.companyId, costBrl);
+    if (params.ticketId && costBrl > 0) {
+      await logInteraction(params.ticketId, costBrl);
+    }
   }
 
   return record;

@@ -13,6 +13,7 @@ import {
   approveSuggestion as executeSuggestionActions,
 } from "@/lib/ai/suggestion-mode";
 import type { OperationMode } from "@/lib/ai/suggestion-mode";
+import { checkRateLimit } from "@/lib/ai/rate-limiter";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -73,23 +74,15 @@ function computeConfidenceFromResult(result: AgentResult): number {
 export async function processAiAgent(job: Job<AiAgentJobData>) {
   const { ticketId, companyId, messageContent, messageId, channel = "WHATSAPP", raContext } = job.data;
 
-  // 1. Check ticket-level AI toggle before hitting the LLM.
-  //    Note: company-level AI config (enabled, channel, spend limit, escalation
-  //    keywords) is now fully handled inside runAgent — no duplicate DB query here.
-  const ticket = await prisma.ticket.findUnique({
-    where: { id: ticketId },
-    select: { aiEnabled: true },
-  });
-
-  if (!ticket) {
-    logger.warn(`[ai-agent] Ticket ${ticketId} not found, skipping`);
+  // 1. Rate Limit Check (per-ticket): AI toggle, budget, cooldown, interactions/hour
+  const rateLimit = await checkRateLimit(ticketId, companyId, channel);
+  if (!rateLimit.allowed) {
+    logger.info(`[ai-agent] Rate limited: ticket ${ticketId}, reason=${rateLimit.reason}`);
     return;
   }
-
-  if (!ticket.aiEnabled) {
-    logger.info(
-      `[ai-agent] AI disabled for ticket ${ticketId}, skipping`
-    );
+  if (rateLimit.delayMs && rateLimit.delayMs > 0) {
+    logger.info(`[ai-agent] Cooldown active for ticket ${ticketId}, delaying ${rateLimit.delayMs}ms`);
+    await job.moveToDelayed(Date.now() + rateLimit.delayMs, job.token);
     return;
   }
 
