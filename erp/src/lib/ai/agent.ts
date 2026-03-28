@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { chatCompletion, getEnvProviderConfig } from "./provider";
+import { chatCompletionWithFallback } from "./fallback";
+import type { FallbackProviderConfig } from "./fallback";
 import type { AiMessage, ProviderConfig } from "./provider";
 import { getToolsForChannel } from "./tools";
 import { executeTool, isReadOnlyTool } from "./tool-executor";
@@ -95,6 +97,8 @@ async function runAgentLoop(options: {
   messages: AiMessage[];
   tools: ReturnType<typeof getToolsForChannel>;
   providerConfig: ProviderConfig;
+  /** Optional fallback chain for provider resilience */
+  fallbackChain?: FallbackProviderConfig[];
   toolContext: ToolContext;
   maxIterations: number;
   timeout: number;
@@ -112,6 +116,7 @@ async function runAgentLoop(options: {
     messages,
     tools,
     providerConfig,
+    fallbackChain,
     toolContext,
     maxIterations,
     timeout,
@@ -170,7 +175,9 @@ log,
     }
 
     try {
-      const response = await chatCompletion(messages, tools, providerConfig);
+      const response = fallbackChain && fallbackChain.length > 0
+          ? await chatCompletionWithFallback(messages, tools, fallbackChain, { temperature: providerConfig.temperature, maxTokens: providerConfig.maxTokens })
+          : await chatCompletion(messages, tools, providerConfig);
 
       // ── Accumulate / persist usage ─────────────────────────────────────
       if (response.usage) {
@@ -373,7 +380,7 @@ export async function runAgent(
   companyId: string,
   incomingMessage: string,
   channel: "WHATSAPP" | "EMAIL" | "RECLAMEAQUI" = "WHATSAPP",
-  options?: { suggestionMode?: boolean; raContext?: import("@/lib/reclameaqui/types").RaAiContext },
+  options?: { suggestionMode?: boolean; raContext?: import("@/lib/reclameaqui/types").RaAiContext; fallbackChain?: FallbackProviderConfig[] },
 ): Promise<AgentResult> {
   const startTime = Date.now();
   const timeout = parseInt(process.env.AI_TIMEOUT || "30000", 10);

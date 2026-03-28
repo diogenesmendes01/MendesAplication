@@ -27,6 +27,7 @@ export const QUEUE_NAMES = {
   RECLAMEAQUI_INBOUND: 'reclameaqui-inbound',
   RECLAMEAQUI_OUTBOUND: 'reclameaqui-outbound',
   ATTACHMENT_EXTRACTION: 'attachment-extraction',
+  AI_HEALTH_CHECK: 'ai-health-check',
 } as const
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES]
@@ -64,3 +65,5 @@ export const reclameaquiInboundQueue = new Queue(QUEUE_NAMES.RECLAMEAQUI_INBOUND
 export const reclameaquiOutboundQueue = new Queue(QUEUE_NAMES.RECLAMEAQUI_OUTBOUND, { connection, defaultJobOptions: noRetryJobOptions })
 
 export const extractionQueue = new Queue(QUEUE_NAMES.ATTACHMENT_EXTRACTION, { connection, defaultJobOptions: extractionJobOptions })
+
+export const aiHealthCheckQueue = new Queue(QUEUE_NAMES.AI_HEALTH_CHECK, { connection, defaultJobOptions })

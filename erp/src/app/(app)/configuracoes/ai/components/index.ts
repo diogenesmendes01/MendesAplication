@@ -7,3 +7,4 @@ export { TabReclameAqui } from "./tab-reclameaqui";
 export { TabSuggestionMode } from "./tab-suggestion-mode";
 export { PROVIDERS, DEFAULT_CONFIG } from "./types";
 export type { AiConfigData } from "./types";
+export { TabHealth } from "./tab-health";
