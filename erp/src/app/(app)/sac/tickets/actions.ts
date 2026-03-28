@@ -5,6 +5,7 @@ import { requireCompanyAccess } from "@/lib/rbac";
 import { logAuditEvent } from "@/lib/audit";
 import { sendEmail } from "@/lib/email";
 import { getSlaStatus, type SlaStatusValue } from "@/lib/sla";
+import { assignSlaToTicket, markFirstResponse, markResolved } from "@/lib/sla-engine";
 import { Prisma, type TicketStatus, type TicketPriority, type ChannelType, type MessageDirection, type MessageOrigin, type RefundStatus, type MessageDeliveryStatus } from "@prisma/client";
 import { getSharedCompanyIds } from "@/lib/shared-clients";
 import { createTaxEntriesForInvoice } from "@/lib/tax-entries";
@@ -352,6 +353,13 @@ export async function createTicket(input: CreateTicketInput) {
     companyId: input.companyId,
   });
 
+  // Assign SLA deadlines based on matching policy
+  try {
+    await assignSlaToTicket(ticket.id, input.companyId, null, input.priority, ticket.createdAt);
+  } catch (err) {
+    logger.error(`[createTicket] Failed to assign SLA to ticket ${ticket.id}:`, err);
+  }
+
   invalidateKpiCache(input.companyId);
   sseBus.publish(`company:${input.companyId}:sac`, "sla-update", { timestamp: Date.now() });
 
@@ -532,6 +540,15 @@ export async function updateTicketStatus(
     dataAfter: { status: newStatus } as unknown as Prisma.InputJsonValue,
     companyId,
   });
+
+  // Mark resolved for SLA tracking
+  if (newStatus === "RESOLVED" || newStatus === "CLOSED") {
+    try {
+      await markResolved(ticketId);
+    } catch (err) {
+      logger.error(`[updateTicketStatus] Failed to mark resolved for ticket ${ticketId}:`, err);
+    }
+  }
 
   invalidateKpiCache(companyId);
   sseBus.publish(`company:${companyId}:sac`, "sla-update", { timestamp: Date.now() });
@@ -756,6 +773,13 @@ export async function createTicketReply(input: CreateTicketReplyInput) {
   });
 
   sseBus.publish(`company:${input.companyId}:sac`, "timeline-update", { ticketId: input.ticketId, timestamp: Date.now() });
+
+  // Mark first response for SLA tracking
+  try {
+    await markFirstResponse(input.ticketId);
+  } catch (err) {
+    logger.error(`[createTicketReply] Failed to mark first response for ticket ${input.ticketId}:`, err);
+  }
 
   return {
     id: message.id,

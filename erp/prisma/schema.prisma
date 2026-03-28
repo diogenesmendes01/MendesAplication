@@ -96,6 +96,7 @@ model Company {
   slaViolations       SlaViolation[]
   workflows           Workflow[]
   workflowExecutions  WorkflowExecution[]
+  aiRateLimitEvents   AiRateLimitEvent[]
 
   @@map("companies")
 }
@@ -240,18 +241,15 @@ model SlaConfig {
   stage              String
   deadlineMinutes    Int
   alertBeforeMinutes Int             @default(30)
-
-  // ─── SLA Management: granular config ───
-  channelType        ChannelType? // NULL = global, set = per-channel
-  escalateToRole     String? // "ADMIN" | "MANAGER" | specific userId
-  autoEscalate       Boolean      @default(true)
-  autoPriorityBump   Boolean      @default(true)
-  businessHoursOnly  Boolean      @default(false)
-  businessHoursStart Int?         @default(8)
-  businessHoursEnd   Int?         @default(18)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  channelType        ChannelType?
+  escalateToRole     String?
+  autoEscalate       Boolean         @default(true)
+  autoPriorityBump   Boolean         @default(true)
+  businessHoursOnly  Boolean         @default(false)
+  businessHoursStart Int?            @default(8)
+  businessHoursEnd   Int?            @default(18)
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
@@ -476,40 +474,37 @@ model BankTransaction {
 }
 
 model Ticket {
-  id            String         @id @default(cuid())
-  clientId      String
-  subject       String
-  description   String
-  priority      TicketPriority @default(MEDIUM)
-  status        TicketStatus   @default(OPEN)
-  assigneeId    String?
-  proposalId    String?
-  boletoId      String?
-  companyId     String
-  channelId     String?
-  contactId     String?
-  slaFirstReply DateTime?
-  slaResolution DateTime?
-  slaBreached   Boolean        @default(false)
-  slaAtRisk     Boolean        @default(false)
-
-  // ─── SLA Management: tracking fields ───
-  slaFirstReplyAt DateTime?
-  slaResolvedAt   DateTime?
-  slaEscalatedAt  DateTime?
-
-  tags                    String[] @default([])
+  id                      String         @id @default(cuid())
+  clientId                String
+  subject                 String
+  description             String
+  priority                TicketPriority @default(MEDIUM)
+  status                  TicketStatus   @default(OPEN)
+  assigneeId              String?
+  proposalId              String?
+  boletoId                String?
+  companyId               String
+  channelId               String?
+  contactId               String?
+  slaFirstReply           DateTime?
+  slaResolution           DateTime?
+  slaBreached             Boolean        @default(false)
+  slaAtRisk               Boolean        @default(false)
+  slaFirstReplyAt         DateTime?
+  slaResolvedAt           DateTime?
+  slaEscalatedAt          DateTime?
+  tags                    String[]       @default([])
   raExternalId            String?
   raStatusId              Int?
   raStatusName            String?
-  raCanEvaluate           Boolean  @default(false)
-  raCanModerate           Boolean  @default(false)
+  raCanEvaluate           Boolean        @default(false)
+  raCanModerate           Boolean        @default(false)
   raRating                String?
   raResolvedIssue         Boolean?
   raBackDoingBusiness     Boolean?
-  raFrozen                Boolean  @default(false)
-  raConsumerConsideration String?  @db.Text
-  raCompanyConsideration  String?  @db.Text
+  raFrozen                Boolean        @default(false)
+  raConsumerConsideration String?        @db.Text
+  raCompanyConsideration  String?        @db.Text
 
   // Campos RA enriquecidos (v2)
   raReason               String?
@@ -525,28 +520,32 @@ model Ticket {
   raActive               Boolean   @default(true)
   raModerationStatus     String?
   aiEnabled              Boolean   @default(true)
+  aiDisabledReason       String? // "budget_exceeded" | "rate_limited" | "manual" | null
+  aiTotalCostBrl         Decimal?  @default(0) @db.Decimal(10, 4)
+  lastAiResponseAt       DateTime?
   mergedIntoId           String?
   mergedAt               DateTime?
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
 
-  client        Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  assignee      User?              @relation("TicketAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
-  company       Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  proposal      Proposal?          @relation("TicketProposal", fields: [proposalId], references: [id], onDelete: SetNull)
-  boleto        Boleto?            @relation("TicketBoleto", fields: [boletoId], references: [id], onDelete: SetNull)
-  channel       Channel?           @relation(fields: [channelId], references: [id], onDelete: SetNull)
-  contact       AdditionalContact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
-  messages      TicketMessage[]
-  attachments   Attachment[]       @relation("TicketAttachments")
-  refunds       Refund[]
-  aiSuggestions AiSuggestion[]
-  mergedInto    Ticket?            @relation("TicketMerge", fields: [mergedIntoId], references: [id], onDelete: SetNull)
-  mergedTickets Ticket[]           @relation("TicketMerge")
-  linksAsA      TicketLink[]       @relation("TicketLinksA")
-  linksAsB      TicketLink[]       @relation("TicketLinksB")
-  slaViolations SlaViolation[]
+  client          Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  assignee        User?              @relation("TicketAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  company         Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  proposal        Proposal?          @relation("TicketProposal", fields: [proposalId], references: [id], onDelete: SetNull)
+  boleto          Boleto?            @relation("TicketBoleto", fields: [boletoId], references: [id], onDelete: SetNull)
+  channel         Channel?           @relation(fields: [channelId], references: [id], onDelete: SetNull)
+  contact         AdditionalContact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  messages        TicketMessage[]
+  attachments     Attachment[]       @relation("TicketAttachments")
+  refunds         Refund[]
+  aiSuggestions   AiSuggestion[]
+  mergedInto      Ticket?            @relation("TicketMerge", fields: [mergedIntoId], references: [id], onDelete: SetNull)
+  mergedTickets   Ticket[]           @relation("TicketMerge")
+  linksAsA        TicketLink[]       @relation("TicketLinksA")
+  linksAsB        TicketLink[]       @relation("TicketLinksB")
+  slaViolations      SlaViolation[]
   workflowExecutions WorkflowExecution[]
+  rateLimitEvents    AiRateLimitEvent[]
 
   @@index([companyId, status])
   @@index([companyId, slaBreached])
@@ -905,6 +904,12 @@ model AiConfig {
   // --- Limites ---
   dailySpendLimitBrl Decimal? @db.Decimal(10, 2)
 
+  // --- Rate Limiting ---
+  maxAiInteractionsPerTicketPerHour Int      @default(5)
+  aiCooldownSeconds                 Int      @default(30)
+  maxBudgetPerTicketBrl             Decimal? @default(2.00) @db.Decimal(10, 2)
+  rateLimitAction                   String   @default("pause") // "pause" | "escalate"
+
   // --- Temperatura ---
   temperature Float @default(0.7)
 
@@ -941,6 +946,22 @@ model AiUsageLog {
   @@index([isSimulation])
   @@index([companyId, isSimulation])
   @@map("ai_usage_logs")
+}
+
+model AiRateLimitEvent {
+  id        String   @id @default(cuid())
+  ticketId  String
+  companyId String
+  type      String // "interaction_limit" | "cooldown" | "budget_exceeded"
+  details   Json?
+  createdAt DateTime @default(now())
+
+  ticket  Ticket  @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, createdAt])
+  @@index([ticketId, createdAt])
+  @@map("ai_rate_limit_events")
 }
 
 model Document {
@@ -1181,7 +1202,6 @@ model TicketLink {
   @@index([ticketBId, status])
   @@map("ticket_links")
 }
-
 // ─── Workflow Engine ─────────────────────────────────────────────────────────
 
 model Workflow {
