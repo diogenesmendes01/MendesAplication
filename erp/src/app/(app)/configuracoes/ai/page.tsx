@@ -3,6 +3,7 @@
 import { useState } from "react";
 import {
   Save,
+  Shield,
   Zap,
   Mail,
   MessageSquare,
@@ -26,6 +27,7 @@ import {
   TabSimulador,
   TabReclameAqui,
   TabSuggestionMode,
+  TabRateLimiting,
 } from "./components";
 import { useAiConfig } from "./hooks";
 import type { ChannelType } from "@prisma/client";
@@ -147,7 +149,7 @@ export default function AiConfigPage() {
 
       {/* Config Tabs — sections within the active channel config */}
       <Tabs defaultValue="geral" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-7">
+        <TabsList className="grid w-full grid-cols-8">
           <TabsTrigger value="geral" className="gap-1.5">
             <Zap className="h-4 w-4" />
             Geral
@@ -175,6 +177,10 @@ export default function AiConfigPage() {
           <TabsTrigger value="suggestion-mode" className="gap-1.5">
             <Lightbulb className="h-4 w-4" />
             Modo Sugestão
+          </TabsTrigger>
+          <TabsTrigger value="rate-limiting" className="gap-1.5">
+            <Shield className="h-4 w-4" />
+            Rate Limiting
           </TabsTrigger>
         </TabsList>
 
@@ -210,6 +216,10 @@ export default function AiConfigPage() {
 
         <TabsContent value="suggestion-mode">
           <TabSuggestionMode config={config} setConfig={setConfig} />
+        </TabsContent>
+
+        <TabsContent value="rate-limiting">
+          <TabRateLimiting companyId={selectedCompanyId} />
         </TabsContent>
       </Tabs>
     </div>
