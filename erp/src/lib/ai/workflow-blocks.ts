@@ -70,12 +70,38 @@ export async function executeBlock(
   }
 }
 
+// ─── Field validation ─────────────────────────────────────────────────────────
+
+const VALIDATION_PATTERNS: Record<string, { regex: RegExp; message: string }> = {
+  cnpj: { regex: /^\d{14}$/, message: "CNPJ deve conter exatamente 14 dígitos numéricos." },
+  cpf: { regex: /^\d{11}$/, message: "CPF deve conter exatamente 11 dígitos numéricos." },
+  email: { regex: /^[^\s@]+@[^\s@]+\.[^\s@]+$/, message: "Email inválido." },
+  telefone: { regex: /^\d{10,11}$/, message: "Telefone deve conter 10 ou 11 dígitos." },
+  data: { regex: /^\d{2}\/\d{2}\/\d{4}$|^\d{4}-\d{2}-\d{2}$/, message: "Data deve estar no formato DD/MM/AAAA ou AAAA-MM-DD." },
+  numero: { regex: /^-?\d+(\.\d+)?$/, message: "Valor deve ser numérico." },
+  texto: { regex: /^.{1,1000}$/, message: "Texto deve ter entre 1 e 1000 caracteres." },
+};
+
+function validateField(value: string, tipo: string): string | null {
+  const stripped = tipo === "cnpj" || tipo === "cpf" || tipo === "telefone" ? value.replace(/\D/g, "") : value;
+  const pattern = VALIDATION_PATTERNS[tipo];
+  if (!pattern) return null; // unknown validation type — skip
+  if (!pattern.regex.test(stripped)) return pattern.message;
+  return null;
+}
+
 // ─── COLLECT_INFO ────────────────────────────────────────────────────────────
 
 async function executeCollectInfo(config: CollectInfoConfig, ctx: BlockContext): Promise<StepResult> {
-  const { campo, obrigatorio, promptPorCanal } = config;
+  const { campo, obrigatorio, validacao, promptPorCanal } = config;
 
   if (ctx.stepData[campo] != null) {
+    // Validate collected value if validacao is specified
+    const value = String(ctx.stepData[campo]);
+    const validationError = validacao ? validateField(value, validacao) : null;
+    if (validationError) {
+      return { success: true, message: validationError, data: { _pendingField: campo, _validationError: validationError } };
+    }
     return { success: true, data: { [campo]: ctx.stepData[campo] }, message: `Campo "${campo}" já coletado: ${ctx.stepData[campo]}` };
   }
 
@@ -98,10 +124,13 @@ const ENTITY_MODEL_MAP: Record<string, string> = {
   refund: "refund",
 };
 
+/** Whitelist of Prisma model names allowed for dynamic access */
+const ALLOWED_PRISMA_MODELS = new Set(Object.values(ENTITY_MODEL_MAP));
+
 async function executeSearch(config: SearchConfig, ctx: BlockContext): Promise<StepResult> {
   const { entidade, filtro, limiteResultados = 10, ordenacao } = config;
   const modelName = ENTITY_MODEL_MAP[entidade];
-  if (!modelName) return { success: false, error: `Entidade desconhecida: ${entidade}` };
+  if (!modelName || !ALLOWED_PRISMA_MODELS.has(modelName)) return { success: false, error: `Entidade desconhecida ou não permitida: ${entidade}` };
 
   const resolvedFilter = interpolateRecord(filtro, ctx.stepData);
   const where: Record<string, unknown> = { companyId: ctx.companyId };
@@ -141,9 +170,19 @@ async function executeSearch(config: SearchConfig, ctx: BlockContext): Promise<S
 // ─── UPDATE ──────────────────────────────────────────────────────────────────
 
 async function executeUpdate(config: UpdateConfig, ctx: BlockContext): Promise<StepResult> {
-  const { entidade, filtro, campos, auditLog = true } = config;
+  const { entidade, filtro, campos, requireConfirmation, auditLog = true } = config;
   const modelName = ENTITY_MODEL_MAP[entidade];
-  if (!modelName) return { success: false, error: `Entidade desconhecida: ${entidade}` };
+  if (!modelName || !ALLOWED_PRISMA_MODELS.has(modelName)) return { success: false, error: `Entidade desconhecida ou não permitida: ${entidade}` };
+
+  // Fix 5: requireConfirmation — pause for human confirmation before writing
+  if (requireConfirmation && !ctx.stepData._updateConfirmed) {
+    return {
+      success: true,
+      shouldPause: true,
+      data: { waitingFor: "humano", waitingCondition: "Confirmação para atualizar registros", _pendingUpdate: true },
+      message: `Atualização requer confirmação humana antes de prosseguir.`,
+    };
+  }
 
   const resolvedFilter = interpolateRecord(filtro, ctx.stepData);
   const resolvedCampos: Record<string, unknown> = {};
@@ -268,16 +307,16 @@ export function evaluateCondition(
 
   let result = false;
   switch (se.operador) {
-    case "igual": result = fieldValue == se.valor; break;
-    case "diferente": result = fieldValue != se.valor; break;
+    case "igual": result = String(fieldValue) === String(se.valor); break;
+    case "diferente": result = String(fieldValue) !== String(se.valor); break;
     case "maior": result = Number(fieldValue) > Number(se.valor); break;
     case "menor": result = Number(fieldValue) < Number(se.valor); break;
     case "contem":
       result = typeof fieldValue === "string" && typeof se.valor === "string" ? fieldValue.includes(se.valor)
         : Array.isArray(fieldValue) && fieldValue.includes(se.valor);
       break;
-    case "existe": result = fieldValue != null && fieldValue !== "" && fieldValue !== undefined; break;
-    case "nao_existe": result = fieldValue == null || fieldValue === "" || fieldValue === undefined; break;
+    case "existe": result = fieldValue !== null && fieldValue !== "" && fieldValue !== undefined; break;
+    case "nao_existe": result = fieldValue === null || fieldValue === "" || fieldValue === undefined; break;
   }
 
   return { result, nextStepId: result ? entao : senao };

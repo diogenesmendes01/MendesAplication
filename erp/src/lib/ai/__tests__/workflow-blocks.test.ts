@@ -186,3 +186,92 @@ describe("Unknown block", () => {
     expect((await executeBlock("X" as any, {} as any, ctx())).success).toBe(false);
   });
 });
+
+// ─── Fix 3: evaluateCondition strict comparison ──────────────────────────────
+
+describe("evaluateCondition strict comparison", () => {
+  it("igual uses string coercion for type-safe comparison", () => {
+    expect(evaluateCondition({ se: { campo: "n", operador: "igual", valor: "1" }, entao: "a", senao: "b" }, { n: 1 }).result).toBe(true);
+    expect(evaluateCondition({ se: { campo: "n", operador: "igual", valor: 1 }, entao: "a", senao: "b" }, { n: "1" }).result).toBe(true);
+  });
+
+  it("diferente uses string coercion", () => {
+    expect(evaluateCondition({ se: { campo: "s", operador: "diferente", valor: "1" }, entao: "a", senao: "b" }, { s: 1 }).result).toBe(false);
+  });
+
+  it("existe uses strict null check", () => {
+    expect(evaluateCondition({ se: { campo: "x", operador: "existe", valor: null }, entao: "a", senao: "b" }, { x: 0 }).result).toBe(true);
+    expect(evaluateCondition({ se: { campo: "x", operador: "existe", valor: null }, entao: "a", senao: "b" }, { x: false }).result).toBe(true);
+  });
+});
+
+// ─── Fix 6: COLLECT_INFO validation ──────────────────────────────────────────
+
+describe("COLLECT_INFO validation", () => {
+  it("validates cnpj format", async () => {
+    const r = await executeBlock("COLLECT_INFO", { campo: "cnpj", obrigatorio: true, validacao: "cnpj" } as CollectInfoConfig, ctx({ cnpj: "123" }));
+    expect(r.data?._validationError).toBeDefined();
+  });
+
+  it("accepts valid cnpj (digits only)", async () => {
+    const r = await executeBlock("COLLECT_INFO", { campo: "cnpj", obrigatorio: true, validacao: "cnpj" } as CollectInfoConfig, ctx({ cnpj: "12345678000195" }));
+    expect(r.data?._validationError).toBeUndefined();
+    expect(r.data?.cnpj).toBe("12345678000195");
+  });
+
+  it("accepts cnpj with formatting (strips non-digits)", async () => {
+    const r = await executeBlock("COLLECT_INFO", { campo: "cnpj", obrigatorio: true, validacao: "cnpj" } as CollectInfoConfig, ctx({ cnpj: "12.345.678/0001-95" }));
+    expect(r.data?._validationError).toBeUndefined();
+    expect(r.data?.cnpj).toBe("12.345.678/0001-95");
+  });
+
+  it("validates email format", async () => {
+    const r = await executeBlock("COLLECT_INFO", { campo: "email", obrigatorio: true, validacao: "email" } as CollectInfoConfig, ctx({ email: "invalid" }));
+    expect(r.data?._validationError).toBeDefined();
+  });
+
+  it("accepts valid email", async () => {
+    const r = await executeBlock("COLLECT_INFO", { campo: "email", obrigatorio: true, validacao: "email" } as CollectInfoConfig, ctx({ email: "test@example.com" }));
+    expect(r.data?.email).toBe("test@example.com");
+  });
+
+  it("skips validation when not specified", async () => {
+    const r = await executeBlock("COLLECT_INFO", { campo: "obs", obrigatorio: true } as CollectInfoConfig, ctx({ obs: "anything" }));
+    expect(r.data?.obs).toBe("anything");
+  });
+});
+
+// ─── Fix 7: SEARCH whitelist ─────────────────────────────────────────────────
+
+describe("SEARCH whitelist", () => {
+  it("rejects unknown entities", async () => {
+    const r = await executeBlock("SEARCH", { entidade: "user", filtro: {} } as SearchConfig, ctx());
+    expect(r.success).toBe(false);
+    expect(r.error).toContain("não permitida");
+  });
+});
+
+// ─── Fix 5: UPDATE requireConfirmation ───────────────────────────────────────
+
+describe("UPDATE requireConfirmation", () => {
+  it("pauses when requireConfirmation is true and not confirmed", async () => {
+    const r = await executeBlock("UPDATE", {
+      entidade: "boleto",
+      filtro: { status: "PENDING" },
+      campos: { status: "CANCELLED" },
+      requireConfirmation: true,
+    } as any, ctx());
+    expect(r.shouldPause).toBe(true);
+    expect(r.data?.waitingFor).toBe("humano");
+  });
+
+  it("proceeds when already confirmed", async () => {
+    const r = await executeBlock("UPDATE", {
+      entidade: "boleto",
+      filtro: { status: "PENDING" },
+      campos: { status: "CANCELLED" },
+      requireConfirmation: true,
+    } as any, ctx({ _updateConfirmed: true }));
+    expect(r.shouldPause).toBeUndefined();
+  });
+});

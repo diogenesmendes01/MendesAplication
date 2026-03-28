@@ -286,3 +286,33 @@ describe("buildWorkflowContext", () => {
     expect(ctx).toContain("Último step do workflow.");
   });
 });
+
+// ─── Fix 4: advanceWorkflow __END__ sentinel ─────────────────────────────────
+
+describe("advanceWorkflow __END__", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("completes workflow when step has proximoStep __END__", async () => {
+    const steps = [
+      { id: "a", nome: "A", tipo: "SET_TAG", config: {}, proximoStep: "__END__" },
+      { id: "b", nome: "B (unreachable)", tipo: "RESPOND", config: {} },
+    ];
+    mockExecFindUnique.mockResolvedValue(makeExecution({ currentStepIndex: 0, workflow: makeWorkflow({ steps }) }));
+    mockExecUpdate.mockResolvedValue({});
+    const r = await advanceWorkflow("exec-1");
+    expect(r.done).toBe(true);
+    expect(r.status).toBe("COMPLETED");
+  });
+
+  it("fails when proximoStep target not found (no fallback to index+1)", async () => {
+    const steps = [
+      { id: "a", nome: "A", tipo: "RESPOND", config: {}, proximoStep: "nonexistent_step" },
+      { id: "b", nome: "B", tipo: "RESPOND", config: {} },
+    ];
+    mockExecFindUnique.mockResolvedValue(makeExecution({ currentStepIndex: 0, workflow: makeWorkflow({ steps }) }));
+    mockExecUpdate.mockResolvedValue({});
+    const r = await advanceWorkflow("exec-1");
+    expect(r.done).toBe(true);
+    expect(r.status).toBe("FAILED");
+  });
+});

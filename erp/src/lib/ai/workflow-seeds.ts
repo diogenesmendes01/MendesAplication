@@ -15,7 +15,7 @@ export const WORKFLOW_REMOCAO_CADASTRO = {
     { id: "buscar_boletos", nome: "Buscar boletos pendentes", tipo: "SEARCH", config: { entidade: "boleto", filtro: { cnpj: "${cnpj}", status: "PENDING" }, ordenacao: "dueDate:asc", limiteResultados: 50 } },
     { id: "dar_baixa_boletos", nome: "Cancelar boletos", tipo: "UPDATE", config: { entidade: "boleto", filtro: { cnpj: "${cnpj}", status: "PENDING" }, campos: { status: "CANCELLED" }, auditLog: true } },
     { id: "responder_sucesso", nome: "Confirmar remoção", tipo: "RESPOND", config: { templatePorCanal: { WHATSAPP: "Pronto! ✅ Cadastro inativado e boletos cancelados.", EMAIL: "Seu cadastro foi inativado e os boletos pendentes cancelados.", RECLAMEAQUI: { publico: "Já realizamos a remoção do cadastro e cancelamento das cobranças.", privado: "Olá! Cadastro (CNPJ ${cnpj}) inativado e boletos cancelados." } } } },
-    { id: "marcar_ticket", nome: "Marcar ticket", tipo: "SET_TAG", config: { alvo: "ticket", acao: "adicionar_tag", valor: "remocao_cadastro_executada" } },
+    { id: "marcar_ticket", nome: "Marcar ticket", tipo: "SET_TAG", config: { alvo: "ticket", acao: "adicionar_tag", valor: "remocao_cadastro_executada" }, proximoStep: "__END__" },
     { id: "cliente_nao_encontrado", nome: "Cliente não encontrado", tipo: "RESPOND", config: { templatePorCanal: { WHATSAPP: "Não encontrei cadastro com esse CNPJ. Pode verificar?", EMAIL: "Não localizamos cadastro vinculado ao CNPJ informado.", RECLAMEAQUI: { publico: "Estamos verificando a situação.", privado: "Não encontramos cadastro para o CNPJ informado." } } } },
   ] as WorkflowStep[],
 };

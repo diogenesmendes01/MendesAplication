@@ -104,7 +104,7 @@ export async function executeStep(
 ): Promise<StepResult> {
   const execution = await prisma.workflowExecution.findUnique({
     where: { id: executionId },
-    include: { workflow: true },
+    include: { workflow: true, ticket: { include: { channel: true } } },
   });
 
   if (!execution) return { success: false, error: "Execution not found" };
@@ -116,10 +116,12 @@ export async function executeStep(
   const step = steps[stepIndex];
   const stepData = execution.stepData as Record<string, unknown>;
 
+  const ticketChannel = (execution.ticket?.channel?.type ?? "WHATSAPP") as ChannelName;
+
   const ctx: BlockContext = {
     companyId: execution.companyId,
     ticketId: execution.ticketId,
-    channel: "WHATSAPP",
+    channel: ticketChannel,
     stepData,
   };
 
@@ -172,8 +174,22 @@ export async function advanceWorkflow(
   } else {
     const currentStep = steps[execution.currentStepIndex];
     if (currentStep?.proximoStep) {
+      // __END__ sentinel signals explicit workflow completion
+      if (currentStep.proximoStep === "__END__") {
+        await prisma.workflowExecution.update({
+          where: { id: executionId },
+          data: { status: "COMPLETED", completedAt: new Date(), currentStepIndex: execution.currentStepIndex },
+        });
+        return { done: true, nextStepIndex: -1, status: "COMPLETED" };
+      }
       nextIndex = steps.findIndex((s) => s.id === currentStep.proximoStep);
-      if (nextIndex === -1) nextIndex = execution.currentStepIndex + 1;
+      if (nextIndex === -1) {
+        await prisma.workflowExecution.update({
+          where: { id: executionId },
+          data: { status: "FAILED", error: `Target step "${currentStep.proximoStep}" not found`, completedAt: new Date() },
+        });
+        return { done: true, nextStepIndex: -1, status: "FAILED" };
+      }
     } else {
       nextIndex = execution.currentStepIndex + 1;
     }
