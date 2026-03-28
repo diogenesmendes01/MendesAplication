@@ -124,6 +124,54 @@ function resolveLastSyncDate(
 }
 
 /**
+ * Calculates the Reclame Aqui SLA deadline: 10 business days from creation.
+ * Reclame Aqui considers only weekdays (Mon-Fri) for the 10-day deadline.
+ * If the deadline is not met, the complaint counts as "Não respondida".
+ */
+export function calculateRaSlaDeadline(creationDate: string | Date): Date {
+  let date = new Date(creationDate);
+  let businessDays = 0;
+  while (businessDays < 10) {
+    date.setDate(date.getDate() + 1);
+    const dayOfWeek = date.getDay();
+    if (dayOfWeek !== 0 && dayOfWeek !== 6) businessDays++;
+  }
+  return date;
+}
+
+/**
+ * Calculates remaining business days until the RA SLA deadline.
+ * Returns negative values if deadline has passed.
+ */
+export function getRaBusinessDaysRemaining(deadline: Date, from: Date = new Date()): number {
+  const target = new Date(deadline);
+  const cursor = new Date(from);
+  cursor.setHours(0, 0, 0, 0);
+  target.setHours(0, 0, 0, 0);
+
+  if (cursor >= target) {
+    // Count negative business days
+    let days = 0;
+    const d = new Date(target);
+    while (d < cursor) {
+      d.setDate(d.getDate() + 1);
+      const dow = d.getDay();
+      if (dow !== 0 && dow !== 6) days--;
+    }
+    return days;
+  }
+
+  let days = 0;
+  const d = new Date(cursor);
+  while (d < target) {
+    d.setDate(d.getDate() + 1);
+    const dow = d.getDay();
+    if (dow !== 0 && dow !== 6) days++;
+  }
+  return days;
+}
+
+/**
  * Builds the message content for an interaction, handling auto-moderation
  * (type 151) by prefixing with [Auto-Moderação] and appending the
  * moderated title from detail_type 40 if present.
@@ -419,6 +467,7 @@ async function createNewTicket(
         raWhatsappEvalDone: raTicket.whatsapp?.evaluated ?? null,
         raActive: raTicket.active ?? true,
         raModerationStatus: raTicket.moderation?.status ?? null,
+        raSlaDeadline: calculateRaSlaDeadline(raTicket.creation_date),
         raConsumerConsideration: raTicket.consumer_consideration ?? null,
         raCompanyConsideration: raTicket.company_consideration ?? null,
         tags: ["reclame-aqui"],
@@ -488,6 +537,7 @@ async function updateExistingTicket(
         raWhatsappEvalDone: raTicket.whatsapp?.evaluated ?? null,
         raActive: raTicket.active ?? true,
         raModerationStatus: raTicket.moderation?.status ?? null,
+        raSlaDeadline: calculateRaSlaDeadline(raTicket.creation_date),
         raConsumerConsideration: raTicket.consumer_consideration ?? null,
         raCompanyConsideration: raTicket.company_consideration ?? null,
       },

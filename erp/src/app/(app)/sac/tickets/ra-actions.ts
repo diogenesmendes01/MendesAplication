@@ -67,6 +67,7 @@ export interface RaTicketContext {
   raModerationStatus: string | null;
   raFrozen: boolean;
   raActive: boolean;
+  raSlaDeadline: string | null;
   consumerConsideration: string | null;
   companyConsideration: string | null;
   whatsappEval: { sent: boolean | null; done: boolean | null } | null;
@@ -250,6 +251,7 @@ export async function getRaTicketContext(
     raModerationStatus: (ticket as any).raModerationStatus ?? null,
     raFrozen: ticket.raFrozen ?? false,
     raActive: (ticket as any).raActive ?? true,
+    raSlaDeadline: (ticket as any).raSlaDeadline?.toISOString() ?? null,
     consumerConsideration: ticket.raConsumerConsideration,
     companyConsideration: ticket.raCompanyConsideration,
     whatsappEval: (ticket as any).raWhatsappEvalSent != null ? {

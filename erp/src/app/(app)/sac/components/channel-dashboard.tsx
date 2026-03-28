@@ -17,6 +17,8 @@ import {
   TrendingUp,
   Hourglass,
   Loader2,
+  AlertTriangle,
+  ShieldAlert,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useCompany } from "@/contexts/company-context";
@@ -194,6 +196,32 @@ function ReclameAquiKpis({
           }
         />
       </div>
+
+      {/* RA SLA (10 dias úteis) */}
+      {((data.raSlaAtRisk ?? 0) > 0 || (data.raSlaBreached ?? 0) > 0) && (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <KpiCard
+            title="SLA RA: Em Risco"
+            value={data.raSlaAtRisk ?? 0}
+            icon={AlertTriangle}
+            className={
+              (data.raSlaAtRisk ?? 0) > 0
+                ? "border-yellow-200 bg-yellow-50 dark:border-yellow-900 dark:bg-yellow-950"
+                : undefined
+            }
+          />
+          <KpiCard
+            title="SLA RA: Estourado"
+            value={data.raSlaBreached ?? 0}
+            icon={ShieldAlert}
+            className={
+              (data.raSlaBreached ?? 0) > 0
+                ? "border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950"
+                : undefined
+            }
+          />
+        </div>
+      )}
 
       {/* RA Reputation Card */}
       <RaReputationCard companyId={companyId} />

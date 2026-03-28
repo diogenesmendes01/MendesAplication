@@ -46,6 +46,8 @@ export interface ChannelDashboardData {
   total?: number;
   taxaResolucao?: number;
   aguardandoModeracao?: number;
+  raSlaAtRisk?: number;
+  raSlaBreached?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -329,7 +331,7 @@ export async function getChannelDashboard(
   // RECLAMEAQUI
   // -------------------------------------------------------------------------
   if (channelType === "RECLAMEAQUI") {
-    const [ticketsMeta, respondidas, resolvidas, aguardandoModeracao] =
+    const [ticketsMeta, respondidas, resolvidas, aguardandoModeracao, raSlaAtRisk, raSlaBreached] =
       await Promise.all([
         prisma.ticket.findMany({
           where: { ...channelWhere },
@@ -347,6 +349,12 @@ export async function getChannelDashboard(
         prisma.ticket.count({
           where: { ...channelWhere, raCanModerate: true },
         }),
+        prisma.ticket.count({
+          where: { ...channelWhere, raSlaDeadline: { not: null }, slaAtRisk: true, slaBreached: false, status: { in: ["OPEN", "IN_PROGRESS", "WAITING_CLIENT"] } },
+        }),
+        prisma.ticket.count({
+          where: { ...channelWhere, raSlaDeadline: { not: null }, slaBreached: true, status: { in: ["OPEN", "IN_PROGRESS", "WAITING_CLIENT"] } },
+        }),
       ]);
 
     const total = ticketsMeta.length;
@@ -359,7 +367,7 @@ export async function getChannelDashboard(
         : 0;
     const taxaResolucao = total > 0 ? (resolvidas / total) * 100 : 0;
 
-    return { notaGeral, respondidas, total, taxaResolucao, aguardandoModeracao };
+    return { notaGeral, respondidas, total, taxaResolucao, aguardandoModeracao, raSlaAtRisk, raSlaBreached };
   }
 
   return {};
