@@ -1,7 +1,7 @@
 import { Job } from "bullmq";
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
-import { readFile } from "fs/promises";
+import { readFile, stat } from "fs/promises";
 import path from "path";
 import { extractCnpjs } from "@/lib/ai/cnpj-utils";
 
@@ -39,6 +39,16 @@ const ALL_SUPPORTED = [
   SUPPORTED_XLSX,
   SUPPORTED_DOCX,
 ];
+
+
+/** Maximum file size allowed for extraction (50 MB) */
+export const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024;
+
+/** Maximum image size for Vision API base64 encoding (5 MB) */
+export const MAX_VISION_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
+
+/** rawText length threshold for warning log (100k chars) */
+const RAW_TEXT_WARN_LENGTH = 100_000;
 
 const SUMMARY_PROMPT = `Analise o texto extraído de um anexo de atendimento ao cliente e retorne JSON:
 {
@@ -93,9 +103,10 @@ export async function processAttachmentExtraction(
       return;
     }
 
-    // 2. Read file from storage
-    const fileBuffer = await readFileFromStorage(storagePath);
-    if (!fileBuffer || fileBuffer.length === 0) {
+    // 2. Read file from storage (with path traversal + size validation)
+    const fileBuffer = await readFileFromStorage(storagePath, attachmentId, startTime);
+    if (!fileBuffer) return; // already marked as failed inside readFileFromStorage
+    if (fileBuffer.length === 0) {
       await markFailed(
         attachmentId,
         "Arquivo vazio ou não encontrado",
@@ -117,6 +128,14 @@ export async function processAttachmentExtraction(
     }
 
     const { rawText, method } = result;
+
+    // 3.5. Warn if rawText is very large
+    if (rawText.length > RAW_TEXT_WARN_LENGTH) {
+      logger.warn(
+        { attachmentId, rawTextLength: rawText.length },
+        "[extraction] rawText exceeds 100k chars \u2014 storing as-is but may impact performance"
+      );
+    }
 
     // 4. Generate summary + metadata via LLM
     const tokenCount = estimateTokens(rawText);
@@ -320,6 +339,41 @@ async function tryVision(
   attachmentId: string
 ): Promise<ExtractionResult | null> {
   try {
+    // Guard: skip vision for images larger than 5 MB
+    if (
+      SUPPORTED_IMAGES.includes(mimeType) &&
+      fileBuffer.length > MAX_VISION_IMAGE_SIZE_BYTES
+    ) {
+      let resized = false;
+
+      // Attempt to resize with sharp if available
+      try {
+        const sharp = (await import("sharp")).default;
+        const resizedBuffer = await sharp(fileBuffer)
+          .resize({ width: 2048, height: 2048, fit: "inside", withoutEnlargement: true })
+          .jpeg({ quality: 80 })
+          .toBuffer();
+
+        if (resizedBuffer.length <= MAX_VISION_IMAGE_SIZE_BYTES) {
+          const base64 = resizedBuffer.toString("base64");
+          const text = await callVisionModel(base64, "image/jpeg");
+          if (isExtractionUsable(text)) {
+            return { rawText: text, method: "vision" };
+          }
+          return null;
+        }
+        resized = true; // resized but still too large
+      } catch {
+        // sharp not available
+      }
+
+      logger.warn(
+        { attachmentId, sizeBytes: fileBuffer.length, resized },
+        "[extraction] Image too large for vision API \u2014 skipping"
+      );
+      return null;
+    }
+
     const base64 = fileBuffer.toString("base64");
     const text = await callVisionModel(base64, mimeType);
     if (isExtractionUsable(text)) {
@@ -498,8 +552,48 @@ async function markFailed(
   logger.warn({ attachmentId, error }, "[extraction] Failed");
 }
 
-async function readFileFromStorage(storagePath: string): Promise<Buffer> {
-  const uploadsDir = path.join(process.cwd(), "uploads");
-  const fullPath = path.join(uploadsDir, storagePath);
+/**
+ * Reads a file from the uploads directory with path traversal protection
+ * and file size validation.
+ *
+ * Returns null (and marks extraction as failed) if validation fails.
+ */
+async function readFileFromStorage(
+  storagePath: string,
+  attachmentId: string,
+  startTime: number
+): Promise<Buffer | null> {
+  const uploadsDir = path.resolve(process.cwd(), "uploads");
+  const fullPath = path.resolve(uploadsDir, storagePath);
+
+  // Path traversal protection: ensure resolved path is inside uploads/
+  if (!fullPath.startsWith(uploadsDir + path.sep) && fullPath !== uploadsDir) {
+    logger.warn(
+      { attachmentId, storagePath, resolvedPath: fullPath },
+      "[extraction] Path traversal detected \u2014 blocking file access"
+    );
+    await markFailed(attachmentId, "Path traversal detected", startTime);
+    return null;
+  }
+
+  // File size check before reading into memory
+  try {
+    const fileStat = await stat(fullPath);
+    if (fileStat.size > MAX_FILE_SIZE_BYTES) {
+      logger.warn(
+        { attachmentId, sizeBytes: fileStat.size, maxBytes: MAX_FILE_SIZE_BYTES },
+        "[extraction] File too large \u2014 skipping extraction"
+      );
+      await markFailed(attachmentId, "File too large", startTime);
+      return null;
+    }
+  } catch (e) {
+    // stat failed \u2014 let readFile handle the error naturally
+    logger.warn(
+      { attachmentId, error: String(e) },
+      "[extraction] Could not stat file \u2014 attempting read"
+    );
+  }
+
   return readFile(fullPath);
 }

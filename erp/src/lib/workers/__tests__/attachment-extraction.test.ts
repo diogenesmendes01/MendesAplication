@@ -22,8 +22,10 @@ vi.mock("@/lib/logger", () => ({
 }));
 
 const mockReadFile = vi.fn();
+const mockStat = vi.fn();
 vi.mock("fs/promises", () => ({
   readFile: (...args: unknown[]) => mockReadFile(...args),
+  stat: (...args: unknown[]) => mockStat(...args),
 }));
 
 const mockPdfParse = vi.fn();
@@ -55,6 +57,7 @@ import {
   processAttachmentExtraction,
   isExtractionUsable,
   estimateTokens,
+  MAX_FILE_SIZE_BYTES,
 } from "../attachment-extraction";
 import type { ExtractionJobData } from "../attachment-extraction";
 
@@ -80,11 +83,17 @@ function mockSummaryResponse(summary: string, metadata: Record<string, unknown> 
   });
 }
 
+/** Default stat mock for a normal-sized file */
+function mockStatNormal(size = 1024) {
+  mockStat.mockResolvedValue({ size });
+}
+
 describe("attachment-extraction worker", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.OPENAI_API_KEY = "test-key";
     mockReadFile.mockResolvedValue(Buffer.from("test content"));
+    mockStatNormal();
   });
 
   describe("isExtractionUsable", () => {
@@ -104,6 +113,117 @@ describe("attachment-extraction worker", () => {
     it("estimates roughly 1 token per 4 chars", () => {
       expect(estimateTokens("abcdefgh")).toBe(2);
       expect(estimateTokens("a".repeat(100))).toBe(25);
+    });
+  });
+
+
+  // ─── Security: Path Traversal ────────────────────────────────────────────
+
+  describe("path traversal protection", () => {
+    it("blocks path traversal with ../", async () => {
+      await processAttachmentExtraction(
+        makeJob({ storagePath: "../../etc/passwd" })
+      );
+      expect(mockPrismaUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { attachmentId: "att-123" },
+          data: expect.objectContaining({
+            status: "failed",
+            errorMessage: "Path traversal detected",
+          }),
+        })
+      );
+      expect(mockReadFile).not.toHaveBeenCalled();
+    });
+
+    it("blocks absolute path injection", async () => {
+      await processAttachmentExtraction(
+        makeJob({ storagePath: "/etc/shadow" })
+      );
+      expect(mockPrismaUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { attachmentId: "att-123" },
+          data: expect.objectContaining({
+            status: "failed",
+            errorMessage: "Path traversal detected",
+          }),
+        })
+      );
+      expect(mockReadFile).not.toHaveBeenCalled();
+    });
+
+    it("blocks encoded traversal attempt", async () => {
+      await processAttachmentExtraction(
+        makeJob({ storagePath: "../sensitive/data.pdf" })
+      );
+      expect(mockPrismaUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: "failed",
+            errorMessage: "Path traversal detected",
+          }),
+        })
+      );
+    });
+
+    it("allows legitimate nested paths within uploads/", async () => {
+      mockPdfParse.mockResolvedValue({ text: "Valid PDF content for extraction test with enough text" });
+      mockSummaryResponse("Test doc", {});
+      await processAttachmentExtraction(
+        makeJob({ storagePath: "company1/2026-03/subfolder/file.pdf" })
+      );
+      expect(mockReadFile).toHaveBeenCalled();
+      expect(mockPrismaUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: "completed" }),
+        })
+      );
+    });
+  });
+
+  // ─── Security: File Size Limit ───────────────────────────────────────────
+
+  describe("file size limit", () => {
+    it("blocks files larger than MAX_FILE_SIZE_BYTES (50 MB)", async () => {
+      mockStat.mockResolvedValue({ size: MAX_FILE_SIZE_BYTES + 1 });
+      await processAttachmentExtraction(makeJob());
+      expect(mockPrismaUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { attachmentId: "att-123" },
+          data: expect.objectContaining({
+            status: "failed",
+            errorMessage: "File too large",
+          }),
+        })
+      );
+      expect(mockReadFile).not.toHaveBeenCalled();
+    });
+
+    it("allows files exactly at the size limit", async () => {
+      mockStat.mockResolvedValue({ size: MAX_FILE_SIZE_BYTES });
+      mockPdfParse.mockResolvedValue({ text: "Valid content within size limit with enough text here" });
+      mockSummaryResponse("Test doc", {});
+      await processAttachmentExtraction(makeJob());
+      expect(mockReadFile).toHaveBeenCalled();
+      expect(mockPrismaUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: "completed" }),
+        })
+      );
+    });
+
+    it("proceeds normally when stat fails (lets readFile handle error)", async () => {
+      mockStat.mockRejectedValue(new Error("ENOENT"));
+      mockReadFile.mockRejectedValue(new Error("ENOENT: file not found"));
+      await processAttachmentExtraction(makeJob());
+      expect(mockPrismaUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: "failed",
+            errorMessage: expect.stringContaining("ENOENT"),
+          }),
+        })
+      );
     });
   });
 
@@ -242,6 +362,22 @@ describe("attachment-extraction worker", () => {
       expect(mockPrismaUpdate).toHaveBeenCalledWith(expect.objectContaining({
         where: { attachmentId: "att-123" },
         data: expect.objectContaining({ status: "completed", rawText: longText }),
+      }));
+    });
+
+
+    it("logs warning when rawText exceeds 100k chars", async () => {
+      const hugeText = "B".repeat(150_000);
+      mockPdfParse.mockResolvedValue({ text: hugeText });
+      mockSummaryResponse("Documento enorme", {});
+      await processAttachmentExtraction(makeJob());
+      const { logger } = await import("@/lib/logger");
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ attachmentId: "att-123", rawTextLength: 150_000 }),
+        expect.stringContaining("rawText exceeds 100k chars")
+      );
+      expect(mockPrismaUpdate).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({ status: "completed", rawText: hugeText }),
       }));
     });
 
