@@ -373,7 +373,7 @@ export async function runAgent(
   companyId: string,
   incomingMessage: string,
   channel: "WHATSAPP" | "EMAIL" | "RECLAMEAQUI" = "WHATSAPP",
-  options?: { suggestionMode?: boolean },
+  options?: { suggestionMode?: boolean; raContext?: import("@/lib/reclameaqui/types").RaAiContext },
 ): Promise<AgentResult> {
   const startTime = Date.now();
   const timeout = parseInt(process.env.AI_TIMEOUT || "30000", 10);
@@ -541,7 +541,7 @@ export async function runAgent(
   // Build channel-specific system prompt
   let systemPrompt: string;
   if (channel === "RECLAMEAQUI") {
-    systemPrompt = buildReclameAquiSystemPrompt(persona, clientName, historyContext);
+    systemPrompt = buildReclameAquiSystemPrompt(persona, clientName, historyContext, options?.raContext);
   } else if (channel === "EMAIL") {
     systemPrompt = buildEmailSystemPrompt(persona, clientName, historyContext, aiConfig.emailSignature);
   } else {
@@ -932,7 +932,8 @@ ${CNPJ_INSTRUCTIONS}${ATTACHMENT_INSTRUCTIONS}
 function buildReclameAquiSystemPrompt(
   persona: string,
   clientName: string,
-  historyContext: string
+  historyContext: string,
+  raContext?: import("@/lib/reclameaqui/types").RaAiContext,
 ): string {
   let prompt = `# Assistente de Atendimento - MendesERP (Reclame Aqui)
 
@@ -977,6 +978,47 @@ ${CNPJ_INSTRUCTIONS}${ATTACHMENT_INSTRUCTIONS}
 ## CONTEXTO ATUAL:
 - Canal: Reclame Aqui
 - Reclamante: ${clientName}`;
+
+  // Enrich prompt with RA ticket context when available
+  if (raContext) {
+    prompt += `\n\n## CONTEXTO ENRIQUECIDO DO TICKET RA:`;
+    if (raContext.complaintTitle) {
+      prompt += `\n- Título da reclamação: ${raContext.complaintTitle}`;
+    }
+    if (raContext.reason) {
+      prompt += `\n- Motivo/Categoria RA: ${raContext.reason}`;
+    }
+    if (raContext.feeling) {
+      prompt += `\n- Sentimento do consumidor: ${raContext.feeling}`;
+    }
+    if (raContext.categories.length > 0) {
+      prompt += `\n- Categorias: ${raContext.categories.join(", ")}`;
+    }
+    if (raContext.rating) {
+      prompt += `\n- Avaliação: ${raContext.rating}`;
+    }
+    if (raContext.resolvedIssue !== null) {
+      prompt += `\n- Problema resolvido: ${raContext.resolvedIssue ? "Sim" : "Não"}`;
+    }
+    if (raContext.interactionsCount > 0) {
+      prompt += `\n- Número de interações: ${raContext.interactionsCount}`;
+    }
+    if (raContext.previousResponseContent) {
+      prompt += `\n- Resposta anterior da empresa: ${raContext.previousResponseContent.substring(0, 500)}`;
+    }
+
+    // Contextual instructions
+    prompt += `\n\n## INSTRUÇÕES BASEADAS NO CONTEXTO:`;
+    if (raContext.feeling && ["negativo", "muito negativo", "insatisfeito", "frustrado", "raiva"].some(f => raContext.feeling!.toLowerCase().includes(f))) {
+      prompt += `\n- ⚠️ O consumidor está com sentimento NEGATIVO. Use tom mais empático e acolhedor. Reconheça a frustração antes de propor soluções.`;
+    }
+    if (raContext.isReplica) {
+      prompt += `\n- ⚠️ Esta é uma RÉPLICA do consumidor (ele respondeu após a primeira resposta da empresa). Reconheça que é uma continuação, não repita o que já foi dito e aborde diretamente o novo ponto levantado.`;
+    }
+    if (raContext.previousResponseContent) {
+      prompt += `\n- ⚠️ Já existe uma resposta anterior da empresa. NÃO repita o conteúdo. Avance na resolução ou aborde novos pontos.`;
+    }
+  }
 
   if (historyContext) {
     prompt += `\n\n## HISTÓRICO DA RECLAMAÇÃO:\n${historyContext}`;

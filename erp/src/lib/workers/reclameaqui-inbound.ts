@@ -356,6 +356,18 @@ async function updateExistingTicket(
         companyId,
         messageContent: interaction.message,
         channel: "RECLAMEAQUI" as const,
+        raContext: {
+          reason: raTicket.ra_reason ?? null,
+          feeling: raTicket.ra_feeling ?? null,
+          categories: raTicket.categories?.map((c: any) => c.description) ?? [],
+          customerName: raTicket.customer?.name ?? null,
+          complaintTitle: raTicket.complaint_title ?? null,
+          previousResponseContent: raTicket.complaint_response_content ?? null,
+          resolvedIssue: raTicket.resolved_issue ?? null,
+          rating: raTicket.rating ?? null,
+          interactionsCount: raTicket.interactions?.length ?? 0,
+          isReplica: [7, 20].includes(raTicket.ra_status?.id ?? 0),
+        },
       });
       logger.info(
         `[reclameaqui-inbound] Enqueued ai-agent job for ticket ${existingTicket.id}`

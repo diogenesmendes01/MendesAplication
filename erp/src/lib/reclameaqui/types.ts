@@ -404,3 +404,20 @@ export interface RaAttachmentResponse {
   url: string;
   [key: string]: unknown;
 }
+
+// ──────────────────────────────────────────────
+// AI Context (enriched payload for ai-agent)
+// ──────────────────────────────────────────────
+
+export interface RaAiContext {
+  reason: string | null;
+  feeling: string | null;
+  categories: string[];
+  customerName: string | null;
+  complaintTitle: string | null;
+  previousResponseContent: string | null;
+  resolvedIssue: boolean | null;
+  rating: string | null;
+  interactionsCount: number;
+  isReplica: boolean;
+}
