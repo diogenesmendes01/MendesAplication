@@ -33,6 +33,17 @@ interface SyncSummary {
   skippedByCount: boolean;
 }
 
+/** Metrics counters tracked throughout a sync run */
+interface SyncMetrics {
+  ticketsProcessed: number;
+  ticketsCreated: number;
+  ticketsUpdated: number;
+  messagesCreated: number;
+  apiCalls: number;
+  skippedByCount: number;
+  errors: number;
+}
+
 /** Prisma transaction client type */
 type TxClient = Prisma.TransactionClient;
 
@@ -282,7 +293,8 @@ async function syncInteractionAttachments(
   ticketId: string,
   messageId: string,
   details: RaInteractionDetail[],
-  raClient?: ReclameAquiClient
+  raClient?: ReclameAquiClient,
+  metrics?: SyncMetrics
 ): Promise<void> {
   if (!details?.length) return;
 
@@ -310,6 +322,7 @@ async function syncInteractionAttachments(
     if (!url && raClient) {
       try {
         const linkResult = await raClient.getAttachmentLink(extId);
+        if (metrics) metrics.apiCalls++;
         url = linkResult?.url || "";
       } catch {
         logger.warn(
@@ -345,12 +358,15 @@ async function processRaTicket(
   companyId: string,
   channelId: string,
   summary: SyncSummary,
+  metrics: SyncMetrics,
   raClient?: ReclameAquiClient
 ): Promise<void> {
   const externalId = raTicket.source_external_id;
   const raStatusId = raTicket.ra_status.id;
   const raStatusName = raTicket.ra_status.name;
   const ticketStatus = mapRaStatusToTicketStatus(raStatusId);
+
+  metrics.ticketsProcessed++;
 
   // Check if ticket already exists
   const existingTicket = await prisma.ticket.findFirst({
@@ -366,11 +382,13 @@ async function processRaTicket(
   });
 
   if (!existingTicket) {
-    await createNewTicket(raTicket, companyId, channelId, ticketStatus, raStatusId, raStatusName, raClient);
+    await createNewTicket(raTicket, companyId, channelId, ticketStatus, raStatusId, raStatusName, metrics, raClient);
     summary.created++;
+    metrics.ticketsCreated++;
   } else {
-    await updateExistingTicket(existingTicket, raTicket, companyId, ticketStatus, raStatusId, raStatusName, raClient);
+    await updateExistingTicket(existingTicket, raTicket, companyId, ticketStatus, raStatusId, raStatusName, metrics, raClient);
     summary.updated++;
+    metrics.ticketsUpdated++;
   }
 }
 
@@ -381,6 +399,7 @@ async function createNewTicket(
   ticketStatus: TicketStatus,
   raStatusId: number,
   raStatusName: string,
+  metrics: SyncMetrics,
   raClient?: ReclameAquiClient
 ): Promise<void> {
   const customer = raTicket.customer;
@@ -481,7 +500,7 @@ async function createNewTicket(
 
     // Create messages from interactions (+ their attachments)
     for (const interaction of raTicket.interactions) {
-      await createTicketMessage(tx, ticket.id, interaction, raClient);
+      await createTicketMessage(tx, ticket.id, interaction, metrics, raClient);
     }
 
     logger.info(
@@ -536,6 +555,7 @@ async function updateExistingTicket(
   ticketStatus: TicketStatus,
   raStatusId: number,
   raStatusName: string,
+  metrics: SyncMetrics,
   raClient?: ReclameAquiClient
 ): Promise<void> {
   const existingMessageIds = new Set(
@@ -547,6 +567,8 @@ async function updateExistingTicket(
   const newInteractions = raTicket.interactions.filter(
     (i) => !existingMessageIds.has(i.ticket_interaction_id)
   );
+
+  metrics.skippedByCount += raTicket.interactions.length - newInteractions.length;
 
   // Update ticket RA fields + sync ticket-level attachments
   await prisma.$transaction(async (tx) => {
@@ -587,7 +609,7 @@ async function updateExistingTicket(
   // Create new messages
   for (const interaction of newInteractions) {
     try {
-      await createTicketMessage(prisma, existingTicket.id, interaction, raClient);
+      await createTicketMessage(prisma, existingTicket.id, interaction, metrics, raClient);
     } catch (err: unknown) {
       // Handle unique constraint violation (idempotent)
       if (
@@ -643,6 +665,7 @@ async function createTicketMessage(
   tx: TxClient,
   ticketId: string,
   interaction: RaInteraction,
+  metrics: SyncMetrics,
   raClient?: ReclameAquiClient
 ): Promise<void> {
   const direction = mapInteractionDirection(
@@ -667,13 +690,16 @@ async function createTicketMessage(
     },
   });
 
+  metrics.messagesCreated++;
+
   // Sync interaction-level attachments (detail_type 15/33)
   await syncInteractionAttachments(
     tx,
     ticketId,
     message.id,
     interaction.details,
-    raClient
+    raClient,
+    metrics
   );
 }
 
@@ -721,6 +747,16 @@ export async function processReclameAquiInbound(_job: Job): Promise<void> {
 
   for (const ch of channels) {
     const summary: SyncSummary = { total: 0, created: 0, updated: 0, errors: 0, skippedByCount: false };
+    const metrics: SyncMetrics = {
+      ticketsProcessed: 0,
+      ticketsCreated: 0,
+      ticketsUpdated: 0,
+      messagesCreated: 0,
+      apiCalls: 0,
+      skippedByCount: 0,
+      errors: 0,
+    };
+    const startTime = Date.now();
 
     let config: ReclameAquiChannelConfig;
     try {
@@ -749,6 +785,7 @@ export async function processReclameAquiInbound(_job: Job): Promise<void> {
 
     // Check ticket API availability before sync
     const isAvailable = await client.checkTicketAvailability();
+    metrics.apiCalls++;
     if (!isAvailable) {
       logger.warn(`[reclameaqui-inbound] Ticket API indisponível, sync skipado para channel ${ch.id}`);
       continue;
@@ -760,6 +797,7 @@ export async function processReclameAquiInbound(_job: Job): Promise<void> {
     try {
       // Authenticate
       await client.authenticate();
+      metrics.apiCalls++;
 
       // ── Count-first check ──────────────────────────────────────
       // Before paginating, check if anything changed since last sync.
@@ -805,15 +843,17 @@ export async function processReclameAquiInbound(_job: Job): Promise<void> {
           page_number: pageNumber,
           sort: "asc",
         });
+        metrics.apiCalls++;
 
         const tickets = response.data || [];
         summary.total += tickets.length;
 
         for (const raTicket of tickets) {
           try {
-            await processRaTicket(raTicket, ch.companyId, ch.id, summary, client);
+            await processRaTicket(raTicket, ch.companyId, ch.id, summary, metrics, client);
           } catch (_err) {
             summary.errors++;
+            metrics.errors++;
             logger.error(
               `[reclameaqui-inbound] Error processing RA ticket ${raTicket.source_external_id}`
             );
@@ -843,13 +883,36 @@ export async function processReclameAquiInbound(_job: Job): Promise<void> {
         },
       });
 
+      const durationMs = Date.now() - startTime;
+
+      // Structured metrics log
       logger.info(
-        `[reclameaqui-inbound] Sync complete for channel ${ch.id}: ` +
-          `total=${summary.total}, created=${summary.created}, ` +
-          `updated=${summary.updated}, errors=${summary.errors}`
+        {
+          event: "ra_sync_completed",
+          companyId: ch.companyId,
+          channelId: ch.id,
+          ticketsProcessed: metrics.ticketsProcessed,
+          ticketsCreated: metrics.ticketsCreated,
+          ticketsUpdated: metrics.ticketsUpdated,
+          messagesCreated: metrics.messagesCreated,
+          durationMs,
+          apiCalls: metrics.apiCalls,
+          skippedByCount: metrics.skippedByCount,
+        },
+        `[reclameaqui-inbound] Sync completed for channel ${ch.id}`
       );
-    } catch (_err) {
+    } catch (err) {
+      const durationMs = Date.now() - startTime;
+
+      // Structured error log
       logger.error(
+        {
+          event: "ra_sync_failed",
+          companyId: ch.companyId,
+          channelId: ch.id,
+          error: err instanceof Error ? err.message : String(err),
+          durationMs,
+        },
         `[reclameaqui-inbound] Error syncing channel ${ch.id}`
       );
     }

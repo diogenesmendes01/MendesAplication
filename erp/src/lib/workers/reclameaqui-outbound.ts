@@ -509,12 +509,15 @@ async function handleFinishPrivate(ticketId: string): Promise<void> {
 export async function processReclameAquiOutbound(job: Job<RaOutboundJobData>): Promise<void> {
   const data = job.data;
   const jobType = job.name;
+  const startTime = Date.now();
 
   logger.info(`[reclameaqui-outbound] Processing job ${job.id}: type=${jobType}, ticketId=${data.ticketId}`);
 
-  switch (jobType) {
-    case "RA_SEND_PUBLIC":
-      return handleSendPublic(data.ticketId, (data as RaSendPublicJobData).message);
+  try {
+    switch (jobType) {
+      case "RA_SEND_PUBLIC":
+        await handleSendPublic(data.ticketId, (data as RaSendPublicJobData).message);
+        break;
 
     case "RA_SEND_PRIVATE":
       return handleSendPrivate(
@@ -525,16 +528,18 @@ export async function processReclameAquiOutbound(job: Job<RaOutboundJobData>): P
         (data as RaSendPrivateJobData).files
       );
 
-    case "RA_SEND_DUAL":
-      return handleSendDual(
-        data.ticketId,
-        (data as RaSendDualJobData).privateMessage,
-        (data as RaSendDualJobData).publicMessage,
-        (data as RaSendDualJobData).email
-      );
+      case "RA_SEND_DUAL":
+        await handleSendDual(
+          data.ticketId,
+          (data as RaSendDualJobData).privateMessage,
+          (data as RaSendDualJobData).publicMessage,
+          (data as RaSendDualJobData).email
+        );
+        break;
 
-    case "RA_REQUEST_EVALUATION":
-      return handleRequestEvaluation(data.ticketId);
+      case "RA_REQUEST_EVALUATION":
+        await handleRequestEvaluation(data.ticketId);
+        break;
 
     case "RA_REQUEST_MODERATION":
       return handleRequestModeration(
@@ -546,10 +551,38 @@ export async function processReclameAquiOutbound(job: Job<RaOutboundJobData>): P
         (data as RaRequestModerationJobData).files
       );
 
-    case "RA_FINISH_PRIVATE":
-      return handleFinishPrivate(data.ticketId);
+      case "RA_FINISH_PRIVATE":
+        await handleFinishPrivate(data.ticketId);
+        break;
 
-    default:
-      throw new Error(`[reclameaqui-outbound] Unknown job type: ${jobType}`);
+      default:
+        throw new Error(`[reclameaqui-outbound] Unknown job type: ${jobType}`);
+    }
+
+    const durationMs = Date.now() - startTime;
+    logger.info(
+      {
+        event: "ra_outbound_completed",
+        jobType,
+        ticketId: data.ticketId,
+        durationMs,
+        attempt: job.attemptsMade + 1,
+      },
+      `[reclameaqui-outbound] Job ${job.id} completed`
+    );
+  } catch (err) {
+    const durationMs = Date.now() - startTime;
+    logger.error(
+      {
+        event: "ra_outbound_failed",
+        jobType,
+        ticketId: data.ticketId,
+        attempts: job.attemptsMade + 1,
+        error: err instanceof Error ? err.message : String(err),
+        code: err instanceof ReclameAquiError ? err.code : undefined,
+      },
+      `[reclameaqui-outbound] Job ${job.id} failed`
+    );
+    throw err;
   }
 }
