@@ -23,6 +23,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { useCompany } from "@/contexts/company-context";
 import {
   listSuggestions,
@@ -34,6 +41,7 @@ import {
   rejectSuggestionAction,
 } from "../tickets/[id]/suggestion-actions";
 import { toast } from "sonner";
+import { timeAgo, confidenceColor } from "@/utils/suggestion-helpers";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -46,17 +54,6 @@ const dateFmt = new Intl.DateTimeFormat("pt-BR", {
   hour: "2-digit",
   minute: "2-digit",
 });
-
-function timeAgo(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const minutes = Math.floor(diff / 60000);
-  if (minutes < 1) return "agora";
-  if (minutes < 60) return `há ${minutes}min`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `há ${hours}h`;
-  const days = Math.floor(hours / 24);
-  return `há ${days}d`;
-}
 
 function channelLabel(channel: string): string {
   switch (channel) {
@@ -74,12 +71,6 @@ function channelColor(channel: string): string {
     case "RECLAMEAQUI": return "border-purple-300 text-purple-700 bg-purple-50";
     default: return "";
   }
-}
-
-function confidenceColor(confidence: number): string {
-  if (confidence >= 0.8) return "text-green-700 bg-green-100";
-  if (confidence >= 0.6) return "text-yellow-700 bg-yellow-100";
-  return "text-red-700 bg-red-100";
 }
 
 function statusIcon(status: string) {
@@ -187,6 +178,7 @@ function SuggestionRow({
   onUpdate: () => void;
 }) {
   const [loading, setLoading] = useState(false);
+  const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
   const isPending = item.status === "PENDING";
 
   async function handleApprove() {
@@ -207,6 +199,7 @@ function SuggestionRow({
     try {
       await rejectSuggestionAction(item.id, companyId);
       toast.success("Sugestão rejeitada");
+      setRejectDialogOpen(false);
       onUpdate();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao rejeitar");
@@ -215,93 +208,129 @@ function SuggestionRow({
     }
   }
 
+  const confidencePct = Math.round(item.confidence * 100);
+
   return (
-    <div className={`rounded-lg border p-4 space-y-3 transition-colors ${
-      isPending ? "border-yellow-200 bg-yellow-50/30" : "bg-card"
-    }`}>
-      {/* Header row */}
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <div className="flex items-center gap-2 flex-wrap">
-          <Bot className="h-4 w-4 text-purple-600" />
-          <Link
-            href={`/sac/tickets/${item.ticketId}`}
-            className="text-sm font-semibold text-primary hover:underline"
-          >
-            {item.ticketSubject}
-          </Link>
-          <Badge variant="outline" className={`text-[10px] ${channelColor(item.channel)}`}>
-            {channelLabel(item.channel)}
-          </Badge>
-          <Badge variant="outline" className={`text-[10px] ${statusBadgeColor(item.status)}`}>
-            {statusIcon(item.status)}
-            <span className="ml-1">{statusLabel(item.status)}</span>
-          </Badge>
-          <Badge className={`text-[10px] ${confidenceColor(item.confidence)}`}>
-            {Math.round(item.confidence * 100)}%
-          </Badge>
+    <>
+      <div className={`rounded-lg border p-4 space-y-3 transition-colors ${
+        isPending ? "border-yellow-200 bg-yellow-50/30" : "bg-card"
+      }`}>
+        {/* Header row */}
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Bot className="h-4 w-4 text-purple-600" />
+            <Link
+              href={`/sac/tickets/${item.ticketId}`}
+              className="text-sm font-semibold text-primary hover:underline"
+            >
+              {item.ticketSubject}
+            </Link>
+            <Badge variant="outline" className={`text-[10px] ${channelColor(item.channel)}`}>
+              {channelLabel(item.channel)}
+            </Badge>
+            <Badge variant="outline" className={`text-[10px] ${statusBadgeColor(item.status)}`}>
+              {statusIcon(item.status)}
+              <span className="ml-1">{statusLabel(item.status)}</span>
+            </Badge>
+            <Badge className={`text-[10px] ${confidenceColor(item.confidence)}`}>
+              {confidencePct}%
+            </Badge>
+          </div>
+          <span className="text-xs text-muted-foreground">
+            {timeAgo(item.createdAt)}
+          </span>
         </div>
-        <span className="text-xs text-muted-foreground">
-          {timeAgo(item.createdAt)}
-        </span>
+
+        {/* Response preview */}
+        <p className="text-sm text-muted-foreground line-clamp-2">
+          {item.editedResponse || item.suggestedResponse}
+        </p>
+
+        {/* Reviewer info */}
+        {item.reviewerName && (
+          <p className="text-xs text-muted-foreground">
+            {item.status === "EDITED"
+              ? `Editado e aprovado por ${item.reviewerName}`
+              : item.status === "APPROVED"
+                ? `Aprovado por ${item.reviewerName}`
+                : item.status === "REJECTED"
+                  ? `Rejeitado por ${item.reviewerName}`
+                  : ""}
+            {item.reviewedAt && ` — ${dateFmt.format(new Date(item.reviewedAt))}`}
+          </p>
+        )}
+
+        {/* Quick actions */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <Link href={`/sac/tickets/${item.ticketId}`}>
+            <Button variant="outline" size="sm" className="h-7 text-xs gap-1">
+              <ExternalLink className="h-3 w-3" />
+              Ver ticket
+            </Button>
+          </Link>
+
+          {isPending && (
+            <>
+              <Button
+                size="sm"
+                className="h-7 text-xs bg-green-600 hover:bg-green-700 gap-1"
+                disabled={loading}
+                onClick={handleApprove}
+              >
+                {loading ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Check className="h-3 w-3" />
+                )}
+                Aprovar
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs border-red-200 text-red-700 hover:bg-red-50 gap-1"
+                disabled={loading}
+                onClick={() => setRejectDialogOpen(true)}
+              >
+                <X className="h-3 w-3" />
+                Rejeitar
+              </Button>
+            </>
+          )}
+        </div>
       </div>
 
-      {/* Response preview */}
-      <p className="text-sm text-muted-foreground line-clamp-2">
-        {item.editedResponse || item.suggestedResponse}
-      </p>
-
-      {/* Reviewer info */}
-      {item.reviewerName && (
-        <p className="text-xs text-muted-foreground">
-          {item.status === "EDITED"
-            ? `Editado e aprovado por ${item.reviewerName}`
-            : item.status === "APPROVED"
-              ? `Aprovado por ${item.reviewerName}`
-              : item.status === "REJECTED"
-                ? `Rejeitado por ${item.reviewerName}`
-                : ""}
-          {item.reviewedAt && ` — ${dateFmt.format(new Date(item.reviewedAt))}`}
-        </p>
-      )}
-
-      {/* Quick actions */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <Link href={`/sac/tickets/${item.ticketId}`}>
-          <Button variant="outline" size="sm" className="h-7 text-xs gap-1">
-            <ExternalLink className="h-3 w-3" />
-            Ver ticket
-          </Button>
-        </Link>
-
-        {isPending && (
-          <>
+      {/* Reject confirmation dialog */}
+      <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Rejeitar sugestão?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            A sugestão da IA será rejeitada e não será enviada.
+            Esta ação não pode ser desfeita.
+          </p>
+          <DialogFooter>
             <Button
-              size="sm"
-              className="h-7 text-xs bg-green-600 hover:bg-green-700 gap-1"
+              variant="outline"
+              onClick={() => setRejectDialogOpen(false)}
               disabled={loading}
-              onClick={handleApprove}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleReject}
+              disabled={loading}
             >
               {loading ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
-              ) : (
-                <Check className="h-3 w-3" />
-              )}
-              Aprovar
+                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+              ) : null}
+              {loading ? "Rejeitando..." : "Confirmar Rejeição"}
             </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 text-xs border-red-200 text-red-700 hover:bg-red-50 gap-1"
-              disabled={loading}
-              onClick={handleReject}
-            >
-              <X className="h-3 w-3" />
-              Rejeitar
-            </Button>
-          </>
-        )}
-      </div>
-    </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 

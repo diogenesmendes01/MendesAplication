@@ -30,6 +30,7 @@ import {
   approveSuggestionAction,
   rejectSuggestionAction,
 } from "../suggestion-actions";
+import { timeAgo, confidenceColor, confidenceBarColor } from "@/utils/suggestion-helpers";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -93,29 +94,6 @@ const dateFmt = new Intl.DateTimeFormat("pt-BR", {
   hour: "2-digit",
   minute: "2-digit",
 });
-
-function timeAgo(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const minutes = Math.floor(diff / 60000);
-  if (minutes < 1) return "agora";
-  if (minutes < 60) return `há ${minutes} min`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `há ${hours}h`;
-  const days = Math.floor(hours / 24);
-  return `há ${days}d`;
-}
-
-function confidenceColor(confidence: number): string {
-  if (confidence >= 0.8) return "text-green-700 bg-green-100";
-  if (confidence >= 0.6) return "text-yellow-700 bg-yellow-100";
-  return "text-red-700 bg-red-100";
-}
-
-function confidenceBarColor(confidence: number): string {
-  if (confidence >= 0.8) return "bg-green-500";
-  if (confidence >= 0.6) return "bg-yellow-500";
-  return "bg-red-500";
-}
 
 function statusConfig(status: string) {
   switch (status) {
@@ -328,7 +306,14 @@ export default function AiSuggestionCard({
             {/* Confidence bar */}
             <div className="flex items-center gap-2">
               <span className="text-muted-foreground">Confiança:</span>
-              <div className="flex-1 max-w-[200px] h-2 bg-gray-200 rounded-full overflow-hidden">
+              <div
+                className="flex-1 max-w-[200px] h-2 bg-gray-200 rounded-full overflow-hidden"
+                role="progressbar"
+                aria-label="Nível de confiança da sugestão"
+                aria-valuenow={Math.round(suggestion.confidence * 100)}
+                aria-valuemin={0}
+                aria-valuemax={100}
+              >
                 <div
                   className={`h-full rounded-full ${confidenceBarColor(suggestion.confidence)}`}
                   style={{ width: `${Math.round(suggestion.confidence * 100)}%` }}

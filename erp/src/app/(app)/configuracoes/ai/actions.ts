@@ -45,7 +45,7 @@ export interface AiConfigData {
   // Temperature
   temperature: number;
   // Suggestion Mode
-  operationMode: string; // "auto" | "suggest" | "hybrid"
+  operationMode: "auto" | "suggest" | "hybrid";
   hybridThreshold: number; // 0.0-1.0
   alwaysRequireApproval: string[];
 }
@@ -118,7 +118,7 @@ function configToData(config: {
   raAutoRequestEvaluation: boolean;
   raEscalationKeywords: string[];
   temperature: number;
-  operationMode: string;
+  operationMode: "auto" | "suggest" | "hybrid";
   hybridThreshold: number;
   alwaysRequireApproval: string[];
 }): AiConfigData {

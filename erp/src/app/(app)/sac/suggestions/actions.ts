@@ -48,7 +48,7 @@ export async function listSuggestions(
     where.status = filters.status;
   }
 
-  if (filters?.channel && (filters.channel as string) !== "ALL") {
+  if (filters?.channel && String(filters.channel) !== "ALL") {
     where.channel = filters.channel;
   }
 
@@ -93,12 +93,21 @@ export async function listSuggestions(
 export async function getSuggestionStats(companyId: string) {
   await requireCompanyAccess(companyId);
 
-  const [pending, approved, rejected, edited] = await Promise.all([
-    prisma.aiSuggestion.count({ where: { companyId, status: "PENDING" } }),
-    prisma.aiSuggestion.count({ where: { companyId, status: "APPROVED" } }),
-    prisma.aiSuggestion.count({ where: { companyId, status: "REJECTED" } }),
-    prisma.aiSuggestion.count({ where: { companyId, status: "EDITED" } }),
-  ]);
+  const grouped = await prisma.aiSuggestion.groupBy({
+    by: ["status"],
+    where: { companyId },
+    _count: true,
+  });
 
-  return { pending, approved, rejected, edited };
+  const counts: Record<string, number> = {};
+  for (const g of grouped) {
+    counts[g.status] = g._count;
+  }
+
+  return {
+    pending: counts["PENDING"] ?? 0,
+    approved: counts["APPROVED"] ?? 0,
+    rejected: counts["REJECTED"] ?? 0,
+    edited: counts["EDITED"] ?? 0,
+  };
 }
