@@ -13,8 +13,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { getDocumentChunks, rechunkDocument } from "../actions";
-import type { KBChunk } from "../actions";
+import { getDocumentChunks, rechunkDocument } from "@/lib/services/kb-actions";
+import type { KBChunk } from "@/lib/services/kb-actions";
 
 interface ChunksViewerProps {
   open: boolean;

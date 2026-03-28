@@ -21,8 +21,8 @@ import {
   deleteDocument,
   getKBStats,
   getAllTags,
-} from "./actions";
-import type { KBDocument, KBStats } from "./actions";
+} from "@/lib/services/kb-actions";
+import type { KBDocument, KBStats } from "@/lib/services/kb-actions";
 import {
   KbStatsBar,
   DocumentList,

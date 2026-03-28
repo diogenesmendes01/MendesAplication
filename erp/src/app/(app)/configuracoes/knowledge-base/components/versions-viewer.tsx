@@ -14,8 +14,8 @@ import {
 import {
   getDocumentVersions,
   restoreVersion,
-} from "../actions";
-import type { KBVersion } from "../actions";
+} from "@/lib/services/kb-actions";
+import type { KBVersion } from "@/lib/services/kb-actions";
 
 interface VersionsViewerProps {
   open: boolean;

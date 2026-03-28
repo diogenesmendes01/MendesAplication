@@ -18,13 +18,7 @@ import {
   rechunkDocument as _rechunkDocument,
 } from "@/lib/services/kb-actions";
 
-export type {
-  KBDocument,
-  KBChunk,
-  KBSearchResult,
-  KBVersion,
-  KBStats,
-} from "@/lib/services/kb-actions";
+// Types: import directly from "@/lib/services/kb-actions"
 
 export async function listDocuments(...args: Parameters<typeof _listDocuments>) {
   return _listDocuments(...args);

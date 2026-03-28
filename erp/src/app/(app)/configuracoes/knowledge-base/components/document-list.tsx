@@ -25,7 +25,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { KBDocument } from "../actions";
+import type { KBDocument } from "@/lib/services/kb-actions";
 
 interface DocumentListProps {
   documents: KBDocument[];

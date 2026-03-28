@@ -1,7 +1,7 @@
 "use client";
 
 import { FileText, Layers, Clock, Tag } from "lucide-react";
-import type { KBStats } from "../actions";
+import type { KBStats } from "@/lib/services/kb-actions";
 
 function timeAgo(date: Date | null): string {
   if (!date) return "—";

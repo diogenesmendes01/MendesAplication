@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import type { RaTicketContext } from "../tickets/ra-actions";
+import type { RaTicketContext } from "../tickets/ra-actions.types";
 
 // Helper function to get emoji for feeling
 const getFeelingEmoji = (feeling: string | null): string => {
@@ -233,13 +233,13 @@ export function RaDetailPanel({ context }: { context: RaTicketContext }) {
             {raPublicTreatmentTime && (
               <div>
                 <span className="text-sm font-medium">Tempo resposta pública:</span>
-                <p className="mt-1">{formatTime(raPublicTreatmentTime)}</p>
+                <p className="mt-1">{formatTime(String(raPublicTreatmentTime))}</p>
               </div>
             )}
             {raPrivateTreatmentTime && (
               <div>
                 <span className="text-sm font-medium">Tempo resposta privada:</span>
-                <p className="mt-1">{formatTime(raPrivateTreatmentTime)}</p>
+                <p className="mt-1">{formatTime(String(raPrivateTreatmentTime))}</p>
               </div>
             )}
             {raCommentsCount > 0 && (
