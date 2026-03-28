@@ -39,11 +39,13 @@ const defaultJobOptions = {
   removeOnFail: { count: 5000 },
 }
 
-// Outbound RA jobs should NOT retry automatically (business logic errors, not transient)
-const noRetryJobOptions = {
-  attempts: 1,
-  removeOnComplete: { count: 1000 },
-  removeOnFail: { count: 5000 },
+// Outbound RA jobs: retry with exponential backoff (5s, 10s, 20s)
+// Error classification (retriable vs permanent) is handled in the worker
+const raOutboundJobOptions = {
+  attempts: 3,
+  backoff: { type: 'exponential' as const, delay: 5000 },
+  removeOnComplete: { age: 86400, count: 1000 },
+  removeOnFail: { age: 604800 },
 }
 
 // Extraction jobs
@@ -62,7 +64,7 @@ export const slaCheckQueue = new Queue(QUEUE_NAMES.SLA_CHECK, { connection })
 export const aiAgentQueue = new Queue(QUEUE_NAMES.AI_AGENT, { connection, defaultJobOptions })
 export const documentProcessingQueue = new Queue(QUEUE_NAMES.DOCUMENT_PROCESSING, { connection, defaultJobOptions })
 export const reclameaquiInboundQueue = new Queue(QUEUE_NAMES.RECLAMEAQUI_INBOUND, { connection, defaultJobOptions })
-export const reclameaquiOutboundQueue = new Queue(QUEUE_NAMES.RECLAMEAQUI_OUTBOUND, { connection, defaultJobOptions: noRetryJobOptions })
+export const reclameaquiOutboundQueue = new Queue(QUEUE_NAMES.RECLAMEAQUI_OUTBOUND, { connection, defaultJobOptions: raOutboundJobOptions })
 
 export const extractionQueue = new Queue(QUEUE_NAMES.ATTACHMENT_EXTRACTION, { connection, defaultJobOptions: extractionJobOptions })
 

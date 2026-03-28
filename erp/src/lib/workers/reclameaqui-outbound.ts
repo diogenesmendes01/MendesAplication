@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { decryptConfig } from "@/lib/encryption";
 import { ReclameAquiClient, ReclameAquiError } from "@/lib/reclameaqui/client";
 import { logger } from "@/lib/logger";
+import { sseBus } from "@/lib/sse";
 import type { RaClientConfig } from "@/lib/reclameaqui/types";
 import type { MessageDeliveryStatus } from "@prisma/client";
 import { promises as fs } from "fs";
@@ -57,6 +58,79 @@ export type RaOutboundJobData =
   | RaFinishPrivateJobData;
 
 // ---------------------------------------------------------------------------
+// Error Classification
+// ---------------------------------------------------------------------------
+
+/**
+ * RA error codes that are RETRIABLE (transient failures).
+ * Rate limit (429), server errors (500, 503).
+ */
+const RETRIABLE_ERROR_CODES = new Set([4290, 5000, 5030]);
+
+/**
+ * RA error codes that are PERMANENT (no point retrying).
+ * Ticket inactive, already rated, moderation already requested, etc.
+ */
+const PERMANENT_ERROR_CODES = new Set([
+  4090,   // Ticket inactive
+  4091,   // Not RA ticket
+  4095,   // Already rated
+  4096,   // Not eligible for evaluation
+  4098,   // Attachment limit exceeded
+  4099,   // Daily moderation limit exceeded
+  40910,  // Moderation per complaint limit exceeded
+  40912,  // Moderation by duplicity impossible
+  40913,  // Moderation requires public response + evaluation
+  40914,  // Moderation reason not allowed
+  40915,  // Not RA ticket
+  40916,  // Already has pending moderation
+  40917,  // Moderation already requested
+  40919,  // Source doesn't support private messages
+  40920,  // Ticket closed, public message blocked
+  40922,  // Unsupported attachment type
+  40925,  // Private message already finished
+  40930,  // Duplicate message (handled separately)
+]);
+
+/**
+ * Classifies an error as retriable or permanent.
+ * - Network errors (no code) → retriable
+ * - Known transient codes → retriable
+ * - Known permanent codes → permanent
+ * - Unknown codes → retriable (safer to retry)
+ */
+export function isRetriableError(err: unknown): boolean {
+  if (!(err instanceof ReclameAquiError)) {
+    // Network errors, timeouts, etc → retry
+    return true;
+  }
+
+  if (PERMANENT_ERROR_CODES.has(err.code)) {
+    return false;
+  }
+
+  if (RETRIABLE_ERROR_CODES.has(err.code)) {
+    return true;
+  }
+
+  // Unknown RA error code → default to retriable
+  return true;
+}
+
+/**
+ * Custom error for permanent failures that should NOT be retried by BullMQ.
+ * We catch the original error and wrap it so we can return instead of throw.
+ */
+class PermanentRaError extends Error {
+  public readonly code: number;
+  constructor(code: number, message: string) {
+    super(message);
+    this.name = "PermanentRaError";
+    this.code = code;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -70,6 +144,9 @@ async function getTicketWithRaChannel(ticketId: string) {
     include: {
       channel: {
         select: { id: true, config: true, isActive: true, type: true },
+      },
+      company: {
+        select: { id: true },
       },
     },
   });
@@ -100,7 +177,7 @@ async function getTicketWithRaChannel(ticketId: string) {
     baseUrl: config.baseUrl,
   });
 
-  return { ticket, raExternalId: ticket.raExternalId, client };
+  return { ticket, raExternalId: ticket.raExternalId, client, companyId: ticket.company?.id ?? ticket.companyId };
 }
 
 /**
@@ -164,12 +241,125 @@ async function createOutboundMessage(params: {
   });
 }
 
+/**
+ * Structured log for outbound job attempts.
+ */
+function logJobAttempt(params: {
+  jobType: string;
+  ticketId: string;
+  attempt: number;
+  maxAttempts: number;
+  error: unknown;
+  willRetry: boolean;
+}) {
+  const errorInfo = params.error instanceof ReclameAquiError
+    ? { code: params.error.code, message: params.error.message }
+    : { message: String(params.error) };
+
+  logger.error(
+    {
+      jobType: params.jobType,
+      ticketId: params.ticketId,
+      attempt: params.attempt,
+      maxAttempts: params.maxAttempts,
+      error: errorInfo,
+      willRetry: params.willRetry,
+    },
+    `[reclameaqui-outbound] Job failed: ${params.jobType} for ticket ${params.ticketId} (attempt ${params.attempt}/${params.maxAttempts}, willRetry=${params.willRetry})`
+  );
+}
+
+/**
+ * Notify the frontend via SSE that a timeline update happened.
+ */
+function notifyTimelineUpdate(companyId: string, ticketId: string) {
+  sseBus.publish(`company:${companyId}:sac`, "timeline-update", {
+    ticketId,
+    timestamp: Date.now(),
+  });
+}
+
+/**
+ * Handles an error in an outbound job:
+ * - Duplicate → mark as SENT, return (no throw)
+ * - Permanent → create FAILED message, return (no throw = BullMQ won't retry)
+ * - Retriable → create FAILED message only on last attempt, throw (BullMQ retries)
+ */
+async function handleOutboundError(params: {
+  err: unknown;
+  job: Job;
+  ticketId: string;
+  companyId: string;
+  content: string;
+  isInternal: boolean;
+  onDuplicate?: () => Promise<void>;
+}): Promise<void> {
+  const { err, job, ticketId, companyId, content, isInternal, onDuplicate } = params;
+  const attempt = job.attemptsMade + 1;
+  const maxAttempts = job.opts?.attempts ?? 3;
+
+  // Duplicate → treat as success
+  if (isDuplicateError(err)) {
+    await createOutboundMessage({
+      ticketId,
+      content,
+      isInternal,
+      deliveryStatus: "SENT",
+    });
+    logger.warn(`[reclameaqui-outbound] Duplicate message for ticket ${ticketId}, marked as SENT`);
+    if (onDuplicate) await onDuplicate();
+    return;
+  }
+
+  const retriable = isRetriableError(err);
+  const isLastAttempt = attempt >= maxAttempts;
+  const willRetry = retriable && !isLastAttempt;
+
+  logJobAttempt({
+    jobType: job.name,
+    ticketId,
+    attempt,
+    maxAttempts,
+    error: err,
+    willRetry,
+  });
+
+  if (!retriable) {
+    // Permanent error → create FAILED message, don't throw (BullMQ won't retry)
+    await createOutboundMessage({
+      ticketId,
+      content,
+      isInternal,
+      deliveryStatus: "FAILED",
+    }).catch(() => {});
+
+    notifyTimelineUpdate(companyId, ticketId);
+    return;
+  }
+
+  // Retriable error
+  if (isLastAttempt) {
+    // Last attempt → create FAILED message + notify
+    await createOutboundMessage({
+      ticketId,
+      content,
+      isInternal,
+      deliveryStatus: "FAILED",
+    }).catch(() => {});
+
+    notifyTimelineUpdate(companyId, ticketId);
+  }
+
+  // Throw so BullMQ retries (or marks as failed on last attempt)
+  throw err;
+}
+
 // ---------------------------------------------------------------------------
 // Job Handlers
 // ---------------------------------------------------------------------------
 
-async function handleSendPublic(ticketId: string, message: string): Promise<void> {
-  const { ticket, raExternalId, client } = await getTicketWithRaChannel(ticketId);
+async function handleSendPublic(job: Job, ticketId: string, message: string): Promise<void> {
+  const { ticket, raExternalId, client, companyId } = await getTicketWithRaChannel(ticketId);
 
   try {
     await client.authenticate();
@@ -189,40 +379,26 @@ async function handleSendPublic(ticketId: string, message: string): Promise<void
 
     logger.info(`[reclameaqui-outbound] Public message sent for ticket ${ticket.id}`);
   } catch (err) {
-    if (isDuplicateError(err)) {
-      await createOutboundMessage({
-        ticketId: ticket.id,
-        content: message,
-        isInternal: false,
-        deliveryStatus: "SENT",
-      });
-      logger.warn(`[reclameaqui-outbound] Duplicate public message for ticket ${ticket.id}, marked as SENT`);
-      return;
-    }
-
-    await createOutboundMessage({
+    await handleOutboundError({
+      err,
+      job,
       ticketId: ticket.id,
+      companyId,
       content: message,
       isInternal: false,
-      deliveryStatus: "FAILED",
-    }).catch(() => {}); // Don't mask original error
-
-    logger.error(
-      { error: err instanceof ReclameAquiError ? { code: err.code, message: err.message } : String(err) },
-      `[reclameaqui-outbound] Failed to send public message for ticket ${ticket.id}`
-    );
-    throw err;
+    });
   }
 }
 
 async function handleSendPrivate(
+  job: Job,
   ticketId: string,
   message: string,
   email: string,
   filePaths?: string[],
   filesBase64?: string[]
 ): Promise<void> {
-  const { ticket, raExternalId, client } = await getTicketWithRaChannel(ticketId);
+  const { ticket, raExternalId, client, companyId } = await getTicketWithRaChannel(ticketId);
 
   try {
     await client.authenticate();
@@ -239,29 +415,14 @@ async function handleSendPrivate(
 
     logger.info(`[reclameaqui-outbound] Private message sent for ticket ${ticket.id}`);
   } catch (err) {
-    if (isDuplicateError(err)) {
-      await createOutboundMessage({
-        ticketId: ticket.id,
-        content: message,
-        isInternal: true,
-        deliveryStatus: "SENT",
-      });
-      logger.warn(`[reclameaqui-outbound] Duplicate private message for ticket ${ticket.id}, marked as SENT`);
-      return;
-    }
-
-    await createOutboundMessage({
+    await handleOutboundError({
+      err,
+      job,
       ticketId: ticket.id,
+      companyId,
       content: message,
       isInternal: true,
-      deliveryStatus: "FAILED",
-    }).catch(() => {});
-
-    logger.error(
-      { error: err instanceof ReclameAquiError ? { code: err.code, message: err.message } : String(err) },
-      `[reclameaqui-outbound] Failed to send private message for ticket ${ticket.id}`
-    );
-    throw err;
+    });
   } finally {
     // Always cleanup disk files, even on failure
     await cleanupFiles(filePaths);
@@ -269,12 +430,13 @@ async function handleSendPrivate(
 }
 
 async function handleSendDual(
+  job: Job,
   ticketId: string,
   privateMessage: string,
   publicMessage: string,
   email: string
 ): Promise<void> {
-  const { ticket, raExternalId, client } = await getTicketWithRaChannel(ticketId);
+  const { ticket, raExternalId, client, companyId } = await getTicketWithRaChannel(ticketId);
 
   await client.authenticate();
 
@@ -304,17 +466,27 @@ async function handleSendDual(
       logger.warn(`[reclameaqui-outbound] Dual: duplicate private message for ticket ${ticket.id}, marked as SENT`);
       privateFailed = false;
     } else {
-      await createOutboundMessage({
-        ticketId: ticket.id,
-        content: privateMessage,
-        isInternal: true,
-        deliveryStatus: "FAILED",
-      }).catch(() => {});
+      const retriable = isRetriableError(err);
+      const attempt = job.attemptsMade + 1;
+      const maxAttempts = job.opts?.attempts ?? 3;
 
-      logger.error(
-        { error: err instanceof ReclameAquiError ? { code: err.code, message: err.message } : String(err) },
-        `[reclameaqui-outbound] Dual: failed to send private message for ticket ${ticket.id}`
-      );
+      logJobAttempt({
+        jobType: job.name,
+        ticketId: ticket.id,
+        attempt,
+        maxAttempts,
+        error: err,
+        willRetry: retriable && attempt < maxAttempts,
+      });
+
+      if (!retriable || attempt >= maxAttempts) {
+        await createOutboundMessage({
+          ticketId: ticket.id,
+          content: privateMessage,
+          isInternal: true,
+          deliveryStatus: "FAILED",
+        }).catch(() => {});
+      }
     }
   }
 
@@ -345,28 +517,46 @@ async function handleSendDual(
       });
       logger.warn(`[reclameaqui-outbound] Dual: duplicate public message for ticket ${ticket.id}, marked as SENT`);
     } else {
-      await createOutboundMessage({
+      const retriable = isRetriableError(err);
+      const attempt = job.attemptsMade + 1;
+      const maxAttempts = job.opts?.attempts ?? 3;
+      const willRetry = retriable && attempt < maxAttempts;
+
+      logJobAttempt({
+        jobType: job.name,
         ticketId: ticket.id,
-        content: publicMessage,
-        isInternal: false,
-        deliveryStatus: "FAILED",
-      }).catch(() => {});
+        attempt,
+        maxAttempts,
+        error: err,
+        willRetry,
+      });
 
-      logger.error(
-        { error: err instanceof ReclameAquiError ? { code: err.code, message: err.message } : String(err) },
-        `[reclameaqui-outbound] Dual: failed to send public message for ticket ${ticket.id}`
-      );
+      if (!retriable || attempt >= maxAttempts) {
+        await createOutboundMessage({
+          ticketId: ticket.id,
+          content: publicMessage,
+          isInternal: false,
+          deliveryStatus: "FAILED",
+        }).catch(() => {});
 
-      // Only throw if both failed
-      if (privateFailed) {
+        notifyTimelineUpdate(companyId, ticket.id);
+      }
+
+      // Only throw if both failed (retriable) — or if public failed and should retry
+      if (privateFailed || willRetry) {
         throw err;
       }
     }
   }
+
+  // If private failed with a retriable error and public succeeded, still notify
+  if (privateFailed) {
+    notifyTimelineUpdate(companyId, ticket.id);
+  }
 }
 
-async function handleRequestEvaluation(ticketId: string): Promise<void> {
-  const { ticket, raExternalId, client } = await getTicketWithRaChannel(ticketId);
+async function handleRequestEvaluation(job: Job, ticketId: string): Promise<void> {
+  const { ticket, raExternalId, client, companyId } = await getTicketWithRaChannel(ticketId);
 
   if (!ticket.raCanEvaluate) {
     logger.warn(`[reclameaqui-outbound] Ticket ${ticket.id} cannot request evaluation (raCanEvaluate=false)`);
@@ -397,22 +587,19 @@ async function handleRequestEvaluation(ticketId: string): Promise<void> {
 
     logger.info(`[reclameaqui-outbound] Evaluation requested for ticket ${ticket.id}`);
   } catch (err) {
-    await createOutboundMessage({
+    await handleOutboundError({
+      err,
+      job,
       ticketId: ticket.id,
+      companyId,
       content: `[Sistema] Falha ao solicitar avaliação: ${err instanceof ReclameAquiError ? err.message : "Erro desconhecido"}`,
       isInternal: true,
-      deliveryStatus: "FAILED",
-    }).catch(() => {});
-
-    logger.error(
-      { error: err instanceof ReclameAquiError ? { code: err.code, message: err.message } : String(err) },
-      `[reclameaqui-outbound] Failed to request evaluation for ticket ${ticket.id}`
-    );
-    throw err;
+    });
   }
 }
 
 async function handleRequestModeration(
+  job: Job,
   ticketId: string,
   reason: number,
   message: string,
@@ -420,7 +607,7 @@ async function handleRequestModeration(
   filePaths?: string[],
   filesBase64?: string[]
 ): Promise<void> {
-  const { ticket, raExternalId, client } = await getTicketWithRaChannel(ticketId);
+  const { ticket, raExternalId, client, companyId } = await getTicketWithRaChannel(ticketId);
 
   try {
     await client.authenticate();
@@ -442,26 +629,22 @@ async function handleRequestModeration(
 
     logger.info(`[reclameaqui-outbound] Moderation requested for ticket ${ticket.id}, reason: ${reason}`);
   } catch (err) {
-    await createOutboundMessage({
+    await handleOutboundError({
+      err,
+      job,
       ticketId: ticket.id,
+      companyId,
       content: `[Sistema] Falha ao solicitar moderação: ${err instanceof ReclameAquiError ? err.message : "Erro desconhecido"}`,
       isInternal: true,
-      deliveryStatus: "FAILED",
-    }).catch(() => {});
-
-    logger.error(
-      { error: err instanceof ReclameAquiError ? { code: err.code, message: err.message } : String(err) },
-      `[reclameaqui-outbound] Failed to request moderation for ticket ${ticket.id}`
-    );
-    throw err;
+    });
   } finally {
     // Always cleanup disk files, even on failure
     await cleanupFiles(filePaths);
   }
 }
 
-async function handleFinishPrivate(ticketId: string): Promise<void> {
-  const { ticket, raExternalId, client } = await getTicketWithRaChannel(ticketId);
+async function handleFinishPrivate(job: Job, ticketId: string): Promise<void> {
+  const { ticket, raExternalId, client, companyId } = await getTicketWithRaChannel(ticketId);
 
   try {
     await client.authenticate();
@@ -476,29 +659,22 @@ async function handleFinishPrivate(ticketId: string): Promise<void> {
 
     logger.info(`[reclameaqui-outbound] Private messaging finished for ticket ${ticket.id}`);
   } catch (err) {
-    if (isDuplicateError(err)) {
-      await createOutboundMessage({
-        ticketId: ticket.id,
-        content: "[Sistema] Mensagem privada encerrada (já encerrada anteriormente)",
-        isInternal: true,
-        deliveryStatus: "SENT",
-      });
-      logger.warn(`[reclameaqui-outbound] Duplicate finish private for ticket ${ticket.id}, marked as SENT`);
-      return;
-    }
-
-    await createOutboundMessage({
+    await handleOutboundError({
+      err,
+      job,
       ticketId: ticket.id,
+      companyId,
       content: `[Sistema] Falha ao encerrar mensagem privada: ${err instanceof ReclameAquiError ? err.message : "Erro desconhecido"}`,
       isInternal: true,
-      deliveryStatus: "FAILED",
-    }).catch(() => {});
-
-    logger.error(
-      { error: err instanceof ReclameAquiError ? { code: err.code, message: err.message } : String(err) },
-      `[reclameaqui-outbound] Failed to finish private messaging for ticket ${ticket.id}`
-    );
-    throw err;
+      onDuplicate: async () => {
+        await createOutboundMessage({
+          ticketId: ticket.id,
+          content: "[Sistema] Mensagem privada encerrada (já encerrada anteriormente)",
+          isInternal: true,
+          deliveryStatus: "SENT",
+        });
+      },
+    });
   }
 }
 
@@ -511,25 +687,41 @@ export async function processReclameAquiOutbound(job: Job<RaOutboundJobData>): P
   const jobType = job.name;
   const startTime = Date.now();
 
-  logger.info(`[reclameaqui-outbound] Processing job ${job.id}: type=${jobType}, ticketId=${data.ticketId}`);
+  logger.info(
+    { jobType, ticketId: data.ticketId, attempt: job.attemptsMade + 1, maxAttempts: job.opts?.attempts ?? 3 },
+    `[reclameaqui-outbound] Processing job ${job.id}: type=${jobType}, ticketId=${data.ticketId}, attempt=${job.attemptsMade + 1}`
+  );
+
+export async function processReclameAquiOutbound(job: Job<RaOutboundJobData>): Promise<void> {
+  const data = job.data;
+  const jobType = job.name;
+  const startTime = Date.now();
+
+  logger.info(
+    { jobType, ticketId: data.ticketId, attempt: job.attemptsMade + 1, maxAttempts: job.opts?.attempts ?? 3 },
+    `[reclameaqui-outbound] Processing job ${job.id}: type=${jobType}, ticketId=${data.ticketId}, attempt=${job.attemptsMade + 1}`
+  );
 
   try {
     switch (jobType) {
       case "RA_SEND_PUBLIC":
-        await handleSendPublic(data.ticketId, (data as RaSendPublicJobData).message);
+        await handleSendPublic(job, data.ticketId, (data as RaSendPublicJobData).message);
         break;
 
-    case "RA_SEND_PRIVATE":
-      return handleSendPrivate(
-        data.ticketId,
-        (data as RaSendPrivateJobData).message,
-        (data as RaSendPrivateJobData).email,
-        (data as RaSendPrivateJobData).filePaths,
-        (data as RaSendPrivateJobData).files
-      );
+      case "RA_SEND_PRIVATE":
+        await handleSendPrivate(
+          job,
+          data.ticketId,
+          (data as RaSendPrivateJobData).message,
+          (data as RaSendPrivateJobData).email,
+          (data as RaSendPrivateJobData).filePaths,
+          (data as RaSendPrivateJobData).files
+        );
+        break;
 
       case "RA_SEND_DUAL":
         await handleSendDual(
+          job,
           data.ticketId,
           (data as RaSendDualJobData).privateMessage,
           (data as RaSendDualJobData).publicMessage,
@@ -538,21 +730,23 @@ export async function processReclameAquiOutbound(job: Job<RaOutboundJobData>): P
         break;
 
       case "RA_REQUEST_EVALUATION":
-        await handleRequestEvaluation(data.ticketId);
+        await handleRequestEvaluation(job, data.ticketId);
         break;
 
-    case "RA_REQUEST_MODERATION":
-      return handleRequestModeration(
-        data.ticketId,
-        (data as RaRequestModerationJobData).reason,
-        (data as RaRequestModerationJobData).message,
-        (data as RaRequestModerationJobData).migrateTO,
-        (data as RaRequestModerationJobData).filePaths,
-        (data as RaRequestModerationJobData).files
-      );
+      case "RA_REQUEST_MODERATION":
+        await handleRequestModeration(
+          job,
+          data.ticketId,
+          (data as RaRequestModerationJobData).reason,
+          (data as RaRequestModerationJobData).message,
+          (data as RaRequestModerationJobData).migrateTO,
+          (data as RaRequestModerationJobData).filePaths,
+          (data as RaRequestModerationJobData).files
+        );
+        break;
 
       case "RA_FINISH_PRIVATE":
-        await handleFinishPrivate(data.ticketId);
+        await handleFinishPrivate(job, data.ticketId);
         break;
 
       default:
