@@ -14,6 +14,9 @@ import {
 } from "@/lib/ai/suggestion-mode";
 import type { OperationMode } from "@/lib/ai/suggestion-mode";
 import { checkRateLimit } from "@/lib/ai/rate-limiter";
+import { buildFallbackChain } from "@/lib/ai/fallback";
+import { isProviderError } from "@/lib/ai/fallback";
+import { markTicketPendingRecovery } from "@/lib/ai/recovery";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -27,6 +30,8 @@ interface AiAgentJobData {
   channel?: "WHATSAPP" | "EMAIL" | "RECLAMEAQUI";
   /** Enriched RA ticket context for better AI suggestions */
   raContext?: import("@/lib/reclameaqui/types").RaAiContext;
+  /** Flag indicating this job was re-queued from recovery */
+  isRecovery?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -72,7 +77,11 @@ function computeConfidenceFromResult(result: AgentResult): number {
 // ---------------------------------------------------------------------------
 
 export async function processAiAgent(job: Job<AiAgentJobData>) {
-  const { ticketId, companyId, messageContent, messageId, channel = "WHATSAPP", raContext } = job.data;
+  const { ticketId, companyId, messageContent, messageId, channel = "WHATSAPP", raContext, isRecovery } = job.data;
+
+  if (isRecovery) {
+    logger.info(`[ai-agent] Processing recovery job for ticket ${ticketId}`);
+  }
 
   // 1. Rate Limit Check (per-ticket): AI toggle, budget, cooldown, interactions/hour
   const rateLimit = await checkRateLimit(ticketId, companyId, channel);
@@ -85,6 +94,9 @@ export async function processAiAgent(job: Job<AiAgentJobData>) {
     await job.moveToDelayed(Date.now() + rateLimit.delayMs, job.token);
     return;
   }
+
+  // ─── Build fallback chain for this company/channel ─────────────────────
+  const fallbackChain = await buildFallbackChain(companyId, channel);
 
   // ─── Resolve operation mode ─────────────────────────────────────────────
   const aiConfig = await resolveAiConfigSelect(companyId, channel, {
@@ -153,16 +165,30 @@ export async function processAiAgent(job: Job<AiAgentJobData>) {
       return;
     }
 
-    // Run the AI agent for RECLAMEAQUI
+    // Run the AI agent for RECLAMEAQUI (with fallback chain)
     const useSuggestionMode = shouldRunAsSuggestion(effectiveMode);
     logger.info(
-      `[ai-agent] Running RA agent for ticket ${ticketId}, company ${companyId}, mode=${effectiveMode}, suggestionMode=${useSuggestionMode}`
+      `[ai-agent] Running RA agent for ticket ${ticketId}, company ${companyId}, mode=${effectiveMode}, suggestionMode=${useSuggestionMode}, fallbackChain=${fallbackChain.length}`
     );
 
-    const result = await runAgent(ticketId, companyId, messageContent, "RECLAMEAQUI", {
-      suggestionMode: useSuggestionMode,
-      raContext,
-    });
+    let result: AgentResult;
+    try {
+      result = await runAgent(ticketId, companyId, messageContent, "RECLAMEAQUI", {
+        suggestionMode: useSuggestionMode,
+        raContext,
+        fallbackChain: fallbackChain.length > 1 ? fallbackChain : undefined,
+      });
+    } catch (error) {
+      if (isProviderError(error)) {
+        logger.warn(
+          { ticketId, companyId, error: error instanceof Error ? error.message : String(error) },
+          "[ai-agent] All providers failed for RA ticket, marking for recovery"
+        );
+        await markTicketPendingRecovery(ticketId);
+        return;
+      }
+      throw error;
+    }
 
     logger.info(
       `[ai-agent] RA agent completed for ticket ${ticketId}: responded=${result.responded}, escalated=${result.escalated}, iterations=${result.iterations}${result.error ? `, error=${result.error}` : ""}`
@@ -278,15 +304,29 @@ export async function processAiAgent(job: Job<AiAgentJobData>) {
     return;
   }
 
-  // 3. Run the AI agent loop for WHATSAPP / EMAIL
+  // 3. Run the AI agent loop for WHATSAPP / EMAIL (with fallback chain)
   const useSuggestionMode = shouldRunAsSuggestion(operationMode);
   logger.info(
-    `[ai-agent] Running agent for ticket ${ticketId}, company ${companyId}, channel ${channel}, mode=${operationMode}, suggestionMode=${useSuggestionMode}`
+    `[ai-agent] Running agent for ticket ${ticketId}, company ${companyId}, channel ${channel}, mode=${operationMode}, suggestionMode=${useSuggestionMode}, fallbackChain=${fallbackChain.length}`
   );
 
-  const result = await runAgent(ticketId, companyId, messageContent, channel, {
-    suggestionMode: useSuggestionMode,
-  });
+  let result: AgentResult;
+  try {
+    result = await runAgent(ticketId, companyId, messageContent, channel, {
+      suggestionMode: useSuggestionMode,
+      fallbackChain: fallbackChain.length > 1 ? fallbackChain : undefined,
+    });
+  } catch (error) {
+    if (isProviderError(error)) {
+      logger.warn(
+        { ticketId, companyId, channel, error: error instanceof Error ? error.message : String(error) },
+        "[ai-agent] All providers failed, marking ticket for recovery"
+      );
+      await markTicketPendingRecovery(ticketId);
+      return;
+    }
+    throw error;
+  }
 
   logger.info(
     `[ai-agent] Agent completed for ticket ${ticketId}: responded=${result.responded}, escalated=${result.escalated}, iterations=${result.iterations}${result.error ? `, error=${result.error}` : ""}`
