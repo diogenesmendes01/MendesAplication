@@ -26,6 +26,7 @@ export const QUEUE_NAMES = {
   DOCUMENT_PROCESSING: 'document-processing',
   RECLAMEAQUI_INBOUND: 'reclameaqui-inbound',
   RECLAMEAQUI_OUTBOUND: 'reclameaqui-outbound',
+  ATTACHMENT_EXTRACTION: 'attachment-extraction',
 } as const
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES]
@@ -44,6 +45,14 @@ const noRetryJobOptions = {
   removeOnFail: { count: 5000 },
 }
 
+// Extraction jobs
+const extractionJobOptions = {
+  attempts: 3,
+  backoff: { type: 'exponential' as const, delay: 5000 },
+  removeOnComplete: { count: 1000 },
+  removeOnFail: { count: 5000 },
+}
+
 export const emailInboundQueue = new Queue(QUEUE_NAMES.EMAIL_INBOUND, { connection, defaultJobOptions })
 export const emailOutboundQueue = new Queue(QUEUE_NAMES.EMAIL_OUTBOUND, { connection, defaultJobOptions })
 export const whatsappInboundQueue = new Queue(QUEUE_NAMES.WHATSAPP_INBOUND, { connection, defaultJobOptions })
@@ -53,3 +62,5 @@ export const aiAgentQueue = new Queue(QUEUE_NAMES.AI_AGENT, { connection, defaul
 export const documentProcessingQueue = new Queue(QUEUE_NAMES.DOCUMENT_PROCESSING, { connection, defaultJobOptions })
 export const reclameaquiInboundQueue = new Queue(QUEUE_NAMES.RECLAMEAQUI_INBOUND, { connection, defaultJobOptions })
 export const reclameaquiOutboundQueue = new Queue(QUEUE_NAMES.RECLAMEAQUI_OUTBOUND, { connection, defaultJobOptions: noRetryJobOptions })
+
+export const extractionQueue = new Queue(QUEUE_NAMES.ATTACHMENT_EXTRACTION, { connection, defaultJobOptions: extractionJobOptions })
