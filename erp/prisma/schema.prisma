@@ -94,6 +94,8 @@ model Company {
   santanderSequences  SantanderSequence[]
   aiSuggestions       AiSuggestion[]
   slaViolations       SlaViolation[]
+  workflows           Workflow[]
+  workflowExecutions  WorkflowExecution[]
   aiRateLimitEvents   AiRateLimitEvent[]
 
   @@map("companies")
@@ -119,6 +121,7 @@ model User {
   refundsExecuted     Refund[]             @relation("RefundExecutedBy")
   refundAttachments   RefundAttachment[]
   reviewedSuggestions AiSuggestion[]       @relation("SuggestionReviewer")
+  createdWorkflows    Workflow[]
 
   @@map("users")
 }
@@ -540,8 +543,9 @@ model Ticket {
   mergedTickets   Ticket[]           @relation("TicketMerge")
   linksAsA        TicketLink[]       @relation("TicketLinksA")
   linksAsB        TicketLink[]       @relation("TicketLinksB")
-  slaViolations   SlaViolation[]
-  rateLimitEvents AiRateLimitEvent[]
+  slaViolations      SlaViolation[]
+  workflowExecutions WorkflowExecution[]
+  rateLimitEvents    AiRateLimitEvent[]
 
   @@index([companyId, status])
   @@index([companyId, slaBreached])
@@ -1197,4 +1201,58 @@ model TicketLink {
   @@index([ticketAId, status])
   @@index([ticketBId, status])
   @@map("ticket_links")
+}
+// ─── Workflow Engine ─────────────────────────────────────────────────────────
+
+model Workflow {
+  id          String   @id @default(cuid())
+  companyId   String
+  name        String
+  description String?
+  trigger     Json
+  steps       Json
+  channels    String[] @default(["WHATSAPP", "EMAIL", "RECLAMEAQUI"])
+  enabled     Boolean  @default(true)
+  priority    Int      @default(0)
+  version     Int      @default(1)
+  timeoutMin  Int      @default(2880)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById String?
+
+  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdBy  User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  executions WorkflowExecution[]
+
+  @@unique([companyId, name])
+  @@index([companyId, enabled])
+  @@map("workflows")
+}
+
+model WorkflowExecution {
+  id               String    @id @default(cuid())
+  workflowId       String
+  ticketId         String
+  companyId        String
+  currentStepIndex Int       @default(0)
+  status           String    @default("ACTIVE")
+  stepData         Json      @default("{}")
+  waitingFor       String?
+  waitingCondition String?
+  startedAt        DateTime  @default(now())
+  completedAt      DateTime?
+  pausedAt         DateTime?
+  timeoutAt        DateTime?
+  error            String?
+  updatedAt        DateTime  @updatedAt
+
+  workflow Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  ticket   Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+  @@index([workflowId])
+  @@index([companyId, status])
+  @@index([status, timeoutAt])
+  @@map("workflow_executions")
 }

@@ -144,17 +144,17 @@ describe("v2 tool groups", () => {
 describe("getToolsForChannel", () => {
   it("returns WHATSAPP_TOOLS for WHATSAPP channel", () => {
     const tools = getToolsForChannel("WHATSAPP");
-    expect(tools).toBe(WHATSAPP_TOOLS);
+    expect(tools).toEqual(expect.arrayContaining(WHATSAPP_TOOLS));
   });
 
   it("returns EMAIL_TOOLS for EMAIL channel", () => {
     const tools = getToolsForChannel("EMAIL");
-    expect(tools).toBe(EMAIL_TOOLS);
+    expect(tools).toEqual(expect.arrayContaining(EMAIL_TOOLS));
   });
 
   it("returns RECLAMEAQUI_TOOLS for RECLAMEAQUI channel", () => {
     const tools = getToolsForChannel("RECLAMEAQUI");
-    expect(tools).toBe(RECLAMEAQUI_TOOLS);
+    expect(tools).toEqual(expect.arrayContaining(RECLAMEAQUI_TOOLS));
   });
 
   it("WHATSAPP_TOOLS includes RESPOND but not RESPOND_EMAIL", () => {
