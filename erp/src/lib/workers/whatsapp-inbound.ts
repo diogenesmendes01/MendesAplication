@@ -1,6 +1,6 @@
 import { Job } from "bullmq";
 import { prisma } from "@/lib/prisma";
-import { aiAgentQueue } from "@/lib/queue";
+import { aiAgentQueue, extractionQueue } from "@/lib/queue";
 import { sseBus } from "@/lib/sse";
 import { invalidateKpiCache } from "@/lib/kpi-cache";
 import path from "path";
@@ -249,7 +249,7 @@ async function processMediaFollowUp(job: Job<MediaWebhookPayload>) {
   }
 
   // Create attachment linked to the message
-  await prisma.attachment.create({
+  const mediaAttachment = await prisma.attachment.create({
     data: {
       ticketId: existingMessage.ticketId,
       ticketMessageId: existingMessage.id,
@@ -263,6 +263,15 @@ async function processMediaFollowUp(job: Job<MediaWebhookPayload>) {
   logger.info(
     `[whatsapp-inbound] Media attachment saved for message ${existingMessage.id} (${media.fileName})`
   );
+
+  // Dispatch extraction job for the newly saved media attachment
+  await extractionQueue.add("extract", {
+    attachmentId: mediaAttachment.id,
+    storagePath: saved.storagePath,
+    mimeType: media.mimetype,
+    fileName: media.fileName,
+    companyId,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -497,6 +506,14 @@ export async function processWhatsAppInbound(job: Job<any>) {
         },
       });
       attachmentId = attachment.id;
+      // Dispatch extraction job for background processing
+      await extractionQueue.add("extract", {
+        attachmentId: attachment.id,
+        storagePath: saved.storagePath,
+        mimeType: mediaInfo.mimetype,
+        fileName: mediaInfo.fileName,
+        companyId,
+      });
     }
   }
 

@@ -4,7 +4,7 @@ import { ImapFlow } from "imapflow";
 import type { FetchMessageObject, MessageStructureObject } from "imapflow";
 import { prisma } from "@/lib/prisma";
 import { decryptConfig } from "@/lib/encryption";
-import { aiAgentQueue } from "@/lib/queue";
+import { aiAgentQueue, extractionQueue } from "@/lib/queue";
 import path from "path";
 import fs from "fs/promises";
 import { logger } from "@/lib/logger";
@@ -375,7 +375,7 @@ export async function processEmail(
         if (buffer.length === 0) continue;
 
         const saved = await saveAttachmentBuffer(buffer, companyId, fileName);
-        await prisma.attachment.create({
+        const attachment = await prisma.attachment.create({
           data: {
             ticketId,
             ticketMessageId: message.id,
@@ -386,6 +386,14 @@ export async function processEmail(
           },
         });
         logger.info(`[email-inbound] Saved attachment ${fileName} (${saved.fileSize} bytes)`);
+        // Dispatch extraction job for background processing
+        await extractionQueue.add("extract", {
+          attachmentId: attachment.id,
+          storagePath: saved.storagePath,
+          mimeType,
+          fileName,
+          companyId,
+        });
       } catch (err) {
         logger.error({ err: err }, `[email-inbound] Failed to save attachment:`);
       }

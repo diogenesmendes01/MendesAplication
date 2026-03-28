@@ -9,6 +9,7 @@ import { processAiAgent } from './ai-agent'
 import { processDocumentProcessing } from './document-processor'
 import { processReclameAquiInbound } from './reclameaqui-inbound'
 import { processReclameAquiOutbound } from './reclameaqui-outbound'
+import { processAttachmentExtraction } from './attachment-extraction'
 import { logger } from "@/lib/logger";
 
 logger.info('Starting workers...')
@@ -66,6 +67,9 @@ const reclameaquiInboundWorker = createWorker(QUEUE_NAMES.RECLAMEAQUI_INBOUND, p
 // Concurrency 1 for outbound RA — rate limit sensitive (10 req/min)
 const reclameaquiOutboundWorker = createWorker(QUEUE_NAMES.RECLAMEAQUI_OUTBOUND, processReclameAquiOutbound, 1)
 
+// Extraction worker: concurrency 3 for parallel attachment processing
+const attachmentExtractionWorker = createWorker(QUEUE_NAMES.ATTACHMENT_EXTRACTION, processAttachmentExtraction, 3)
+
 const workers = [
   emailInboundWorker,
   emailOutboundWorker,
@@ -76,6 +80,7 @@ const workers = [
   documentProcessingWorker,
   reclameaquiInboundWorker,
   reclameaquiOutboundWorker,
+  attachmentExtractionWorker,
 ]
 
 async function shutdown() {
