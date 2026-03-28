@@ -1,0 +1,11 @@
+CREATE TABLE "ai_feedbacks" ("id" TEXT NOT NULL,"companyId" TEXT NOT NULL,"suggestionId" TEXT,"ticketId" TEXT NOT NULL,"channel" TEXT NOT NULL,"type" TEXT NOT NULL,"category" TEXT,"originalResponse" TEXT,"editedResponse" TEXT,"rejectionReason" TEXT,"diff" JSONB,"analyzedAt" TIMESTAMP(3),"analysisResult" JSONB,"actionTaken" TEXT,"actionTakenBy" TEXT,"actionTakenAt" TIMESTAMP(3),"createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,CONSTRAINT "ai_feedbacks_pkey" PRIMARY KEY ("id"));
+CREATE INDEX "ai_feedbacks_companyId_createdAt_idx" ON "ai_feedbacks"("companyId","createdAt");
+CREATE INDEX "ai_feedbacks_companyId_category_createdAt_idx" ON "ai_feedbacks"("companyId","category","createdAt");
+CREATE INDEX "ai_feedbacks_companyId_type_createdAt_idx" ON "ai_feedbacks"("companyId","type","createdAt");
+CREATE INDEX "ai_feedbacks_analyzedAt_idx" ON "ai_feedbacks"("analyzedAt");
+ALTER TABLE "ai_feedbacks" ADD CONSTRAINT "ai_feedbacks_companyId_fkey" FOREIGN KEY ("companyId") REFERENCES "companies"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "ai_feedbacks" ADD CONSTRAINT "ai_feedbacks_suggestionId_fkey" FOREIGN KEY ("suggestionId") REFERENCES "ai_suggestions"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "ai_feedbacks" ADD CONSTRAINT "ai_feedbacks_ticketId_fkey" FOREIGN KEY ("ticketId") REFERENCES "tickets"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+CREATE TABLE "ai_feedback_reports" ("id" TEXT NOT NULL,"companyId" TEXT NOT NULL,"period" TEXT NOT NULL,"totalSuggestions" INTEGER NOT NULL,"approved" INTEGER NOT NULL,"rejected" INTEGER NOT NULL,"edited" INTEGER NOT NULL,"expired" INTEGER NOT NULL,"approvalRate" DOUBLE PRECISION NOT NULL,"avgConfidence" DOUBLE PRECISION NOT NULL,"errorCategories" JSONB NOT NULL,"approvalRateDelta" DOUBLE PRECISION,"confidenceDelta" DOUBLE PRECISION,"recommendations" JSONB NOT NULL,"promptSuggestions" JSONB,"createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,CONSTRAINT "ai_feedback_reports_pkey" PRIMARY KEY ("id"));
+CREATE UNIQUE INDEX "ai_feedback_reports_companyId_period_key" ON "ai_feedback_reports"("companyId","period");
+ALTER TABLE "ai_feedback_reports" ADD CONSTRAINT "ai_feedback_reports_companyId_fkey" FOREIGN KEY ("companyId") REFERENCES "companies"("id") ON DELETE CASCADE ON UPDATE CASCADE;

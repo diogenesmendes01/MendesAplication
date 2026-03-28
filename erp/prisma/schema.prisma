@@ -93,6 +93,8 @@ model Company {
   paymentProviders    PaymentProvider[]
   santanderSequences  SantanderSequence[]
   aiSuggestions       AiSuggestion[]
+  aiFeedbacks         AiFeedback[]
+  aiFeedbackReports   AiFeedbackReport[]
   slaViolations       SlaViolation[]
   aiRateLimitEvents   AiRateLimitEvent[]
 
@@ -536,6 +538,7 @@ model Ticket {
   attachments     Attachment[]       @relation("TicketAttachments")
   refunds         Refund[]
   aiSuggestions   AiSuggestion[]
+  aiFeedbacks     AiFeedback[]
   mergedInto      Ticket?            @relation("TicketMerge", fields: [mergedIntoId], references: [id], onDelete: SetNull)
   mergedTickets   Ticket[]           @relation("TicketMerge")
   linksAsA        TicketLink[]       @relation("TicketLinksA")
@@ -1146,6 +1149,7 @@ model AiSuggestion {
   message  TicketMessage? @relation(fields: [messageId], references: [id], onDelete: SetNull)
   company  Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
   reviewer User?          @relation("SuggestionReviewer", fields: [reviewedBy], references: [id], onDelete: SetNull)
+  feedbacks AiFeedback[]
 
   @@index([ticketId, status])
   @@index([companyId, status, createdAt])
@@ -1197,4 +1201,54 @@ model TicketLink {
   @@index([ticketAId, status])
   @@index([ticketBId, status])
   @@map("ticket_links")
+}
+
+model AiFeedback {
+  id               String    @id @default(cuid())
+  companyId        String
+  suggestionId     String?
+  ticketId         String
+  channel          ChannelType
+  type             String
+  category         String?
+  originalResponse String?   @db.Text
+  editedResponse   String?   @db.Text
+  rejectionReason  String?
+  diff             Json?
+  analyzedAt       DateTime?
+  analysisResult   Json?
+  actionTaken      String?
+  actionTakenBy    String?
+  actionTakenAt    DateTime?
+  createdAt        DateTime  @default(now())
+  company    Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  suggestion AiSuggestion? @relation(fields: [suggestionId], references: [id], onDelete: SetNull)
+  ticket     Ticket        @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  @@index([companyId, createdAt])
+  @@index([companyId, category, createdAt])
+  @@index([companyId, type, createdAt])
+  @@index([analyzedAt])
+  @@map("ai_feedbacks")
+}
+
+model AiFeedbackReport {
+  id                String   @id @default(cuid())
+  companyId         String
+  period            String
+  totalSuggestions  Int
+  approved          Int
+  rejected          Int
+  edited            Int
+  expired           Int
+  approvalRate      Float
+  avgConfidence     Float
+  errorCategories   Json
+  approvalRateDelta Float?
+  confidenceDelta   Float?
+  recommendations   Json
+  promptSuggestions Json?
+  createdAt         DateTime @default(now())
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  @@unique([companyId, period])
+  @@map("ai_feedback_reports")
 }
