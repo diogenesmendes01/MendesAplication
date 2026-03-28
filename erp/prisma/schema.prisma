@@ -93,7 +93,12 @@ model Company {
   paymentProviders    PaymentProvider[]
   santanderSequences  SantanderSequence[]
   aiSuggestions       AiSuggestion[]
+  aiFeedbacks         AiFeedback[]
+  aiFeedbackReports   AiFeedbackReport[]
+  aiAlerts            AiAlert[]
   slaViolations       SlaViolation[]
+  workflows           Workflow[]
+  workflowExecutions  WorkflowExecution[]
   aiRateLimitEvents   AiRateLimitEvent[]
 
   @@map("companies")
@@ -119,6 +124,7 @@ model User {
   refundsExecuted     Refund[]             @relation("RefundExecutedBy")
   refundAttachments   RefundAttachment[]
   reviewedSuggestions AiSuggestion[]       @relation("SuggestionReviewer")
+  createdWorkflows    Workflow[]
 
   @@map("users")
 }
@@ -518,6 +524,7 @@ model Ticket {
   raModerationStatus     String?
   aiEnabled              Boolean   @default(true)
   aiDisabledReason       String? // "budget_exceeded" | "rate_limited" | "manual" | null
+  aiPendingRecovery      Boolean   @default(false)
   aiTotalCostBrl         Decimal?  @default(0) @db.Decimal(10, 4)
   lastAiResponseAt       DateTime?
   mergedIntoId           String?
@@ -536,12 +543,14 @@ model Ticket {
   attachments     Attachment[]       @relation("TicketAttachments")
   refunds         Refund[]
   aiSuggestions   AiSuggestion[]
+  aiFeedbacks     AiFeedback[]
   mergedInto      Ticket?            @relation("TicketMerge", fields: [mergedIntoId], references: [id], onDelete: SetNull)
   mergedTickets   Ticket[]           @relation("TicketMerge")
   linksAsA        TicketLink[]       @relation("TicketLinksA")
   linksAsB        TicketLink[]       @relation("TicketLinksB")
-  slaViolations   SlaViolation[]
-  rateLimitEvents AiRateLimitEvent[]
+  slaViolations      SlaViolation[]
+  workflowExecutions WorkflowExecution[]
+  rateLimitEvents    AiRateLimitEvent[]
 
   @@index([companyId, status])
   @@index([companyId, slaBreached])
@@ -909,6 +918,12 @@ model AiConfig {
   // --- Temperatura ---
   temperature Float @default(0.7)
 
+  // --- AI Fallback ---
+  fallbackChain         Json?
+  healthCheckEnabled    Boolean   @default(true)
+  healthCheckIntervalMs Int       @default(120000)
+  humanOnlyModeEnabled  Boolean   @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1146,6 +1161,7 @@ model AiSuggestion {
   message  TicketMessage? @relation(fields: [messageId], references: [id], onDelete: SetNull)
   company  Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
   reviewer User?          @relation("SuggestionReviewer", fields: [reviewedBy], references: [id], onDelete: SetNull)
+  feedbacks AiFeedback[]
 
   @@index([ticketId, status])
   @@index([companyId, status, createdAt])
@@ -1197,4 +1213,162 @@ model TicketLink {
   @@index([ticketAId, status])
   @@index([ticketBId, status])
   @@map("ticket_links")
+}
+
+model AiFeedback {
+  id               String    @id @default(cuid())
+  companyId        String
+  suggestionId     String?
+  ticketId         String
+  channel          ChannelType
+  type             String
+  category         String?
+  originalResponse String?   @db.Text
+  editedResponse   String?   @db.Text
+  rejectionReason  String?
+  diff             Json?
+  analyzedAt       DateTime?
+  analysisResult   Json?
+  actionTaken      String?
+  actionTakenBy    String?
+  actionTakenAt    DateTime?
+  createdAt        DateTime  @default(now())
+  company    Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  suggestion AiSuggestion? @relation(fields: [suggestionId], references: [id], onDelete: SetNull)
+  ticket     Ticket        @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  @@index([companyId, createdAt])
+  @@index([companyId, category, createdAt])
+  @@index([companyId, type, createdAt])
+  @@index([analyzedAt])
+  @@map("ai_feedbacks")
+}
+
+model AiFeedbackReport {
+  id                String   @id @default(cuid())
+  companyId         String
+  period            String
+  totalSuggestions  Int
+  approved          Int
+  rejected          Int
+  edited            Int
+  expired           Int
+  approvalRate      Float
+  avgConfidence     Float
+  errorCategories   Json
+  approvalRateDelta Float?
+  confidenceDelta   Float?
+  recommendations   Json
+  promptSuggestions Json?
+  createdAt         DateTime @default(now())
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  @@unique([companyId, period])
+  @@map("ai_feedback_reports")
+}
+
+// ─── AI Observability Alert ─────────────────────────────────────────────────
+
+model AiAlert {
+  id              String    @id @default(cuid())
+  companyId       String
+  metricType      String
+  threshold       Float
+  operator        String    @default("gt")
+  enabled         Boolean   @default(true)
+  lastTriggeredAt DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, metricType])
+  @@index([companyId, enabled])
+  @@map("ai_alerts")
+}
+
+// ─── Workflow Engine ─────────────────────────────────────────────────────────
+
+model Workflow {
+  id          String   @id @default(cuid())
+  companyId   String
+  name        String
+  description String?
+  trigger     Json
+  steps       Json
+  channels    String[] @default(["WHATSAPP", "EMAIL", "RECLAMEAQUI"])
+  enabled     Boolean  @default(true)
+  priority    Int      @default(0)
+  version     Int      @default(1)
+  timeoutMin  Int      @default(2880)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById String?
+
+  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdBy  User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  executions WorkflowExecution[]
+
+  @@unique([companyId, name])
+  @@index([companyId, enabled])
+  @@map("workflows")
+}
+
+model WorkflowExecution {
+  id               String    @id @default(cuid())
+  workflowId       String
+  ticketId         String
+  companyId        String
+  currentStepIndex Int       @default(0)
+  status           String    @default("ACTIVE")
+  stepData         Json      @default("{}")
+  waitingFor       String?
+  waitingCondition String?
+  startedAt        DateTime  @default(now())
+  completedAt      DateTime?
+  pausedAt         DateTime?
+  timeoutAt        DateTime?
+  error            String?
+  updatedAt        DateTime  @updatedAt
+
+  workflow Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  ticket   Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+  @@index([workflowId])
+  @@index([companyId, status])
+  @@index([status, timeoutAt])
+  @@map("workflow_executions")
+}
+
+// ─── AI Fallback: Provider Health ─────────────────────────────────────────────
+
+model AiProviderHealth {
+  id           String   @id @default(cuid())
+  provider     String
+  model        String
+  status       String   // "up" | "down" | "degraded"
+  latencyMs    Int?
+  errorMessage String?
+  checkedAt    DateTime @default(now())
+
+  @@index([provider, checkedAt])
+  @@index([status])
+  @@map("ai_provider_health")
+}
+
+model AiProviderIncident {
+  id               String    @id @default(cuid())
+  provider         String
+  model            String
+  startedAt        DateTime
+  resolvedAt       DateTime?
+  durationMs       Int?
+  ticketsAffected  Int       @default(0)
+  ticketsRecovered Int       @default(0)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([provider, createdAt])
+  @@index([resolvedAt])
+  @@map("ai_provider_incidents")
 }

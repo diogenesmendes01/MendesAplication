@@ -13,6 +13,7 @@ import {
   ShieldAlert,
   Globe,
   Lightbulb,
+  HeartPulse,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -28,6 +29,7 @@ import {
   TabReclameAqui,
   TabSuggestionMode,
   TabRateLimiting,
+  TabHealth,
 } from "./components";
 import { useAiConfig } from "./hooks";
 import type { ChannelType } from "@prisma/client";
@@ -149,7 +151,7 @@ export default function AiConfigPage() {
 
       {/* Config Tabs — sections within the active channel config */}
       <Tabs defaultValue="geral" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-8">
+        <TabsList className="grid w-full grid-cols-9">
           <TabsTrigger value="geral" className="gap-1.5">
             <Zap className="h-4 w-4" />
             Geral
@@ -181,6 +183,10 @@ export default function AiConfigPage() {
           <TabsTrigger value="rate-limiting" className="gap-1.5">
             <Shield className="h-4 w-4" />
             Rate Limiting
+          </TabsTrigger>
+          <TabsTrigger value="saude" className="gap-1.5">
+            <HeartPulse className="h-4 w-4" />
+            Saúde
           </TabsTrigger>
         </TabsList>
 
@@ -220,6 +226,10 @@ export default function AiConfigPage() {
 
         <TabsContent value="rate-limiting">
           <TabRateLimiting companyId={selectedCompanyId} />
+        </TabsContent>
+
+        <TabsContent value="saude">
+          <TabHealth companyId={selectedCompanyId} />
         </TabsContent>
       </Tabs>
     </div>

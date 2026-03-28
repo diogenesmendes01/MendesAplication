@@ -8,3 +8,4 @@ export { TabSuggestionMode } from "./tab-suggestion-mode";
 export { TabRateLimiting } from "./tab-rate-limiting";
 export { PROVIDERS, DEFAULT_CONFIG } from "./types";
 export type { AiConfigData } from "./types";
+export { TabHealth } from "./tab-health";
