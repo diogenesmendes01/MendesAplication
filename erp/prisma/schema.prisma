@@ -126,6 +126,8 @@ model User {
   refundAttachments   RefundAttachment[]
   reviewedSuggestions AiSuggestion[]       @relation("SuggestionReviewer")
   createdWorkflows    Workflow[]
+  createdDocuments    Document[]           @relation("DocumentCreator")
+  updatedDocuments    Document[]           @relation("DocumentUpdater")
 
   @@map("users")
 }
@@ -983,23 +985,36 @@ model AiRateLimitEvent {
 }
 
 model Document {
-  id        String         @id @default(cuid())
-  companyId String
-  name      String
-  mimeType  String
-  fileSize  Int
-  status    DocumentStatus @default(PROCESSING)
-  channel   ChannelType? // NULL = general (all channels), set to filter by channel
-  createdAt DateTime       @default(now())
-  updatedAt DateTime       @updatedAt
+  id          String         @id @default(cuid())
+  companyId   String
+  name        String
+  content     String?        @db.Text
+  mimeType    String
+  fileSize    Int
+  status      DocumentStatus @default(PROCESSING)
+  channel     ChannelType?
+  category    String?
+  tags        String[]       @default([])
+  sourceType  String         @default("manual")
+  sourceFile  String?
+  isActive    Boolean        @default(true)
+  version     Int            @default(1)
+  createdById String?
+  updatedById String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
 
-  company Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  chunks  DocumentChunk[]
+  company   Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  chunks    DocumentChunk[]
+  versions  DocumentVersion[]
+  createdBy User?             @relation("DocumentCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy User?             @relation("DocumentUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
 
   @@index([companyId, createdAt])
+  @@index([companyId, isActive])
+  @@index([companyId, category])
   @@map("documents")
 }
-
 model FiscalConfig {
   id                        String    @id @default(cuid())
   companyId                 String    @unique
@@ -1047,6 +1062,25 @@ model DocumentChunk {
 
   @@index([documentId])
   @@map("document_chunks")
+}
+
+model DocumentVersion {
+  id         String   @id @default(cuid())
+  documentId String
+  version    Int
+  title      String
+  content    String   @db.Text
+  category   String?
+  tags       String[] @default([])
+  changedBy  String?
+  changeNote String?
+  createdAt  DateTime @default(now())
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, version])
+  @@index([documentId])
+  @@map("document_versions")
 }
 
 model PaymentProvider {
