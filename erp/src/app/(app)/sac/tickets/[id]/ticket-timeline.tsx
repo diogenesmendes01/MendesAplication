@@ -1257,6 +1257,7 @@ export default function TicketTimeline({
                   });
                 })()
               )}
+            </div>
 
             {/* Reply / internal note form */}
             <div className="border-t pt-4 space-y-3">
