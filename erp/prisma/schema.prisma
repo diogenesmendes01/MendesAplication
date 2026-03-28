@@ -100,6 +100,7 @@ model Company {
   workflows           Workflow[]
   workflowExecutions  WorkflowExecution[]
   aiRateLimitEvents   AiRateLimitEvent[]
+  aiAuditTrails       AiAuditTrail[]
 
   @@map("companies")
 }
@@ -551,6 +552,7 @@ model Ticket {
   slaViolations      SlaViolation[]
   workflowExecutions WorkflowExecution[]
   rateLimitEvents    AiRateLimitEvent[]
+  aiAuditTrails      AiAuditTrail[]
 
   @@index([companyId, status])
   @@index([companyId, slaBreached])
@@ -584,6 +586,8 @@ model TicketMessage {
   contact       AdditionalContact? @relation("TicketMessageContact", fields: [contactId], references: [id], onDelete: SetNull)
   attachments   Attachment[]       @relation("TicketMessageAttachments")
   aiSuggestions AiSuggestion[]
+  auditTriggers AiAuditTrail[] @relation("AuditTrigger")
+  auditResponses AiAuditTrail[] @relation("AuditResponse")
 
   @@unique([externalId, channel])
   @@index([ticketId, createdAt])
@@ -917,6 +921,9 @@ model AiConfig {
 
   // --- Temperatura ---
   temperature Float @default(0.7)
+  auditTrailEnabled     Boolean @default(true)
+  auditRetentionDays    Int     @default(90)
+  auditReasoningEnabled Boolean @default(true)
 
   // --- AI Fallback ---
   fallbackChain         Json?
@@ -1371,4 +1378,39 @@ model AiProviderIncident {
   @@index([provider, createdAt])
   @@index([resolvedAt])
   @@map("ai_provider_incidents")
+}
+
+model AiAuditTrail {
+  id                String   @id @default(cuid())
+  ticketId          String
+  messageId         String?
+  responseMessageId String?
+  companyId         String
+  channel           ChannelType
+  iteration         Int
+  input             String   @db.Text
+  reasoning         String?  @db.Text
+  toolCalls         Json     @default("[]")
+  output            String?  @db.Text
+  decision          String
+  confidence        Float    @default(0)
+  inputTokens       Int      @default(0)
+  outputTokens      Int      @default(0)
+  costBrl           Decimal  @db.Decimal(10, 6) @default(0)
+  durationMs        Int      @default(0)
+  provider          String
+  model             String
+  isArchived        Boolean  @default(false)
+  createdAt         DateTime @default(now())
+
+  ticket            Ticket         @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  triggerMessage    TicketMessage? @relation("AuditTrigger", fields: [messageId], references: [id], onDelete: SetNull)
+  responseMessage   TicketMessage? @relation("AuditResponse", fields: [responseMessageId], references: [id], onDelete: SetNull)
+  company           Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId, createdAt])
+  @@index([companyId, createdAt])
+  @@index([messageId])
+  @@index([isArchived, createdAt])
+  @@map("ai_audit_trails")
 }
