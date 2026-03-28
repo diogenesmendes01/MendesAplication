@@ -692,16 +692,6 @@ export async function processReclameAquiOutbound(job: Job<RaOutboundJobData>): P
     `[reclameaqui-outbound] Processing job ${job.id}: type=${jobType}, ticketId=${data.ticketId}, attempt=${job.attemptsMade + 1}`
   );
 
-export async function processReclameAquiOutbound(job: Job<RaOutboundJobData>): Promise<void> {
-  const data = job.data;
-  const jobType = job.name;
-  const startTime = Date.now();
-
-  logger.info(
-    { jobType, ticketId: data.ticketId, attempt: job.attemptsMade + 1, maxAttempts: job.opts?.attempts ?? 3 },
-    `[reclameaqui-outbound] Processing job ${job.id}: type=${jobType}, ticketId=${data.ticketId}, attempt=${job.attemptsMade + 1}`
-  );
-
   try {
     switch (jobType) {
       case "RA_SEND_PUBLIC":
