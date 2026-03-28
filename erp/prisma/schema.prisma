@@ -93,6 +93,7 @@ model Company {
   paymentProviders    PaymentProvider[]
   santanderSequences  SantanderSequence[]
   aiSuggestions       AiSuggestion[]
+  aiAlerts            AiAlert[]
   slaViolations       SlaViolation[]
   aiRateLimitEvents   AiRateLimitEvent[]
 
@@ -1197,4 +1198,24 @@ model TicketLink {
   @@index([ticketAId, status])
   @@index([ticketBId, status])
   @@map("ticket_links")
+}
+
+// ─── AI Observability Alert ─────────────────────────────────────────────────
+
+model AiAlert {
+  id              String    @id @default(cuid())
+  companyId       String
+  metricType      String
+  threshold       Float
+  operator        String    @default("gt")
+  enabled         Boolean   @default(true)
+  lastTriggeredAt DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, metricType])
+  @@index([companyId, enabled])
+  @@map("ai_alerts")
 }
