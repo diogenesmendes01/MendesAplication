@@ -19,6 +19,7 @@ export interface RaSendPrivateJobData {
   ticketId: string;
   message: string;
   email: string;
+  files?: string[]; // base64-encoded file buffers
 }
 
 export interface RaSendDualJobData {
@@ -37,6 +38,7 @@ export interface RaRequestModerationJobData {
   reason: number;
   message: string;
   migrateTO?: number;
+  files?: string[]; // base64-encoded file buffers
 }
 
 export interface RaFinishPrivateJobData {
@@ -179,12 +181,14 @@ async function handleSendPublic(ticketId: string, message: string): Promise<void
   }
 }
 
-async function handleSendPrivate(ticketId: string, message: string, email: string): Promise<void> {
+async function handleSendPrivate(ticketId: string, message: string, email: string, files?: string[]): Promise<void> {
   const { ticket, raExternalId, client } = await getTicketWithRaChannel(ticketId);
 
   try {
     await client.authenticate();
-    await client.sendPrivateMessage(raExternalId, message, email);
+    // Decode base64 files if present
+    const fileBuffers = files?.map(f => Buffer.from(f, "base64"));
+    await client.sendPrivateMessage(raExternalId, message, email, fileBuffers);
 
     await createOutboundMessage({
       ticketId: ticket.id,
@@ -370,12 +374,13 @@ async function handleRequestModeration(
   reason: number,
   message: string,
   migrateTO?: number
-): Promise<void> {
+, files?: string[]): Promise<void> {
   const { ticket, raExternalId, client } = await getTicketWithRaChannel(ticketId);
 
   try {
     await client.authenticate();
-    await client.requestModeration(raExternalId, reason, message, migrateTO);
+    const modFileBuffers = files?.map(f => Buffer.from(f, "base64"));
+    await client.requestModeration(raExternalId, reason, message, migrateTO, modFileBuffers);
 
     await createOutboundMessage({
       ticketId: ticket.id,
@@ -466,7 +471,8 @@ export async function processReclameAquiOutbound(job: Job<RaOutboundJobData>): P
       return handleSendPrivate(
         data.ticketId,
         (data as RaSendPrivateJobData).message,
-        (data as RaSendPrivateJobData).email
+        (data as RaSendPrivateJobData).email,
+        (data as RaSendPrivateJobData).files
       );
 
     case "RA_SEND_DUAL":
@@ -483,7 +489,9 @@ export async function processReclameAquiOutbound(job: Job<RaOutboundJobData>): P
     case "RA_REQUEST_MODERATION":
       return handleRequestModeration(
         data.ticketId,
-        (data as RaRequestModerationJobData).reason,
+        (data as RaRequestModerationJobData,
+        (data as RaRequestModerationJobData).files
+      ).reason,
         (data as RaRequestModerationJobData).message,
         (data as RaRequestModerationJobData).migrateTO
       );
