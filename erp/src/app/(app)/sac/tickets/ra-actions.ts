@@ -11,6 +11,8 @@ import { RA_ERROR_MESSAGES } from "@/lib/reclameaqui/errors";
 import { RA_ATTACHMENT_LIMITS } from "@/lib/reclameaqui/attachments";
 import { Prisma } from "@prisma/client";
 import { logger } from "@/lib/logger";
+import { promises as fs } from "fs";
+import crypto from "crypto";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -764,6 +766,32 @@ export async function finishPrivateMessage(
 }
 
 // ---------------------------------------------------------------------------
+// Helper: save FormData files to disk, return paths
+// ---------------------------------------------------------------------------
+
+async function saveFilesToDisk(
+  ticketId: string,
+  formData: FormData
+): Promise<string[]> {
+  const tempDir = `/tmp/ra-uploads/${ticketId}`;
+  await fs.mkdir(tempDir, { recursive: true });
+
+  const filePaths: string[] = [];
+  const entries = formData.getAll("files");
+  for (const entry of entries) {
+    if (entry instanceof File) {
+      const ext = entry.name.split(".").pop() ?? "";
+      const safeName = `${crypto.randomUUID()}${ext ? `.${ext}` : ""}`;
+      const filePath = `${tempDir}/${safeName}`;
+      await fs.writeFile(filePath, Buffer.from(await entry.arrayBuffer()));
+      filePaths.push(filePath);
+    }
+  }
+
+  return filePaths;
+}
+
+// ---------------------------------------------------------------------------
 // 8. sendPrivateMessageWithAttachments
 // ---------------------------------------------------------------------------
 
@@ -790,18 +818,6 @@ export async function sendPrivateMessageWithAttachments(
       return { success: false, error: "Ticket inválido para Reclame Aqui" };
     }
 
-    // Extract files from FormData
-    const filesBase64: string[] = [];
-    if (formData) {
-      const entries = formData.getAll("files");
-      for (const entry of entries) {
-        if (entry instanceof File) {
-          const buffer = Buffer.from(await entry.arrayBuffer());
-          filesBase64.push(buffer.toString("base64"));
-        }
-      }
-    }
-
     // Server-side validation
     if (formData) {
       const rawFiles = formData.getAll("files");
@@ -823,14 +839,20 @@ export async function sendPrivateMessageWithAttachments(
       }
     }
 
-    // Enqueue with file buffers serialized as base64
+    // Save files to disk instead of base64 to avoid bloating Redis payloads
+    let filePaths: string[] = [];
+    if (formData) {
+      filePaths = await saveFilesToDisk(ticket.id, formData);
+    }
+
+    // Enqueue with file paths only (lightweight payload)
     await reclameaquiOutboundQueue.add("RA_SEND_PRIVATE", {
       ticketId: ticket.id,
       raExternalId: ticket.raExternalId,
       message,
       companyId,
       email: ticket.client.email,
-      files: filesBase64.length > 0 ? filesBase64 : undefined,
+      filePaths: filePaths.length > 0 ? filePaths : undefined,
     });
 
     await logAuditEvent({
@@ -840,7 +862,7 @@ export async function sendPrivateMessageWithAttachments(
       entityId: ticketId,
       dataAfter: {
         action: "SEND_PRIVATE_WITH_ATTACHMENTS",
-        attachmentCount: filesBase64.length,
+        attachmentCount: filePaths.length,
         raExternalId: ticket.raExternalId,
       } as unknown as Prisma.InputJsonValue,
       companyId,
@@ -900,16 +922,10 @@ export async function requestModerationWithAttachments(
       return { success: false, error: "Este ticket não pertence ao canal Reclame Aqui" };
     }
 
-    // Extract files from FormData
-    const filesBase64: string[] = [];
+    // Save files to disk instead of base64 to avoid bloating Redis payloads
+    let filePaths: string[] = [];
     if (formData) {
-      const entries = formData.getAll("files");
-      for (const entry of entries) {
-        if (entry instanceof File) {
-          const buffer = Buffer.from(await entry.arrayBuffer());
-          filesBase64.push(buffer.toString("base64"));
-        }
-      }
+      filePaths = await saveFilesToDisk(ticketId, formData);
     }
 
     await reclameaquiOutboundQueue.add("RA_REQUEST_MODERATION", {
@@ -919,7 +935,7 @@ export async function requestModerationWithAttachments(
       reason,
       message: message.trim(),
       migrateTO,
-      files: filesBase64.length > 0 ? filesBase64 : undefined,
+      filePaths: filePaths.length > 0 ? filePaths : undefined,
     });
 
     await logAuditEvent({
@@ -930,7 +946,7 @@ export async function requestModerationWithAttachments(
       dataAfter: {
         action: "REQUEST_RA_MODERATION_WITH_ATTACHMENTS",
         reason,
-        attachmentCount: filesBase64.length,
+        attachmentCount: filePaths.length,
         raExternalId: ticket.raExternalId,
         migrateTO,
       } as unknown as Prisma.InputJsonValue,

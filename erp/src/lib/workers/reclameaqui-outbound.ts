@@ -5,6 +5,7 @@ import { ReclameAquiClient, ReclameAquiError } from "@/lib/reclameaqui/client";
 import { logger } from "@/lib/logger";
 import type { RaClientConfig } from "@/lib/reclameaqui/types";
 import type { MessageDeliveryStatus } from "@prisma/client";
+import { promises as fs } from "fs";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -19,7 +20,8 @@ export interface RaSendPrivateJobData {
   ticketId: string;
   message: string;
   email: string;
-  files?: string[]; // base64-encoded file buffers
+  filePaths?: string[]; // paths to files saved on disk
+  files?: string[]; // base64-encoded file buffers (legacy, backward compat)
 }
 
 export interface RaSendDualJobData {
@@ -38,7 +40,8 @@ export interface RaRequestModerationJobData {
   reason: number;
   message: string;
   migrateTO?: number;
-  files?: string[]; // base64-encoded file buffers
+  filePaths?: string[]; // paths to files saved on disk
+  files?: string[]; // base64-encoded file buffers (legacy, backward compat)
 }
 
 export interface RaFinishPrivateJobData {
@@ -105,6 +108,37 @@ async function getTicketWithRaChannel(ticketId: string) {
  */
 function isDuplicateError(err: unknown): boolean {
   return err instanceof ReclameAquiError && err.code === 40930;
+}
+
+/**
+ * Reads file buffers from disk paths. Falls back to base64 decoding for legacy jobs.
+ */
+async function resolveFileBuffers(
+  filePaths?: string[],
+  filesBase64?: string[]
+): Promise<Buffer[] | undefined> {
+  // New format: read from disk
+  if (filePaths && filePaths.length > 0) {
+    return Promise.all(filePaths.map((p) => fs.readFile(p)));
+  }
+  // Legacy format: decode base64
+  if (filesBase64 && filesBase64.length > 0) {
+    return filesBase64.map((f) => Buffer.from(f, "base64"));
+  }
+  return undefined;
+}
+
+/**
+ * Cleans up temporary files from disk. Silently ignores missing files.
+ */
+async function cleanupFiles(filePaths?: string[]): Promise<void> {
+  if (!filePaths || filePaths.length === 0) return;
+  await Promise.all(filePaths.map((p) => fs.unlink(p).catch(() => {})));
+  // Try to remove the parent directory if empty
+  if (filePaths.length > 0) {
+    const dir = filePaths[0].substring(0, filePaths[0].lastIndexOf("/"));
+    await fs.rmdir(dir).catch(() => {});
+  }
 }
 
 /**
@@ -181,13 +215,19 @@ async function handleSendPublic(ticketId: string, message: string): Promise<void
   }
 }
 
-async function handleSendPrivate(ticketId: string, message: string, email: string, files?: string[]): Promise<void> {
+async function handleSendPrivate(
+  ticketId: string,
+  message: string,
+  email: string,
+  filePaths?: string[],
+  filesBase64?: string[]
+): Promise<void> {
   const { ticket, raExternalId, client } = await getTicketWithRaChannel(ticketId);
 
   try {
     await client.authenticate();
-    // Decode base64 files if present
-    const fileBuffers = files?.map(f => Buffer.from(f, "base64"));
+    // Read files from disk (new) or decode base64 (legacy backward compat)
+    const fileBuffers = await resolveFileBuffers(filePaths, filesBase64);
     await client.sendPrivateMessage(raExternalId, message, email, fileBuffers);
 
     await createOutboundMessage({
@@ -222,6 +262,9 @@ async function handleSendPrivate(ticketId: string, message: string, email: strin
       `[reclameaqui-outbound] Failed to send private message for ticket ${ticket.id}`
     );
     throw err;
+  } finally {
+    // Always cleanup disk files, even on failure
+    await cleanupFiles(filePaths);
   }
 }
 
@@ -373,13 +416,16 @@ async function handleRequestModeration(
   ticketId: string,
   reason: number,
   message: string,
-  migrateTO?: number
-, files?: string[]): Promise<void> {
+  migrateTO?: number,
+  filePaths?: string[],
+  filesBase64?: string[]
+): Promise<void> {
   const { ticket, raExternalId, client } = await getTicketWithRaChannel(ticketId);
 
   try {
     await client.authenticate();
-    const modFileBuffers = files?.map(f => Buffer.from(f, "base64"));
+    // Read files from disk (new) or decode base64 (legacy backward compat)
+    const modFileBuffers = await resolveFileBuffers(filePaths, filesBase64);
     await client.requestModeration(raExternalId, reason, message, migrateTO, modFileBuffers);
 
     await createOutboundMessage({
@@ -408,6 +454,9 @@ async function handleRequestModeration(
       `[reclameaqui-outbound] Failed to request moderation for ticket ${ticket.id}`
     );
     throw err;
+  } finally {
+    // Always cleanup disk files, even on failure
+    await cleanupFiles(filePaths);
   }
 }
 
@@ -472,6 +521,7 @@ export async function processReclameAquiOutbound(job: Job<RaOutboundJobData>): P
         data.ticketId,
         (data as RaSendPrivateJobData).message,
         (data as RaSendPrivateJobData).email,
+        (data as RaSendPrivateJobData).filePaths,
         (data as RaSendPrivateJobData).files
       );
 
@@ -492,6 +542,7 @@ export async function processReclameAquiOutbound(job: Job<RaOutboundJobData>): P
         (data as RaRequestModerationJobData).reason,
         (data as RaRequestModerationJobData).message,
         (data as RaRequestModerationJobData).migrateTO,
+        (data as RaRequestModerationJobData).filePaths,
         (data as RaRequestModerationJobData).files
       );
 
