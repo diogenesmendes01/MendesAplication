@@ -15,6 +15,18 @@ import { promises as fs } from "fs";
 import crypto from "crypto";
 
 // ---------------------------------------------------------------------------
+// Shared BullMQ job options for RA outbound jobs
+// ---------------------------------------------------------------------------
+
+const RA_OUTBOUND_JOB_OPTS = {
+  attempts: 3,
+  backoff: { type: "exponential" as const, delay: 5000 },
+  removeOnComplete: { age: 86400, count: 1000 },
+  removeOnFail: { age: 604800 },
+} as const;
+
+
+// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
@@ -363,7 +375,7 @@ export async function approveSuggestion(
         publicMessage,
         privateMessage,
         email: clientEmail,
-      });
+      }, RA_OUTBOUND_JOB_OPTS);
     } else {
       // No email available — can only send public message
       await reclameaquiOutboundQueue.add("RA_SEND_PUBLIC", {
@@ -372,7 +384,7 @@ export async function approveSuggestion(
         raExternalId: message.ticket.raExternalId,
         companyId,
         message: publicMessage,
-      });
+      }, RA_OUTBOUND_JOB_OPTS);
     }
 
     await logAuditEvent({
@@ -504,7 +516,7 @@ export async function sendRaResponse(
       publicMessage: hasPublic ? publicMessage.trim() : undefined,
       privateMessage: hasPrivate ? privateMessage!.trim() : undefined,
       email: recipientEmail,
-    });
+    }, RA_OUTBOUND_JOB_OPTS);
 
     await logAuditEvent({
       userId: session.userId,
@@ -564,7 +576,7 @@ export async function requestRaEvaluation(
       ticketId,
       raExternalId: ticket.raExternalId,
       companyId,
-    });
+    }, RA_OUTBOUND_JOB_OPTS);
 
     await logAuditEvent({
       userId: session.userId,
@@ -639,7 +651,7 @@ export async function requestRaModeration(
       reason,
       message: message.trim(),
       migrateTO,
-    });
+    }, RA_OUTBOUND_JOB_OPTS);
 
     await logAuditEvent({
       userId: session.userId,
@@ -745,7 +757,7 @@ export async function finishPrivateMessage(
       ticketId: ticket.id,
       raExternalId: ticket.raExternalId,
       companyId,
-    });
+    }, RA_OUTBOUND_JOB_OPTS);
 
     await logAuditEvent({
       userId: session.userId,
@@ -854,7 +866,7 @@ export async function sendPrivateMessageWithAttachments(
       companyId,
       email: ticket.client.email,
       filePaths: filePaths.length > 0 ? filePaths : undefined,
-    });
+    }, RA_OUTBOUND_JOB_OPTS);
 
     await logAuditEvent({
       userId: session.userId,
@@ -937,7 +949,7 @@ export async function requestModerationWithAttachments(
       message: message.trim(),
       migrateTO,
       filePaths: filePaths.length > 0 ? filePaths : undefined,
-    });
+    }, RA_OUTBOUND_JOB_OPTS);
 
     await logAuditEvent({
       userId: session.userId,
@@ -957,6 +969,92 @@ export async function requestModerationWithAttachments(
     return { success: true };
   } catch (err) {
     logger.error({ err }, "[ra-actions] requestModerationWithAttachments error");
+    return { success: false, error: mapRaError(err) };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 10. retryFailedRaMessage — retry a FAILED outbound message
+// ---------------------------------------------------------------------------
+
+export async function retryFailedRaMessage(
+  messageId: string,
+  companyId: string
+): Promise<RaActionResult> {
+  try {
+    const session = await requireCompanyAccess(companyId);
+
+    const message = await prisma.ticketMessage.findFirst({
+      where: { id: messageId },
+      include: {
+        ticket: {
+          select: {
+            id: true,
+            companyId: true,
+            raExternalId: true,
+            client: { select: { email: true } },
+            channel: { select: { type: true } },
+          },
+        },
+      },
+    });
+
+    if (!message) {
+      return { success: false, error: "Mensagem não encontrada" };
+    }
+
+    if (message.ticket.companyId !== companyId) {
+      return { success: false, error: "Acesso negado" };
+    }
+
+    if (message.deliveryStatus !== "FAILED") {
+      return { success: false, error: "Apenas mensagens com falha podem ser reenviadas" };
+    }
+
+    if (message.ticket.channel?.type !== "RECLAMEAQUI") {
+      return { success: false, error: "Este ticket não pertence ao canal Reclame Aqui" };
+    }
+
+    // Determine job type based on message properties
+    const isInternal = message.isInternal;
+    const jobName = isInternal ? "RA_SEND_PRIVATE" : "RA_SEND_PUBLIC";
+
+    // Update status to QUEUED
+    await prisma.ticketMessage.update({
+      where: { id: messageId },
+      data: { deliveryStatus: "QUEUED" },
+    });
+
+    // Re-enqueue
+    if (isInternal) {
+      await reclameaquiOutboundQueue.add(jobName, {
+        ticketId: message.ticket.id,
+        message: message.content,
+        email: message.ticket.client.email,
+      }, RA_OUTBOUND_JOB_OPTS);
+    } else {
+      await reclameaquiOutboundQueue.add(jobName, {
+        ticketId: message.ticket.id,
+        message: message.content,
+      }, RA_OUTBOUND_JOB_OPTS);
+    }
+
+    await logAuditEvent({
+      userId: session.userId,
+      action: "UPDATE",
+      entity: "TicketMessage",
+      entityId: messageId,
+      dataAfter: {
+        action: "RETRY_FAILED_RA_MESSAGE",
+        jobType: jobName,
+        deliveryStatus: "QUEUED",
+      } as unknown as Prisma.InputJsonValue,
+      companyId,
+    });
+
+    return { success: true };
+  } catch (err) {
+    logger.error({ err }, "[ra-actions] retryFailedRaMessage error");
     return { success: false, error: mapRaError(err) };
   }
 }

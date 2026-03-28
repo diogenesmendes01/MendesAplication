@@ -16,6 +16,7 @@ import {
   Bot,
   Wifi,
   RefreshCw,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -56,6 +57,7 @@ import {
 import { getWhatsAppStatus } from "../../../configuracoes/canais/actions";
 import { useEventStream } from "@/hooks/use-event-stream";
 import RaSuggestionCard from "./ra-suggestion-card";
+import { retryFailedRaMessage } from "../ra-actions";
 import AiSuggestionCard from "./components/ai-suggestion-card";
 import type { AiSuggestionData } from "./components/ai-suggestion-card";
 import { getSuggestions } from "./suggestion-actions";
@@ -250,6 +252,47 @@ function EventIcon({ event }: { event: TimelineEvent }) {
 // Timeline Event Item (Todos tab)
 // ---------------------------------------------------------------------------
 
+
+// ---------------------------------------------------------------------------
+// Retry Failed Button
+// ---------------------------------------------------------------------------
+
+function RetryFailedButton({ messageId, companyId, onRetry }: { messageId: string; companyId: string; onRetry?: () => void }) {
+  const [retrying, setRetrying] = useState(false);
+
+  async function handleRetry() {
+    setRetrying(true);
+    try {
+      const result = await retryFailedRaMessage(messageId, companyId);
+      if (result.success) {
+        toast.success("Mensagem reenviada para fila de envio");
+        onRetry?.();
+      } else {
+        toast.error(result.error ?? "Erro ao reenviar mensagem");
+      }
+    } catch {
+      toast.error("Erro ao reenviar mensagem");
+    } finally {
+      setRetrying(false);
+    }
+  }
+
+  return (
+    <div className="mt-2">
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={handleRetry}
+        disabled={retrying}
+        className="text-xs border-red-300 text-red-700 hover:bg-red-50"
+      >
+        <RefreshCw className={`mr-1 h-3 w-3 ${retrying ? "animate-spin" : ""}`} />
+        {retrying ? "Reenviando..." : "Tentar novamente"}
+      </Button>
+    </div>
+  );
+}
+
 function TimelineItem({ event, channelType, companyId, ticketId, onActionComplete, isGrouped }: { event: TimelineEvent; channelType?: string | null; companyId: string; ticketId: string; onActionComplete?: () => void; isGrouped?: boolean }) {
   // AI-generated suggestion pending approval → render SuggestionCard
   if (event.isAiGenerated && event.deliveryStatus === "PENDING_APPROVAL") {
@@ -385,7 +428,18 @@ function TimelineItem({ event, channelType, companyId, ticketId, onActionComplet
               Descartada
             </Badge>
           )}
+          {event.deliveryStatus === "FAILED" && (
+            <Badge variant="destructive" className="text-xs px-1.5 py-0">
+              <AlertTriangle className="mr-1 h-3 w-3" />
+              Falha no envio
+            </Badge>
+          )}
         </div>
+
+        {/* Retry button for FAILED messages */}
+        {event.deliveryStatus === "FAILED" && event.channel === "RECLAMEAQUI" && event.direction === "OUTBOUND" && (
+          <RetryFailedButton messageId={event.id} companyId={companyId} onRetry={onActionComplete} />
+        )}
 
         {/* Content */}
         {event.type === "status_change" ? (
