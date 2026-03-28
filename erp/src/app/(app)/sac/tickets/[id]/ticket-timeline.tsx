@@ -60,9 +60,6 @@ import AiSuggestionCard from "./components/ai-suggestion-card";
 import type { AiSuggestionData } from "./components/ai-suggestion-card";
 import { getSuggestions } from "./suggestion-actions";
 import type { SuggestionRecord } from "./suggestion-actions";
-import AiSuggestionCard from "./components/ai-suggestion-card";
-import type { AiSuggestionData } from "./components/ai-suggestion-card";
-import { getSuggestions } from "./suggestion-actions";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -635,8 +632,6 @@ export default function TicketTimeline({
 }: TicketTimelineProps) {
   const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [suggestions, setSuggestions] = useState<AiSuggestionData[]>([]);
-  const [suggestions, setSuggestions] = useState<AiSuggestionData[]>([]);
-  const [loading, setLoading] = useState(true);
   const [aiEnabled, setAiEnabled] = useState(initialAiEnabled);
   const [togglingAi, setTogglingAi] = useState(false);
   const [noteContent, setNoteContent] = useState("");
@@ -1203,16 +1198,6 @@ export default function TicketTimeline({
                   });
                 })()
               )}
-              {/* AI Suggestion cards */}
-              {suggestions.filter(s => s.status === "PENDING").map((sugg) => (
-                <AiSuggestionCard
-                  key={sugg.id}
-                  suggestion={sugg}
-                  onActionComplete={() => { loadEvents(); loadSuggestions(); }}
-                />
-              ))}
-              <div ref={timelineEndRef} />
-            </div>
 
             {/* Reply / internal note form */}
             <div className="border-t pt-4 space-y-3">
