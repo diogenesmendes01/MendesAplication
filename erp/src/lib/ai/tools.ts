@@ -264,7 +264,10 @@ export type ToolName =
   | typeof CREATE_NOTE.name
   | typeof LOOKUP_CLIENT_BY_CNPJ.name
   | typeof LINK_TICKET_TO_CLIENT.name
-  | typeof READ_ATTACHMENT.name;
+  | typeof READ_ATTACHMENT.name
+  | typeof EXECUTE_WORKFLOW.name
+  | typeof GET_WORKFLOW_STATE.name
+  | typeof ADVANCE_WORKFLOW.name;
 
 // ─── All Tools (legacy — includes WhatsApp RESPOND) ─────────────────────────
 
@@ -320,13 +323,85 @@ export const RECLAMEAQUI_TOOLS: AnyAiToolDefinition[] = [
 /**
  * Returns the appropriate tool set for a given channel.
  */
+
+// ─── Workflow Engine Tools ───────────────────────────────────────────────────
+
+export const EXECUTE_WORKFLOW = defineTool({
+  name: "EXECUTE_WORKFLOW",
+  description:
+    "Inicia a execucao de um workflow identificado. Use quando detectar uma intencao que corresponde a um workflow disponivel. O workflow guiara os proximos passos automaticamente.",
+  parameters: {
+    type: "object",
+    properties: {
+      workflowName: {
+        type: "string",
+        description: "Nome do workflow a executar",
+      },
+      initialData: {
+        type: "object",
+        description:
+          "Dados ja conhecidos para preencher variaveis do workflow (ex: cnpj ja informado)",
+      },
+    },
+    required: ["workflowName"],
+  },
+});
+
+export const GET_WORKFLOW_STATE = defineTool({
+  name: "GET_WORKFLOW_STATE",
+  description:
+    "Retorna o estado atual do workflow em execucao para este ticket — step atual, dados coletados, status. Use para entender onde o workflow parou e o que falta.",
+  parameters: {
+    type: "object",
+    properties: {},
+    required: [],
+  },
+});
+
+export const ADVANCE_WORKFLOW = defineTool({
+  name: "ADVANCE_WORKFLOW",
+  description:
+    "Avanca o workflow para o proximo step, salvando dados coletados. Use apos completar um step com sucesso.",
+  parameters: {
+    type: "object",
+    properties: {
+      stepResult: {
+        type: "object",
+        description:
+          "Resultado do step atual — dados coletados, busca realizada, etc",
+      },
+      skipToStep: {
+        type: "string",
+        description:
+          "Se definido, pula para esse step em vez do proximo sequencial",
+      },
+    },
+    required: [],
+  },
+});
+
+export type ExecuteWorkflowArgs = InferToolArgs<typeof EXECUTE_WORKFLOW>;
+export type GetWorkflowStateArgs = InferToolArgs<typeof GET_WORKFLOW_STATE>;
+export type AdvanceWorkflowArgs = InferToolArgs<typeof ADVANCE_WORKFLOW>;
+
+export const WORKFLOW_TOOLS: AnyAiToolDefinition[] = [
+  EXECUTE_WORKFLOW,
+  GET_WORKFLOW_STATE,
+  ADVANCE_WORKFLOW,
+];
+
 export function getToolsForChannel(channel: "WHATSAPP" | "EMAIL" | "RECLAMEAQUI"): AnyAiToolDefinition[] {
+  let base: AnyAiToolDefinition[];
   switch (channel) {
     case "EMAIL":
-      return EMAIL_TOOLS;
+      base = EMAIL_TOOLS;
+      break;
     case "RECLAMEAQUI":
-      return RECLAMEAQUI_TOOLS;
+      base = RECLAMEAQUI_TOOLS;
+      break;
     default:
-      return WHATSAPP_TOOLS;
+      base = WHATSAPP_TOOLS;
+      break;
   }
+  return [...base, EXECUTE_WORKFLOW, GET_WORKFLOW_STATE, ADVANCE_WORKFLOW];
 }

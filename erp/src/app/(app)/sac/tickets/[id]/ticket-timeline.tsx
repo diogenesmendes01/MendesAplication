@@ -60,6 +60,7 @@ import AiSuggestionCard from "./components/ai-suggestion-card";
 import type { AiSuggestionData } from "./components/ai-suggestion-card";
 import { getSuggestions } from "./suggestion-actions";
 import type { SuggestionRecord } from "./suggestion-actions";
+import AiAuditPanel from "./components/ai-audit-panel";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -249,7 +250,7 @@ function EventIcon({ event }: { event: TimelineEvent }) {
 // Timeline Event Item (Todos tab)
 // ---------------------------------------------------------------------------
 
-function TimelineItem({ event, channelType, companyId, onActionComplete, isGrouped }: { event: TimelineEvent; channelType?: string | null; companyId: string; onActionComplete?: () => void; isGrouped?: boolean }) {
+function TimelineItem({ event, channelType, companyId, ticketId, onActionComplete, isGrouped }: { event: TimelineEvent; channelType?: string | null; companyId: string; ticketId: string; onActionComplete?: () => void; isGrouped?: boolean }) {
   // AI-generated suggestion pending approval → render SuggestionCard
   if (event.isAiGenerated && event.deliveryStatus === "PENDING_APPROVAL") {
     return (
@@ -417,6 +418,11 @@ function TimelineItem({ event, channelType, companyId, onActionComplete, isGroup
 
         {/* Attachments */}
         <AttachmentList attachments={event.attachments} />
+
+        {/* AI Audit Trail */}
+        {event.isAiGenerated && companyId && (
+          <AiAuditPanel ticketId={ticketId} companyId={companyId} />
+        )}
       </div>
     </div>
   );
@@ -1189,6 +1195,7 @@ export default function TicketTimeline({
                         event={evt}
                         channelType={channelType}
                         companyId={companyId}
+                        ticketId={ticketId}
                         onActionComplete={() => { loadEvents(); loadSuggestions(); }}
                         isGrouped={isGrouped}
                       />

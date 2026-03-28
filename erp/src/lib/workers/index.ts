@@ -1,4 +1,4 @@
-import { QUEUE_NAMES, emailInboundQueue, slaCheckQueue, reclameaquiInboundQueue } from '../queue'
+import { QUEUE_NAMES, emailInboundQueue, slaCheckQueue, reclameaquiInboundQueue , aiHealthCheckQueue } from '../queue'
 import { createWorker } from './base'
 import { processEmailInbound } from './email-inbound'
 import { processEmailOutbound } from './email-outbound'
@@ -10,6 +10,7 @@ import { processDocumentProcessing } from './document-processor'
 import { processReclameAquiInbound } from './reclameaqui-inbound'
 import { processReclameAquiOutbound } from './reclameaqui-outbound'
 import { processAttachmentExtraction } from './attachment-extraction'
+import { processAiHealthCheck } from './ai-health-check'
 import { logger } from "@/lib/logger";
 
 logger.info('Starting workers...')
@@ -48,6 +49,17 @@ reclameaquiInboundQueue.upsertJobScheduler(
   logger.error('[reclameaqui-inbound] Failed to schedule repeatable job:', err)
 })
 
+// Set up repeatable job for AI health checks (every 2 minutes)
+aiHealthCheckQueue.upsertJobScheduler(
+  'ai-health-check-poll',
+  { every: 2 * 60 * 1000 },
+  { name: 'check-ai-health' }
+).then(() => {
+  logger.info('[ai-health-check] Repeatable health check job scheduled (every 2 min)')
+}).catch((err) => {
+  logger.error('[ai-health-check] Failed to schedule repeatable job:', err)
+})
+
 const emailInboundWorker = createWorker(QUEUE_NAMES.EMAIL_INBOUND, processEmailInbound, 2)
 
 const emailOutboundWorker = createWorker(QUEUE_NAMES.EMAIL_OUTBOUND, processEmailOutbound, 2)
@@ -70,6 +82,8 @@ const reclameaquiOutboundWorker = createWorker(QUEUE_NAMES.RECLAMEAQUI_OUTBOUND,
 // Extraction worker: concurrency 3 for parallel attachment processing
 const attachmentExtractionWorker = createWorker(QUEUE_NAMES.ATTACHMENT_EXTRACTION, processAttachmentExtraction, 3)
 
+const aiHealthCheckWorker = createWorker(QUEUE_NAMES.AI_HEALTH_CHECK, processAiHealthCheck, 1)
+
 const workers = [
   emailInboundWorker,
   emailOutboundWorker,
@@ -81,6 +95,7 @@ const workers = [
   reclameaquiInboundWorker,
   reclameaquiOutboundWorker,
   attachmentExtractionWorker,
+  aiHealthCheckWorker,
 ]
 
 async function shutdown() {

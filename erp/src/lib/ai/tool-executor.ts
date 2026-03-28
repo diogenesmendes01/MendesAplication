@@ -38,6 +38,7 @@ export const READ_ONLY_TOOLS = new Set([
   "GET_HISTORY",
   "LOOKUP_CLIENT_BY_CNPJ",
   "READ_ATTACHMENT",
+  "GET_WORKFLOW_STATE",
 ]);
 
 /** Tools that write data or send messages — intercepted in suggestion mode */
@@ -48,6 +49,8 @@ export const WRITE_TOOLS = new Set([
   "ESCALATE",
   "CREATE_NOTE",
   "LINK_TICKET_TO_CLIENT",
+  "EXECUTE_WORKFLOW",
+  "ADVANCE_WORKFLOW",
 ]);
 
 export function isReadOnlyTool(toolName: string): boolean {
@@ -77,6 +80,10 @@ function executeSuggestionModeTool(
       return `[Sugestão registrada] Nota interna seria criada.`;
     case "LINK_TICKET_TO_CLIENT":
       return `[Sugestão registrada] Ticket seria vinculado ao cliente ${args.cnpj}.`;
+    case "EXECUTE_WORKFLOW":
+      return `[Sugestão registrada] Workflow "${args.workflowName}" seria iniciado.`;
+    case "ADVANCE_WORKFLOW":
+      return `[Sugestão registrada] Workflow seria avançado para próximo step.`;
     default:
       return `[Sugestão registrada] Ação ${toolName} seria executada.`;
   }
@@ -126,6 +133,13 @@ export async function executeTool(
       case "LINK_TICKET_TO_CLIENT":
         if (context.dryRun) return executeDryRunLinkTicketToClient(args);
         return await executeLinkTicketToClient(args, context);
+      // ─── Workflow tools ──────────────────────────────────────────────
+      case "EXECUTE_WORKFLOW":
+        return await executeWorkflowTool(args, context);
+      case "GET_WORKFLOW_STATE":
+        return await executeGetWorkflowState(context);
+      case "ADVANCE_WORKFLOW":
+        return await executeAdvanceWorkflowTool(args, context);
       case "READ_ATTACHMENT":
         if (context.dryRun) return executeDryRunReadAttachment(args);
         return await executeReadAttachment(args, context);
@@ -931,4 +945,101 @@ function executeDryRunReadAttachment(args: Record<string, unknown>): string {
     return `[SIMULAÇÃO] Busca por "${query}" no anexo ${attachmentId}: Nenhum conteudo disponivel em modo simulacao.`;
   }
   return `[SIMULAÇÃO] Conteudo do anexo ${attachmentId}: Nenhum conteudo disponivel em modo simulacao.`;
+}
+
+
+// ─── Workflow tool implementations ───────────────────────────────────────────
+
+// Lazy import to avoid circular deps and ensure test mocking works
+async function getWorkflowEngine() {
+  return await import("./workflow-engine");
+}
+type WorkflowStep = import("./workflow-types").WorkflowStep;
+
+async function executeWorkflowTool(
+  args: Record<string, unknown>,
+  context: ToolContext,
+): Promise<string> {
+  const workflowName = args.workflowName as string;
+  if (!workflowName) return "Erro: workflowName não fornecido.";
+
+  const { getActiveExecution, createExecution, runWorkflow } = await getWorkflowEngine();
+  const existing = await getActiveExecution(context.ticketId);
+  if (existing) {
+    return `Já existe um workflow ativo para este ticket: "${existing.workflow.name}" (step ${existing.currentStepIndex + 1}). Use GET_WORKFLOW_STATE para ver o estado.`;
+  }
+
+  const workflow = await prisma.workflow.findFirst({
+    where: { companyId: context.companyId, name: workflowName, enabled: true },
+  });
+
+  if (!workflow) {
+    return `Workflow "${workflowName}" não encontrado ou está desabilitado.`;
+  }
+
+  const initialData = (args.initialData as Record<string, unknown>) ?? {};
+  const execution = await createExecution(workflow.id, context.ticketId, context.companyId, initialData, workflow.timeoutMin);
+  const result = await runWorkflow(execution.id);
+
+  return JSON.stringify({
+    executionId: execution.id,
+    workflowName: workflow.name,
+    status: result.status,
+    stepsExecuted: result.stepsExecuted,
+    message: result.message,
+  });
+}
+
+async function executeGetWorkflowState(context: ToolContext): Promise<string> {
+  const { getActiveExecution } = await getWorkflowEngine();
+  const execution = await getActiveExecution(context.ticketId);
+  if (!execution) return "Nenhum workflow ativo para este ticket.";
+
+  const steps = execution.workflow.steps as unknown as WorkflowStep[];
+  const currentStep = steps[execution.currentStepIndex];
+
+  return JSON.stringify({
+    workflowName: execution.workflow.name,
+    status: execution.status,
+    currentStepIndex: execution.currentStepIndex,
+    totalSteps: steps.length,
+    currentStep: currentStep ? { id: currentStep.id, nome: currentStep.nome, tipo: currentStep.tipo } : null,
+    stepData: execution.stepData,
+    waitingFor: execution.waitingFor,
+    startedAt: execution.startedAt,
+  });
+}
+
+async function executeAdvanceWorkflowTool(
+  args: Record<string, unknown>,
+  context: ToolContext,
+): Promise<string> {
+  const { getActiveExecution, resumeWorkflow, runWorkflow, advanceWorkflow: advanceWf } = await getWorkflowEngine();
+  const execution = await getActiveExecution(context.ticketId);
+  if (!execution) return "Nenhum workflow ativo para avançar.";
+
+  if (execution.status === "PAUSED") {
+    const stepResult = args.stepResult as Record<string, unknown> | undefined;
+    const resumed = await resumeWorkflow(execution.id, stepResult);
+    if (resumed.status === "COMPLETED") {
+      return JSON.stringify({ status: "COMPLETED", message: "Workflow concluído." });
+    }
+    const result = await runWorkflow(execution.id);
+    return JSON.stringify({ status: result.status, stepsExecuted: result.stepsExecuted, message: result.message });
+  }
+
+  if (args.stepResult) {
+    const stepData = execution.stepData as Record<string, unknown>;
+    const merged = { ...stepData, ...(args.stepResult as Record<string, unknown>) };
+    await prisma.workflowExecution.update({ where: { id: execution.id }, data: { stepData: merged } });
+  }
+
+  const skipToStep = args.skipToStep as string | undefined;
+  const advance = await advanceWf(execution.id, skipToStep);
+  if (advance.done) {
+    return JSON.stringify({ status: advance.status, message: "Workflow concluído." });
+  }
+
+  const result = await runWorkflow(execution.id);
+  return JSON.stringify({ status: result.status, stepsExecuted: result.stepsExecuted, message: result.message });
 }
