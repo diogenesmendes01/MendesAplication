@@ -11,6 +11,7 @@ import {
   FlaskConical,
   ShieldAlert,
   Globe,
+  Lightbulb,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -24,6 +25,7 @@ import {
   TabConsumo,
   TabSimulador,
   TabReclameAqui,
+  TabSuggestionMode,
 } from "./components";
 import { useAiConfig } from "./hooks";
 import type { ChannelType } from "@prisma/client";
@@ -145,7 +147,7 @@ export default function AiConfigPage() {
 
       {/* Config Tabs — sections within the active channel config */}
       <Tabs defaultValue="geral" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid w-full grid-cols-7">
           <TabsTrigger value="geral" className="gap-1.5">
             <Zap className="h-4 w-4" />
             Geral
@@ -169,6 +171,10 @@ export default function AiConfigPage() {
           <TabsTrigger value="simulador" className="gap-1.5">
             <FlaskConical className="h-4 w-4" />
             Simulador
+          </TabsTrigger>
+          <TabsTrigger value="suggestion-mode" className="gap-1.5">
+            <Lightbulb className="h-4 w-4" />
+            Modo Sugestão
           </TabsTrigger>
         </TabsList>
 
@@ -200,6 +206,10 @@ export default function AiConfigPage() {
 
         <TabsContent value="simulador">
           <TabSimulador companyId={selectedCompanyId} />
+        </TabsContent>
+
+        <TabsContent value="suggestion-mode">
+          <TabSuggestionMode config={config} setConfig={setConfig} />
         </TabsContent>
       </Tabs>
     </div>

@@ -56,6 +56,9 @@ import {
 import { getWhatsAppStatus } from "../../../configuracoes/canais/actions";
 import { useEventStream } from "@/hooks/use-event-stream";
 import RaSuggestionCard from "./ra-suggestion-card";
+import AiSuggestionCard from "./components/ai-suggestion-card";
+import type { AiSuggestionData } from "./components/ai-suggestion-card";
+import { getSuggestions } from "./suggestion-actions";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -627,6 +630,7 @@ export default function TicketTimeline({
   channelType,
 }: TicketTimelineProps) {
   const [events, setEvents] = useState<TimelineEvent[]>([]);
+  const [suggestions, setSuggestions] = useState<AiSuggestionData[]>([]);
   const [loading, setLoading] = useState(true);
   const [aiEnabled, setAiEnabled] = useState(initialAiEnabled);
   const [togglingAi, setTogglingAi] = useState(false);
@@ -671,6 +675,38 @@ export default function TicketTimeline({
   // Active tab — controlled for lazy-loading recipients
   const [activeTab, setActiveTab] = useState("todos");
 
+  const loadSuggestions = useCallback(async () => {
+    if (!ticketId || !companyId) return;
+    try {
+      const data = await getSuggestions(ticketId, companyId);
+      setSuggestions(data.map((s: Record<string, unknown>) => ({
+        id: s.id as string,
+        ticketId: s.ticketId as string,
+        companyId: s.companyId as string,
+        channel: s.channel as string,
+        analysis: (s.analysis || {}) as AiSuggestionData["analysis"],
+        suggestedResponse: s.suggestedResponse as string,
+        suggestedSubject: s.suggestedSubject as string | null,
+        suggestedActions: ((s.suggestedActions as unknown[]) || []) as AiSuggestionData["suggestedActions"],
+        raPrivateMessage: s.raPrivateMessage as string | null,
+        raPublicMessage: s.raPublicMessage as string | null,
+        raDetectedType: s.raDetectedType as string | null,
+        raSuggestModeration: s.raSuggestModeration as boolean | undefined,
+        status: s.status as AiSuggestionData["status"],
+        reviewedBy: s.reviewedBy as string | null,
+        reviewedAt: s.reviewedAt ? (s.reviewedAt instanceof Date ? (s.reviewedAt as Date).toISOString() : String(s.reviewedAt)) : null,
+        editedResponse: s.editedResponse as string | null,
+        editedSubject: s.editedSubject as string | null,
+        rejectionReason: s.rejectionReason as string | null,
+        confidence: s.confidence as number,
+        createdAt: s.createdAt instanceof Date ? (s.createdAt as Date).toISOString() : String(s.createdAt),
+        reviewer: s.reviewer as AiSuggestionData["reviewer"],
+      })));
+    } catch {
+      // silent
+    }
+  }, [ticketId, companyId]);
+
   const loadEvents = useCallback(async () => {
     if (!ticketId || !companyId) return;
     setLoading(true);
@@ -694,7 +730,8 @@ export default function TicketTimeline({
 
   useEffect(() => {
     loadEvents();
-  }, [loadEvents]);
+    loadSuggestions();
+  }, [loadEvents, loadSuggestions]);
 
   // Incremental poll — only fetch events newer than the last known timestamp
   const pollNewEvents = useCallback(async () => {
@@ -757,7 +794,7 @@ export default function TicketTimeline({
   const [refreshing, setRefreshing] = useState(false);
   async function handleManualRefresh() {
     setRefreshing(true);
-    await loadEvents();
+    await Promise.all([loadEvents(), loadSuggestions()]);
     setRefreshing(false);
   }
 
@@ -1137,6 +1174,14 @@ export default function TicketTimeline({
                   );
                 })
               )}
+              {/* AI Suggestion cards */}
+              {suggestions.filter(s => s.status === "PENDING").map((sugg) => (
+                <AiSuggestionCard
+                  key={sugg.id}
+                  suggestion={sugg}
+                  onActionComplete={() => { loadEvents(); loadSuggestions(); }}
+                />
+              ))}
               <div ref={timelineEndRef} />
             </div>
 

@@ -26,6 +26,7 @@ import {
   Mail,
   MessageCircle,
   Star,
+  Lightbulb,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -44,6 +45,7 @@ import {
 import { useCompany } from "@/contexts/company-context";
 import { useUser } from "@/contexts/user-context";
 import { getSlaAlertCounts } from "@/app/(app)/sac/tickets/actions";
+import { getPendingSuggestionsCount } from "@/app/(app)/sac/tickets/[id]/suggestion-actions";
 import { useEventStream } from "@/hooks/use-event-stream";
 
 interface NavItem {
@@ -65,6 +67,7 @@ const navItems: NavItem[] = [
       { label: "Email", href: "/sac/email", icon: Mail },
       { label: "WhatsApp", href: "/sac/whatsapp", icon: MessageCircle },
       { label: "Reclame Aqui", href: "/sac/reclameaqui", icon: Star },
+      { label: "Sugestões IA", href: "/sac/suggestions", icon: Lightbulb },
     ],
   },
   { label: "Financeiro", href: "/financeiro", icon: DollarSign },
@@ -103,6 +106,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
   const { companies, selectedCompany, setSelectedCompanyId } = useCompany();
   const { user } = useUser();
   const [sacBadge, setSacBadge] = useState(0);
+  const [suggestionBadge, setSuggestionBadge] = useState(0);
 
   const fetchBadge = useCallback(() => {
     if (!selectedCompany) return;
@@ -113,6 +117,9 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
       .catch(() => {
         setSacBadge(0);
       });
+    getPendingSuggestionsCount(selectedCompany.id)
+      .then((count) => setSuggestionBadge(count))
+      .catch(() => setSuggestionBadge(0));
   }, [selectedCompany]);
 
   useEffect(() => {
@@ -295,7 +302,12 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
                         )}
                       >
                         <child.icon className="h-4 w-4" />
-                        <span>{child.label}</span>
+                        <span className="flex-1">{child.label}</span>
+                        {child.href === "/sac/suggestions" && suggestionBadge > 0 && (
+                          <span className="inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-purple-100 px-1 text-[9px] font-bold text-purple-700">
+                            {suggestionBadge > 99 ? "99+" : suggestionBadge}
+                          </span>
+                        )}
                       </Link>
                     );
                   })}
