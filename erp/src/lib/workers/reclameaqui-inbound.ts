@@ -438,38 +438,6 @@ async function createNewTicket(
     }
 
 
-    // ── CNPJ lookup from consumer email domain ─────────────────────────
-    // When cpfCnpj is synthetic (RA-xxx), try to find the real CNPJ
-    // by matching the email domain against the external CNPJ database.
-    // This runs OUTSIDE the transaction since it queries a separate DB.
-    const currentClient = await tx.client.findFirst({
-      where: { id: clientId },
-      select: { cpfCnpj: true },
-    });
-    if (currentClient?.cpfCnpj?.startsWith("RA-") && customerEmail) {
-      try {
-        const cnpjResult = await lookupCnpjByEmail(customerEmail);
-        if (cnpjResult) {
-          await tx.client.update({
-            where: { id: clientId },
-            data: {
-              cpfCnpj: cnpjResult.cnpj,
-              type: "PJ",
-            },
-          });
-          logger.info(
-            `[reclameaqui-inbound] Updated client ${clientId} with CNPJ ${cnpjResult.cnpj} from email domain`
-          );
-        }
-      } catch (err) {
-        // Non-critical — log and continue with RA-xxx cpfCnpj
-        logger.warn(
-          { err, clientId, email: customerEmail },
-          "[reclameaqui-inbound] CNPJ lookup failed, continuing with synthetic ID"
-        );
-      }
-    }
-
     // Create ticket
     const ticket = await tx.ticket.create({
       data: {
@@ -520,6 +488,41 @@ async function createNewTicket(
       `[reclameaqui-inbound] Created ticket ${ticket.id} with ${raTicket.interactions.length} messages`
     );
   });
+
+  // ── CNPJ lookup from consumer email domain (OUTSIDE transaction) ───
+  // When cpfCnpj is synthetic (RA-xxx), try to find the real CNPJ
+  // by matching the email domain against the external CNPJ database.
+  // Runs after transaction to avoid holding DB locks during 60s external query.
+  if (customerEmail) {
+    const currentClient = await prisma.client.findFirst({
+      where: { cpfCnpj: { startsWith: "RA-" }, additionalContacts: { some: { email: customerEmail } } },
+      select: { id: true, cpfCnpj: true },
+      orderBy: { createdAt: "desc" },
+    });
+    if (currentClient) {
+      try {
+        const cnpjResult = await lookupCnpjByEmail(customerEmail);
+        if (cnpjResult) {
+          await prisma.client.update({
+            where: { id: currentClient.id },
+            data: {
+              cpfCnpj: cnpjResult.cnpj,
+              type: "PJ",
+            },
+          });
+          logger.info(
+            `[reclameaqui-inbound] Updated client ${currentClient.id} with CNPJ ${cnpjResult.cnpj} from email domain`
+          );
+        }
+      } catch (err) {
+        // Non-critical — log and continue with RA-xxx cpfCnpj
+        logger.warn(
+          { err, clientId: currentClient.id, email: customerEmail },
+          "[reclameaqui-inbound] CNPJ lookup failed, continuing with synthetic ID"
+        );
+      }
+    }
+  }
 }
 
 async function updateExistingTicket(
