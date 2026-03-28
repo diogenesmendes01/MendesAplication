@@ -8,7 +8,7 @@ ALTER TABLE "sla_configs" ADD COLUMN "businessHoursOnly" BOOLEAN NOT NULL DEFAUL
 ALTER TABLE "sla_configs" ADD COLUMN "businessHoursStart" INTEGER DEFAULT 8;
 ALTER TABLE "sla_configs" ADD COLUMN "businessHoursEnd" INTEGER DEFAULT 18;
 
-DROP INDEX IF EXISTS "sla_configs_companyId_type_priority_stage_key";
+ALTER TABLE "sla_configs" DROP CONSTRAINT IF EXISTS "sla_configs_companyId_type_priority_stage_key";
 CREATE UNIQUE INDEX "sla_configs_companyId_type_priority_stage_channelType_key"
   ON "sla_configs" ("companyId", "type", "priority", "stage", "channelType");
 CREATE INDEX "sla_configs_companyId_type_channelType_idx"
