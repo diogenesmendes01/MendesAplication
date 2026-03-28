@@ -58,10 +58,17 @@ export async function processEmailOutbound(job: Job<EmailOutboundJobData>) {
       where: { id: { in: attachmentIds } },
     });
     for (const att of attachmentRecords) {
-      attachments.push({
-        filename: att.fileName,
-        path: path.join(process.cwd(), "uploads", att.storagePath),
-      });
+      if (att.storagePath) {
+        attachments.push({
+          filename: att.fileName,
+          path: path.join(process.cwd(), "uploads", att.storagePath),
+        });
+      } else if (att.externalUrl) {
+        attachments.push({
+          filename: att.fileName,
+          path: att.externalUrl,
+        });
+      }
     }
   }
 

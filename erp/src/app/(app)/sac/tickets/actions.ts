@@ -832,6 +832,7 @@ export async function listTimelineEvents(
             fileSize: true,
             mimeType: true,
             storagePath: true,
+            externalUrl: true,
           },
         },
       },
@@ -881,7 +882,7 @@ export async function listTimelineEvents(
         fileName: a.fileName,
         fileSize: a.fileSize,
         mimeType: a.mimeType,
-        url: `/api/files/${a.storagePath}`,
+        url: a.externalUrl || (a.storagePath ? `/api/files/${a.storagePath}` : ''),
       })),
       refundAmount: null,
       refundStatus: null,
@@ -1237,7 +1238,7 @@ export async function attachFileToTicket(
     fileName: attachment.fileName,
     fileSize: attachment.fileSize,
     mimeType: attachment.mimeType,
-    url: `/api/files/${attachment.storagePath}`,
+    url: attachment.storagePath ? `/api/files/${attachment.storagePath}` : '',
   };
 }
 
@@ -1931,7 +1932,7 @@ export async function requestRefund(
         fileName: proofAttachment.fileName,
         fileSize: proofAttachment.fileSize,
         mimeType: proofAttachment.mimeType,
-        storagePath: proofAttachment.storagePath,
+        storagePath: proofAttachment.storagePath!,
         uploadedById: session.userId,
       },
     });
@@ -2386,7 +2387,7 @@ export async function executeRefund(
             fileName: proofFile.fileName,
             fileSize: proofFile.fileSize,
             mimeType: proofFile.mimeType,
-            storagePath: proofFile.storagePath,
+            storagePath: proofFile.storagePath!,
             uploadedById: session.userId,
           },
         });

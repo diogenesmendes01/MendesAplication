@@ -75,6 +75,68 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+
+function isImageMime(mimeType: string): boolean {
+  return mimeType.startsWith("image/");
+}
+
+/** Renders attachments with inline image thumbnails for images, download links for others */
+function AttachmentList({ attachments }: { attachments: TimelineEvent["attachments"] }) {
+  if (attachments.length === 0) return null;
+
+  const images = attachments.filter((a) => isImageMime(a.mimeType));
+  const files = attachments.filter((a) => !isImageMime(a.mimeType));
+
+  return (
+    <div className="mt-2 space-y-2">
+      {images.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {images.map((att) => (
+            <a
+              key={att.id}
+              href={att.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group relative block max-w-[200px] rounded-md overflow-hidden border hover:border-primary transition-colors"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={att.url}
+                alt={att.fileName}
+                className="max-h-[150px] w-auto object-cover"
+                loading="lazy"
+              />
+              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                <Download className="h-5 w-5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+              </div>
+              <span className="block px-1.5 py-0.5 text-[10px] text-muted-foreground truncate">
+                {att.fileName}
+              </span>
+            </a>
+          ))}
+        </div>
+      )}
+      {files.map((att) => (
+        <a
+          key={att.id}
+          href={att.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-2 text-xs text-primary hover:underline"
+        >
+          <Paperclip className="h-3 w-3" />
+          <span>{att.fileName}</span>
+          {att.fileSize > 0 && (
+            <span className="text-muted-foreground">
+              ({formatFileSize(att.fileSize)})
+            </span>
+          )}
+          <Download className="h-3 w-3" />
+        </a>
+      ))}
+    </div>
+  );
+}
 function originLabel(event: TimelineEvent): string | null {
   if (event.type === "status_change" || event.type === "refund") return null;
   if (event.origin === "SYSTEM") return "via ERP";
@@ -248,19 +310,7 @@ function TimelineItem({ event, channelType, companyId, onActionComplete, isGroup
           <p className="text-sm whitespace-pre-wrap leading-relaxed">
             {event.content}
           </p>
-          {event.attachments.length > 0 && (
-            <div className="mt-2 space-y-1">
-              {event.attachments.map((att) => (
-                <a key={att.id} href={att.url} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-2 text-xs text-primary hover:underline">
-                  <Paperclip className="h-3 w-3" />
-                  <span>{att.fileName}</span>
-                  <span className="text-muted-foreground">({formatFileSize(att.fileSize)})</span>
-                  <Download className="h-3 w-3" />
-                </a>
-              ))}
-            </div>
-          )}
+          <AttachmentList attachments={event.attachments} />
         </div>
       </div>
     );
@@ -362,26 +412,7 @@ function TimelineItem({ event, channelType, companyId, onActionComplete, isGroup
         )}
 
         {/* Attachments */}
-        {event.attachments.length > 0 && (
-          <div className="mt-2 space-y-1">
-            {event.attachments.map((att) => (
-              <a
-                key={att.id}
-                href={att.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 text-xs text-primary hover:underline"
-              >
-                <Paperclip className="h-3 w-3" />
-                <span>{att.fileName}</span>
-                <span className="text-muted-foreground">
-                  ({formatFileSize(att.fileSize)})
-                </span>
-                <Download className="h-3 w-3" />
-              </a>
-            ))}
-          </div>
-        )}
+        <AttachmentList attachments={event.attachments} />
       </div>
     </div>
   );
@@ -452,24 +483,9 @@ function EmailThreadItem({ event, ticketSubject }: EmailThreadItemProps) {
 
       {/* Attachments */}
       {event.attachments.length > 0 && (
-        <div className="mt-3 border-t pt-3 space-y-1">
+        <div className="mt-3 border-t pt-3">
           <span className="text-xs font-medium text-muted-foreground">Anexos:</span>
-          {event.attachments.map((att) => (
-            <a
-              key={att.id}
-              href={att.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 text-xs text-primary hover:underline"
-            >
-              <Paperclip className="h-3 w-3" />
-              <span>{att.fileName}</span>
-              <span className="text-muted-foreground">
-                ({formatFileSize(att.fileSize)})
-              </span>
-              <Download className="h-3 w-3" />
-            </a>
-          ))}
+          <AttachmentList attachments={event.attachments} />
         </div>
       )}
     </div>
@@ -528,25 +544,7 @@ function WhatsAppBubble({ event }: { event: TimelineEvent }) {
         </p>
 
         {/* Attachments */}
-        {event.attachments.length > 0 && (
-          <div className="mt-1.5 space-y-1">
-            {event.attachments.map((att) => (
-              <a
-                key={att.id}
-                href={att.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1.5 text-xs text-primary hover:underline"
-              >
-                <Paperclip className="h-3 w-3" />
-                <span>{att.fileName}</span>
-                <span className="text-muted-foreground">
-                  ({formatFileSize(att.fileSize)})
-                </span>
-              </a>
-            ))}
-          </div>
-        )}
+        <AttachmentList attachments={event.attachments} />
 
         {/* Timestamp + delivery status */}
         <div className="flex justify-end items-center gap-1 mt-1">

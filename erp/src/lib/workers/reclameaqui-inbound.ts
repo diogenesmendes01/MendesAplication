@@ -9,6 +9,7 @@ import type {
   RaClientConfig,
   RaTicket,
   RaInteraction,
+  RaInteractionDetail,
 } from "@/lib/reclameaqui/types";
 import {
   RA_INTERACTION_TYPES,
@@ -128,6 +129,145 @@ function buildMessageContent(interaction: RaInteraction): string {
   return content;
 }
 
+/**
+ * Guess MIME type from file name extension.
+ */
+function guessMimeType(fileName: string): string {
+  const ext = fileName.split(".").pop()?.toLowerCase();
+  switch (ext) {
+    case "jpg":
+    case "jpeg":
+      return "image/jpeg";
+    case "png":
+      return "image/png";
+    case "gif":
+      return "image/gif";
+    case "webp":
+      return "image/webp";
+    case "pdf":
+      return "application/pdf";
+    case "doc":
+      return "application/msword";
+    case "docx":
+      return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    case "xls":
+      return "application/vnd.ms-excel";
+    case "xlsx":
+      return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    case "mp4":
+      return "video/mp4";
+    case "mp3":
+      return "audio/mpeg";
+    default:
+      return "application/octet-stream";
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Attachment Processing
+// ---------------------------------------------------------------------------
+
+/**
+ * Sync ticket-level attachments from RA `attached[]` array.
+ * Deduplicates by externalId to avoid duplicates on re-syncs.
+ */
+async function syncTicketAttachments(
+  tx: TxClient,
+  ticketId: string,
+  raTicket: RaTicket
+): Promise<void> {
+  if (!raTicket.attached?.length) return;
+
+  for (const att of raTicket.attached) {
+    const extId = att.id?.toString();
+    if (!extId) continue;
+
+    // Deduplicate by externalId
+    const existing = await tx.attachment.findFirst({
+      where: { ticketId, externalId: extId },
+      select: { id: true },
+    });
+
+    if (existing) continue;
+
+    const fileName = att.name || `attachment-${att.id}`;
+    await tx.attachment.create({
+      data: {
+        ticketId,
+        fileName,
+        fileSize: 0, // RA doesn't return file size
+        mimeType: guessMimeType(fileName),
+        storagePath: null, // External attachment — no local storage
+        externalId: extId,
+        externalUrl: att.detail_description || "",
+      },
+    });
+  }
+}
+
+/**
+ * Sync interaction-level attachments (detail_type 15 = ANEXO, 33 = ANEXO_2)
+ * as Attachments linked to the TicketMessage.
+ */
+async function syncInteractionAttachments(
+  tx: TxClient,
+  ticketId: string,
+  messageId: string,
+  details: RaInteractionDetail[],
+  raClient?: ReclameAquiClient
+): Promise<void> {
+  if (!details?.length) return;
+
+  const attachmentDetails = details.filter(
+    (d) =>
+      d.ticket_detail_type_id === RA_DETAIL_TYPES.ANEXO ||
+      d.ticket_detail_type_id === RA_DETAIL_TYPES.ANEXO_2
+  );
+
+  for (const detail of attachmentDetails) {
+    const extId = detail.ticket_detail_id?.toString();
+    if (!extId) continue;
+
+    // Deduplicate by externalId
+    const existing = await tx.attachment.findFirst({
+      where: { ticketMessageId: messageId, externalId: extId },
+      select: { id: true },
+    });
+
+    if (existing) continue;
+
+    let url = detail.value || detail.name || "";
+
+    // Fallback: if URL is empty, try fetching via API
+    if (!url && raClient) {
+      try {
+        const linkResult = await raClient.getAttachmentLink(extId);
+        url = linkResult?.url || "";
+      } catch {
+        logger.warn(
+          `[reclameaqui-inbound] Failed to fetch attachment link for detail ${extId}`
+        );
+      }
+    }
+
+    if (!url) continue;
+
+    const fileName = detail.name || `attachment-${extId}`;
+    await tx.attachment.create({
+      data: {
+        ticketMessageId: messageId,
+        ticketId,
+        fileName,
+        fileSize: 0,
+        mimeType: guessMimeType(fileName),
+        storagePath: null,
+        externalId: extId,
+        externalUrl: url,
+      },
+    });
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Ticket Processing
 // ---------------------------------------------------------------------------
@@ -136,7 +276,8 @@ async function processRaTicket(
   raTicket: RaTicket,
   companyId: string,
   channelId: string,
-  summary: SyncSummary
+  summary: SyncSummary,
+  raClient?: ReclameAquiClient
 ): Promise<void> {
   const externalId = raTicket.source_external_id;
   const raStatusId = raTicket.ra_status.id;
@@ -157,10 +298,10 @@ async function processRaTicket(
   });
 
   if (!existingTicket) {
-    await createNewTicket(raTicket, companyId, channelId, ticketStatus, raStatusId, raStatusName);
+    await createNewTicket(raTicket, companyId, channelId, ticketStatus, raStatusId, raStatusName, raClient);
     summary.created++;
   } else {
-    await updateExistingTicket(existingTicket, raTicket, companyId, ticketStatus, raStatusId, raStatusName);
+    await updateExistingTicket(existingTicket, raTicket, companyId, ticketStatus, raStatusId, raStatusName, raClient);
     summary.updated++;
   }
 }
@@ -171,7 +312,8 @@ async function createNewTicket(
   channelId: string,
   ticketStatus: TicketStatus,
   raStatusId: number,
-  raStatusName: string
+  raStatusName: string,
+  raClient?: ReclameAquiClient
 ): Promise<void> {
   const customer = raTicket.customer;
   const customerEmail = customer.email?.[0]?.trim().toLowerCase();
@@ -264,9 +406,12 @@ async function createNewTicket(
       },
     });
 
-    // Create messages from interactions
+    // Sync ticket-level attachments (attached[])
+    await syncTicketAttachments(tx, ticket.id, raTicket);
+
+    // Create messages from interactions (+ their attachments)
     for (const interaction of raTicket.interactions) {
-      await createTicketMessage(tx, ticket.id, interaction);
+      await createTicketMessage(tx, ticket.id, interaction, raClient);
     }
 
     logger.info(
@@ -285,7 +430,8 @@ async function updateExistingTicket(
   companyId: string,
   ticketStatus: TicketStatus,
   raStatusId: number,
-  raStatusName: string
+  raStatusName: string,
+  raClient?: ReclameAquiClient
 ): Promise<void> {
   const existingMessageIds = new Set(
     existingTicket.messages
@@ -297,40 +443,45 @@ async function updateExistingTicket(
     (i) => !existingMessageIds.has(i.ticket_interaction_id)
   );
 
-  // Update ticket RA fields
-  await prisma.ticket.update({
-    where: { id: existingTicket.id },
-    data: {
-      status: ticketStatus,
-      raStatusId,
-      raStatusName,
-      raCanEvaluate: raTicket.request_evaluation ?? false,
-      raCanModerate: raTicket.request_moderation ?? false,
-      raRating: raTicket.rating,
-      raResolvedIssue: raTicket.resolved_issue,
-      raBackDoingBusiness: raTicket.back_doing_business,
-      raFrozen: raStatusId === 10,
-      raReason: raTicket.ra_reason ?? null,
-      raFeeling: raTicket.ra_feeling ?? null,
-      raCategories: raTicket.categories?.map(c => c.description) ?? [],
-      raPublicTreatmentTime: raTicket.public_treatment_time ?? null,
-      raPrivateTreatmentTime: raTicket.private_treatment_time ?? null,
-      raRatingDate: raTicket.rating_date ? new Date(raTicket.rating_date) : null,
-      raCommentsCount: raTicket.comments_count ?? 0,
-      raUnreadCount: raTicket.interactions_not_readed_count ?? 0,
-      raWhatsappEvalSent: raTicket.whatsapp?.sent ?? null,
-      raWhatsappEvalDone: raTicket.whatsapp?.evaluated ?? null,
-      raActive: raTicket.active ?? true,
-      raModerationStatus: raTicket.moderation?.status ?? null,
-      raConsumerConsideration: raTicket.consumer_consideration ?? null,
-      raCompanyConsideration: raTicket.company_consideration ?? null,
-    },
+  // Update ticket RA fields + sync ticket-level attachments
+  await prisma.$transaction(async (tx) => {
+    await tx.ticket.update({
+      where: { id: existingTicket.id },
+      data: {
+        status: ticketStatus,
+        raStatusId,
+        raStatusName,
+        raCanEvaluate: raTicket.request_evaluation ?? false,
+        raCanModerate: raTicket.request_moderation ?? false,
+        raRating: raTicket.rating,
+        raResolvedIssue: raTicket.resolved_issue,
+        raBackDoingBusiness: raTicket.back_doing_business,
+        raFrozen: raStatusId === 10,
+        raReason: raTicket.ra_reason ?? null,
+        raFeeling: raTicket.ra_feeling ?? null,
+        raCategories: raTicket.categories?.map(c => c.description) ?? [],
+        raPublicTreatmentTime: raTicket.public_treatment_time ?? null,
+        raPrivateTreatmentTime: raTicket.private_treatment_time ?? null,
+        raRatingDate: raTicket.rating_date ? new Date(raTicket.rating_date) : null,
+        raCommentsCount: raTicket.comments_count ?? 0,
+        raUnreadCount: raTicket.interactions_not_readed_count ?? 0,
+        raWhatsappEvalSent: raTicket.whatsapp?.sent ?? null,
+        raWhatsappEvalDone: raTicket.whatsapp?.evaluated ?? null,
+        raActive: raTicket.active ?? true,
+        raModerationStatus: raTicket.moderation?.status ?? null,
+        raConsumerConsideration: raTicket.consumer_consideration ?? null,
+        raCompanyConsideration: raTicket.company_consideration ?? null,
+      },
+    });
+
+    // Sync ticket-level attachments (may have new ones on re-sync)
+    await syncTicketAttachments(tx, existingTicket.id, raTicket);
   });
 
   // Create new messages
   for (const interaction of newInteractions) {
     try {
-      await createTicketMessage(prisma, existingTicket.id, interaction);
+      await createTicketMessage(prisma, existingTicket.id, interaction, raClient);
     } catch (err: unknown) {
       // Handle unique constraint violation (idempotent)
       if (
@@ -385,7 +536,8 @@ async function updateExistingTicket(
 async function createTicketMessage(
   tx: TxClient,
   ticketId: string,
-  interaction: RaInteraction
+  interaction: RaInteraction,
+  raClient?: ReclameAquiClient
 ): Promise<void> {
   const direction = mapInteractionDirection(
     interaction.ticket_interaction_type_id
@@ -393,7 +545,7 @@ async function createTicketMessage(
   const isInternal = interaction.privacy === "true" || interaction.privacy === "1" || interaction.privacy === true;
   const content = buildMessageContent(interaction);
 
-  await tx.ticketMessage.create({
+  const message = await tx.ticketMessage.create({
     data: {
       ticketId,
       senderId: null,
@@ -408,6 +560,15 @@ async function createTicketMessage(
         : new Date(),
     },
   });
+
+  // Sync interaction-level attachments (detail_type 15/33)
+  await syncInteractionAttachments(
+    tx,
+    ticketId,
+    message.id,
+    interaction.details,
+    raClient
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -488,7 +649,7 @@ export async function processReclameAquiInbound(_job: Job): Promise<void> {
 
         for (const raTicket of tickets) {
           try {
-            await processRaTicket(raTicket, ch.companyId, ch.id, summary);
+            await processRaTicket(raTicket, ch.companyId, ch.id, summary, client);
           } catch (_err) {
             summary.errors++;
             logger.error(
