@@ -41,26 +41,30 @@ type TxClient = Prisma.TransactionClient;
 /**
  * Maps Reclame Aqui ra_status.id to ERP TicketStatus.
  *
+ * All 13 documented RA status IDs:
  *  5  (Não respondido)         → OPEN
  *  6  (Respondido)             → WAITING_CLIENT
  *  7  (Réplica consumidor)     → IN_PROGRESS
- *  8  (Réplica empresa)        → WAITING_CLIENT
+ *  8  (Réplica empresa)        → IN_PROGRESS
  *  9  (Avaliado)               → RESOLVED
  * 10  (Congelado)              → CLOSED
+ * 11  (Moderação)              → IN_PROGRESS
  * 12  (Desativado consumidor)  → CLOSED
  * 13  (Inativa no RA)          → CLOSED
+ * 17  (Redistribuição)         → CLOSED
  * 18  (Avaliado Resolvido)     → RESOLVED
  * 19  (Avaliado Não Resolvido) → RESOLVED
- * 20  (Réplica)                → IN_PROGRESS
+ * 20  (Réplica pendente)       → IN_PROGRESS
  */
-function mapRaStatusToTicketStatus(raStatusId: number): TicketStatus {
+export function mapRaStatusToTicketStatus(raStatusId: number): TicketStatus {
   switch (raStatusId) {
     case 5:
       return "OPEN";
     case 6:
-    case 8:
       return "WAITING_CLIENT";
     case 7:
+    case 8:
+    case 11:
     case 20:
       return "IN_PROGRESS";
     case 9:
@@ -70,8 +74,10 @@ function mapRaStatusToTicketStatus(raStatusId: number): TicketStatus {
     case 10:
     case 12:
     case 13:
+    case 17:
       return "CLOSED";
     default:
+      logger.warn({ raStatusId }, "[reclameaqui] Unknown RA status ID, defaulting to OPEN");
       return "OPEN";
   }
 }

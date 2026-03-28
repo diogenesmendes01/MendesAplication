@@ -71,18 +71,20 @@ export interface RaStatus {
 }
 
 /**
- * RA Status IDs:
+ * RA Status IDs (all 13 documented):
  *  5  = Não respondido
- *  6  = Respondido
+ *  6  = Respondido / Aguardando consumidor
  *  7  = Réplica do consumidor
  *  8  = Réplica da empresa
  *  9  = Avaliado
  * 10  = Congelado
+ * 11  = Moderação pendente
  * 12  = Desativado pelo consumidor
  * 13  = Inativa no RA
+ * 17  = Redistribuição
  * 18  = Avaliado Resolvido
  * 19  = Avaliado Não Resolvido
- * 20  = Réplica
+ * 20  = Réplica pendente
  */
 export const RA_STATUS = {
   NAO_RESPONDIDO: 5,
@@ -91,11 +93,13 @@ export const RA_STATUS = {
   REPLICA_EMPRESA: 8,
   AVALIADO: 9,
   CONGELADO: 10,
+  MODERACAO: 11,
   DESATIVADO_CONSUMIDOR: 12,
   INATIVA_RA: 13,
+  REDISTRIBUICAO: 17,
   AVALIADO_RESOLVIDO: 18,
   AVALIADO_NAO_RESOLVIDO: 19,
-  REPLICA: 20,
+  REPLICA_PENDENTE: 20,
 } as const;
 
 /**
