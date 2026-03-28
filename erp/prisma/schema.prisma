@@ -525,6 +525,7 @@ model Ticket {
   raWhatsappEvalDone     Boolean?
   raActive               Boolean   @default(true)
   raModerationStatus     String?
+  raSlaDeadline          DateTime?
   aiEnabled              Boolean   @default(true)
   aiDisabledReason       String? // "budget_exceeded" | "rate_limited" | "manual" | null
   aiPendingRecovery      Boolean   @default(false)

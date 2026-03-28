@@ -50,6 +50,74 @@ const TruncatedText = ({ text, maxLength = 100 }: { text: string | null; maxLeng
   );
 };
 
+
+// RA SLA countdown component
+function RaSlaCard({ deadline }: { deadline: string }) {
+  const deadlineDate = new Date(deadline);
+  const now = new Date();
+
+  // Calculate business days remaining
+  const target = new Date(deadlineDate);
+  const cursor = new Date(now);
+  cursor.setHours(0, 0, 0, 0);
+  target.setHours(0, 0, 0, 0);
+
+  let daysRemaining = 0;
+  if (cursor >= target) {
+    const d = new Date(target);
+    while (d < cursor) {
+      d.setDate(d.getDate() + 1);
+      const dow = d.getDay();
+      if (dow !== 0 && dow !== 6) daysRemaining--;
+    }
+  } else {
+    const d = new Date(cursor);
+    while (d < target) {
+      d.setDate(d.getDate() + 1);
+      const dow = d.getDay();
+      if (dow !== 0 && dow !== 6) daysRemaining++;
+    }
+  }
+
+  let badgeColor = "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200";
+  let statusText = `${daysRemaining} dias úteis restantes`;
+  let borderClass = "border-emerald-200 dark:border-emerald-800";
+
+  if (daysRemaining <= 0) {
+    badgeColor = "bg-black text-white dark:bg-gray-900 dark:text-gray-100";
+    statusText = daysRemaining === 0 ? "Vence hoje!" : `Expirado há ${Math.abs(daysRemaining)} dia(s) útil(eis)`;
+    borderClass = "border-red-500 dark:border-red-700";
+  } else if (daysRemaining <= 2) {
+    badgeColor = "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200";
+    statusText = `⚠️ ${daysRemaining} dia(s) útil(eis) restante(s)`;
+    borderClass = "border-red-300 dark:border-red-700";
+  } else if (daysRemaining <= 5) {
+    badgeColor = "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200";
+    statusText = `${daysRemaining} dias úteis restantes`;
+    borderClass = "border-yellow-300 dark:border-yellow-700";
+  }
+
+  return (
+    <Card className={borderClass}>
+      <CardHeader>
+        <CardTitle className="text-lg flex items-center gap-2">
+          ⏱️ SLA Reclame Aqui
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium">Prazo (10 dias úteis):</span>
+          <span className={`px-2 py-1 rounded-md text-xs font-semibold ${badgeColor}`}>
+            {statusText}
+          </span>
+        </div>
+        <div className="text-xs text-muted-foreground">
+          Vencimento: {deadlineDate.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 export function RaDetailPanel({ context }: { context: RaTicketContext }) {
   const {
     raStatusName,
@@ -71,6 +139,7 @@ export function RaDetailPanel({ context }: { context: RaTicketContext }) {
     consumerConsideration,
     companyConsideration,
     raModerationStatus,
+    raSlaDeadline,
     availableActions,
     recentMessages
   } = context;
@@ -106,6 +175,11 @@ export function RaDetailPanel({ context }: { context: RaTicketContext }) {
         </CardContent>
       </Card>
 
+
+      {/* RA SLA Section */}
+      {raSlaDeadline && (
+        <RaSlaCard deadline={raSlaDeadline} />
+      )}
       {/* Context Section */}
       {(raReason || raFeeling || (raCategories && raCategories.length > 0)) && (
         <Card>

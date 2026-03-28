@@ -82,4 +82,109 @@ export async function processSlaCheck(job: Job): Promise<void> {
 
   if (toMark.length > 0) { await prisma.refund.updateMany({ where: { id: { in: toMark } }, data: { slaAtRisk: true } }); logger.info(`[sla-check] ${toMark.length} refund(s) at risk`); }
   if (toUnmark.length > 0) await prisma.refund.updateMany({ where: { id: { in: toUnmark } }, data: { slaAtRisk: false } });
+
+  // Reclame Aqui SLA check (10 business days)
+  try {
+    const raResult = await checkRaSlaDeadlines();
+    if (raResult.breached > 0 || raResult.atRisk > 0) {
+      logger.info(`[sla-check] RA SLA: ${raResult.breached} breached, ${raResult.atRisk} at risk`);
+    }
+  } catch (err) {
+    logger.error("[sla-check] RA SLA check error:", err);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Reclame Aqui SLA (10 business days) — appended to processSlaCheck
+// ---------------------------------------------------------------------------
+
+import { sseBus } from "@/lib/sse";
+import { getRaBusinessDaysRemaining } from "./reclameaqui-inbound";
+
+/**
+ * Check RA SLA deadlines and emit alerts.
+ * Called at the end of processSlaCheck.
+ */
+export async function checkRaSlaDeadlines(): Promise<{ atRisk: number; breached: number }> {
+  const now = new Date();
+  let atRisk = 0;
+  let breached = 0;
+
+  const raTickets = await prisma.ticket.findMany({
+    where: {
+      status: { in: ["OPEN", "IN_PROGRESS", "WAITING_CLIENT"] },
+      raSlaDeadline: { not: null },
+      raExternalId: { not: null },
+    },
+    select: {
+      id: true,
+      companyId: true,
+      raSlaDeadline: true,
+      slaBreached: true,
+      slaAtRisk: true,
+      subject: true,
+    },
+  });
+
+  for (const ticket of raTickets) {
+    if (!ticket.raSlaDeadline) continue;
+
+    const daysRemaining = getRaBusinessDaysRemaining(ticket.raSlaDeadline, now);
+
+    if (daysRemaining <= 0 && !ticket.slaBreached) {
+      // RA SLA breached
+      await prisma.ticket.update({
+        where: { id: ticket.id },
+        data: { slaBreached: true, slaAtRisk: false },
+      });
+
+      sseBus.publish(`sac:${ticket.companyId}`, "ra-sla-breach", {
+        ticketId: ticket.id,
+        subject: ticket.subject,
+        daysOverdue: Math.abs(daysRemaining),
+      });
+
+      await prisma.auditLog.create({
+        data: {
+          userId: "SYSTEM",
+          action: "RA_SLA_BREACHED",
+          entity: "Ticket",
+          entityId: ticket.id,
+          companyId: ticket.companyId,
+          dataAfter: { daysOverdue: Math.abs(daysRemaining), deadline: ticket.raSlaDeadline.toISOString() },
+        },
+      });
+
+      logger.warn(`[sla-check] RA SLA breached: ticket=${ticket.id} overdue=${Math.abs(daysRemaining)} days`);
+      breached++;
+    } else if (daysRemaining > 0 && daysRemaining <= 2 && !ticket.slaAtRisk && !ticket.slaBreached) {
+      // RA SLA at risk (2 business days remaining)
+      await prisma.ticket.update({
+        where: { id: ticket.id },
+        data: { slaAtRisk: true },
+      });
+
+      sseBus.publish(`sac:${ticket.companyId}`, "ra-sla-at-risk", {
+        ticketId: ticket.id,
+        subject: ticket.subject,
+        daysRemaining,
+      });
+
+      await prisma.auditLog.create({
+        data: {
+          userId: "SYSTEM",
+          action: "RA_SLA_AT_RISK",
+          entity: "Ticket",
+          entityId: ticket.id,
+          companyId: ticket.companyId,
+          dataAfter: { daysRemaining, deadline: ticket.raSlaDeadline.toISOString() },
+        },
+      });
+
+      logger.info(`[sla-check] RA SLA at risk: ticket=${ticket.id} daysRemaining=${daysRemaining}`);
+      atRisk++;
+    }
+  }
+
+  return { atRisk, breached };
 }

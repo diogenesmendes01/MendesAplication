@@ -432,6 +432,7 @@ export interface TicketDetail {
   raRating: string | null;
   raCanEvaluate: boolean;
   raCanModerate: boolean;
+  raSlaDeadline: string | null;
   mergedIntoId: string | null;
   mergedAt: string | null;
 }
@@ -482,6 +483,7 @@ async function _getTicketByIdInternal(
     raRating: ticket.raRating ?? null,
     raCanEvaluate: ticket.raCanEvaluate ?? false,
     raCanModerate: ticket.raCanModerate ?? false,
+    raSlaDeadline: ticket.raSlaDeadline?.toISOString() ?? null,
     mergedIntoId: ticket.mergedIntoId ?? null,
     mergedAt: ticket.mergedAt?.toISOString() ?? null,
   };
