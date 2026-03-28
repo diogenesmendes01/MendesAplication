@@ -424,6 +424,8 @@ export interface TicketDetail {
   raRating: string | null;
   raCanEvaluate: boolean;
   raCanModerate: boolean;
+  mergedIntoId: string | null;
+  mergedAt: string | null;
 }
 
 async function _getTicketByIdInternal(
@@ -472,6 +474,8 @@ async function _getTicketByIdInternal(
     raRating: ticket.raRating ?? null,
     raCanEvaluate: ticket.raCanEvaluate ?? false,
     raCanModerate: ticket.raCanModerate ?? false,
+    mergedIntoId: ticket.mergedIntoId ?? null,
+    mergedAt: ticket.mergedAt?.toISOString() ?? null,
   };
 }
 
@@ -489,6 +493,7 @@ const VALID_STATUS_TRANSITIONS: Record<TicketStatus, TicketStatus[]> = {
   WAITING_CLIENT: ["IN_PROGRESS", "RESOLVED"],
   RESOLVED: ["CLOSED", "IN_PROGRESS"],
   CLOSED: [],
+  MERGED: [],
 };
 
 export async function updateTicketStatus(

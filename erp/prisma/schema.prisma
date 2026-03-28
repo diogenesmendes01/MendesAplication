@@ -313,6 +313,7 @@ enum TicketStatus {
   WAITING_CLIENT
   RESOLVED
   CLOSED
+  MERGED
 }
 
 enum ProposalStatus {
@@ -503,6 +504,8 @@ model Ticket {
   raActive                  Boolean    @default(true)
   raModerationStatus        String?
   aiEnabled      Boolean        @default(true)
+  mergedIntoId    String?
+  mergedAt        DateTime?
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 
@@ -517,6 +520,10 @@ model Ticket {
   attachments Attachment[]        @relation("TicketAttachments")
   refunds     Refund[]
   aiSuggestions AiSuggestion[]
+  mergedInto      Ticket?        @relation("TicketMerge", fields: [mergedIntoId], references: [id], onDelete: SetNull)
+  mergedTickets   Ticket[]       @relation("TicketMerge")
+  linksAsA        TicketLink[]   @relation("TicketLinksA")
+  linksAsB        TicketLink[]   @relation("TicketLinksB")
 
   @@index([companyId, status])
   @@index([companyId, slaBreached])
@@ -1106,4 +1113,26 @@ model AiSuggestion {
   @@index([status, expiresAt])
   @@index([reviewedBy])
   @@map("ai_suggestions")
+}
+
+model TicketLink {
+  id           String   @id @default(cuid())
+  ticketAId    String
+  ticketBId    String
+  type         String
+  confidence   Float    @default(0)
+  detectedBy   String
+  confirmedBy  String?
+  status       String   @default("suggested")
+  metadata     Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  ticketA Ticket @relation("TicketLinksA", fields: [ticketAId], references: [id], onDelete: Cascade)
+  ticketB Ticket @relation("TicketLinksB", fields: [ticketBId], references: [id], onDelete: Cascade)
+
+  @@unique([ticketAId, ticketBId])
+  @@index([ticketAId, status])
+  @@index([ticketBId, status])
+  @@map("ticket_links")
 }
