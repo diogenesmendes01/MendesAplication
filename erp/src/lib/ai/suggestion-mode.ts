@@ -4,6 +4,7 @@ import type { ToolContext, ReclameAquiResponse } from "./tool-executor";
 import type { CapturedAction } from "./agent";
 import type { ChannelType } from "@prisma/client";
 import { logger } from "@/lib/logger";
+import { captureFeedback } from "./feedback-capture";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -219,6 +220,16 @@ export async function approveSuggestion(
     "AI suggestion resolved",
   );
 
+
+  try {
+    await captureFeedback(
+      { companyId: suggestion.companyId, suggestionId: suggestion.id, ticketId: suggestion.ticketId, channel: suggestion.channel, originalResponse: suggestion.suggestedResponse, confidence: suggestion.confidence },
+      status as "APPROVED" | "EDITED",
+      editedResponse,
+    );
+  } catch (err) {
+    logger.error({ err, suggestionId }, "Failed to capture feedback on approve");
+  }
   return { success: allSuccess };
 }
 
@@ -276,6 +287,21 @@ export async function rejectSuggestion(
   if (result.success) {
     logger.info({ suggestionId, reason }, "AI suggestion rejected");
   }
+
+    try {
+      const suggestion = await prisma.aiSuggestion.findUnique({
+        where: { id: suggestionId },
+        select: { companyId: true, ticketId: true, channel: true, suggestedResponse: true, confidence: true },
+      });
+      if (suggestion) {
+        await captureFeedback(
+          { companyId: suggestion.companyId, suggestionId, ticketId: suggestion.ticketId, channel: suggestion.channel, originalResponse: suggestion.suggestedResponse, confidence: suggestion.confidence },
+          "REJECTED", null, reason,
+        );
+      }
+    } catch (err) {
+      logger.error({ err, suggestionId }, "Failed to capture feedback on reject");
+    }
 
   return result;
 }
