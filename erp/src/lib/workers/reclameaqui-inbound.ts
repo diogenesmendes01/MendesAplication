@@ -29,6 +29,7 @@ interface SyncSummary {
   created: number;
   updated: number;
   errors: number;
+  skippedByCount: boolean;
 }
 
 /** Prisma transaction client type */
@@ -108,6 +109,18 @@ function defaultSyncDate(): string {
   const d = new Date();
   d.setDate(d.getDate() - 7);
   return d.toISOString();
+}
+
+/**
+ * Resolve the last sync date for a channel.
+ * Priority: DB lastSyncAt > config.lastSyncDate > 7 days ago.
+ */
+function resolveLastSyncDate(
+  dbLastSyncAt: Date | null,
+  configLastSyncDate?: string
+): string {
+  if (dbLastSyncAt) return dbLastSyncAt.toISOString();
+  return configLastSyncDate || defaultSyncDate();
 }
 
 /**
@@ -578,6 +591,31 @@ async function createTicketMessage(
 }
 
 // ---------------------------------------------------------------------------
+// Count-First Check
+// ---------------------------------------------------------------------------
+
+/**
+ * Performs a lightweight count check before full sync.
+ * Returns the number of tickets modified since lastSyncDate.
+ * Uses 1 API call instead of potentially many paginated GETs.
+ *
+ * With count-first, the cron interval can safely go from 15min → 5min
+ * since most executions will only cost 1 API call (auth + count).
+ */
+async function countModifiedTickets(
+  client: ReclameAquiClient,
+  lastSyncDate: string
+): Promise<number> {
+  const countResponse = await client.countTickets({
+    last_modification_date: {
+      comparator: "gte",
+      value: lastSyncDate,
+    },
+  });
+  return countResponse.data ?? 0;
+}
+
+// ---------------------------------------------------------------------------
 // Main Processor
 // ---------------------------------------------------------------------------
 
@@ -586,7 +624,7 @@ export async function processReclameAquiInbound(_job: Job): Promise<void> {
   // Find all active RECLAMEAQUI channels
   const channels = await prisma.channel.findMany({
     where: { type: "RECLAMEAQUI", isActive: true },
-    select: { id: true, companyId: true, config: true },
+    select: { id: true, companyId: true, config: true, lastSyncAt: true },
   });
 
   if (channels.length === 0) {
@@ -595,7 +633,7 @@ export async function processReclameAquiInbound(_job: Job): Promise<void> {
   }
 
   for (const ch of channels) {
-    const summary: SyncSummary = { total: 0, created: 0, updated: 0, errors: 0 };
+    const summary: SyncSummary = { total: 0, created: 0, updated: 0, errors: 0, skippedByCount: false };
 
     let config: ReclameAquiChannelConfig;
     try {
@@ -629,13 +667,44 @@ export async function processReclameAquiInbound(_job: Job): Promise<void> {
       continue;
     }
 
-    const lastSyncDate = config.lastSyncDate || defaultSyncDate();
+    // Resolve last sync date: DB field > config > 7 days ago
+    const lastSyncDate = resolveLastSyncDate(ch.lastSyncAt, config.lastSyncDate);
 
     try {
       // Authenticate
       await client.authenticate();
 
-      // Paginate through all tickets modified since last sync
+      // ── Count-first check ──────────────────────────────────────
+      // Before paginating, check if anything changed since last sync.
+      // Costs 1 API call. If count = 0, skip full sync entirely.
+      const modifiedCount = await countModifiedTickets(client, lastSyncDate);
+
+      if (modifiedCount === 0) {
+        logger.info(
+          `[reclameaqui-inbound] No changes since ${lastSyncDate} for channel ${ch.id}, skipping sync`
+        );
+        summary.skippedByCount = true;
+
+        // Still update lastSyncAt to advance the window
+        const now = new Date();
+        await prisma.channel.update({
+          where: { id: ch.id },
+          data: {
+            lastSyncAt: now,
+            config: {
+              ...(ch.config as Record<string, unknown>),
+              lastSyncDate: now.toISOString(),
+            },
+          },
+        });
+        continue;
+      }
+
+      logger.info(
+        `[reclameaqui-inbound] ${modifiedCount} ticket(s) modified since ${lastSyncDate} for channel ${ch.id}, starting sync`
+      );
+
+      // ── Full sync (only when count > 0) ────────────────────────
       let pageNumber = 1;
       let hasMore = true;
 
@@ -699,3 +768,14 @@ export async function processReclameAquiInbound(_job: Job): Promise<void> {
     }
   }
 }
+
+// ---------------------------------------------------------------------------
+// Exported for testing
+// ---------------------------------------------------------------------------
+
+export {
+  countModifiedTickets as _countModifiedTickets,
+  resolveLastSyncDate as _resolveLastSyncDate,
+  mapRaStatusToTicketStatus as _mapRaStatusToTicketStatus,
+  mapInteractionDirection as _mapInteractionDirection,
+};
