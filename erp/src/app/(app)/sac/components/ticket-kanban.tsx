@@ -116,6 +116,7 @@ const EMPTY_DATA: ColumnDataMap = {
   WAITING_CLIENT: { data: [], total: 0 },
   RESOLVED: { data: [], total: 0 },
   CLOSED: { data: [], total: 0 },
+  MERGED: { data: [], total: 0 },
 };
 
 export function TicketKanban({ channelType }: TicketKanbanProps) {

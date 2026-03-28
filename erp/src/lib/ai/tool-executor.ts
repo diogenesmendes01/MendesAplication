@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
 import { searchDocuments, searchDocumentsByChannel } from "./embeddings";
 import { sendTextMessage } from "@/lib/whatsapp-api";
 import { emailOutboundQueue } from "@/lib/queue";
@@ -827,7 +828,7 @@ async function executeReadAttachment(
     return `Nenhum trecho encontrado para "${query}" neste anexo. O documento contem ${extraction.tokenCount} tokens. Tente outra busca ou chame sem query para ver o texto completo.`;
   }
 
-  const relevantLines = [...relevantLineIndices].sort((a, b) => a - b).map((i) => lines[i]);
+  const relevantLines = Array.from(relevantLineIndices).sort((a, b) => a - b).map((i) => lines[i]);
   return `Trechos relevantes para "${query}" em ${extraction.attachment.fileName}:\n\n${relevantLines.join("\n")}`;
 }
 
@@ -1031,7 +1032,7 @@ async function executeAdvanceWorkflowTool(
   if (args.stepResult) {
     const stepData = execution.stepData as Record<string, unknown>;
     const merged = { ...stepData, ...(args.stepResult as Record<string, unknown>) };
-    await prisma.workflowExecution.update({ where: { id: execution.id }, data: { stepData: merged } });
+    await prisma.workflowExecution.update({ where: { id: execution.id }, data: { stepData: merged as unknown as Prisma.InputJsonValue } });
   }
 
   const skipToStep = args.skipToStep as string | undefined;

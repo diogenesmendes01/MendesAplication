@@ -5,7 +5,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
-import type { ChannelType } from "@prisma/client";
+import type { ChannelType, Prisma } from "@prisma/client";
 
 export interface ToolCallRecord {
   tool: string;
@@ -61,7 +61,7 @@ export async function recordAuditTrail(entry: AuditTrailEntry): Promise<string |
           tool: tc.tool, args: tc.args,
           result: tc.result.substring(0, 500),
           durationMs: tc.durationMs,
-        })),
+        })) as unknown as Prisma.InputJsonValue,
         output: entry.output || null,
         decision: entry.decision,
         confidence: entry.confidence,
@@ -118,7 +118,7 @@ export async function exportAuditTrailCSV(ticketId: string, companyId: string): 
   const rows = trails.map((t) => [
     t.createdAt.toISOString(), String(t.iteration),
     csvEscape(t.input), csvEscape(t.reasoning || ""),
-    csvEscape((t.toolCalls as ToolCallRecord[]).map((tc) => tc.tool).join("; ")),
+    csvEscape((t.toolCalls as unknown as ToolCallRecord[]).map((tc) => tc.tool).join("; ")),
     csvEscape(t.output || ""), t.decision, t.confidence.toFixed(2),
     String(t.inputTokens), String(t.outputTokens),
     Number(t.costBrl).toFixed(6), String(t.durationMs), t.provider, t.model,

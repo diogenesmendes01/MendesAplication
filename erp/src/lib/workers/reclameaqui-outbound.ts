@@ -121,7 +121,7 @@ export function isRetriableError(err: unknown): boolean {
  * Custom error for permanent failures that should NOT be retried by BullMQ.
  * We catch the original error and wrap it so we can return instead of throw.
  */
-class PermanentRaError extends Error {
+class _PermanentRaError extends Error {
   public readonly code: number;
   constructor(code: number, message: string) {
     super(message);
@@ -755,7 +755,7 @@ export async function processReclameAquiOutbound(job: Job<RaOutboundJobData>): P
       `[reclameaqui-outbound] Job ${job.id} completed`
     );
   } catch (err) {
-    const durationMs = Date.now() - startTime;
+    const _durationMs = Date.now() - startTime;
     logger.error(
       {
         event: "ra_outbound_failed",

@@ -175,7 +175,7 @@ describe("KB Restore Version", () => {
     mCDM.mockResolvedValue({});
     mCC.mockResolvedValue({});
 
-    const result = await restoreVersion("c1", "d1", 1);
+    const _result = await restoreVersion("c1", "d1", 1);
     expect(mVC).toHaveBeenCalled(); // saves current before restore
     expect(mDU).toHaveBeenCalledWith(
       expect.objectContaining({

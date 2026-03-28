@@ -28,9 +28,9 @@ const formatTime = (time: string | null): string => {
 
 // Helper function to truncate long text with expand functionality
 const TruncatedText = ({ text, maxLength = 100 }: { text: string | null; maxLength?: number }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
   if (!text) return null;
 
-  const [isExpanded, setIsExpanded] = useState(false);
   const shouldTruncate = text.length > maxLength;
 
   const displayText = isExpanded ? text : text.substring(0, maxLength) + (shouldTruncate ? "..." : "");
@@ -141,7 +141,7 @@ export function RaDetailPanel({ context }: { context: RaTicketContext }) {
     raModerationStatus,
     raSlaDeadline,
     availableActions,
-    recentMessages,
+    recentMessages: _recentMessages,
     client
   } = context;
 

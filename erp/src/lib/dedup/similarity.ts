@@ -28,13 +28,13 @@ export function keywordSimilarity(text1: string, text2: string): number {
   const words1 = extractKeywords(text1);
   const words2 = extractKeywords(text2);
   if (words1.size === 0 && words2.size === 0) return 0;
-  const intersection = [...words1].filter((w) => words2.has(w));
-  const unionSize = new Set([...words1, ...words2]).size;
+  const intersection = Array.from(words1).filter((w) => words2.has(w));
+  const unionSize = new Set([...Array.from(words1), ...Array.from(words2)]).size;
   return unionSize > 0 ? intersection.length / unionSize : 0;
 }
 
 export function getMatchedTerms(text1: string, text2: string): string[] {
   const words1 = extractKeywords(text1);
   const words2 = extractKeywords(text2);
-  return [...words1].filter((w) => words2.has(w));
+  return Array.from(words1).filter((w) => words2.has(w));
 }

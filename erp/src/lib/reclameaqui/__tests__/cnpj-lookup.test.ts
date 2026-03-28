@@ -2,7 +2,7 @@
  * Unit tests for cnpj-lookup.ts — domain extraction, free email detection,
  * and CNPJ lookup logic (with mocked pg Pool).
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 
 // We import the pure functions directly (no DB dependency)
 import {

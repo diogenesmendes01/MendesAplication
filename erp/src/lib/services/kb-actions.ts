@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
+import type { ChannelType } from "@prisma/client";
 import { requireSession } from "@/lib/session";
 import { canAccessCompany } from "@/lib/rbac";
 import { generateEmbedding } from "@/lib/ai/embeddings";
@@ -38,7 +39,7 @@ export async function listDocuments(companyId: string, filters?: { category?: st
 
 export async function createDocument(companyId: string, data: { name: string; content: string; category?: string; tags?: string[]; channel?: string | null }): Promise<KBDocument> {
   const session = await requireCompanyAuth(companyId);
-  const doc = await prisma.document.create({ data: { companyId, name: data.name, content: data.content, mimeType: "text/markdown", fileSize: Buffer.from(data.content, "utf-8").length, status: "PROCESSING", channel: data.channel as any, category: data.category || null, tags: data.tags || [], sourceType: "manual", isActive: true, version: 1, createdById: session.userId, updatedById: session.userId } });
+  const doc = await prisma.document.create({ data: { companyId, name: data.name, content: data.content, mimeType: "text/markdown", fileSize: Buffer.from(data.content, "utf-8").length, status: "PROCESSING", channel: (data.channel ?? null) as ChannelType | null, category: data.category || null, tags: data.tags || [], sourceType: "manual", isActive: true, version: 1, createdById: session.userId, updatedById: session.userId } });
   await prisma.documentVersion.create({ data: { documentId: doc.id, version: 1, title: data.name, content: data.content, category: data.category || null, tags: data.tags || [], changedBy: session.userId, changeNote: "Criacao inicial" } });
   await processDocumentChunks(doc.id, data.content);
   return doc as unknown as KBDocument;
@@ -123,7 +124,7 @@ export async function uploadAndExtractText(formData: FormData): Promise<{ extrac
   const buffer = Buffer.from(await file.arrayBuffer());
   const mimeType = file.type;
   let extractedText = "";
-  if (mimeType === "application/pdf") { const pdfParse = (await import("pdf-parse")).default; extractedText = (await pdfParse(buffer)).text; }
+  if (mimeType === "application/pdf") { const pdfParse = (await import("pdf-parse") as unknown as { default: (buf: Buffer) => Promise<{ text: string }> }).default; extractedText = (await pdfParse(buffer)).text; }
   else if (mimeType === "text/plain" || mimeType === "text/csv") { extractedText = buffer.toString("utf-8"); }
   else if (mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || mimeType === "application/msword") { const mammoth = await import("mammoth"); extractedText = (await mammoth.extractRawText({ buffer })).value; }
   else if (mimeType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" || mimeType === "application/vnd.ms-excel") { const XLSX = await import("xlsx"); const wb = XLSX.read(buffer, { type: "buffer" }); extractedText = wb.SheetNames.map((n) => { const s = wb.Sheets[n]; return "=== " + n + " ===\n" + XLSX.utils.sheet_to_csv(s); }).join("\n\n"); }
@@ -145,9 +146,9 @@ async function processDocumentChunks(documentId: string, content: string, chunkS
     if (textChunks.length === 0) { await prisma.document.update({ where: { id: documentId }, data: { status: "READY" } }); return 0; }
     for (let i = 0; i < textChunks.length; i++) {
       try { const embedding = await generateEmbedding(textChunks[i]); await prisma.documentChunk.create({ data: { documentId, content: textChunks[i], embedding, chunkIndex: i } }); }
-      catch (err) { logger.error("Embedding error chunk " + i, err); await prisma.documentChunk.create({ data: { documentId, content: textChunks[i], embedding: [], chunkIndex: i } }); }
+      catch (err) { logger.error("Embedding error chunk " + i + " " + String(err)); await prisma.documentChunk.create({ data: { documentId, content: textChunks[i], embedding: [], chunkIndex: i } }); }
     }
     await prisma.document.update({ where: { id: documentId }, data: { status: "READY" } });
     return textChunks.length;
-  } catch (err) { logger.error("Error processing " + documentId, err); await prisma.document.update({ where: { id: documentId }, data: { status: "ERROR" } }); throw err; }
+  } catch (err) { logger.error("Error processing " + documentId + " " + String(err)); await prisma.document.update({ where: { id: documentId }, data: { status: "ERROR" } }); throw err; }
 }

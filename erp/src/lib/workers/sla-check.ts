@@ -45,7 +45,7 @@ export async function processSlaCheck(job: Job): Promise<void> {
       logger.info(`[sla-check] SLA engine: ${result.breached} breached, ${result.atRisk} at risk`);
     }
   } catch (err) {
-    logger.error("[sla-check] SLA engine error:", err);
+    logger.error("[sla-check] SLA engine error:" + " " + String(err));
     // Fallback
     await prisma.ticket.updateMany({
       where: { status: { in: ["OPEN", "IN_PROGRESS", "WAITING_CLIENT"] }, slaFirstReply: { lt: now }, slaBreached: false },
@@ -90,7 +90,7 @@ export async function processSlaCheck(job: Job): Promise<void> {
       logger.info(`[sla-check] RA SLA: ${raResult.breached} breached, ${raResult.atRisk} at risk`);
     }
   } catch (err) {
-    logger.error("[sla-check] RA SLA check error:", err);
+    logger.error("[sla-check] RA SLA check error:" + " " + String(err));
   }
 }
 

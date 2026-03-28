@@ -43,7 +43,7 @@ export interface SlaStatusResult {
   };
   resolution: {
     deadline: Date | null;
-    resolvedAt: Date | null;
+    respondedAt: Date | null;
     breached: boolean;
     minutesRemaining: number | null;
     percentConsumed: number;

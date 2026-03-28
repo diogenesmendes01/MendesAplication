@@ -125,7 +125,7 @@ export async function processBoletoWebhookEvent(
         rawGatewayId: event.gatewayId,
       },
       companyId,
-    }).catch((err) => logger.error("Audit log failed:", err));
+    }).catch((err) => logger.error("Audit log failed:" + " " + String(err)));
 
     return { processed: false, reason: "boleto_not_found" };
   }
@@ -251,7 +251,7 @@ export async function processBoletoWebhookEvent(
       accountReceivableId: updatedReceivableId,
     },
     companyId: boleto.companyId,
-  }).catch((err) => logger.error("Audit log failed:", err));
+  }).catch((err) => logger.error("Audit log failed:" + " " + String(err)));
 
   return {
     processed: true,

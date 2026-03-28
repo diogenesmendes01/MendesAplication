@@ -26,7 +26,7 @@ vi.mock("@/lib/prisma", () => ({
     ticketMessage: {
       create: vi.fn().mockResolvedValue({ id: "msg-1" }),
     },
-    $transaction: vi.fn().mockImplementation((fn: any) =>
+    $transaction: vi.fn().mockImplementation((fn: (...args: unknown[]) => unknown) =>
       fn({
         client: {
           findFirst: vi.fn().mockResolvedValue(null),
@@ -62,7 +62,7 @@ const mockCountTickets = vi.fn();
 const mockGetTickets = vi.fn();
 
 vi.mock("@/lib/reclameaqui/client", () => {
-  const MockReclameAquiClient = vi.fn(function (this: any) {
+  const MockReclameAquiClient = vi.fn(function (this: Record<string, unknown>) {
     this.authenticate = mockAuthenticate;
     this.checkTicketAvailability = mockCheckTicketAvailability;
     this.countTickets = mockCountTickets;
@@ -331,7 +331,7 @@ describe("resolveLastSyncDate", () => {
 
   beforeEach(async () => {
     const mod = await import("../reclameaqui-inbound");
-    resolveLastSyncDate = (mod as any)._resolveLastSyncDate;
+    resolveLastSyncDate = (mod as unknown as Record<string, (...args: unknown[]) => unknown>)._resolveLastSyncDate;
   });
 
   it("returns DB date when available", () => {
@@ -355,7 +355,7 @@ describe("resolveLastSyncDate", () => {
 describe("countModifiedTickets", () => {
   it("returns the count from API response", async () => {
     const mod = await import("../reclameaqui-inbound");
-    const countModifiedTickets = (mod as any)._countModifiedTickets;
+    const countModifiedTickets = (mod as unknown as Record<string, (...args: unknown[]) => unknown>)._countModifiedTickets;
 
     const mockClient = {
       countTickets: vi.fn().mockResolvedValue({ data: 42 }),
@@ -373,7 +373,7 @@ describe("countModifiedTickets", () => {
 
   it("returns 0 when API returns undefined data", async () => {
     const mod = await import("../reclameaqui-inbound");
-    const countModifiedTickets = (mod as any)._countModifiedTickets;
+    const countModifiedTickets = (mod as unknown as Record<string, (...args: unknown[]) => unknown>)._countModifiedTickets;
 
     const mockClient = {
       countTickets: vi.fn().mockResolvedValue({}),

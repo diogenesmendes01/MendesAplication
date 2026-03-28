@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
 import type {
   WorkflowTrigger,
   WorkflowStep,
@@ -79,7 +80,7 @@ export async function createExecution(
       companyId,
       currentStepIndex: 0,
       status: "ACTIVE",
-      stepData: initialData ?? {},
+      stepData: (initialData ?? {}) as unknown as Prisma.InputJsonValue,
       timeoutAt,
     },
     include: { workflow: true },
@@ -136,7 +137,7 @@ export async function executeStep(
     }
     await prisma.workflowExecution.update({
       where: { id: executionId },
-      data: { stepData: updatedStepData },
+      data: { stepData: updatedStepData as unknown as Prisma.InputJsonValue },
     });
   }
 
@@ -248,14 +249,14 @@ export async function resumeWorkflow(
   if (nextIndex >= steps.length) {
     await prisma.workflowExecution.update({
       where: { id: executionId },
-      data: { status: "COMPLETED", completedAt: new Date(), currentStepIndex: nextIndex, stepData: updatedStepData, waitingFor: null, waitingCondition: null, pausedAt: null },
+      data: { status: "COMPLETED", completedAt: new Date(), currentStepIndex: nextIndex, stepData: updatedStepData as unknown as Prisma.InputJsonValue, waitingFor: null, waitingCondition: null, pausedAt: null },
     });
     return { nextStepIndex: nextIndex, status: "COMPLETED" };
   }
 
   await prisma.workflowExecution.update({
     where: { id: executionId },
-    data: { status: "ACTIVE", currentStepIndex: nextIndex, stepData: updatedStepData, waitingFor: null, waitingCondition: null, pausedAt: null },
+    data: { status: "ACTIVE", currentStepIndex: nextIndex, stepData: updatedStepData as unknown as Prisma.InputJsonValue, waitingFor: null, waitingCondition: null, pausedAt: null },
   });
   logger.info({ executionId, nextStepIndex: nextIndex }, "Workflow resumed");
   return { nextStepIndex: nextIndex, status: "ACTIVE" };

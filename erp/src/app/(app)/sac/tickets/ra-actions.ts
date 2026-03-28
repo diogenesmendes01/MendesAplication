@@ -243,6 +243,8 @@ export async function getRaTicketContext(
     actions.push({ action: "APPROVE_SUGGESTION", enabled: true, reason: null });
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const t = ticket as any;
   return {
     ticketId: ticket.id,
     raExternalId: ticket.raExternalId,
@@ -251,26 +253,26 @@ export async function getRaTicketContext(
     erpStatus: ticket.status,
     raStatusId: ticket.raStatusId,
     raStatusName: ticket.raStatusName,
-    raReason: (ticket as any).raReason ?? null,
-    raFeeling: (ticket as any).raFeeling ?? null,
-    raCategories: (ticket as any).raCategories ?? [],
+    raReason: t.raReason ?? null,
+    raFeeling: t.raFeeling ?? null,
+    raCategories: t.raCategories ?? [],
     raRating: ticket.raRating,
     raResolvedIssue: ticket.raResolvedIssue,
     raBackDoingBusiness: ticket.raBackDoingBusiness,
-    raPublicTreatmentTime: (ticket as any).raPublicTreatmentTime ?? null,
-    raPrivateTreatmentTime: (ticket as any).raPrivateTreatmentTime ?? null,
-    raRatingDate: (ticket as any).raRatingDate?.toISOString() ?? null,
-    raCommentsCount: (ticket as any).raCommentsCount ?? 0,
-    raUnreadCount: (ticket as any).raUnreadCount ?? 0,
-    raModerationStatus: (ticket as any).raModerationStatus ?? null,
+    raPublicTreatmentTime: t.raPublicTreatmentTime ?? null,
+    raPrivateTreatmentTime: t.raPrivateTreatmentTime ?? null,
+    raRatingDate: t.raRatingDate?.toISOString() ?? null,
+    raCommentsCount: t.raCommentsCount ?? 0,
+    raUnreadCount: t.raUnreadCount ?? 0,
+    raModerationStatus: t.raModerationStatus ?? null,
     raFrozen: ticket.raFrozen ?? false,
-    raActive: (ticket as any).raActive ?? true,
-    raSlaDeadline: (ticket as any).raSlaDeadline?.toISOString() ?? null,
+    raActive: t.raActive ?? true,
+    raSlaDeadline: t.raSlaDeadline?.toISOString() ?? null,
     consumerConsideration: ticket.raConsumerConsideration,
     companyConsideration: ticket.raCompanyConsideration,
-    whatsappEval: (ticket as any).raWhatsappEvalSent != null ? {
-      sent: (ticket as any).raWhatsappEvalSent,
-      done: (ticket as any).raWhatsappEvalDone,
+    whatsappEval: t.raWhatsappEvalSent != null ? {
+      sent: t.raWhatsappEvalSent,
+      done: t.raWhatsappEvalDone,
     } : null,
     client: {
       name: ticket.client?.name ?? "",

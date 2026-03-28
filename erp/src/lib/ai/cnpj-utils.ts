@@ -14,7 +14,7 @@ const CNPJ_REGEX = /\b(\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2})\b/g;
  */
 export function extractCnpjs(text: string): string[] {
   const matches = text.match(CNPJ_REGEX) || [];
-  return [...new Set(matches.map(normalizeCnpj))];
+  return Array.from(new Set(matches.map(normalizeCnpj)));
 }
 
 /**

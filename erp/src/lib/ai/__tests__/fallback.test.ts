@@ -141,7 +141,7 @@ describe("chatCompletionWithFallback", () => {
       .mockResolvedValueOnce({
         id: "1", provider: "openai", model: "gpt-4o-mini",
         status: "down", latencyMs: null, errorMessage: "503", checkedAt: new Date(),
-      } as any)
+      } as unknown as { status: string })
       .mockResolvedValueOnce(null); // anthropic - no previous check
 
     vi.mocked(chatCompletion).mockResolvedValueOnce({
@@ -161,9 +161,9 @@ describe("chatCompletionWithFallback", () => {
   it("still tries last provider even if known down", async () => {
     // All providers "down" in health check
     vi.mocked(prisma.aiProviderHealth.findFirst)
-      .mockResolvedValueOnce({ status: "down" } as any)
-      .mockResolvedValueOnce({ status: "down" } as any)
-      .mockResolvedValueOnce({ status: "down" } as any); // Not actually checked for last
+      .mockResolvedValueOnce({ status: "down" } as unknown as { status: string })
+      .mockResolvedValueOnce({ status: "down" } as unknown as { status: string })
+      .mockResolvedValueOnce({ status: "down" } as unknown as { status: string }); // Not actually checked for last
 
     vi.mocked(chatCompletion)
       .mockRejectedValueOnce(new Error("error"))

@@ -82,7 +82,7 @@ function AuditEntryCard({ entry }: { entry: AuditTrailRecord }) {
             <div className="flex items-center gap-1.5 mb-1"><BarChart3 className="h-3.5 w-3.5 text-gray-600" /><span className="text-xs font-semibold text-gray-800">Métricas</span></div>
             <div className="flex flex-wrap gap-2 text-xs">
               <Badge variant="outline" className="font-mono">{entry.inputTokens + entry.outputTokens} tokens</Badge>
-              <Badge variant="outline" className="font-mono">{formatCost(entry.costBrl)}</Badge>
+              <Badge variant="outline" className="font-mono">{formatCost(Number(entry.costBrl))}</Badge>
               <Badge variant="outline" className="font-mono"><Clock className="mr-1 h-3 w-3" />{formatDuration(entry.durationMs)}</Badge>
               <Badge variant="outline" className="font-mono">{entry.provider}/{entry.model}</Badge>
             </div>

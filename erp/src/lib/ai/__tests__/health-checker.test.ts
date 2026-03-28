@@ -1,7 +1,7 @@
 /**
  * Tests for AI Provider Health Checker
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach as _afterEach } from "vitest";
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -158,7 +158,7 @@ describe("areAllProvidersDown", () => {
     vi.mocked(prisma.aiProviderHealth.findMany).mockResolvedValueOnce([
       { provider: "openai", model: "gpt-4o-mini", status: "down", latencyMs: null, checkedAt: new Date() },
       { provider: "anthropic", model: "claude-haiku-4-20250414", status: "down", latencyMs: null, checkedAt: new Date() },
-    ] as any);
+    ] as unknown as { provider: string; model: string; status: string; latencyMs: number | null; checkedAt: Date }[]);
 
     expect(await areAllProvidersDown()).toBe(true);
   });
@@ -167,7 +167,7 @@ describe("areAllProvidersDown", () => {
     vi.mocked(prisma.aiProviderHealth.findMany).mockResolvedValueOnce([
       { provider: "openai", model: "gpt-4o-mini", status: "down", latencyMs: null, checkedAt: new Date() },
       { provider: "anthropic", model: "claude-haiku-4-20250414", status: "up", latencyMs: 800, checkedAt: new Date() },
-    ] as any);
+    ] as unknown as { provider: string; model: string; status: string; latencyMs: number | null; checkedAt: Date }[]);
 
     expect(await areAllProvidersDown()).toBe(false);
   });

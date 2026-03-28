@@ -14,7 +14,8 @@ export type AuditAction =
   | "DELETE"
   | "LOGIN"
   | "LOGOUT"
-  | "STATUS_CHANGE";
+  | "STATUS_CHANGE"
+  | "ai_fallback_chain_updated";
 
 export interface AuditEventParams {
   userId: string;

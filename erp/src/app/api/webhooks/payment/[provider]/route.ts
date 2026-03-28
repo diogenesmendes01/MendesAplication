@@ -166,7 +166,7 @@ export async function POST(
         status: "boleto_not_found",
       },
       companyId: matchedProvider.companyId,
-    }).catch(err => logger.error("Audit log failed:", err));
+    }).catch(err => logger.error("Audit log failed:" + " " + String(err)));
     return NextResponse.json({ received: true, boleto: "not_found" }, { status: 200 });
   }
 
@@ -316,7 +316,7 @@ export async function POST(
           `Verificar necessidade de devolução.`,
       },
       companyId: boleto.companyId,
-    }).catch(err => logger.error("Audit log failed:", err));
+    }).catch(err => logger.error("Audit log failed:" + " " + String(err)));
   }
 
   // 10. Log audit event
@@ -339,7 +339,7 @@ export async function POST(
       ...(isOverpaid ? { overpaid: true, overpaidDelta } : {}),
     },
     companyId: boleto.companyId,
-  }).catch(err => logger.error("Audit log failed:", err));
+  }).catch(err => logger.error("Audit log failed:" + " " + String(err)));
 
   logger.info(
     `[webhook] Boleto ${boleto.id} updated: ${previousStatus} → ${newBoletoStatus}` +

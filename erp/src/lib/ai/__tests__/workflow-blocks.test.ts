@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-function-type */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const mockClientFindMany = vi.fn();

@@ -225,7 +225,7 @@ export async function getAiConfig(
     return { ...DEFAULT_AI_CONFIG };
   }
 
-  return configToData(config);
+  return configToData({ ...config, operationMode: config.operationMode as "auto" | "suggest" | "hybrid" });
 }
 
 const VALID_PROVIDERS = ["openai", "anthropic", "grok", "qwen", "deepseek"] as const;

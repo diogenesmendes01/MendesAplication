@@ -357,7 +357,7 @@ export async function createTicket(input: CreateTicketInput) {
   try {
     await assignSlaToTicket(ticket.id, input.companyId, null, input.priority, ticket.createdAt);
   } catch (err) {
-    logger.error(`[createTicket] Failed to assign SLA to ticket ${ticket.id}:`, err);
+    logger.error(`[createTicket] Failed to assign SLA to ticket ${ticket.id}: ${err}`);
   }
 
   invalidateKpiCache(input.companyId);
@@ -548,7 +548,7 @@ export async function updateTicketStatus(
     try {
       await markResolved(ticketId);
     } catch (err) {
-      logger.error(`[updateTicketStatus] Failed to mark resolved for ticket ${ticketId}:`, err);
+      logger.error(`[updateTicketStatus] Failed to mark resolved for ticket ${ticketId}: ${err}`);
     }
   }
 
@@ -780,7 +780,7 @@ export async function createTicketReply(input: CreateTicketReplyInput) {
   try {
     await markFirstResponse(input.ticketId);
   } catch (err) {
-    logger.error(`[createTicketReply] Failed to mark first response for ticket ${input.ticketId}:`, err);
+    logger.error(`[createTicketReply] Failed to mark first response for ticket ${input.ticketId}: ${err}`);
   }
 
   return {

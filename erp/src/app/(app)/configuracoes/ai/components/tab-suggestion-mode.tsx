@@ -106,7 +106,7 @@ export function TabSuggestionMode({ config, setConfig }: TabSuggestionModeProps)
           <Select
             value={config.operationMode}
             onValueChange={(v) =>
-              setConfig((prev) => ({ ...prev, operationMode: v }))
+              setConfig((prev) => ({ ...prev, operationMode: v as "auto" | "suggest" | "hybrid" }))
             }
           >
             <SelectTrigger className="w-full">

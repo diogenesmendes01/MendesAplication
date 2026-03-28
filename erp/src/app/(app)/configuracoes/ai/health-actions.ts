@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requireCompanyAccess } from "@/lib/rbac";
 import { requireAdmin } from "@/lib/session";
 import { logAuditEvent } from "@/lib/audit";
-import { encrypt } from "@/lib/encryption";
+import { encrypt as _encrypt } from "@/lib/encryption";
 import { logger } from "@/lib/logger";
 
 // ---------------------------------------------------------------------------
@@ -193,9 +193,11 @@ export async function configFallbackChain(
 
     await logAuditEvent({
       action: "ai_fallback_chain_updated",
-      userId: session.user.id,
+      userId: session.userId,
+      entity: "aiConfig",
+      entityId: companyId,
       companyId,
-      details: { chain, healthCheckEnabled },
+      dataAfter: { chain, healthCheckEnabled } as unknown as import("@prisma/client").Prisma.InputJsonValue,
     });
 
     logger.info(

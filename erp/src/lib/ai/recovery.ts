@@ -40,7 +40,7 @@ export async function processRecoveryQueue(): Promise<{ processed: number; faile
   if (pendingTickets.length === 0) return { processed: 0, failed: 0 };
 
   logger.info({ count: pendingTickets.length }, "[recovery] Processing pending tickets");
-  const companyIds = [...new Set(pendingTickets.map((t) => t.companyId))];
+  const companyIds = Array.from(new Set(pendingTickets.map((t) => t.companyId)));
   for (const cid of companyIds) sseBus.publish(`company:${cid}:system`, "ai-recovery-started", { ticketCount: pendingTickets.length });
 
   const queue = await getAiAgentQueue();
@@ -51,7 +51,7 @@ export async function processRecoveryQueue(): Promise<{ processed: number; faile
       await queue.add("process", {
         ticketId: ticket.id, companyId: ticket.companyId,
         messageContent: ticket.messages[0]?.content || "",
-        channel: (ticket as any).channelType || "WHATSAPP", isRecovery: true,
+        channel: (ticket as unknown as Record<string, unknown>).channelType || "WHATSAPP", isRecovery: true,
       });
       await prisma.ticket.update({ where: { id: ticket.id }, data: { aiPendingRecovery: false } });
       processed++;

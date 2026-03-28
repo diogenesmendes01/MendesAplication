@@ -47,10 +47,10 @@ export interface UpdateWorkflowInput {
 // ─── List workflows ──────────────────────────────────────────────────────────
 
 export async function listWorkflows(companyId: string): Promise<WorkflowData[]> {
-  const { company } = await requireCompanyAccess(companyId);
+  await requireCompanyAccess(companyId);
 
   const workflows = await prisma.workflow.findMany({
-    where: { companyId: company.id },
+    where: { companyId },
     orderBy: [{ priority: "desc" }, { name: "asc" }],
     include: { _count: { select: { executions: true } } },
   });
@@ -75,15 +75,15 @@ export async function listWorkflows(companyId: string): Promise<WorkflowData[]> 
 // ─── Create workflow ─────────────────────────────────────────────────────────
 
 export async function createWorkflow(companyId: string, input: CreateWorkflowInput): Promise<WorkflowData> {
-  const { company, userId } = await requireCompanyAccess(companyId);
+  const { userId } = await requireCompanyAccess(companyId);
 
   const workflow = await prisma.workflow.create({
     data: {
-      companyId: company.id,
+      companyId,
       name: input.name,
       description: input.description,
-      trigger: input.trigger as any,
-      steps: input.steps as any,
+      trigger: input.trigger as unknown as import("@prisma/client").Prisma.InputJsonValue,
+      steps: input.steps as unknown as import("@prisma/client").Prisma.InputJsonValue,
       channels: input.channels ?? ["WHATSAPP", "EMAIL", "RECLAMEAQUI"],
       priority: input.priority ?? 0,
       timeoutMin: input.timeoutMin ?? 2880,
@@ -97,7 +97,7 @@ export async function createWorkflow(companyId: string, input: CreateWorkflowInp
     entity: "Workflow",
     entityId: workflow.id,
     dataAfter: { name: workflow.name, trigger: workflow.trigger },
-    companyId: company.id,
+    companyId,
   });
 
   return {
@@ -119,16 +119,16 @@ export async function createWorkflow(companyId: string, input: CreateWorkflowInp
 // ─── Update workflow ─────────────────────────────────────────────────────────
 
 export async function updateWorkflow(companyId: string, workflowId: string, input: UpdateWorkflowInput): Promise<WorkflowData> {
-  const { company, userId } = await requireCompanyAccess(companyId);
+  const { userId } = await requireCompanyAccess(companyId);
 
-  const existing = await prisma.workflow.findFirst({ where: { id: workflowId, companyId: company.id } });
+  const existing = await prisma.workflow.findFirst({ where: { id: workflowId, companyId } });
   if (!existing) throw new Error("Workflow not found");
 
   const data: Record<string, unknown> = {};
   if (input.name !== undefined) data.name = input.name;
   if (input.description !== undefined) data.description = input.description;
-  if (input.trigger !== undefined) data.trigger = input.trigger as any;
-  if (input.steps !== undefined) { data.steps = input.steps as any; data.version = existing.version + 1; }
+  if (input.trigger !== undefined) data.trigger = input.trigger as unknown as import("@prisma/client").Prisma.InputJsonValue;
+  if (input.steps !== undefined) { data.steps = input.steps as unknown as import("@prisma/client").Prisma.InputJsonValue; data.version = existing.version + 1; }
   if (input.channels !== undefined) data.channels = input.channels;
   if (input.enabled !== undefined) data.enabled = input.enabled;
   if (input.priority !== undefined) data.priority = input.priority;
@@ -143,7 +143,7 @@ export async function updateWorkflow(companyId: string, workflowId: string, inpu
     entityId: workflow.id,
     dataBefore: { name: existing.name, enabled: existing.enabled, version: existing.version },
     dataAfter: { name: workflow.name, enabled: workflow.enabled, version: workflow.version },
-    companyId: company.id,
+    companyId,
   });
 
   return {
@@ -179,10 +179,10 @@ export interface ExecutionStatusData {
 }
 
 export async function getExecutionStatus(companyId: string, executionId: string): Promise<ExecutionStatusData | null> {
-  const { company } = await requireCompanyAccess(companyId);
+  await requireCompanyAccess(companyId);
 
   const execution = await prisma.workflowExecution.findFirst({
-    where: { id: executionId, companyId: company.id },
+    where: { id: executionId, companyId },
     include: { workflow: { select: { name: true, steps: true } } },
   });
 
@@ -207,9 +207,9 @@ export async function getExecutionStatus(companyId: string, executionId: string)
 // ─── List executions ─────────────────────────────────────────────────────────
 
 export async function listExecutions(companyId: string, workflowId?: string, status?: string, limit = 50): Promise<ExecutionStatusData[]> {
-  const { company } = await requireCompanyAccess(companyId);
+  await requireCompanyAccess(companyId);
 
-  const where: Record<string, unknown> = { companyId: company.id };
+  const where: Record<string, unknown> = { companyId };
   if (workflowId) where.workflowId = workflowId;
   if (status) where.status = status;
 

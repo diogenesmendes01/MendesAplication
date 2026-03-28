@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-function-type, @typescript-eslint/no-unused-vars */
 /**
  * Unit tests for suggestion-mode.ts
  * Tests the suggestion mode business logic:

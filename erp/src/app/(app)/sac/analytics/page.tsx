@@ -210,8 +210,8 @@ export default function AnalyticsPage() {
                 }} />
                 <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => `R$${v.toFixed(2)}`} />
                 <Tooltip
-                  formatter={(v: number) => [`R$ ${v.toFixed(4)}`, "Custo"]}
-                  labelFormatter={(l: string) => new Date(l + "T12:00:00").toLocaleDateString("pt-BR")}
+                  formatter={(v: number | undefined) => [`R$ ${(v ?? 0).toFixed(4)}`, "Custo"]}
+                  labelFormatter={(l: React.ReactNode) => new Date(String(l) + "T12:00:00").toLocaleDateString("pt-BR")}
                 />
                 <Bar dataKey="costBrl" fill="#8B5CF6" radius={[4, 4, 0, 0]} />
               </BarChart>
@@ -231,12 +231,13 @@ export default function AnalyticsPage() {
               <ResponsiveContainer width="100%" height={280}>
                 <PieChart>
                   <Pie data={costByChannel} dataKey="costBrl" nameKey="channel" cx="50%" cy="50%" outerRadius={100}
-                    label={({ channel, costBrl }: CostByChannel) => `${channel} R$${costBrl.toFixed(2)}`}>
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    label={((props: any) => `${props.channel} R$${props.costBrl.toFixed(2)}`) as any}>
                     {costByChannel.map((entry, i) => (
                       <Cell key={entry.channel} fill={CHANNEL_COLORS[entry.channel] ?? PIE_COLORS[i % PIE_COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(v: number) => [`R$ ${v.toFixed(4)}`, "Custo"]} />
+                  <Tooltip formatter={(v: number | undefined) => [`R$ ${(v ?? 0).toFixed(4)}`, "Custo"]} />
                   <Legend />
                 </PieChart>
               </ResponsiveContainer>

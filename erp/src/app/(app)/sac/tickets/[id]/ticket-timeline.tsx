@@ -689,6 +689,7 @@ export default function TicketTimeline({
   channelType,
 }: TicketTimelineProps) {
   const [events, setEvents] = useState<TimelineEvent[]>([]);
+  const [loading, setLoading] = useState(false);
   const [suggestions, setSuggestions] = useState<AiSuggestionData[]>([]);
   const [aiEnabled, setAiEnabled] = useState(initialAiEnabled);
   const [togglingAi, setTogglingAi] = useState(false);

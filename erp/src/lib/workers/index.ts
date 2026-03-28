@@ -23,7 +23,7 @@ emailInboundQueue.upsertJobScheduler(
 ).then(() => {
   logger.info('[email-inbound] Repeatable poll job scheduled (every 2 min)')
 }).catch((err) => {
-  logger.error('[email-inbound] Failed to schedule repeatable job:', err)
+  logger.error('[email-inbound] Failed to schedule repeatable job:' + " " + String(err))
 })
 
 // Set up repeatable job for SLA checks (every 1 minute)
@@ -34,7 +34,7 @@ slaCheckQueue.upsertJobScheduler(
 ).then(() => {
   logger.info('[sla-check] Repeatable SLA check job scheduled (every 1 min)')
 }).catch((err) => {
-  logger.error('[sla-check] Failed to schedule repeatable job:', err)
+  logger.error('[sla-check] Failed to schedule repeatable job:' + " " + String(err))
 })
 
 // Set up repeatable job for Reclame Aqui inbound polling (every 5 minutes)
@@ -46,7 +46,7 @@ reclameaquiInboundQueue.upsertJobScheduler(
 ).then(() => {
   logger.info('[reclameaqui-inbound] Repeatable poll job scheduled (every 5 min)')
 }).catch((err) => {
-  logger.error('[reclameaqui-inbound] Failed to schedule repeatable job:', err)
+  logger.error('[reclameaqui-inbound] Failed to schedule repeatable job:' + " " + String(err))
 })
 
 // Set up repeatable job for AI health checks (every 2 minutes)
@@ -57,7 +57,7 @@ aiHealthCheckQueue.upsertJobScheduler(
 ).then(() => {
   logger.info('[ai-health-check] Repeatable health check job scheduled (every 2 min)')
 }).catch((err) => {
-  logger.error('[ai-health-check] Failed to schedule repeatable job:', err)
+  logger.error('[ai-health-check] Failed to schedule repeatable job:' + " " + String(err))
 })
 
 const emailInboundWorker = createWorker(QUEUE_NAMES.EMAIL_INBOUND, processEmailInbound, 2)

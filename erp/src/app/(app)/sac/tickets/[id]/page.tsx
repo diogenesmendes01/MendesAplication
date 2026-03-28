@@ -281,7 +281,8 @@ export default function TicketDetailPage() {
   const [newTag, setNewTag] = useState("");
   const [financial, setFinancial] = useState<ClientFinancialSummary | null>(null);
   const [aiConfigEnabled, setAiConfigEnabled] = useState(false);
-  const [raContext, setRaContext] = useState<any>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+const [raContext, setRaContext] = useState<any>(null);
   const [loadingRaContext, setLoadingRaContext] = useState(false);
 
   // Contact linking state (US-081)
@@ -369,7 +370,7 @@ export default function TicketDetailPage() {
           const raCtx = await getRaTicketContext(ticketId, selectedCompanyId);
           setRaContext(raCtx);
         } catch (err) {
-          console.error("Failed to load RA context:", err);
+          console.error("Failed to load RA context:", err); // eslint-disable-line no-console
           toast.error("Erro ao carregar contexto do Reclame Aqui");
         } finally {
           setLoadingRaContext(false);

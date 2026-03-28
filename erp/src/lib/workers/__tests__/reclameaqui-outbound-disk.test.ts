@@ -95,7 +95,7 @@ function fakeTicket(overrides = {}) {
 }
 
 function fakeJob(name: string, data: Record<string, unknown>) {
-  return { id: "job-1", name, data } as any;
+  return { id: "job-1", name, data } as unknown as import("bullmq").Job;
 }
 
 async function writeTempFile(ticketId: string, filename: string, content: string): Promise<string> {

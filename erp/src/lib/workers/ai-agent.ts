@@ -178,10 +178,10 @@ export async function processAiAgent(job: Job<AiAgentJobData>) {
     );
 
     // Enrich raContext with CNPJ identification flag
-    const enrichedRaContext = {
+    const enrichedRaContext: import("@/lib/reclameaqui/types").RaAiContext | undefined = raContext ? {
       ...raContext,
       needsCnpjIdentification: ticket?.client?.cpfCnpj?.startsWith("RA-") ?? false,
-    };
+    } : undefined;
     let result: AgentResult;
     try {
       result = await runAgent(ticketId, companyId, messageContent, "RECLAMEAQUI", {

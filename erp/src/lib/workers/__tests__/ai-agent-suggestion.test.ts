@@ -66,7 +66,7 @@ import { processAiAgent } from "../ai-agent";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function makeJob(data: Record<string, unknown>): Job<any> {
+function makeJob(data: Record<string, unknown>): Job<Record<string, unknown>> {
   return {
     data: {
       ticketId: "ticket-1",
@@ -75,7 +75,7 @@ function makeJob(data: Record<string, unknown>): Job<any> {
       channel: "WHATSAPP",
       ...data,
     },
-  } as unknown as Job<any>;
+  } as unknown as Job<Record<string, unknown>>;
 }
 
 beforeEach(() => {

@@ -1,5 +1,6 @@
 "use server";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { requireCompanyAccess } from "@/lib/rbac";
 
 export interface FeedbackSummary { total: number; positive: number; correction: number; negative: number; approvalRate: number; editRate: number; rejectionRate: number; byCategory: Array<{ category: string; count: number }>; byChannel: Array<{ channel: string; count: number }>; }
@@ -43,7 +44,7 @@ export async function getEditPatterns(companyId: string, from?: string, to?: str
   const dateFilter: Record<string, unknown> = {};
   if (from) dateFilter.gte = new Date(from);
   if (to) dateFilter.lte = new Date(to);
-  const feedbacks = await prisma.aiFeedback.findMany({ where: { companyId, type: "correction", diff: { not: null }, ...(Object.keys(dateFilter).length > 0 ? { createdAt: dateFilter } : {}) }, select: { diff: true, originalResponse: true, editedResponse: true }, orderBy: { createdAt: "desc" }, take: 200 });
+  const feedbacks = await prisma.aiFeedback.findMany({ where: { companyId, type: "correction", diff: { not: Prisma.DbNull }, ...(Object.keys(dateFilter).length > 0 ? { createdAt: dateFilter } : {}) }, select: { diff: true, originalResponse: true, editedResponse: true }, orderBy: { createdAt: "desc" }, take: 200 });
   const totalEdits = feedbacks.length; let totalChangePercent = 0; let minorEdits = 0; let majorEdits = 0;
   const topChanges: EditPattern["topChanges"] = [];
   for (const f of feedbacks) { const diff = f.diff as Record<string, unknown> | null; if (!diff) continue; const cp = (diff.changePercent as number) || 0; totalChangePercent += cp; if (diff.isMinorEdit) minorEdits++; else majorEdits++; if (topChanges.length < 10 && f.originalResponse && f.editedResponse) topChanges.push({ originalSnippet: f.originalResponse.slice(0, 150), editedSnippet: f.editedResponse.slice(0, 150), changePercent: cp }); }

@@ -159,7 +159,7 @@ async function executeSearch(config: SearchConfig, ctx: BlockContext): Promise<S
   }
 
   try {
-    const model = prisma[modelName as keyof typeof prisma] as any;
+    const model = prisma[modelName as keyof typeof prisma] as unknown as { findMany: (args: unknown) => Promise<unknown[]> };
     const results = await model.findMany({ where, take: limiteResultados, ...(orderBy && { orderBy }) });
     return { success: true, data: { total: results.length, results }, message: `Encontrados ${results.length} resultado(s).` };
   } catch (err) {
@@ -194,12 +194,12 @@ async function executeUpdate(config: UpdateConfig, ctx: BlockContext): Promise<S
   for (const [k, v] of Object.entries(resolvedFilter)) where[k] = v;
 
   try {
-    const model = prisma[modelName as keyof typeof prisma] as any;
+    const model = prisma[modelName as keyof typeof prisma] as unknown as { findMany: (args: unknown) => Promise<unknown[]>; update: (args: unknown) => Promise<unknown> };
     const records = await model.findMany({ where, take: 50 });
     if (records.length === 0) return { success: false, error: `Nenhum registro encontrado.` };
 
     let updatedCount = 0;
-    for (const record of records) {
+    for (const record of records as { id: string }[]) {
       await model.update({ where: { id: record.id }, data: resolvedCampos });
       updatedCount++;
       if (auditLog) {
@@ -231,7 +231,7 @@ async function executeRespond(config: RespondConfig, ctx: BlockContext): Promise
     }
   } else {
     const fallback = templatePorCanal ? Object.values(templatePorCanal)[0] : null;
-    message = fallback ? interpolate(typeof fallback === "string" ? fallback : (fallback as any).privado || "", ctx.stepData) : "Processo concluído.";
+    message = fallback ? interpolate(typeof fallback === "string" ? fallback : (fallback as Record<string, string>).privado || "", ctx.stepData) : "Processo concluído.";
   }
 
   return { success: true, message, data: { respondedMessage: message } };
@@ -278,11 +278,11 @@ async function executeSetTag(config: SetTagConfig, ctx: BlockContext): Promise<S
       if (!ticket) return { success: false, error: "Ticket não encontrado." };
 
       if (config.acao === "adicionar_tag") {
-        await prisma.ticket.update({ where: { id: ctx.ticketId }, data: { tags: [...new Set([...ticket.tags, config.valor])] } });
+        await prisma.ticket.update({ where: { id: ctx.ticketId }, data: { tags: Array.from(new Set([...ticket.tags, config.valor])) } });
       } else if (config.acao === "remover_tag") {
         await prisma.ticket.update({ where: { id: ctx.ticketId }, data: { tags: ticket.tags.filter((t) => t !== config.valor) } });
       } else if (config.acao === "alterar_status") {
-        await prisma.ticket.update({ where: { id: ctx.ticketId }, data: { status: config.valor as any } });
+        await prisma.ticket.update({ where: { id: ctx.ticketId }, data: { status: config.valor as unknown as import("@prisma/client").TicketStatus } });
       }
     }
     return { success: true, data: { alvo: config.alvo, acao: config.acao, valor: config.valor }, message: `Tag/status atualizado.` };
@@ -334,7 +334,8 @@ async function executeEscalate(config: EscalateConfig, ctx: BlockContext): Promi
   try {
     await prisma.ticket.update({
       where: { id: ctx.ticketId },
-      data: { aiEnabled: false, status: "OPEN", ...(config.prioridade && { priority: config.prioridade }) },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      data: { aiEnabled: false, status: "OPEN" as const, ...(config.prioridade && { priority: config.prioridade as any }) },
     });
 
     const noteContent = config.incluirContexto

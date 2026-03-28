@@ -141,7 +141,7 @@ function resolveLastSyncDate(
  * If the deadline is not met, the complaint counts as "Não respondida".
  */
 export function calculateRaSlaDeadline(creationDate: string | Date): Date {
-  let date = new Date(creationDate);
+  const date = new Date(creationDate);
   let businessDays = 0;
   while (businessDays < 10) {
     date.setDate(date.getDate() + 1);
@@ -638,7 +638,7 @@ async function updateExistingTicket(
         raContext: {
           reason: raTicket.ra_reason ?? null,
           feeling: raTicket.ra_feeling ?? null,
-          categories: raTicket.categories?.map((c: any) => c.description) ?? [],
+          categories: raTicket.categories?.map((c: { description: string }) => c.description) ?? [],
           customerName: raTicket.customer?.name ?? null,
           complaintTitle: raTicket.complaint_title ?? null,
           previousResponseContent: raTicket.complaint_response_content ?? null,

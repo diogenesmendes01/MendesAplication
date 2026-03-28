@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { executeTool } from "./tool-executor";
-import type { ToolContext, ReclameAquiResponse } from "./tool-executor";
+import type { ToolContext, ReclameAquiResponse as _ReclameAquiResponse } from "./tool-executor";
 import type { CapturedAction } from "./agent";
 import type { ChannelType } from "@prisma/client";
 import { logger } from "@/lib/logger";
@@ -38,10 +38,10 @@ export async function createAiSuggestion(
       channel: data.channel,
       messageId: data.messageId,
 
-      analysis: data.analysis as any,
+      analysis: data.analysis as unknown as import("@prisma/client").Prisma.InputJsonValue,
       suggestedResponse: data.suggestedResponse,
       suggestedSubject: data.suggestedSubject,
-      suggestedActions: data.suggestedActions as any,
+      suggestedActions: data.suggestedActions as unknown as import("@prisma/client").Prisma.InputJsonValue,
 
       raPrivateMessage: data.raPrivateMessage,
       raPublicMessage: data.raPublicMessage,

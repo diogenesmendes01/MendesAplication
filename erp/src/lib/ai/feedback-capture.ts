@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
-import type { ChannelType } from "@prisma/client";
+import type { ChannelType, Prisma } from "@prisma/client";
 
 export type FeedbackType = "positive" | "correction" | "negative" | "ignored" | "unnecessary_escalation";
 
@@ -57,7 +57,7 @@ export async function captureFeedback(
       originalResponse: input.originalResponse,
       editedResponse: action === "EDITED" ? (editedResponse ?? null) : null,
       rejectionReason: action === "REJECTED" ? (rejectionReason ?? null) : null,
-      diff,
+      diff: diff as unknown as Prisma.InputJsonValue ?? undefined,
     },
   });
   logger.info({ feedbackId: feedback.id, suggestionId: input.suggestionId, type, channel: input.channel }, "AI feedback captured");
