@@ -4,6 +4,7 @@ import { decryptConfig } from "@/lib/encryption";
 import { aiAgentQueue } from "@/lib/queue";
 import { ReclameAquiClient } from "@/lib/reclameaqui/client";
 import { logger } from "@/lib/logger";
+import { lookupCnpjByEmail } from "@/lib/reclameaqui/cnpj-lookup";
 import type { TicketStatus, MessageDirection, Prisma } from "@prisma/client";
 import type {
   RaClientConfig,
@@ -433,6 +434,39 @@ async function createNewTicket(
           },
         });
         clientId = client.id;
+      }
+    }
+
+
+    // ── CNPJ lookup from consumer email domain ─────────────────────────
+    // When cpfCnpj is synthetic (RA-xxx), try to find the real CNPJ
+    // by matching the email domain against the external CNPJ database.
+    // This runs OUTSIDE the transaction since it queries a separate DB.
+    const currentClient = await tx.client.findFirst({
+      where: { id: clientId },
+      select: { cpfCnpj: true },
+    });
+    if (currentClient?.cpfCnpj?.startsWith("RA-") && customerEmail) {
+      try {
+        const cnpjResult = await lookupCnpjByEmail(customerEmail);
+        if (cnpjResult) {
+          await tx.client.update({
+            where: { id: clientId },
+            data: {
+              cpfCnpj: cnpjResult.cnpj,
+              type: "PJ",
+            },
+          });
+          logger.info(
+            `[reclameaqui-inbound] Updated client ${clientId} with CNPJ ${cnpjResult.cnpj} from email domain`
+          );
+        }
+      } catch (err) {
+        // Non-critical — log and continue with RA-xxx cpfCnpj
+        logger.warn(
+          { err, clientId, email: customerEmail },
+          "[reclameaqui-inbound] CNPJ lookup failed, continuing with synthetic ID"
+        );
       }
     }
 

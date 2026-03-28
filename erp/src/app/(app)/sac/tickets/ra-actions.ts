@@ -73,7 +73,7 @@ export interface RaTicketContext {
   consumerConsideration: string | null;
   companyConsideration: string | null;
   whatsappEval: { sent: boolean | null; done: boolean | null } | null;
-  client: { name: string; email: string | null; phone: string | null };
+  client: { name: string; email: string | null; phone: string | null; cpfCnpj: string | null };
   availableActions: RaAvailableAction[];
   recentMessages: Array<{
     content: string;
@@ -182,7 +182,7 @@ export async function getRaTicketContext(
       raFrozen: true,
       raConsumerConsideration: true,
       raCompanyConsideration: true,
-      client: { select: { name: true, email: true, telefone: true } },
+      client: { select: { name: true, email: true, telefone: true, cpfCnpj: true } },
       channel: { select: { type: true } },
       messages: {
         orderBy: { createdAt: "desc" },
@@ -264,6 +264,7 @@ export async function getRaTicketContext(
       name: ticket.client?.name ?? "",
       email: ticket.client?.email ?? null,
       phone: ticket.client?.telefone ?? null,
+      cpfCnpj: ticket.client?.cpfCnpj ?? null,
     },
     availableActions: actions,
     recentMessages: ticket.messages.map((m) => ({

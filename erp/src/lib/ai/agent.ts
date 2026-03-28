@@ -1057,8 +1057,11 @@ ${CNPJ_INSTRUCTIONS}${ATTACHMENT_INSTRUCTIONS}
     if (raContext.previousResponseContent) {
       prompt += `\n- ⚠️ Já existe uma resposta anterior da empresa. NÃO repita o conteúdo. Avance na resolução ou aborde novos pontos.`;
     }
-  }
+    if (raContext.needsCnpjIdentification) {
+      prompt += `\n- ⚠️ O cliente NÃO foi identificado por CNPJ (cpfCnpj sintético). Priorize a identificação: use LOOKUP_CLIENT_BY_CNPJ se encontrar CNPJ no contexto, ou pergunte o CNPJ ao consumidor na mensagem privada.`;
+    }
 
+  }
   if (historyContext) {
     prompt += `\n\n## HISTÓRICO DA RECLAMAÇÃO:\n${historyContext}`;
   }
