@@ -432,4 +432,5 @@ export interface RaAiContext {
   rating: string | null;
   interactionsCount: number;
   isReplica: boolean;
+  needsCnpjIdentification?: boolean;
 }

@@ -83,6 +83,12 @@ export async function processAiAgent(job: Job<AiAgentJobData>) {
     logger.info(`[ai-agent] Processing recovery job for ticket ${ticketId}`);
   }
 
+  // Check ticket-level AI toggle and get client CNPJ for RA enrichment.
+  const ticket = await prisma.ticket.findUnique({
+    where: { id: ticketId },
+    select: { aiEnabled: true, client: { select: { cpfCnpj: true } } },
+  });
+
   // 1. Rate Limit Check (per-ticket): AI toggle, budget, cooldown, interactions/hour
   const rateLimit = await checkRateLimit(ticketId, companyId, channel);
   if (!rateLimit.allowed) {
@@ -171,11 +177,16 @@ export async function processAiAgent(job: Job<AiAgentJobData>) {
       `[ai-agent] Running RA agent for ticket ${ticketId}, company ${companyId}, mode=${effectiveMode}, suggestionMode=${useSuggestionMode}, fallbackChain=${fallbackChain.length}`
     );
 
+    // Enrich raContext with CNPJ identification flag
+    const enrichedRaContext = {
+      ...raContext,
+      needsCnpjIdentification: ticket?.client?.cpfCnpj?.startsWith("RA-") ?? false,
+    };
     let result: AgentResult;
     try {
       result = await runAgent(ticketId, companyId, messageContent, "RECLAMEAQUI", {
         suggestionMode: useSuggestionMode,
-        raContext,
+        raContext: enrichedRaContext,
         fallbackChain: fallbackChain.length > 1 ? fallbackChain : undefined,
       });
     } catch (error) {

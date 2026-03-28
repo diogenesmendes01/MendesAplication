@@ -141,7 +141,8 @@ export function RaDetailPanel({ context }: { context: RaTicketContext }) {
     raModerationStatus,
     raSlaDeadline,
     availableActions,
-    recentMessages
+    recentMessages,
+    client
   } = context;
 
   return (
@@ -170,6 +171,11 @@ export function RaDetailPanel({ context }: { context: RaTicketContext }) {
           {raActive === false && (
             <Badge variant="outline" className="w-full justify-center">
               🏢 Ticket migrado para outra empresa
+            </Badge>
+          )}
+          {client?.cpfCnpj?.startsWith("RA-") && (
+            <Badge variant="destructive" className="w-full justify-center">
+              ⚠️ Cliente sem CNPJ
             </Badge>
           )}
         </CardContent>
