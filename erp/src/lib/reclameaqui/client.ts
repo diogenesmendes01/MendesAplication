@@ -396,7 +396,7 @@ export class ReclameAquiClient {
 
     if (files?.length) {
       files.forEach((file, i) => {
-        formData.append("file", new Blob([file]), `attachment-${i}`);
+        formData.append("file", new Blob([new Uint8Array(file)]), `attachment-${i}`);
       });
     }
 
@@ -439,7 +439,7 @@ export class ReclameAquiClient {
 
     if (files?.length) {
       files.forEach((file, i) => {
-        formData.append("file", new Blob([file]), `attachment-${i}`);
+        formData.append("file", new Blob([new Uint8Array(file)]), `attachment-${i}`);
       });
     }
 

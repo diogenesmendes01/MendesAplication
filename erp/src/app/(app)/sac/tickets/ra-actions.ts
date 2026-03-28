@@ -626,26 +626,6 @@ export async function requestRaModeration(
       return { success: false, error: "Este ticket não pertence ao canal Reclame Aqui" };
     }
 
-    // Server-side validation
-    if (formData) {
-      const rawFiles = formData.getAll("files");
-      if (rawFiles.length > RA_ATTACHMENT_LIMITS.maxFiles) {
-        return { success: false, error: `Máximo ${RA_ATTACHMENT_LIMITS.maxFiles} arquivos por envio` };
-      }
-      for (const entry of rawFiles) {
-        if (entry instanceof File) {
-          const ext = entry.name.split(".").pop()?.toLowerCase() ?? "";
-          if (!RA_ATTACHMENT_LIMITS.acceptedExtensions.includes(ext)) {
-            return { success: false, error: `Tipo não aceito: .${ext}` };
-          }
-          const isAudio = ["audio/mpeg", "audio/x-ms-wma", "audio/ogg", "audio/aac"].includes(entry.type);
-          const maxBytes = (isAudio ? RA_ATTACHMENT_LIMITS.maxAudioSizeMB : RA_ATTACHMENT_LIMITS.maxOtherSizeMB) * 1024 * 1024;
-          if (entry.size > maxBytes) {
-            return { success: false, error: `${entry.name} excede o limite de tamanho` };
-          }
-        }
-      }
-    }
 
     await reclameaquiOutboundQueue.add("RA_REQUEST_MODERATION", {
       ticketId,
@@ -829,7 +809,7 @@ export async function sendPrivateMessageWithAttachments(
       for (const entry of rawFiles) {
         if (entry instanceof File) {
           const ext = entry.name.split(".").pop()?.toLowerCase() ?? "";
-          if (!RA_ATTACHMENT_LIMITS.acceptedExtensions.includes(ext)) {
+          if (!(RA_ATTACHMENT_LIMITS.acceptedExtensions as readonly string[]).includes(ext)) {
             return { success: false, error: `Tipo não aceito: .${ext}` };
           }
           const isAudio = ["audio/mpeg", "audio/x-ms-wma", "audio/ogg", "audio/aac"].includes(entry.type);

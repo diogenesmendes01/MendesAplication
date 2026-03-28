@@ -489,11 +489,10 @@ export async function processReclameAquiOutbound(job: Job<RaOutboundJobData>): P
     case "RA_REQUEST_MODERATION":
       return handleRequestModeration(
         data.ticketId,
-        (data as RaRequestModerationJobData,
-        (data as RaRequestModerationJobData).files
-      ).reason,
+        (data as RaRequestModerationJobData).reason,
         (data as RaRequestModerationJobData).message,
-        (data as RaRequestModerationJobData).migrateTO
+        (data as RaRequestModerationJobData).migrateTO,
+        (data as RaRequestModerationJobData).files
       );
 
     case "RA_FINISH_PRIVATE":
