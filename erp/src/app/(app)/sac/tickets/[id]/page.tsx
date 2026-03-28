@@ -95,6 +95,8 @@ import { ChannelBreadcrumb } from "@/components/sac/channel-breadcrumb";
 import { ChannelBadge } from "@/components/sac/channel-badge";
 import { getRaTicketContext, requestRaEvaluation, finishPrivateMessage } from "../ra-actions";
 import RaDetailPanel from "../../components/ra-detail-panel";
+import LinkedTicketsBanner from "./linked-tickets-banner";
+import MergedTicketBanner from "./merged-ticket-banner";
 
 const RequestRefundDialog = dynamic(() =>
   import("./refund-dialogs").then((m) => ({ default: m.RequestRefundDialog })),
@@ -155,6 +157,8 @@ function statusLabel(s: string) {
       return "Resolvido";
     case "CLOSED":
       return "Fechado";
+    case "MERGED":
+      return "Mergeado";
     default:
       return s;
   }
@@ -172,6 +176,8 @@ function statusColor(s: string) {
       return "bg-green-100 text-green-800";
     case "CLOSED":
       return "bg-gray-100 text-gray-800";
+    case "MERGED":
+      return "bg-purple-100 text-purple-800";
     default:
       return "bg-gray-100 text-gray-800";
   }
@@ -743,6 +749,14 @@ export default function TicketDetailPage() {
           </span>
         </div>
       </div>
+
+      {/* Cross-channel dedup banners */}
+      {ticket.mergedIntoId && ticket.mergedAt && (
+        <MergedTicketBanner mergedIntoId={ticket.mergedIntoId} mergedAt={ticket.mergedAt} />
+      )}
+      {selectedCompanyId && !ticket.mergedIntoId && (
+        <LinkedTicketsBanner ticketId={ticket.id} companyId={selectedCompanyId} />
+      )}
 
       {/* Unknown contact banner (US-081) */}
       {isUnknownClient && (
