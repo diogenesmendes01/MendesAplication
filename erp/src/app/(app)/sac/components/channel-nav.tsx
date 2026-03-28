@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Mail, MessageSquare, Globe } from "lucide-react";
+import { LayoutDashboard, Mail, MessageSquare, Globe, Activity } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const channels = [
@@ -10,6 +10,7 @@ const channels = [
   { href: "/sac/email", label: "Email", icon: Mail },
   { href: "/sac/whatsapp", label: "WhatsApp", icon: MessageSquare },
   { href: "/sac/reclameaqui", label: "Reclame Aqui", icon: Globe },
+  { href: "/sac/analytics", label: "Observabilidade", icon: Activity },
 ] as const;
 
 export function ChannelNav() {

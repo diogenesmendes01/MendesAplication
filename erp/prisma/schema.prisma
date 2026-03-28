@@ -93,6 +93,7 @@ model Company {
   paymentProviders    PaymentProvider[]
   santanderSequences  SantanderSequence[]
   aiSuggestions       AiSuggestion[]
+  aiAlerts            AiAlert[]
   slaViolations       SlaViolation[]
   workflows           Workflow[]
   workflowExecutions  WorkflowExecution[]
@@ -521,6 +522,7 @@ model Ticket {
   raModerationStatus     String?
   aiEnabled              Boolean   @default(true)
   aiDisabledReason       String? // "budget_exceeded" | "rate_limited" | "manual" | null
+  aiPendingRecovery      Boolean   @default(false)
   aiTotalCostBrl         Decimal?  @default(0) @db.Decimal(10, 4)
   lastAiResponseAt       DateTime?
   mergedIntoId           String?
@@ -913,6 +915,12 @@ model AiConfig {
   // --- Temperatura ---
   temperature Float @default(0.7)
 
+  // --- AI Fallback ---
+  fallbackChain         Json?
+  healthCheckEnabled    Boolean   @default(true)
+  healthCheckIntervalMs Int       @default(120000)
+  humanOnlyModeEnabled  Boolean   @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1202,6 +1210,26 @@ model TicketLink {
   @@index([ticketBId, status])
   @@map("ticket_links")
 }
+// ─── AI Observability Alert ─────────────────────────────────────────────────
+
+model AiAlert {
+  id              String    @id @default(cuid())
+  companyId       String
+  metricType      String
+  threshold       Float
+  operator        String    @default("gt")
+  enabled         Boolean   @default(true)
+  lastTriggeredAt DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, metricType])
+  @@index([companyId, enabled])
+  @@map("ai_alerts")
+}
+
 // ─── Workflow Engine ─────────────────────────────────────────────────────────
 
 model Workflow {
@@ -1255,4 +1283,37 @@ model WorkflowExecution {
   @@index([companyId, status])
   @@index([status, timeoutAt])
   @@map("workflow_executions")
+}
+
+// ─── AI Fallback: Provider Health ─────────────────────────────────────────────
+
+model AiProviderHealth {
+  id           String   @id @default(cuid())
+  provider     String
+  model        String
+  status       String   // "up" | "down" | "degraded"
+  latencyMs    Int?
+  errorMessage String?
+  checkedAt    DateTime @default(now())
+
+  @@index([provider, checkedAt])
+  @@index([status])
+  @@map("ai_provider_health")
+}
+
+model AiProviderIncident {
+  id               String    @id @default(cuid())
+  provider         String
+  model            String
+  startedAt        DateTime
+  resolvedAt       DateTime?
+  durationMs       Int?
+  ticketsAffected  Int       @default(0)
+  ticketsRecovered Int       @default(0)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([provider, createdAt])
+  @@index([resolvedAt])
+  @@map("ai_provider_incidents")
 }
