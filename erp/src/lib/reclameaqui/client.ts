@@ -395,9 +395,9 @@ export class ReclameAquiClient {
     formData.append("email", email);
 
     if (files?.length) {
-      for (const [i, file] of files.entries()) {
+      files.forEach((file, i) => {
         formData.append("file", new Blob([file]), `attachment-${i}`);
-      }
+      });
     }
 
     return this.request("POST", "/ticket/v1/tickets/message/private", {
@@ -438,9 +438,9 @@ export class ReclameAquiClient {
     }
 
     if (files?.length) {
-      for (const [i, file] of files.entries()) {
+      files.forEach((file, i) => {
         formData.append("file", new Blob([file]), `attachment-${i}`);
-      }
+      });
     }
 
     return this.request("POST", "/ticket/v1/tickets/moderation", { formData });
