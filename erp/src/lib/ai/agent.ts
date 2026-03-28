@@ -14,6 +14,7 @@ import {
 } from "./cost-tracker";
 import { MODEL_PRICING, FALLBACK_PRICING, DEFAULT_MODELS } from "./pricing";
 import { getBrlUsdRateSync } from "./exchange-rate";
+import { recordAuditTrail, type ToolCallRecord as AuditToolCallRecord } from "./audit-trail";
 import { logger, createChildLogger } from "@/lib/logger";
 import type { Logger } from "pino";
 
@@ -49,6 +50,7 @@ export interface AgentResult {
   capturedActions?: CapturedAction[];
   /** All tools executed during the agent loop (read + write) */
   toolsExecuted?: string[];
+  auditToolCalls?: AuditToolCallRecord[];
 }
 
 export interface DryRunResult {
@@ -78,6 +80,7 @@ interface AgentLoopResult {
   capturedActions?: CapturedAction[];
   /** All tools executed during the agent loop (read + write) */
   toolsExecuted?: string[];
+  auditToolCalls?: AuditToolCallRecord[];
 }
 
 // ─── Core agent loop ──────────────────────────────────────────────────────────
@@ -134,6 +137,7 @@ log,
   let raResponse: ReclameAquiResponse | undefined;
   const capturedActions: CapturedAction[] = [];
   const allToolsExecuted: string[] = [];
+  const auditToolCalls: AuditToolCallRecord[] = [];
   let actionOrder = 0;
 
   for (let iteration = 0; iteration < maxIterations; iteration++) {
@@ -151,6 +155,7 @@ log,
         raResponse,
         capturedActions,
         toolsExecuted: allToolsExecuted,
+        auditToolCalls,
       };
     }
 
@@ -170,6 +175,7 @@ log,
           raResponse,
         capturedActions,
         toolsExecuted: allToolsExecuted,
+        auditToolCalls,
         };
       }
     }
@@ -211,7 +217,10 @@ log,
             log.info({ tool: toolName, iteration: iteration + 1 }, "Executing tool");
           }
 
+          const toolStartMs = Date.now();
           const result = await executeTool(toolName, args, toolContext);
+          const toolDurationMs = Date.now() - toolStartMs;
+          auditToolCalls.push({ tool: toolName, args, result: result.substring(0, 500), durationMs: toolDurationMs });
           allToolsExecuted.push(toolName);
 
           // Capture write tool calls in suggestion mode
@@ -262,6 +271,7 @@ log,
             raResponse,
         capturedActions,
         toolsExecuted: allToolsExecuted,
+        auditToolCalls,
           };
         }
 
@@ -325,6 +335,7 @@ log,
           raResponse,
         capturedActions,
         toolsExecuted: allToolsExecuted,
+        auditToolCalls,
         };
 
       // ── Empty response ─────────────────────────────────────────────────
@@ -343,6 +354,7 @@ log,
           raResponse,
         capturedActions,
         toolsExecuted: allToolsExecuted,
+        auditToolCalls,
         };
       }
     } catch (error) {
@@ -370,6 +382,7 @@ log,
     raResponse,
         capturedActions,
         toolsExecuted: allToolsExecuted,
+        auditToolCalls,
   };
 }
 
@@ -611,6 +624,25 @@ log,
       }
     },
   });
+
+  // ── Record audit trail (fire-and-forget) ─────────────
+  if (!options?.suggestionMode && loopResult.iterations > 0) {
+    const decision = loopResult.escalated ? "escalate" : loopResult.responded ? "respond" : "no_action";
+    recordAuditTrail({
+      ticketId, companyId, channel,
+      iteration: loopResult.iterations,
+      input: incomingMessage,
+      toolCalls: loopResult.auditToolCalls || [],
+      output: loopResult.finalResponse || undefined,
+      decision, confidence: 0,
+      inputTokens: loopResult.totalInputTokens,
+      outputTokens: loopResult.totalOutputTokens,
+      costBrl: estimateCostBrl(effectiveModel, loopResult.totalInputTokens, loopResult.totalOutputTokens),
+      durationMs: Date.now() - startTime,
+      provider: providerConfig.provider,
+      model: effectiveModel,
+    }).catch((err) => log.error({ err }, "[audit-trail] Failed to record"));
+  }
 
   return {
     responded: loopResult.responded,

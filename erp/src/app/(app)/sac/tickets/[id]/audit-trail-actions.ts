@@ -26,8 +26,6 @@ export async function exportAuditTrail(
   format: "csv" | "json",
 ): Promise<string> {
   await requireCompanyAccess(companyId);
-  if (format === "csv") {
-    return exportAuditTrailCSV(ticketId, companyId);
-  }
+  if (format === "csv") return exportAuditTrailCSV(ticketId, companyId);
   return exportAuditTrailJSON(ticketId, companyId);
 }
