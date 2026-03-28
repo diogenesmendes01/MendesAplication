@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
+import { requireCompanyAccess } from "@/lib/rbac";
 import { revalidatePath } from "next/cache";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -35,6 +36,8 @@ export const METRIC_TYPES = [
 // ─── List ─────────────────────────────────────────────────────────────────────
 
 export async function listAlerts(companyId: string): Promise<AiAlertRow[]> {
+  await requireCompanyAccess(companyId);
+
   return prisma.aiAlert.findMany({
     where: { companyId },
     orderBy: { createdAt: "asc" },
@@ -44,6 +47,8 @@ export async function listAlerts(companyId: string): Promise<AiAlertRow[]> {
 // ─── Upsert (create or update by companyId + metricType) ──────────────────────
 
 export async function upsertAlert(input: AiAlertInput): Promise<AiAlertRow> {
+  await requireCompanyAccess(input.companyId);
+
   const data = {
     threshold: input.threshold,
     operator: input.operator ?? "gt",
@@ -75,6 +80,10 @@ export async function toggleAlert(
   id: string,
   enabled: boolean,
 ): Promise<AiAlertRow> {
+  // Fetch the alert first to verify tenant ownership
+  const alert = await prisma.aiAlert.findUniqueOrThrow({ where: { id } });
+  await requireCompanyAccess(alert.companyId);
+
   const result = await prisma.aiAlert.update({
     where: { id },
     data: { enabled },
@@ -86,6 +95,10 @@ export async function toggleAlert(
 // ─── Delete ───────────────────────────────────────────────────────────────────
 
 export async function deleteAlert(id: string): Promise<void> {
+  // Fetch the alert first to verify tenant ownership
+  const alert = await prisma.aiAlert.findUniqueOrThrow({ where: { id } });
+  await requireCompanyAccess(alert.companyId);
+
   await prisma.aiAlert.delete({ where: { id } });
   revalidatePath("/sac/analytics");
 }

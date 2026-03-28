@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
+import { requireCompanyAccess } from "@/lib/rbac";
 import { Prisma } from "@prisma/client";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -75,6 +76,8 @@ export async function getAiKpis(
   companyId: string,
   period: DateRange,
 ): Promise<AiKpis> {
+  await requireCompanyAccess(companyId);
+
   const whereBase = {
     companyId,
     createdAt: { gte: period.from, lte: period.to },
@@ -141,6 +144,8 @@ export async function getCostByDay(
   companyId: string,
   period: DateRange,
 ): Promise<CostByDay[]> {
+  await requireCompanyAccess(companyId);
+
   const rows = await prisma.$queryRaw<
     { day: Date; cost_brl: Prisma.Decimal; calls: bigint }[]
   >`
@@ -170,6 +175,8 @@ export async function getCostByChannel(
   companyId: string,
   period: DateRange,
 ): Promise<CostByChannel[]> {
+  await requireCompanyAccess(companyId);
+
   const results = await prisma.aiUsageLog.groupBy({
     by: ["channel"],
     where: {
@@ -195,6 +202,8 @@ export async function getTopTicketsByCost(
   period: DateRange,
   limit = 10,
 ): Promise<TopTicketCost[]> {
+  await requireCompanyAccess(companyId);
+
   const results = await prisma.aiUsageLog.groupBy({
     by: ["ticketId"],
     where: {
@@ -222,6 +231,8 @@ export async function getConfidenceByChannel(
   companyId: string,
   period: DateRange,
 ): Promise<{ channel: string; avgConfidence: number; count: number }[]> {
+  await requireCompanyAccess(companyId);
+
   const results = await prisma.aiSuggestion.groupBy({
     by: ["channel"],
     where: {
@@ -245,6 +256,8 @@ export async function getSuggestionBreakdown(
   companyId: string,
   period: DateRange,
 ): Promise<SuggestionBreakdown> {
+  await requireCompanyAccess(companyId);
+
   const results = await prisma.aiSuggestion.groupBy({
     by: ["status"],
     where: {
@@ -276,7 +289,7 @@ export async function getSuggestionBreakdown(
   };
 }
 
-// ─── Confidence Calibration ────────────────────────────────────��──────────────
+// ─── Confidence Calibration ─────────────────────────────────────────────────
 
 const CONFIDENCE_BUCKETS = [
   { min: 0.9, max: 1.01, label: "90-100%" },
@@ -290,6 +303,8 @@ export async function getConfidenceCalibration(
   companyId: string,
   period: DateRange,
 ): Promise<ConfidenceBucket[]> {
+  await requireCompanyAccess(companyId);
+
   const results: ConfidenceBucket[] = [];
 
   for (const bucket of CONFIDENCE_BUCKETS) {
@@ -326,6 +341,8 @@ export async function getEscalationRate(
   companyId: string,
   period: DateRange,
 ): Promise<EscalationData> {
+  await requireCompanyAccess(companyId);
+
   const totalAiTickets = await prisma.ticket.count({
     where: {
       companyId,
@@ -359,7 +376,7 @@ export async function getEscalationRate(
   };
 }
 
-// ─── Recent Escalations ──────────────────────────────────────���────────────────
+// ─── Recent Escalations ─────────────────────────────────────────────────────
 
 export async function getRecentEscalations(
   companyId: string,
@@ -372,6 +389,8 @@ export async function getRecentEscalations(
     escalatedAt: Date;
   }[]
 > {
+  await requireCompanyAccess(companyId);
+
   const tickets = await prisma.ticket.findMany({
     where: {
       companyId,
@@ -423,6 +442,8 @@ export async function getTopTools(
   period: DateRange,
   limit = 10,
 ): Promise<ToolUsage[]> {
+  await requireCompanyAccess(companyId);
+
   const suggestions = await prisma.aiSuggestion.findMany({
     where: {
       companyId,

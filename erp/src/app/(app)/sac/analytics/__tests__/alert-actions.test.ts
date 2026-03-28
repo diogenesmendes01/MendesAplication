@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const mockFindMany = vi.fn();
+const mockFindUniqueOrThrow = vi.fn();
 const mockUpsert = vi.fn();
 const mockUpdate = vi.fn();
 const mockDelete = vi.fn();
@@ -9,11 +10,16 @@ vi.mock("@/lib/prisma", () => ({
   prisma: {
     aiAlert: {
       findMany: (...args: unknown[]) => mockFindMany(...args),
+      findUniqueOrThrow: (...args: unknown[]) => mockFindUniqueOrThrow(...args),
       upsert: (...args: unknown[]) => mockUpsert(...args),
       update: (...args: unknown[]) => mockUpdate(...args),
       delete: (...args: unknown[]) => mockDelete(...args),
     },
   },
+}));
+
+vi.mock("@/lib/rbac", () => ({
+  requireCompanyAccess: vi.fn().mockResolvedValue({ userId: "user-1", role: "ADMIN" }),
 }));
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
@@ -67,23 +73,27 @@ describe("Alert Actions", () => {
   });
 
   describe("toggleAlert", () => {
-    it("toggles the enabled state", async () => {
+    it("fetches alert to verify tenant then toggles", async () => {
+      mockFindUniqueOrThrow.mockResolvedValue({ id: "alert-1", companyId: COMPANY_ID });
       mockUpdate.mockResolvedValue({ id: "alert-1", enabled: false });
 
       const { toggleAlert } = await import("../alert-actions");
       await toggleAlert("alert-1", false);
 
+      expect(mockFindUniqueOrThrow).toHaveBeenCalledWith({ where: { id: "alert-1" } });
       expect(mockUpdate).toHaveBeenCalledWith({ where: { id: "alert-1" }, data: { enabled: false } });
     });
   });
 
   describe("deleteAlert", () => {
-    it("deletes the alert", async () => {
+    it("fetches alert to verify tenant then deletes", async () => {
+      mockFindUniqueOrThrow.mockResolvedValue({ id: "alert-1", companyId: COMPANY_ID });
       mockDelete.mockResolvedValue({});
 
       const { deleteAlert } = await import("../alert-actions");
       await deleteAlert("alert-1");
 
+      expect(mockFindUniqueOrThrow).toHaveBeenCalledWith({ where: { id: "alert-1" } });
       expect(mockDelete).toHaveBeenCalledWith({ where: { id: "alert-1" } });
     });
   });

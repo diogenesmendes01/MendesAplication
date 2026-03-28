@@ -25,6 +25,10 @@ vi.mock("@/lib/prisma", () => ({
   },
 }));
 
+vi.mock("@/lib/rbac", () => ({
+  requireCompanyAccess: vi.fn().mockResolvedValue({ userId: "user-1", role: "ADMIN" }),
+}));
+
 const COMPANY_ID = "company-1";
 const PERIOD = { from: new Date("2026-03-01"), to: new Date("2026-03-28") };
 
