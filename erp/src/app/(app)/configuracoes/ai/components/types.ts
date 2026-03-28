@@ -35,4 +35,7 @@ export const DEFAULT_CONFIG: AiConfigData = {
   raPrivateBeforePublic: true,
   raAutoRequestEvaluation: false,
   raEscalationKeywords: ["processo", "advogado", "procon", "judicial", "indenização"],
+  operationMode: "auto",
+  hybridThreshold: 0.8,
+  alwaysRequireApproval: [] as string[],
 };

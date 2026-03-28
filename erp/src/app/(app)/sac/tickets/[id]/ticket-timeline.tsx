@@ -56,6 +56,10 @@ import {
 import { getWhatsAppStatus } from "../../../configuracoes/canais/actions";
 import { useEventStream } from "@/hooks/use-event-stream";
 import RaSuggestionCard from "./ra-suggestion-card";
+import AiSuggestionCard from "./components/ai-suggestion-card";
+import type { AiSuggestionData } from "./components/ai-suggestion-card";
+import { getSuggestions } from "./suggestion-actions";
+import type { SuggestionRecord } from "./suggestion-actions";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -625,7 +629,7 @@ export default function TicketTimeline({
   channelType,
 }: TicketTimelineProps) {
   const [events, setEvents] = useState<TimelineEvent[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [suggestions, setSuggestions] = useState<AiSuggestionData[]>([]);
   const [aiEnabled, setAiEnabled] = useState(initialAiEnabled);
   const [togglingAi, setTogglingAi] = useState(false);
   const [noteContent, setNoteContent] = useState("");
@@ -669,6 +673,38 @@ export default function TicketTimeline({
   // Active tab — controlled for lazy-loading recipients
   const [activeTab, setActiveTab] = useState("todos");
 
+  const loadSuggestions = useCallback(async () => {
+    if (!ticketId || !companyId) return;
+    try {
+      const data: SuggestionRecord[] = await getSuggestions(ticketId, companyId);
+      setSuggestions(data.map((s): AiSuggestionData => ({
+        id: s.id,
+        ticketId: s.ticketId,
+        companyId: s.companyId,
+        channel: s.channel,
+        analysis: (s.analysis || {}) as AiSuggestionData["analysis"],
+        suggestedResponse: s.suggestedResponse,
+        suggestedSubject: s.suggestedSubject ?? null,
+        suggestedActions: (s.suggestedActions || []) as AiSuggestionData["suggestedActions"],
+        raPrivateMessage: s.raPrivateMessage ?? null,
+        raPublicMessage: s.raPublicMessage ?? null,
+        raDetectedType: s.raDetectedType ?? null,
+        raSuggestModeration: s.raSuggestModeration ?? false,
+        status: s.status as AiSuggestionData["status"],
+        reviewedBy: s.reviewedBy ?? null,
+        reviewedAt: s.reviewedAt ?? null,
+        editedResponse: s.editedResponse ?? null,
+        editedSubject: s.editedSubject ?? null,
+        rejectionReason: s.rejectionReason ?? null,
+        confidence: s.confidence,
+        createdAt: s.createdAt,
+        reviewer: s.reviewer ?? null,
+      })));
+    } catch {
+      // silent
+    }
+  }, [ticketId, companyId]);
+
   const loadEvents = useCallback(async () => {
     if (!ticketId || !companyId) return;
     setLoading(true);
@@ -692,7 +728,8 @@ export default function TicketTimeline({
 
   useEffect(() => {
     loadEvents();
-  }, [loadEvents]);
+    loadSuggestions();
+  }, [loadEvents, loadSuggestions]);
 
   // Incremental poll — only fetch events newer than the last known timestamp
   const pollNewEvents = useCallback(async () => {
@@ -755,7 +792,7 @@ export default function TicketTimeline({
   const [refreshing, setRefreshing] = useState(false);
   async function handleManualRefresh() {
     setRefreshing(true);
-    await loadEvents();
+    await Promise.all([loadEvents(), loadSuggestions()]);
     setRefreshing(false);
   }
 
@@ -1108,35 +1145,57 @@ export default function TicketTimeline({
                   Nenhum evento ainda.
                 </p>
               ) : (
-                events.map((evt, idx) => {
-                  const prev = idx > 0 ? events[idx - 1] : null;
-                  // Group consecutive email messages from same sender
-                  const isGrouped =
-                    evt.channel === "EMAIL" &&
-                    evt.type === "message" &&
-                    prev !== null &&
-                    prev.channel === "EMAIL" &&
-                    prev.type === "message" &&
-                    (
-                      (evt.direction === "INBOUND" && prev.direction === "INBOUND" &&
-                        evt.contactName === prev.contactName) ||
-                      (evt.direction === "OUTBOUND" && prev.direction === "OUTBOUND" &&
-                        evt.sender?.id === prev.sender?.id)
+                (() => {
+                  // Merge events + pending suggestions sorted chronologically (Fix 2)
+                  const pendingSuggs = suggestions.filter(s => s.status === "PENDING");
+                  type TimelineEntry =
+                    | { kind: "event"; data: TimelineEvent; createdAt: string }
+                    | { kind: "suggestion"; data: AiSuggestionData; createdAt: string };
+
+                  const merged: TimelineEntry[] = [
+                    ...events.map((e): TimelineEntry => ({ kind: "event", data: e, createdAt: e.createdAt })),
+                    ...pendingSuggs.map((s): TimelineEntry => ({ kind: "suggestion", data: s, createdAt: s.createdAt })),
+                  ].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+                  return merged.map((entry, idx) => {
+                    if (entry.kind === "suggestion") {
+                      return (
+                        <AiSuggestionCard
+                          key={`sugg-${entry.data.id}`}
+                          suggestion={entry.data}
+                          onActionComplete={() => { loadEvents(); loadSuggestions(); }}
+                        />
+                      );
+                    }
+
+                    const evt = entry.data;
+                    const prevEntry = merged[idx - 1];
+                    const prev = prevEntry?.kind === "event" ? prevEntry.data : null;
+                    const isGrouped =
+                      evt.channel === "EMAIL" &&
+                      evt.type === "message" &&
+                      prev !== null &&
+                      prev.channel === "EMAIL" &&
+                      prev.type === "message" &&
+                      (
+                        (evt.direction === "INBOUND" && prev.direction === "INBOUND" &&
+                          evt.contactName === prev.contactName) ||
+                        (evt.direction === "OUTBOUND" && prev.direction === "OUTBOUND" &&
+                          evt.sender?.id === prev.sender?.id)
+                      );
+                    return (
+                      <TimelineItem
+                        key={evt.id}
+                        event={evt}
+                        channelType={channelType}
+                        companyId={companyId}
+                        onActionComplete={() => { loadEvents(); loadSuggestions(); }}
+                        isGrouped={isGrouped}
+                      />
                     );
-                  return (
-                    <TimelineItem
-                      key={evt.id}
-                      event={evt}
-                      channelType={channelType}
-                      companyId={companyId}
-                      onActionComplete={loadEvents}
-                      isGrouped={isGrouped}
-                    />
-                  );
-                })
+                  });
+                })()
               )}
-              <div ref={timelineEndRef} />
-            </div>
 
             {/* Reply / internal note form */}
             <div className="border-t pt-4 space-y-3">

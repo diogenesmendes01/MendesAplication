@@ -6,19 +6,73 @@ import {
   approveSuggestion,
   rejectSuggestion,
 } from "@/lib/ai/suggestion-mode";
+import type { ChannelType, AiSuggestionStatus } from "@prisma/client";
+
+// ─── Typed return for getSuggestions ────────────────────────────────────────
+
+export interface SuggestionRecord {
+  id: string;
+  ticketId: string;
+  companyId: string;
+  channel: ChannelType;
+  analysis: Record<string, unknown>;
+  suggestedResponse: string;
+  suggestedSubject: string | null;
+  suggestedActions: Array<{ toolName: string; args: Record<string, unknown>; order: number }>;
+  raPrivateMessage: string | null;
+  raPublicMessage: string | null;
+  raDetectedType: string | null;
+  raSuggestModeration: boolean;
+  status: AiSuggestionStatus;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  editedResponse: string | null;
+  editedSubject: string | null;
+  rejectionReason: string | null;
+  confidence: number;
+  createdAt: string;
+  reviewer: { id: string; name: string } | null;
+}
 
 // ─── List suggestions for a ticket ──────────────────────────────────────────
 
-export async function getSuggestions(ticketId: string, companyId: string) {
+export async function getSuggestions(
+  ticketId: string,
+  companyId: string,
+): Promise<SuggestionRecord[]> {
   await requireCompanyAccess(companyId);
 
-  return prisma.aiSuggestion.findMany({
+  const rows = await prisma.aiSuggestion.findMany({
     where: { ticketId, companyId },
     orderBy: { createdAt: "desc" },
     include: {
       reviewer: { select: { id: true, name: true } },
     },
   });
+
+  return rows.map((s) => ({
+    id: s.id,
+    ticketId: s.ticketId,
+    companyId: s.companyId,
+    channel: s.channel,
+    analysis: (s.analysis ?? {}) as Record<string, unknown>,
+    suggestedResponse: s.suggestedResponse,
+    suggestedSubject: s.suggestedSubject,
+    suggestedActions: (s.suggestedActions ?? []) as SuggestionRecord["suggestedActions"],
+    raPrivateMessage: s.raPrivateMessage,
+    raPublicMessage: s.raPublicMessage,
+    raDetectedType: s.raDetectedType,
+    raSuggestModeration: s.raSuggestModeration,
+    status: s.status,
+    reviewedBy: s.reviewedBy,
+    reviewedAt: s.reviewedAt?.toISOString() ?? null,
+    editedResponse: s.editedResponse,
+    editedSubject: s.editedSubject,
+    rejectionReason: s.rejectionReason,
+    confidence: s.confidence,
+    createdAt: s.createdAt.toISOString(),
+    reviewer: s.reviewer,
+  }));
 }
 
 // ─── Get single suggestion ──────────────────────────────────────────────────

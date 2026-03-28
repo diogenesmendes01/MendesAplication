@@ -44,6 +44,10 @@ export interface AiConfigData {
   raEscalationKeywords: string[];
   // Temperature
   temperature: number;
+  // Suggestion Mode
+  operationMode: "auto" | "suggest" | "hybrid";
+  hybridThreshold: number; // 0.0-1.0
+  alwaysRequireApproval: string[];
 }
 
 export interface ModelSuggestionData {
@@ -114,6 +118,9 @@ function configToData(config: {
   raAutoRequestEvaluation: boolean;
   raEscalationKeywords: string[];
   temperature: number;
+  operationMode: "auto" | "suggest" | "hybrid";
+  hybridThreshold: number;
+  alwaysRequireApproval: string[];
 }): AiConfigData {
   return {
     enabled: config.enabled,
@@ -137,6 +144,9 @@ function configToData(config: {
     raAutoRequestEvaluation: config.raAutoRequestEvaluation,
     raEscalationKeywords: config.raEscalationKeywords,
     temperature: config.temperature,
+    operationMode: config.operationMode,
+    hybridThreshold: config.hybridThreshold,
+    alwaysRequireApproval: config.alwaysRequireApproval,
   };
 }
 
@@ -160,6 +170,9 @@ const DEFAULT_AI_CONFIG: AiConfigData = {
   raPrivateBeforePublic: true,
   raAutoRequestEvaluation: false,
   raEscalationKeywords: ["processo", "advogado", "procon", "judicial", "indenização"],
+  operationMode: "auto",
+  hybridThreshold: 0.8,
+  alwaysRequireApproval: [],
 };
 
 // ---------------------------------------------------------------------------
@@ -319,6 +332,9 @@ export async function updateAiConfig(
     emailSignature: data.emailSignature || null,
     dailySpendLimitBrl: data.dailySpendLimitBrl,
     temperature: data.temperature,
+    operationMode: data.operationMode,
+    hybridThreshold: data.hybridThreshold,
+    alwaysRequireApproval: data.alwaysRequireApproval,
     raEnabled: data.raEnabled,
     raMode: data.raMode,
     raPrivateBeforePublic: data.raPrivateBeforePublic,
