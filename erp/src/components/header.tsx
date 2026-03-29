@@ -1,9 +1,11 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { Menu, Search, Bell, ChevronRight } from "lucide-react";
+import { Search, Bell, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Separator } from "@/components/ui/separator";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 import { useUser } from "@/contexts/user-context";
 
@@ -44,12 +46,7 @@ function buildBreadcrumb(pathname: string) {
     });
 }
 
-interface HeaderProps {
-  sidebarCollapsed: boolean;
-  onMenuClick: () => void;
-}
-
-export function Header({ sidebarCollapsed, onMenuClick }: HeaderProps) {
+export function Header() {
   const pathname = usePathname();
   const { user } = useUser();
   const breadcrumb = buildBreadcrumb(pathname);
@@ -63,27 +60,14 @@ export function Header({ sidebarCollapsed, onMenuClick }: HeaderProps) {
     .toUpperCase();
 
   return (
-    <header
-      className={cn(
-        "fixed top-0 right-0 z-30 flex h-14 items-center border-b border-border-subtle bg-background transition-all duration-300",
-        "left-0",
-        sidebarCollapsed ? "md:left-16" : "md:left-60"
-      )}
-    >
+    <header className="flex h-14 shrink-0 items-center border-b border-border-subtle bg-background">
       <div className="flex w-full items-center justify-between px-4">
-        {/* Lado esquerdo: Mobile hamburger + Breadcrumb */}
-        <div className="flex items-center gap-3">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="md:hidden"
-            onClick={onMenuClick}
-            aria-label="Abrir menu"
-          >
-            <Menu className="h-5 w-5" />
-          </Button>
+        {/* Left side: Sidebar trigger + Breadcrumb */}
+        <div className="flex items-center gap-2">
+          <SidebarTrigger className="-ml-1" />
+          <Separator orientation="vertical" className="mr-2 h-4" />
 
-          {/* Breadcrumb dinâmico */}
+          {/* Dynamic breadcrumb */}
           <nav className="hidden items-center gap-1 text-sm md:flex" aria-label="Breadcrumb">
             <span className="text-text-tertiary">MendesERP</span>
             {breadcrumb.map((label, i) => (
@@ -103,9 +87,9 @@ export function Header({ sidebarCollapsed, onMenuClick }: HeaderProps) {
           </nav>
         </div>
 
-        {/* Lado direito: Busca + Notificações + Avatar */}
+        {/* Right side: Search + Notifications + Avatar */}
         <div className="flex items-center gap-2">
-          {/* Busca global */}
+          {/* Global search */}
           <div className="hidden items-center gap-2 sm:flex">
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text-tertiary" />
@@ -117,7 +101,7 @@ export function Header({ sidebarCollapsed, onMenuClick }: HeaderProps) {
             </div>
           </div>
 
-          {/* Notificações */}
+          {/* Notifications */}
           <Button
             variant="ghost"
             size="icon"
@@ -128,7 +112,7 @@ export function Header({ sidebarCollapsed, onMenuClick }: HeaderProps) {
             <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-danger" />
           </Button>
 
-          {/* Avatar do usuário — dados da sessão */}
+          {/* User avatar */}
           <div className="flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent text-xs font-bold text-white">
               {userInitials}
