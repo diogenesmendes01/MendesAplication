@@ -159,8 +159,8 @@ export async function getCompanyKpis(
     prisma.$queryRaw<{ channel: string; count: bigint }[]>`
       SELECT COALESCE(c."type", 'WEB') as channel, COUNT(*)::bigint as count
       FROM tickets t
-      LEFT JOIN channels c ON t.channel_id = c.id
-      WHERE t.company_id = ${companyId}
+      LEFT JOIN channels c ON t."channelId" = c.id
+      WHERE t."companyId" = ${companyId}
         AND t.status IN ('OPEN', 'IN_PROGRESS', 'WAITING_CLIENT')
       GROUP BY COALESCE(c."type", 'WEB')
     `,
@@ -169,11 +169,11 @@ export async function getCompanyKpis(
       SELECT AVG(response_minutes) as avg_minutes
       FROM (
         SELECT EXTRACT(EPOCH FROM (
-          (SELECT MIN(tm.created_at) FROM ticket_messages tm WHERE tm.ticket_id = t.id) - t.created_at
+          (SELECT MIN(tm."createdAt") FROM ticket_messages tm WHERE tm."ticketId" = t.id) - t."createdAt"
         )) / 60 as response_minutes
         FROM tickets t
-        WHERE t.company_id = ${companyId}
-          AND EXISTS (SELECT 1 FROM ticket_messages tm WHERE tm.ticket_id = t.id)
+        WHERE t."companyId" = ${companyId}
+          AND EXISTS (SELECT 1 FROM ticket_messages tm WHERE tm."ticketId" = t.id)
       ) sub
       WHERE response_minutes IS NOT NULL AND response_minutes >= 0
     `,
