@@ -1375,7 +1375,7 @@ const [raContext, setRaContext] = useState<any>(null);
                   </Badge>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                   <div>
                     <p className="text-xs text-muted-foreground">Total Pendente</p>
                     <p className="font-medium">
@@ -1752,7 +1752,7 @@ const [raContext, setRaContext] = useState<any>(null);
             <DialogTitle>Criar Novo Cliente e Vincular</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="col-span-2">
                 <Label htmlFor="new-client-name">Nome *</Label>
                 <Input

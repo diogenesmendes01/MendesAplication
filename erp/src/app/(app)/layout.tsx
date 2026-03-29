@@ -62,7 +62,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               collapsed ? "md:pl-16" : "md:pl-60"
             )}
           >
-            <div className="p-6">{children}</div>
+            <div className="p-4 md:p-6">{children}</div>
           </main>
         </TooltipProvider>
       </UserProvider>

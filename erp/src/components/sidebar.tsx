@@ -321,8 +321,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
       </nav>
 
       {/* Footer com Avatar + Logout */}
-      {!collapsed && (
-        <div className="border-t border-border-subtle p-3">
+      <div className={cn("border-t border-border-subtle p-3", collapsed ? "hidden md:hidden" : "")}>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button className="flex w-full items-center gap-3 rounded-lg bg-sidebar-hover-bg p-2 transition-colors hover:bg-sidebar-active-bg">
@@ -349,7 +348,6 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-      )}
 
       {/* Collapsed: logout icon button */}
       {collapsed && (
@@ -372,7 +370,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
       )}
 
       {/* Collapse toggle */}
-      <div className="border-t border-border-subtle p-2">
+      <div className="hidden md:block border-t border-border-subtle p-2">
         <Button
           variant="ghost"
           size="icon"

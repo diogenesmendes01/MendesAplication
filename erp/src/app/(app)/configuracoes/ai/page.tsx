@@ -151,7 +151,7 @@ export default function AiConfigPage() {
 
       {/* Config Tabs — sections within the active channel config */}
       <Tabs defaultValue="geral" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-9">
+        <TabsList className="flex w-full overflow-x-auto scrollbar-hide">
           <TabsTrigger value="geral" className="gap-1.5">
             <Zap className="h-4 w-4" />
             Geral
