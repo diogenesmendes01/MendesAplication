@@ -17,7 +17,7 @@ export function ChannelNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="flex items-center gap-1 border-b pb-2">
+    <nav className="flex items-center gap-1 border-b pb-2 overflow-x-auto scrollbar-hide flex-nowrap">
       {channels.map(({ href, label, icon: Icon }) => {
         const isActive =
           href === "/sac"
@@ -29,7 +29,7 @@ export function ChannelNav() {
             key={href}
             href={href}
             className={cn(
-              "inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted",
+              "inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted min-w-max",
               isActive
                 ? "border-b-2 border-primary font-bold text-primary"
                 : "text-muted-foreground"

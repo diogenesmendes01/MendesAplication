@@ -184,7 +184,7 @@ export function TabSimulador({ companyId }: TabSimuladorProps) {
               </div>
 
               {/* Usage stats */}
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="rounded-md border p-3 text-center">
                   <p className="text-xs text-muted-foreground">Tokens (input)</p>
                   <p className="text-lg font-bold font-mono">

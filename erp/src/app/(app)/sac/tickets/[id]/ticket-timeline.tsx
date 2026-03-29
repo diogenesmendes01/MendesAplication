@@ -650,7 +650,7 @@ function EmojiPicker({ onSelect }: { onSelect: (emoji: string) => void }) {
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-64 p-2" align="start">
-        <div className="grid grid-cols-8 gap-1">
+        <div className="grid grid-cols-4 sm:grid-cols-8 gap-1">
           {COMMON_EMOJIS.map((emoji) => (
             <button
               key={emoji}
@@ -1374,7 +1374,7 @@ export default function TicketTimeline({
 
             {/* Email reply form */}
             <div className="border-t pt-4 space-y-3">
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <Label htmlFor="email-to" className="text-sm font-medium">
                     Para
