@@ -37,7 +37,7 @@
     --info: 221 83% 53%;             /* #2563EB */
     --info-subtle: 217 91% 94%;      /* #EFF6FF */
 
-    /* Sidebar específico */
+    /* Sidebar — custom design tokens (used by custom classes) */
     --sidebar-bg: 35 14% 92%;        /* #F2F0EB */
     --sidebar-active-bg: 0 0% 100%;  /* #FFFFFF */
     --sidebar-active-text: 234 84% 67%; /* #6366F1 */
@@ -52,6 +52,26 @@
 
     /* Radius */
     --radius: 0.75rem;
+
+    /* shadcn Sidebar CSS vars — mapped to our design tokens */
+    --sidebar-background: 35 14% 92%;       /* matches --sidebar-bg */
+    --sidebar-foreground: 215 25% 11%;      /* matches --text-primary */
+    --sidebar-primary: 234 84% 67%;         /* matches --accent */
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 35 13% 91%;           /* matches --sidebar-hover-bg */
+    --sidebar-accent-foreground: 215 25% 11%; /* matches --text-primary */
+    --sidebar-border: 30 13% 93%;           /* matches --border-subtle */
+    --sidebar-ring: 234 84% 67%;            /* matches --accent */
+  }
+  .dark {
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
   }
 }
 
