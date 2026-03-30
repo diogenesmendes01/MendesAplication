@@ -11,7 +11,7 @@ import { withLogging } from "@/lib/with-logging";
 
 export interface AuditLogEntry {
   id: string;
-  userId: string;
+  userId: string | null;
   userName: string;
   action: string;
   entity: string;
@@ -101,7 +101,7 @@ async function _listAuditLogs(
   const data: AuditLogEntry[] = logs.map((log) => ({
     id: log.id,
     userId: log.userId,
-    userName: log.user.name,
+    userName: log.user?.name ?? "Sistema",
     action: log.action,
     entity: log.entity,
     entityId: log.entityId,
@@ -167,7 +167,7 @@ async function _exportAuditLogsCsv(
   const header = "Data/Hora,Usuário,Ação,Entidade,ID Entidade,Empresa,IP";
   const rows = logs.map((log) => {
     const date = new Date(log.createdAt).toLocaleString("pt-BR");
-    const user = csvEscape(log.user.name);
+    const user = csvEscape(log.user?.name ?? "Sistema");
     const action = log.action;
     const entity = csvEscape(log.entity);
     const entityId = csvEscape(log.entityId);

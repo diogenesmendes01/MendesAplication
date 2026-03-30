@@ -957,7 +957,7 @@ async function _listTimelineEvents(
       id: `status-${sc.id}`,
       type: "status_change",
       createdAt: sc.createdAt.toISOString(),
-      content: `Status alterado para ${newS ?? "desconhecido"} por ${sc.user.name}`,
+      content: `Status alterado para ${newS ?? "desconhecido"} por ${sc.user?.name ?? "Sistema"}`,
       channel: null,
       direction: null,
       origin: null,
