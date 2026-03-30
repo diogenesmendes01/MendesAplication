@@ -6,6 +6,7 @@ import { decrypt } from "@/lib/encryption";
 import { getGateway } from "@/lib/payment/factory";
 import { isProviderType } from "@/lib/payment/types";
 import { logger } from "@/lib/logger";
+import { withApiLogging } from "@/lib/with-api-logging";
 
 /**
  * GET /api/boletos/[boletoId]/pdf
@@ -16,7 +17,7 @@ import { logger } from "@/lib/logger";
  *
  * Response: { link: string }
  */
-export async function GET(
+async function _GET(
   req: NextRequest,
   { params }: { params: Promise<{ boletoId: string }> },
 ) {
@@ -148,3 +149,5 @@ export async function GET(
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+
+export const GET = withApiLogging("boletos/pdf", _GET);

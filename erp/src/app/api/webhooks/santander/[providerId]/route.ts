@@ -1,10 +1,11 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/encryption";
 import { getGateway } from "@/lib/payment/factory";
 import type { WebhookEvent } from "@/lib/payment/types";
 import { processBoletoWebhookEvent } from "@/lib/payment/webhook-handler";
 import { logger } from "@/lib/logger";
+import { withApiLogging } from "@/lib/with-api-logging";
 
 // ---------------------------------------------------------------------------
 // POST /api/webhooks/santander/[providerId]
@@ -14,8 +15,8 @@ import { logger } from "@/lib/logger";
 // update logic to the shared webhook-handler helper.
 // ---------------------------------------------------------------------------
 
-export async function POST(
-  request: Request,
+async function _POST(
+  request: NextRequest,
   { params }: { params: Promise<{ providerId: string }> },
 ) {
   const { providerId } = await params;
@@ -143,3 +144,5 @@ export async function POST(
   // 8. Return 200 OK to Santander to confirm receipt
   return NextResponse.json({ received: true }, { status: 200 });
 }
+
+export const POST = withApiLogging("webhooks/santander", _POST);

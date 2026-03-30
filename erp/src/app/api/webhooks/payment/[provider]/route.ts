@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/encryption";
 import { getGateway } from "@/lib/payment/factory";
@@ -12,6 +12,7 @@ import {
   CENTS_PER_UNIT,
 } from "@/lib/payment/constants";
 import { logger } from "@/lib/logger";
+import { withApiLogging } from "@/lib/with-api-logging";
 
 // ---------------------------------------------------------------------------
 // Status mapping: WebhookEvent.type → BoletoStatus
@@ -29,8 +30,8 @@ const WEBHOOK_TO_BOLETO_STATUS: Record<WebhookEvent["type"], BoletoStatus> = {
 // Bug #14: [provider] param is now the provider ID (not type) for unique routing
 // ---------------------------------------------------------------------------
 
-export async function POST(
-  request: Request,
+async function _POST(
+  request: NextRequest,
   { params }: { params: Promise<{ provider: string }> }
 ) {
   const { provider: providerParam } = await params;
@@ -349,3 +350,5 @@ export async function POST(
 
   return NextResponse.json({ received: true }, { status: 200 });
 }
+
+export const POST = withApiLogging("webhooks/payment", _POST);
