@@ -310,7 +310,7 @@ async function handleSlaBreach(
       },
     });
   } catch (auditErr) {
-    logger.error(`[sla-engine] Failed to create audit log for SLA_BREACHED ticket=${ticket.id}: ${String(auditErr)}`);
+    logger.error({ metric: "audit.create.failure", action: "SLA_BREACHED", ticketId: ticket.id, err: String(auditErr) }, "[sla-engine] Failed to create audit log for SLA_BREACHED");
   }
 
   logger.warn(`[sla-engine] SLA breach: ticket=${ticket.id} stage=${stage} deadline=${config.deadlineMinutes}min actual=${actualMinutes}min`);
@@ -333,7 +333,7 @@ async function handleSlaAtRisk(ticket: TicketWithChannel, stage: string): Promis
       },
     });
   } catch (auditErr) {
-    logger.error(`[sla-engine] Failed to create audit log for SLA_AT_RISK ticket=${ticket.id}: ${String(auditErr)}`);
+    logger.error({ metric: "audit.create.failure", action: "SLA_AT_RISK", ticketId: ticket.id, err: String(auditErr) }, "[sla-engine] Failed to create audit log for SLA_AT_RISK");
   }
 
   logger.info(`[sla-engine] SLA at risk: ticket=${ticket.id} stage=${stage} minutesLeft=${minutesLeft}`);

@@ -156,7 +156,7 @@ export async function checkRaSlaDeadlines(): Promise<{ atRisk: number; breached:
           },
         });
       } catch (auditErr) {
-        logger.error(`[sla-check] Failed to create audit log for RA_SLA_BREACHED ticket=${ticket.id}: ${String(auditErr)}`);
+        logger.error({ metric: "audit.create.failure", action: "RA_SLA_BREACHED", ticketId: ticket.id, err: String(auditErr) }, "[sla-check] Failed to create audit log for RA_SLA_BREACHED");
       }
 
       logger.warn(`[sla-check] RA SLA breached: ticket=${ticket.id} overdue=${Math.abs(daysRemaining)} days`);
@@ -186,7 +186,7 @@ export async function checkRaSlaDeadlines(): Promise<{ atRisk: number; breached:
           },
         });
       } catch (auditErr) {
-        logger.error(`[sla-check] Failed to create audit log for RA_SLA_AT_RISK ticket=${ticket.id}: ${String(auditErr)}`);
+        logger.error({ metric: "audit.create.failure", action: "RA_SLA_AT_RISK", ticketId: ticket.id, err: String(auditErr) }, "[sla-check] Failed to create audit log for RA_SLA_AT_RISK");
       }
 
       logger.info(`[sla-check] RA SLA at risk: ticket=${ticket.id} daysRemaining=${daysRemaining}`);
