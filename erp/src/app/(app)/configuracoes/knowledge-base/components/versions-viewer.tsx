@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Loader2, RotateCcw, Eye } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -41,13 +41,7 @@ export function VersionsViewer({
   const [restoring, setRestoring] = useState<number | null>(null);
   const [viewContent, setViewContent] = useState<KBVersion | null>(null);
 
-  useEffect(() => {
-    if (open && documentId) {
-      loadVersions();
-    }
-  }, [open, documentId]);
-
-  async function loadVersions() {
+  const loadVersions = useCallback(async () => {
     setLoading(true);
     try {
       const data = await getDocumentVersions(companyId, documentId);
@@ -59,7 +53,13 @@ export function VersionsViewer({
     } finally {
       setLoading(false);
     }
-  }
+  }, [companyId, documentId]);
+
+  useEffect(() => {
+    if (open && documentId) {
+      loadVersions();
+    }
+  }, [open, documentId, loadVersions]);
 
   async function handleRestore(version: number) {
     if (

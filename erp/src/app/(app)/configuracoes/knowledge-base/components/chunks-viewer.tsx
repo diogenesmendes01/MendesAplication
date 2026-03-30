@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -36,13 +36,7 @@ export function ChunksViewer({
   const [regenerating, setRegenerating] = useState(false);
   const [chunkSize, setChunkSize] = useState(500);
 
-  useEffect(() => {
-    if (open && documentId) {
-      loadChunks();
-    }
-  }, [open, documentId]);
-
-  async function loadChunks() {
+  const loadChunks = useCallback(async () => {
     setLoading(true);
     try {
       const data = await getDocumentChunks(companyId, documentId);
@@ -52,7 +46,13 @@ export function ChunksViewer({
     } finally {
       setLoading(false);
     }
-  }
+  }, [companyId, documentId]);
+
+  useEffect(() => {
+    if (open && documentId) {
+      loadChunks();
+    }
+  }, [open, documentId, loadChunks]);
 
   async function handleRegenerate() {
     setRegenerating(true);

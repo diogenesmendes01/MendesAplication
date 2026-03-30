@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { Upload, X, FileText, Image, Music, FileSpreadsheet } from "lucide-react";
+import { Upload, X, FileText, Image as ImageIcon, Music, FileSpreadsheet } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,7 +34,7 @@ function formatSize(bytes: number): string {
 }
 
 function getFileIcon(file: File) {
-  if (file.type.startsWith("image/")) return <Image className="h-4 w-4 text-blue-500" />;
+  if (file.type.startsWith("image/")) return <ImageIcon className="h-4 w-4 text-blue-500" />;
   if (file.type.startsWith("audio/")) return <Music className="h-4 w-4 text-purple-500" />;
   if (file.type.includes("spreadsheet") || file.type.includes("excel") || file.type === "text/csv")
     return <FileSpreadsheet className="h-4 w-4 text-green-500" />;
@@ -205,6 +205,7 @@ export function RaFileUpload({ onChange, maxFiles, disabled }: RaFileUploadProps
               >
                 {/* Preview or icon */}
                 {preview ? (
+                  // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={preview}
                     alt={file.name}
