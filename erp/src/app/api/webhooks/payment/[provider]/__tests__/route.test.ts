@@ -55,17 +55,21 @@ vi.mock("@/lib/logger", () => ({
 }));
 
 // Mock next/server
-vi.mock("next/server", () => ({
-  NextResponse: {
-    json: (body: unknown, init?: { status?: number }) => {
-      const status = init?.status ?? 200;
-      return {
-        status,
-        json: async () => body,
-      };
+vi.mock("next/server", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("next/server")>();
+  return {
+    ...actual,
+    NextResponse: {
+      json: (body: unknown, init?: { status?: number }) => {
+        const status = init?.status ?? 200;
+        return {
+          status,
+          json: async () => body,
+        };
+      },
     },
-  },
-}));
+  };
+});
 
 // ---------------------------------------------------------------------------
 // Imports (after mocks)
