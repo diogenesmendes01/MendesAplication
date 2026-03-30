@@ -20,6 +20,63 @@ export const logger = pino({
   }),
 });
 
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+/** Standard context fields attached to log entries. */
+export interface LogContext {
+  traceId?: string;
+  action?: string;
+  route?: string;
+  userId?: string;
+  companyId?: string;
+  durationMs?: number;
+  status?: "success" | "error";
+  [key: string]: unknown;
+}
+
+// ---------------------------------------------------------------------------
+// Sanitization
+// ---------------------------------------------------------------------------
+
+const SENSITIVE_KEYS = new Set([
+  "password",
+  "token",
+  "secret",
+  "key",
+  "apikey",
+  "senha",
+  "cookie",
+  "authorization",
+  "accesstoken",
+  "refreshtoken",
+]);
+
+/**
+ * Deep-clone an object, replacing values of sensitive keys with "[REDACTED]".
+ * Safe for logging user-supplied params without leaking credentials.
+ */
+export function sanitizeParams(
+  obj: Record<string, unknown>,
+): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (SENSITIVE_KEYS.has(k.toLowerCase())) {
+      result[k] = "[REDACTED]";
+    } else if (v && typeof v === "object" && !Array.isArray(v)) {
+      result[k] = sanitizeParams(v as Record<string, unknown>);
+    } else {
+      result[k] = v;
+    }
+  }
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Child logger factory
+// ---------------------------------------------------------------------------
+
 /**
  * Creates a child logger with automatic traceId (correlationId) injection.
  * Each call generates a unique traceId via randomUUID().
