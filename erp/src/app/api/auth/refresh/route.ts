@@ -6,8 +6,9 @@ import {
   generateRefreshToken,
 } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { withApiLogging } from "@/lib/with-api-logging";
 
-export async function POST() {
+async function _POST() {
   // Read refresh token from httpOnly cookie
   const cookieStore = cookies();
   const refreshToken = cookieStore.get("refreshToken")?.value;
@@ -71,3 +72,5 @@ export async function POST() {
 
   return response;
 }
+
+export const POST = withApiLogging("auth/refresh", _POST);

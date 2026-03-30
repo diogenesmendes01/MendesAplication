@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
+import { withApiLogging } from "@/lib/with-api-logging";
 
-export async function GET() {
+async function _GET() {
   return NextResponse.json(
     {
       status: "ok",
@@ -9,3 +10,5 @@ export async function GET() {
     { status: 200 }
   );
 }
+
+export const GET = withApiLogging("health", _GET);

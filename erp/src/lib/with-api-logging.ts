@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createChildLogger } from "@/lib/logger";
 
-type RouteContext = { params: Promise<Record<string, string | string[]>> };
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type RouteContext = any;
 
 type RouteHandler = (
   req: NextRequest,

@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getFilePath, getMimeType } from "@/lib/file-upload";
 import { verifySignedFileRequest } from "@/lib/file-token";
+import { withApiLogging } from "@/lib/with-api-logging";
 import fs from "fs/promises";
 import path from "path";
 
-export async function GET(
+async function _GET(
   req: NextRequest,
   { params }: { params: Promise<{ path: string[] }> }
 ) {
@@ -65,3 +66,5 @@ export async function GET(
     );
   }
 }
+
+export const GET = withApiLogging("files/m2m", _GET);

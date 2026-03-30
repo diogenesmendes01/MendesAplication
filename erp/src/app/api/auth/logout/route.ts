@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAccessToken } from "@/lib/auth";
 import { logAuditEvent } from "@/lib/audit";
+import { withApiLogging } from "@/lib/with-api-logging";
 
-export async function POST(req: NextRequest) {
+async function _POST(req: NextRequest) {
   try {
     const token = req.cookies.get("accessToken")?.value;
 
@@ -51,3 +52,5 @@ export async function POST(req: NextRequest) {
     );
   }
 }
+
+export const POST = withApiLogging("auth/logout", _POST);

@@ -4,6 +4,7 @@ import { canAccessCompany } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
 import { uploadFile, getFilePath } from "@/lib/file-upload";
 import { documentProcessingQueue } from "@/lib/queue";
+import { withApiLogging } from "@/lib/with-api-logging";
 
 const ALLOWED_DOCUMENT_TYPES = new Set(["application/pdf", "text/plain"]);
 const MAX_DOCUMENT_SIZE = 10 * 1024 * 1024; // 10MB
@@ -41,7 +42,7 @@ async function requireDocumentAccess(
   return { ok: true, companyId };
 }
 
-export async function GET(req: NextRequest) {
+async function _GET(req: NextRequest) {
   try {
     const token = req.cookies.get("accessToken")?.value;
     if (!token) {
@@ -81,7 +82,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-export async function POST(req: NextRequest) {
+async function _POST(req: NextRequest) {
   try {
     const token = req.cookies.get("accessToken")?.value;
     if (!token) {
@@ -154,7 +155,7 @@ export async function POST(req: NextRequest) {
   }
 }
 
-export async function DELETE(req: NextRequest) {
+async function _DELETE(req: NextRequest) {
   try {
     const token = req.cookies.get("accessToken")?.value;
     if (!token) {
@@ -201,3 +202,7 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+
+export const GET = withApiLogging("documents", _GET);
+export const POST = withApiLogging("documents", _POST);
+export const DELETE = withApiLogging("documents", _DELETE);

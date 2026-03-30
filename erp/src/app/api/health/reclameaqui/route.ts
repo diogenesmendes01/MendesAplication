@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { withApiLogging } from "@/lib/with-api-logging";
 
 /** Channels without a sync in the last STALE_THRESHOLD_MS are considered stale. */
 const STALE_THRESHOLD_MS = 30 * 60 * 1000; // 30 minutes
@@ -24,7 +25,7 @@ export interface RaHealthResponse {
  * A channel is "stale" if its lastSyncAt is older than 30 minutes or null.
  * The overall response is "healthy" only when every active channel is non-stale.
  */
-export async function GET(): Promise<NextResponse<RaHealthResponse>> {
+async function _GET(): Promise<NextResponse<RaHealthResponse>> {
   const channels = await prisma.channel.findMany({
     where: { type: "RECLAMEAQUI", isActive: true },
     select: { id: true, companyId: true, lastSyncAt: true },
@@ -48,3 +49,5 @@ export async function GET(): Promise<NextResponse<RaHealthResponse>> {
 
   return NextResponse.json({ healthy, channels: result });
 }
+
+export const GET = withApiLogging("health/reclameaqui", _GET);
