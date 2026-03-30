@@ -31,12 +31,10 @@ export function withLogging<TArgs extends unknown[], TReturn>(
       // Session not available (e.g. unauthenticated action) — continue
     }
 
-    // Try to extract companyId from first arg if it looks like one
+    // Extract companyId only from an object arg that explicitly has the property
     if (args.length > 0) {
       const first = args[0];
-      if (typeof first === "string") {
-        companyId = first; // common pattern: first arg is companyId
-      } else if (first && typeof first === "object" && "companyId" in (first as Record<string, unknown>)) {
+      if (first && typeof first === "object" && "companyId" in (first as Record<string, unknown>)) {
         companyId = (first as Record<string, unknown>).companyId as string;
       }
     }
