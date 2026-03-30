@@ -27,12 +27,8 @@ export interface AiAlertRow {
   updatedAt: Date;
 }
 
-export const METRIC_TYPES = [
-  { value: "cost_daily", label: "Custo diário (BRL)", defaultThreshold: 10, defaultOp: "gt" },
-  { value: "escalation_rate", label: "Taxa de escalação", defaultThreshold: 0.3, defaultOp: "gt" },
-  { value: "confidence_avg", label: "Confidence média", defaultThreshold: 0.5, defaultOp: "lt" },
-  { value: "rejection_rate", label: "Taxa de rejeição", defaultThreshold: 0.3, defaultOp: "gt" },
-] as const;
+// NOTE: METRIC_TYPES (plain const array) moved to ./alert-actions.types.ts
+// to avoid "use server" export constraint (Next.js only allows async functions).
 
 // ─── List ─────────────────────────────────────────────────────────────────────
 
