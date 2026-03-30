@@ -118,4 +118,24 @@ describe("withLibLogging", () => {
 
     expect(fn).toHaveBeenCalledWith("a", { b: 2 });
   });
+
+  it("sanitizes sensitive fields (password, token) in logged args without mutating originals", async () => {
+    const fn = vi.fn().mockResolvedValue("ok");
+    const wrapped = withLibLogging("worker.sanitize", fn);
+
+    const originalArg = { userId: "u1", password: "s3cr3t", token: "tok-xyz" };
+    await wrapped(originalArg);
+
+    // Underlying function receives the ORIGINAL (unsanitized) object
+    expect(fn).toHaveBeenCalledWith({ userId: "u1", password: "s3cr3t", token: "tok-xyz" });
+
+    // Logged args must have sensitive fields redacted
+    const startCall = mockInfo.mock.calls.find((c) =>
+      (c[1] as string).startsWith("action.start"),
+    );
+    const loggedArgs = startCall?.[0]?.args as Array<Record<string, unknown>>;
+    expect(loggedArgs[0].userId).toBe("u1");
+    expect(loggedArgs[0].password).toBe("[REDACTED]");
+    expect(loggedArgs[0].token).toBe("[REDACTED]");
+  });
 });
