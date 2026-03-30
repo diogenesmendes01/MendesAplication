@@ -5,15 +5,28 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const mockInfo = vi.fn();
 const mockError = vi.fn();
 
-vi.mock("@/lib/logger", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/logger")>();
+vi.mock("@/lib/logger", () => {
+  const _log = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), child: vi.fn() };
   return {
-    ...actual,
-    createChildLogger: vi.fn(() => ({
-      info: mockInfo,
-      error: mockError,
-      warn: vi.fn(),
-    })),
+    logger: _log,
+    createChildLogger: vi.fn(() => _log),
+    sanitizeParams: vi.fn((obj: Record<string, unknown>) => obj),
+    truncateForLog: vi.fn((v: unknown) => v),
+    classifyError: vi.fn(() => "INTERNAL_ERROR"),
+    classifyErrorByStatus: vi.fn(() => "INTERNAL_ERROR"),
+    ErrorCode: {
+      AUTH_FAILED: "AUTH_FAILED",
+      VALIDATION_ERROR: "VALIDATION_ERROR",
+      NOT_FOUND: "NOT_FOUND",
+      PERMISSION_DENIED: "PERMISSION_DENIED",
+      EXTERNAL_SERVICE_ERROR: "EXTERNAL_SERVICE_ERROR",
+      DATABASE_ERROR: "DATABASE_ERROR",
+      ENCRYPTION_ERROR: "ENCRYPTION_ERROR",
+      RATE_LIMIT_EXCEEDED: "RATE_LIMIT_EXCEEDED",
+      INTERNAL_ERROR: "INTERNAL_ERROR",
+      AUTH_TOKEN_EXPIRED: "AUTH_TOKEN_EXPIRED",
+    },
+    MAX_LOG_ARG_SIZE: 10240,
   };
 });
 
