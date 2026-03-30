@@ -242,8 +242,13 @@ async function _listExecutions(companyId: string, workflowId?: string, status?: 
 // ---------------------------------------------------------------------------
 // Wrapped exports with logging
 // ---------------------------------------------------------------------------
-export const listWorkflows = withLogging('workflows.listWorkflows', _listWorkflows);
-export const createWorkflow = withLogging('workflows.createWorkflow', _createWorkflow);
-export const updateWorkflow = withLogging('workflows.updateWorkflow', _updateWorkflow);
-export const getExecutionStatus = withLogging('workflows.getExecutionStatus', _getExecutionStatus);
-export const listExecutions = withLogging('workflows.listExecutions', _listExecutions);
+const _wrapped_listWorkflows = withLogging('workflows.listWorkflows', _listWorkflows);
+export async function listWorkflows(...args: Parameters<typeof _listWorkflows>) { return _wrapped_listWorkflows(...args); }
+const _wrapped_createWorkflow = withLogging('workflows.createWorkflow', _createWorkflow);
+export async function createWorkflow(...args: Parameters<typeof _createWorkflow>) { return _wrapped_createWorkflow(...args); }
+const _wrapped_updateWorkflow = withLogging('workflows.updateWorkflow', _updateWorkflow);
+export async function updateWorkflow(...args: Parameters<typeof _updateWorkflow>) { return _wrapped_updateWorkflow(...args); }
+const _wrapped_getExecutionStatus = withLogging('workflows.getExecutionStatus', _getExecutionStatus);
+export async function getExecutionStatus(...args: Parameters<typeof _getExecutionStatus>) { return _wrapped_getExecutionStatus(...args); }
+const _wrapped_listExecutions = withLogging('workflows.listExecutions', _listExecutions);
+export async function listExecutions(...args: Parameters<typeof _listExecutions>) { return _wrapped_listExecutions(...args); }

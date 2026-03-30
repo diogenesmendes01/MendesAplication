@@ -116,5 +116,7 @@ async function _getSuggestionStats(companyId: string) {
 // ---------------------------------------------------------------------------
 // Wrapped exports with logging
 // ---------------------------------------------------------------------------
-export const listSuggestions = withLogging('sac.suggestions.listSuggestions', _listSuggestions);
-export const getSuggestionStats = withLogging('sac.suggestions.getSuggestionStats', _getSuggestionStats);
+const _wrapped_listSuggestions = withLogging('sac.suggestions.listSuggestions', _listSuggestions);
+export async function listSuggestions(...args: Parameters<typeof _listSuggestions>) { return _wrapped_listSuggestions(...args); }
+const _wrapped_getSuggestionStats = withLogging('sac.suggestions.getSuggestionStats', _getSuggestionStats);
+export async function getSuggestionStats(...args: Parameters<typeof _getSuggestionStats>) { return _wrapped_getSuggestionStats(...args); }

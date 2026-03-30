@@ -226,8 +226,13 @@ async function _deleteSharingGroup(groupId: string): Promise<void> {
 // ---------------------------------------------------------------------------
 // Wrapped exports with logging
 // ---------------------------------------------------------------------------
-export const listSharingGroups = withLogging('compartilhamento.listSharingGroups', _listSharingGroups);
-export const listAvailableCompanies = withLogging('compartilhamento.listAvailableCompanies', _listAvailableCompanies);
-export const createSharingGroup = withLogging('compartilhamento.createSharingGroup', _createSharingGroup);
-export const updateSharingGroup = withLogging('compartilhamento.updateSharingGroup', _updateSharingGroup);
-export const deleteSharingGroup = withLogging('compartilhamento.deleteSharingGroup', _deleteSharingGroup);
+const _wrapped_listSharingGroups = withLogging('compartilhamento.listSharingGroups', _listSharingGroups);
+export async function listSharingGroups(...args: Parameters<typeof _listSharingGroups>) { return _wrapped_listSharingGroups(...args); }
+const _wrapped_listAvailableCompanies = withLogging('compartilhamento.listAvailableCompanies', _listAvailableCompanies);
+export async function listAvailableCompanies(...args: Parameters<typeof _listAvailableCompanies>) { return _wrapped_listAvailableCompanies(...args); }
+const _wrapped_createSharingGroup = withLogging('compartilhamento.createSharingGroup', _createSharingGroup);
+export async function createSharingGroup(...args: Parameters<typeof _createSharingGroup>) { return _wrapped_createSharingGroup(...args); }
+const _wrapped_updateSharingGroup = withLogging('compartilhamento.updateSharingGroup', _updateSharingGroup);
+export async function updateSharingGroup(...args: Parameters<typeof _updateSharingGroup>) { return _wrapped_updateSharingGroup(...args); }
+const _wrapped_deleteSharingGroup = withLogging('compartilhamento.deleteSharingGroup', _deleteSharingGroup);
+export async function deleteSharingGroup(...args: Parameters<typeof _deleteSharingGroup>) { return _wrapped_deleteSharingGroup(...args); }

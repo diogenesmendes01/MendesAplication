@@ -304,5 +304,7 @@ async function _getCompaniesForCashFlow() {
 // ---------------------------------------------------------------------------
 // Wrapped exports with logging
 // ---------------------------------------------------------------------------
-export const getCashFlowData = withLogging('fluxoCaixa.getCashFlowData', _getCashFlowData);
-export const getCompaniesForCashFlow = withLogging('fluxoCaixa.getCompaniesForCashFlow', _getCompaniesForCashFlow);
+const _wrapped_getCashFlowData = withLogging('fluxoCaixa.getCashFlowData', _getCashFlowData);
+export async function getCashFlowData(...args: Parameters<typeof _getCashFlowData>) { return _wrapped_getCashFlowData(...args); }
+const _wrapped_getCompaniesForCashFlow = withLogging('fluxoCaixa.getCompaniesForCashFlow', _getCompaniesForCashFlow);
+export async function getCompaniesForCashFlow(...args: Parameters<typeof _getCompaniesForCashFlow>) { return _wrapped_getCompaniesForCashFlow(...args); }

@@ -699,11 +699,19 @@ async function _unmatchTransaction(
 // ---------------------------------------------------------------------------
 // Wrapped exports with logging
 // ---------------------------------------------------------------------------
-export const importBankTransactions = withLogging('conciliacao.importBankTransactions', _importBankTransactions);
-export const listBankTransactions = withLogging('conciliacao.listBankTransactions', _listBankTransactions);
-export const deleteBankTransaction = withLogging('conciliacao.deleteBankTransaction', _deleteBankTransaction);
-export const getReconciliationSummary = withLogging('conciliacao.getReconciliationSummary', _getReconciliationSummary);
-export const listUnmatchedSystemRecords = withLogging('conciliacao.listUnmatchedSystemRecords', _listUnmatchedSystemRecords);
-export const autoMatchTransactions = withLogging('conciliacao.autoMatchTransactions', _autoMatchTransactions);
-export const manualMatchTransaction = withLogging('conciliacao.manualMatchTransaction', _manualMatchTransaction);
-export const unmatchTransaction = withLogging('conciliacao.unmatchTransaction', _unmatchTransaction);
+const _wrapped_importBankTransactions = withLogging('conciliacao.importBankTransactions', _importBankTransactions);
+export async function importBankTransactions(...args: Parameters<typeof _importBankTransactions>) { return _wrapped_importBankTransactions(...args); }
+const _wrapped_listBankTransactions = withLogging('conciliacao.listBankTransactions', _listBankTransactions);
+export async function listBankTransactions(...args: Parameters<typeof _listBankTransactions>) { return _wrapped_listBankTransactions(...args); }
+const _wrapped_deleteBankTransaction = withLogging('conciliacao.deleteBankTransaction', _deleteBankTransaction);
+export async function deleteBankTransaction(...args: Parameters<typeof _deleteBankTransaction>) { return _wrapped_deleteBankTransaction(...args); }
+const _wrapped_getReconciliationSummary = withLogging('conciliacao.getReconciliationSummary', _getReconciliationSummary);
+export async function getReconciliationSummary(...args: Parameters<typeof _getReconciliationSummary>) { return _wrapped_getReconciliationSummary(...args); }
+const _wrapped_listUnmatchedSystemRecords = withLogging('conciliacao.listUnmatchedSystemRecords', _listUnmatchedSystemRecords);
+export async function listUnmatchedSystemRecords(...args: Parameters<typeof _listUnmatchedSystemRecords>) { return _wrapped_listUnmatchedSystemRecords(...args); }
+const _wrapped_autoMatchTransactions = withLogging('conciliacao.autoMatchTransactions', _autoMatchTransactions);
+export async function autoMatchTransactions(...args: Parameters<typeof _autoMatchTransactions>) { return _wrapped_autoMatchTransactions(...args); }
+const _wrapped_manualMatchTransaction = withLogging('conciliacao.manualMatchTransaction', _manualMatchTransaction);
+export async function manualMatchTransaction(...args: Parameters<typeof _manualMatchTransaction>) { return _wrapped_manualMatchTransaction(...args); }
+const _wrapped_unmatchTransaction = withLogging('conciliacao.unmatchTransaction', _unmatchTransaction);
+export async function unmatchTransaction(...args: Parameters<typeof _unmatchTransaction>) { return _wrapped_unmatchTransaction(...args); }

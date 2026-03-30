@@ -247,7 +247,11 @@ async function _listClientsForSelect(companyId: string) {
 // ---------------------------------------------------------------------------
 // Wrapped exports with logging
 // ---------------------------------------------------------------------------
-export const listReceivables = withLogging('receber.listReceivables', _listReceivables);
-export const createReceivable = withLogging('receber.createReceivable', _createReceivable);
-export const markReceivableAsPaid = withLogging('receber.markReceivableAsPaid', _markReceivableAsPaid);
-export const listClientsForSelect = withLogging('receber.listClientsForSelect', _listClientsForSelect);
+const _wrapped_listReceivables = withLogging('receber.listReceivables', _listReceivables);
+export async function listReceivables(...args: Parameters<typeof _listReceivables>) { return _wrapped_listReceivables(...args); }
+const _wrapped_createReceivable = withLogging('receber.createReceivable', _createReceivable);
+export async function createReceivable(...args: Parameters<typeof _createReceivable>) { return _wrapped_createReceivable(...args); }
+const _wrapped_markReceivableAsPaid = withLogging('receber.markReceivableAsPaid', _markReceivableAsPaid);
+export async function markReceivableAsPaid(...args: Parameters<typeof _markReceivableAsPaid>) { return _wrapped_markReceivableAsPaid(...args); }
+const _wrapped_listClientsForSelect = withLogging('receber.listClientsForSelect', _listClientsForSelect);
+export async function listClientsForSelect(...args: Parameters<typeof _listClientsForSelect>) { return _wrapped_listClientsForSelect(...args); }

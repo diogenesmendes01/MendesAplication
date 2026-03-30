@@ -248,8 +248,13 @@ async function _toggleCompanyStatus(id: string) {
 // ---------------------------------------------------------------------------
 // Wrapped exports with logging
 // ---------------------------------------------------------------------------
-export const createCompany = withLogging('empresas.createCompany', _createCompany);
-export const updateCompany = withLogging('empresas.updateCompany', _updateCompany);
-export const listCompanies = withLogging('empresas.listCompanies', _listCompanies);
-export const getCompanyById = withLogging('empresas.getCompanyById', _getCompanyById);
-export const toggleCompanyStatus = withLogging('empresas.toggleCompanyStatus', _toggleCompanyStatus);
+const _wrapped_createCompany = withLogging('empresas.createCompany', _createCompany);
+export async function createCompany(...args: Parameters<typeof _createCompany>) { return _wrapped_createCompany(...args); }
+const _wrapped_updateCompany = withLogging('empresas.updateCompany', _updateCompany);
+export async function updateCompany(...args: Parameters<typeof _updateCompany>) { return _wrapped_updateCompany(...args); }
+const _wrapped_listCompanies = withLogging('empresas.listCompanies', _listCompanies);
+export async function listCompanies(...args: Parameters<typeof _listCompanies>) { return _wrapped_listCompanies(...args); }
+const _wrapped_getCompanyById = withLogging('empresas.getCompanyById', _getCompanyById);
+export async function getCompanyById(...args: Parameters<typeof _getCompanyById>) { return _wrapped_getCompanyById(...args); }
+const _wrapped_toggleCompanyStatus = withLogging('empresas.toggleCompanyStatus', _toggleCompanyStatus);
+export async function toggleCompanyStatus(...args: Parameters<typeof _toggleCompanyStatus>) { return _wrapped_toggleCompanyStatus(...args); }

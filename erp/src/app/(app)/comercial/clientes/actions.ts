@@ -275,7 +275,11 @@ async function _getClientForEdit(clientId: string, companyId: string) {
 // ---------------------------------------------------------------------------
 // Wrapped exports with logging
 // ---------------------------------------------------------------------------
-export const listClients = withLogging('clientes.listClients', _listClients);
-export const createClient = withLogging('clientes.createClient', _createClient);
-export const updateClient = withLogging('clientes.updateClient', _updateClient);
-export const getClientForEdit = withLogging('clientes.getClientForEdit', _getClientForEdit);
+const _wrapped_listClients = withLogging('clientes.listClients', _listClients);
+export async function listClients(...args: Parameters<typeof _listClients>) { return _wrapped_listClients(...args); }
+const _wrapped_createClient = withLogging('clientes.createClient', _createClient);
+export async function createClient(...args: Parameters<typeof _createClient>) { return _wrapped_createClient(...args); }
+const _wrapped_updateClient = withLogging('clientes.updateClient', _updateClient);
+export async function updateClient(...args: Parameters<typeof _updateClient>) { return _wrapped_updateClient(...args); }
+const _wrapped_getClientForEdit = withLogging('clientes.getClientForEdit', _getClientForEdit);
+export async function getClientForEdit(...args: Parameters<typeof _getClientForEdit>) { return _wrapped_getClientForEdit(...args); }

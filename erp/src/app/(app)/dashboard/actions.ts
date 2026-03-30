@@ -792,9 +792,15 @@ async function _getSlaTickets(): Promise<TicketWithSLA[]> {
 // ---------------------------------------------------------------------------
 // Wrapped exports with logging
 // ---------------------------------------------------------------------------
-export const getDashboardData = withLogging('dashboard.getDashboardData', _getDashboardData);
-export const getDashboardAlerts = withLogging('dashboard.getDashboardAlerts', _getDashboardAlerts);
-export const getRevenueExpenseChart = withLogging('dashboard.getRevenueExpenseChart', _getRevenueExpenseChart);
-export const getUpcomingPayables = withLogging('dashboard.getUpcomingPayables', _getUpcomingPayables);
-export const getRecentProposals = withLogging('dashboard.getRecentProposals', _getRecentProposals);
-export const getSlaTickets = withLogging('dashboard.getSlaTickets', _getSlaTickets);
+const _wrapped_getDashboardData = withLogging('dashboard.getDashboardData', _getDashboardData);
+export async function getDashboardData(...args: Parameters<typeof _getDashboardData>) { return _wrapped_getDashboardData(...args); }
+const _wrapped_getDashboardAlerts = withLogging('dashboard.getDashboardAlerts', _getDashboardAlerts);
+export async function getDashboardAlerts(...args: Parameters<typeof _getDashboardAlerts>) { return _wrapped_getDashboardAlerts(...args); }
+const _wrapped_getRevenueExpenseChart = withLogging('dashboard.getRevenueExpenseChart', _getRevenueExpenseChart);
+export async function getRevenueExpenseChart(...args: Parameters<typeof _getRevenueExpenseChart>) { return _wrapped_getRevenueExpenseChart(...args); }
+const _wrapped_getUpcomingPayables = withLogging('dashboard.getUpcomingPayables', _getUpcomingPayables);
+export async function getUpcomingPayables(...args: Parameters<typeof _getUpcomingPayables>) { return _wrapped_getUpcomingPayables(...args); }
+const _wrapped_getRecentProposals = withLogging('dashboard.getRecentProposals', _getRecentProposals);
+export async function getRecentProposals(...args: Parameters<typeof _getRecentProposals>) { return _wrapped_getRecentProposals(...args); }
+const _wrapped_getSlaTickets = withLogging('dashboard.getSlaTickets', _getSlaTickets);
+export async function getSlaTickets(...args: Parameters<typeof _getSlaTickets>) { return _wrapped_getSlaTickets(...args); }

@@ -395,10 +395,17 @@ async function _getUserById(id: string) {
 // ---------------------------------------------------------------------------
 // Wrapped exports with logging
 // ---------------------------------------------------------------------------
-export const createUser = withLogging('usuarios.createUser', _createUser);
-export const updateUser = withLogging('usuarios.updateUser', _updateUser);
-export const listUsers = withLogging('usuarios.listUsers', _listUsers);
-export const assignUserToCompanies = withLogging('usuarios.assignUserToCompanies', _assignUserToCompanies);
-export const toggleUserStatus = withLogging('usuarios.toggleUserStatus', _toggleUserStatus);
-export const listAllCompanies = withLogging('usuarios.listAllCompanies', _listAllCompanies);
-export const getUserById = withLogging('usuarios.getUserById', _getUserById);
+const _wrapped_createUser = withLogging('usuarios.createUser', _createUser);
+export async function createUser(...args: Parameters<typeof _createUser>) { return _wrapped_createUser(...args); }
+const _wrapped_updateUser = withLogging('usuarios.updateUser', _updateUser);
+export async function updateUser(...args: Parameters<typeof _updateUser>) { return _wrapped_updateUser(...args); }
+const _wrapped_listUsers = withLogging('usuarios.listUsers', _listUsers);
+export async function listUsers(...args: Parameters<typeof _listUsers>) { return _wrapped_listUsers(...args); }
+const _wrapped_assignUserToCompanies = withLogging('usuarios.assignUserToCompanies', _assignUserToCompanies);
+export async function assignUserToCompanies(...args: Parameters<typeof _assignUserToCompanies>) { return _wrapped_assignUserToCompanies(...args); }
+const _wrapped_toggleUserStatus = withLogging('usuarios.toggleUserStatus', _toggleUserStatus);
+export async function toggleUserStatus(...args: Parameters<typeof _toggleUserStatus>) { return _wrapped_toggleUserStatus(...args); }
+const _wrapped_listAllCompanies = withLogging('usuarios.listAllCompanies', _listAllCompanies);
+export async function listAllCompanies(...args: Parameters<typeof _listAllCompanies>) { return _wrapped_listAllCompanies(...args); }
+const _wrapped_getUserById = withLogging('usuarios.getUserById', _getUserById);
+export async function getUserById(...args: Parameters<typeof _getUserById>) { return _wrapped_getUserById(...args); }

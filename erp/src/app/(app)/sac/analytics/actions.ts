@@ -471,13 +471,23 @@ async function _getTopTools(
 // ---------------------------------------------------------------------------
 // Wrapped exports with logging
 // ---------------------------------------------------------------------------
-export const getAiKpis = withLogging('sac.analytics.getAiKpis', _getAiKpis);
-export const getCostByDay = withLogging('sac.analytics.getCostByDay', _getCostByDay);
-export const getCostByChannel = withLogging('sac.analytics.getCostByChannel', _getCostByChannel);
-export const getTopTicketsByCost = withLogging('sac.analytics.getTopTicketsByCost', _getTopTicketsByCost);
-export const getConfidenceByChannel = withLogging('sac.analytics.getConfidenceByChannel', _getConfidenceByChannel);
-export const getSuggestionBreakdown = withLogging('sac.analytics.getSuggestionBreakdown', _getSuggestionBreakdown);
-export const getConfidenceCalibration = withLogging('sac.analytics.getConfidenceCalibration', _getConfidenceCalibration);
-export const getEscalationRate = withLogging('sac.analytics.getEscalationRate', _getEscalationRate);
-export const getRecentEscalations = withLogging('sac.analytics.getRecentEscalations', _getRecentEscalations);
-export const getTopTools = withLogging('sac.analytics.getTopTools', _getTopTools);
+const _wrapped_getAiKpis = withLogging('sac.analytics.getAiKpis', _getAiKpis);
+export async function getAiKpis(...args: Parameters<typeof _getAiKpis>) { return _wrapped_getAiKpis(...args); }
+const _wrapped_getCostByDay = withLogging('sac.analytics.getCostByDay', _getCostByDay);
+export async function getCostByDay(...args: Parameters<typeof _getCostByDay>) { return _wrapped_getCostByDay(...args); }
+const _wrapped_getCostByChannel = withLogging('sac.analytics.getCostByChannel', _getCostByChannel);
+export async function getCostByChannel(...args: Parameters<typeof _getCostByChannel>) { return _wrapped_getCostByChannel(...args); }
+const _wrapped_getTopTicketsByCost = withLogging('sac.analytics.getTopTicketsByCost', _getTopTicketsByCost);
+export async function getTopTicketsByCost(...args: Parameters<typeof _getTopTicketsByCost>) { return _wrapped_getTopTicketsByCost(...args); }
+const _wrapped_getConfidenceByChannel = withLogging('sac.analytics.getConfidenceByChannel', _getConfidenceByChannel);
+export async function getConfidenceByChannel(...args: Parameters<typeof _getConfidenceByChannel>) { return _wrapped_getConfidenceByChannel(...args); }
+const _wrapped_getSuggestionBreakdown = withLogging('sac.analytics.getSuggestionBreakdown', _getSuggestionBreakdown);
+export async function getSuggestionBreakdown(...args: Parameters<typeof _getSuggestionBreakdown>) { return _wrapped_getSuggestionBreakdown(...args); }
+const _wrapped_getConfidenceCalibration = withLogging('sac.analytics.getConfidenceCalibration', _getConfidenceCalibration);
+export async function getConfidenceCalibration(...args: Parameters<typeof _getConfidenceCalibration>) { return _wrapped_getConfidenceCalibration(...args); }
+const _wrapped_getEscalationRate = withLogging('sac.analytics.getEscalationRate', _getEscalationRate);
+export async function getEscalationRate(...args: Parameters<typeof _getEscalationRate>) { return _wrapped_getEscalationRate(...args); }
+const _wrapped_getRecentEscalations = withLogging('sac.analytics.getRecentEscalations', _getRecentEscalations);
+export async function getRecentEscalations(...args: Parameters<typeof _getRecentEscalations>) { return _wrapped_getRecentEscalations(...args); }
+const _wrapped_getTopTools = withLogging('sac.analytics.getTopTools', _getTopTools);
+export async function getTopTools(...args: Parameters<typeof _getTopTools>) { return _wrapped_getTopTools(...args); }

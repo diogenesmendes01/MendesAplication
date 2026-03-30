@@ -2937,41 +2937,79 @@ async function _getKanbanBootstrap(
 // ---------------------------------------------------------------------------
 // Wrapped exports with structured logging
 // ---------------------------------------------------------------------------
-export const listTickets = withLogging('sac.tickets.listTickets', _listTickets);
-export const getTicketTabCounts = withLogging('sac.tickets.getTicketTabCounts', _getTicketTabCounts);
-export const getSlaAlertCounts = withLogging('sac.tickets.getSlaAlertCounts', _getSlaAlertCounts);
-export const createTicket = withLogging('sac.tickets.createTicket', _createTicket);
-export const listClientsForSelect = withLogging('sac.tickets.listClientsForSelect', _listClientsForSelect);
-export const listUsersForAssign = withLogging('sac.tickets.listUsersForAssign', _listUsersForAssign);
-export const getTicketById = withLogging('sac.tickets.getTicketById', _getTicketById);
-export const updateTicketStatus = withLogging('sac.tickets.updateTicketStatus', _updateTicketStatus);
-export const toggleTicketAi = withLogging('sac.tickets.toggleTicketAi', _toggleTicketAi);
-export const getAiConfigEnabled = withLogging('sac.tickets.getAiConfigEnabled', _getAiConfigEnabled);
-export const reassignTicket = withLogging('sac.tickets.reassignTicket', _reassignTicket);
-export const listTicketMessages = withLogging('sac.tickets.listTicketMessages', _listTicketMessages);
-export const createTicketReply = withLogging('sac.tickets.createTicketReply', _createTicketReply);
-export const listTimelineEvents = withLogging('sac.tickets.listTimelineEvents', _listTimelineEvents);
-export const createInternalNote = withLogging('sac.tickets.createInternalNote', _createInternalNote);
-export const getEmailRecipients = withLogging('sac.tickets.getEmailRecipients', _getEmailRecipients);
-export const sendEmailReply = withLogging('sac.tickets.sendEmailReply', _sendEmailReply);
-export const attachFileToTicket = withLogging('sac.tickets.attachFileToTicket', _attachFileToTicket);
-export const getWhatsAppRecipients = withLogging('sac.tickets.getWhatsAppRecipients', _getWhatsAppRecipients);
-export const sendWhatsAppMessage = withLogging('sac.tickets.sendWhatsAppMessage', _sendWhatsAppMessage);
-export const getClientFinancialSummary = withLogging('sac.tickets.getClientFinancialSummary', _getClientFinancialSummary);
-export const searchClientsForLink = withLogging('sac.tickets.searchClientsForLink', _searchClientsForLink);
-export const linkContactToClient = withLogging('sac.tickets.linkContactToClient', _linkContactToClient);
-export const createClientAndLink = withLogging('sac.tickets.createClientAndLink', _createClientAndLink);
-export const getTicketRefunds = withLogging('sac.tickets.getTicketRefunds', _getTicketRefunds);
-export const getUserRole = withLogging('sac.tickets.getUserRole', _getUserRole);
-export const requestRefund = withLogging('sac.tickets.requestRefund', _requestRefund);
-export const approveRefund = withLogging('sac.tickets.approveRefund', _approveRefund);
-export const rejectRefund = withLogging('sac.tickets.rejectRefund', _rejectRefund);
-export const executeRefund = withLogging('sac.tickets.executeRefund', _executeRefund);
-export const getTicketListBootstrap = withLogging('sac.tickets.getTicketListBootstrap', _getTicketListBootstrap);
-export const addTag = withLogging('sac.tickets.addTag', _addTag);
-export const removeTag = withLogging('sac.tickets.removeTag', _removeTag);
-export const getCancellationInfo = withLogging('sac.tickets.getCancellationInfo', _getCancellationInfo);
-export const requestCancellation = withLogging('sac.tickets.requestCancellation', _requestCancellation);
-export const approveCancellation = withLogging('sac.tickets.approveCancellation', _approveCancellation);
-export const getTicketDetailBootstrap = withLogging('sac.tickets.getTicketDetailBootstrap', _getTicketDetailBootstrap);
-export const getKanbanBootstrap = withLogging('sac.tickets.getKanbanBootstrap', _getKanbanBootstrap);
+const _wrapped_listTickets = withLogging('sac.tickets.listTickets', _listTickets);
+export async function listTickets(...args: Parameters<typeof _listTickets>) { return _wrapped_listTickets(...args); }
+const _wrapped_getTicketTabCounts = withLogging('sac.tickets.getTicketTabCounts', _getTicketTabCounts);
+export async function getTicketTabCounts(...args: Parameters<typeof _getTicketTabCounts>) { return _wrapped_getTicketTabCounts(...args); }
+const _wrapped_getSlaAlertCounts = withLogging('sac.tickets.getSlaAlertCounts', _getSlaAlertCounts);
+export async function getSlaAlertCounts(...args: Parameters<typeof _getSlaAlertCounts>) { return _wrapped_getSlaAlertCounts(...args); }
+const _wrapped_createTicket = withLogging('sac.tickets.createTicket', _createTicket);
+export async function createTicket(...args: Parameters<typeof _createTicket>) { return _wrapped_createTicket(...args); }
+const _wrapped_listClientsForSelect = withLogging('sac.tickets.listClientsForSelect', _listClientsForSelect);
+export async function listClientsForSelect(...args: Parameters<typeof _listClientsForSelect>) { return _wrapped_listClientsForSelect(...args); }
+const _wrapped_listUsersForAssign = withLogging('sac.tickets.listUsersForAssign', _listUsersForAssign);
+export async function listUsersForAssign(...args: Parameters<typeof _listUsersForAssign>) { return _wrapped_listUsersForAssign(...args); }
+const _wrapped_getTicketById = withLogging('sac.tickets.getTicketById', _getTicketById);
+export async function getTicketById(...args: Parameters<typeof _getTicketById>) { return _wrapped_getTicketById(...args); }
+const _wrapped_updateTicketStatus = withLogging('sac.tickets.updateTicketStatus', _updateTicketStatus);
+export async function updateTicketStatus(...args: Parameters<typeof _updateTicketStatus>) { return _wrapped_updateTicketStatus(...args); }
+const _wrapped_toggleTicketAi = withLogging('sac.tickets.toggleTicketAi', _toggleTicketAi);
+export async function toggleTicketAi(...args: Parameters<typeof _toggleTicketAi>) { return _wrapped_toggleTicketAi(...args); }
+const _wrapped_getAiConfigEnabled = withLogging('sac.tickets.getAiConfigEnabled', _getAiConfigEnabled);
+export async function getAiConfigEnabled(...args: Parameters<typeof _getAiConfigEnabled>) { return _wrapped_getAiConfigEnabled(...args); }
+const _wrapped_reassignTicket = withLogging('sac.tickets.reassignTicket', _reassignTicket);
+export async function reassignTicket(...args: Parameters<typeof _reassignTicket>) { return _wrapped_reassignTicket(...args); }
+const _wrapped_listTicketMessages = withLogging('sac.tickets.listTicketMessages', _listTicketMessages);
+export async function listTicketMessages(...args: Parameters<typeof _listTicketMessages>) { return _wrapped_listTicketMessages(...args); }
+const _wrapped_createTicketReply = withLogging('sac.tickets.createTicketReply', _createTicketReply);
+export async function createTicketReply(...args: Parameters<typeof _createTicketReply>) { return _wrapped_createTicketReply(...args); }
+const _wrapped_listTimelineEvents = withLogging('sac.tickets.listTimelineEvents', _listTimelineEvents);
+export async function listTimelineEvents(...args: Parameters<typeof _listTimelineEvents>) { return _wrapped_listTimelineEvents(...args); }
+const _wrapped_createInternalNote = withLogging('sac.tickets.createInternalNote', _createInternalNote);
+export async function createInternalNote(...args: Parameters<typeof _createInternalNote>) { return _wrapped_createInternalNote(...args); }
+const _wrapped_getEmailRecipients = withLogging('sac.tickets.getEmailRecipients', _getEmailRecipients);
+export async function getEmailRecipients(...args: Parameters<typeof _getEmailRecipients>) { return _wrapped_getEmailRecipients(...args); }
+const _wrapped_sendEmailReply = withLogging('sac.tickets.sendEmailReply', _sendEmailReply);
+export async function sendEmailReply(...args: Parameters<typeof _sendEmailReply>) { return _wrapped_sendEmailReply(...args); }
+const _wrapped_attachFileToTicket = withLogging('sac.tickets.attachFileToTicket', _attachFileToTicket);
+export async function attachFileToTicket(...args: Parameters<typeof _attachFileToTicket>) { return _wrapped_attachFileToTicket(...args); }
+const _wrapped_getWhatsAppRecipients = withLogging('sac.tickets.getWhatsAppRecipients', _getWhatsAppRecipients);
+export async function getWhatsAppRecipients(...args: Parameters<typeof _getWhatsAppRecipients>) { return _wrapped_getWhatsAppRecipients(...args); }
+const _wrapped_sendWhatsAppMessage = withLogging('sac.tickets.sendWhatsAppMessage', _sendWhatsAppMessage);
+export async function sendWhatsAppMessage(...args: Parameters<typeof _sendWhatsAppMessage>) { return _wrapped_sendWhatsAppMessage(...args); }
+const _wrapped_getClientFinancialSummary = withLogging('sac.tickets.getClientFinancialSummary', _getClientFinancialSummary);
+export async function getClientFinancialSummary(...args: Parameters<typeof _getClientFinancialSummary>) { return _wrapped_getClientFinancialSummary(...args); }
+const _wrapped_searchClientsForLink = withLogging('sac.tickets.searchClientsForLink', _searchClientsForLink);
+export async function searchClientsForLink(...args: Parameters<typeof _searchClientsForLink>) { return _wrapped_searchClientsForLink(...args); }
+const _wrapped_linkContactToClient = withLogging('sac.tickets.linkContactToClient', _linkContactToClient);
+export async function linkContactToClient(...args: Parameters<typeof _linkContactToClient>) { return _wrapped_linkContactToClient(...args); }
+const _wrapped_createClientAndLink = withLogging('sac.tickets.createClientAndLink', _createClientAndLink);
+export async function createClientAndLink(...args: Parameters<typeof _createClientAndLink>) { return _wrapped_createClientAndLink(...args); }
+const _wrapped_getTicketRefunds = withLogging('sac.tickets.getTicketRefunds', _getTicketRefunds);
+export async function getTicketRefunds(...args: Parameters<typeof _getTicketRefunds>) { return _wrapped_getTicketRefunds(...args); }
+const _wrapped_getUserRole = withLogging('sac.tickets.getUserRole', _getUserRole);
+export async function getUserRole(...args: Parameters<typeof _getUserRole>) { return _wrapped_getUserRole(...args); }
+const _wrapped_requestRefund = withLogging('sac.tickets.requestRefund', _requestRefund);
+export async function requestRefund(...args: Parameters<typeof _requestRefund>) { return _wrapped_requestRefund(...args); }
+const _wrapped_approveRefund = withLogging('sac.tickets.approveRefund', _approveRefund);
+export async function approveRefund(...args: Parameters<typeof _approveRefund>) { return _wrapped_approveRefund(...args); }
+const _wrapped_rejectRefund = withLogging('sac.tickets.rejectRefund', _rejectRefund);
+export async function rejectRefund(...args: Parameters<typeof _rejectRefund>) { return _wrapped_rejectRefund(...args); }
+const _wrapped_executeRefund = withLogging('sac.tickets.executeRefund', _executeRefund);
+export async function executeRefund(...args: Parameters<typeof _executeRefund>) { return _wrapped_executeRefund(...args); }
+const _wrapped_getTicketListBootstrap = withLogging('sac.tickets.getTicketListBootstrap', _getTicketListBootstrap);
+export async function getTicketListBootstrap(...args: Parameters<typeof _getTicketListBootstrap>) { return _wrapped_getTicketListBootstrap(...args); }
+const _wrapped_addTag = withLogging('sac.tickets.addTag', _addTag);
+export async function addTag(...args: Parameters<typeof _addTag>) { return _wrapped_addTag(...args); }
+const _wrapped_removeTag = withLogging('sac.tickets.removeTag', _removeTag);
+export async function removeTag(...args: Parameters<typeof _removeTag>) { return _wrapped_removeTag(...args); }
+const _wrapped_getCancellationInfo = withLogging('sac.tickets.getCancellationInfo', _getCancellationInfo);
+export async function getCancellationInfo(...args: Parameters<typeof _getCancellationInfo>) { return _wrapped_getCancellationInfo(...args); }
+const _wrapped_requestCancellation = withLogging('sac.tickets.requestCancellation', _requestCancellation);
+export async function requestCancellation(...args: Parameters<typeof _requestCancellation>) { return _wrapped_requestCancellation(...args); }
+const _wrapped_approveCancellation = withLogging('sac.tickets.approveCancellation', _approveCancellation);
+export async function approveCancellation(...args: Parameters<typeof _approveCancellation>) { return _wrapped_approveCancellation(...args); }
+const _wrapped_getTicketDetailBootstrap = withLogging('sac.tickets.getTicketDetailBootstrap', _getTicketDetailBootstrap);
+export async function getTicketDetailBootstrap(...args: Parameters<typeof _getTicketDetailBootstrap>) { return _wrapped_getTicketDetailBootstrap(...args); }
+const _wrapped_getKanbanBootstrap = withLogging('sac.tickets.getKanbanBootstrap', _getKanbanBootstrap);
+export async function getKanbanBootstrap(...args: Parameters<typeof _getKanbanBootstrap>) { return _wrapped_getKanbanBootstrap(...args); }

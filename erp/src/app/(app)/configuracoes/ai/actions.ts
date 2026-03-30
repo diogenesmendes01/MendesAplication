@@ -638,11 +638,19 @@ async function _simulateAiResponse(
 // ---------------------------------------------------------------------------
 // Wrapped exports with structured logging
 // ---------------------------------------------------------------------------
-export const getAiConfig = withLogging('configuracoes.ai.getAiConfig', _getAiConfig);
-export const updateAiConfig = withLogging('configuracoes.ai.updateAiConfig', _updateAiConfig);
-export const testAiConnection = withLogging('configuracoes.ai.testAiConnection', _testAiConnection);
-export const listAvailableModels = withLogging('configuracoes.ai.listAvailableModels', _listAvailableModels);
-export const getAiUsageSummary = withLogging('configuracoes.ai.getAiUsageSummary', _getAiUsageSummary);
-export const getTodaySpendAction = withLogging('configuracoes.ai.getTodaySpendAction', _getTodaySpendAction);
-export const getSuggestedModel = withLogging('configuracoes.ai.getSuggestedModel', _getSuggestedModel);
-export const simulateAiResponse = withLogging('configuracoes.ai.simulateAiResponse', _simulateAiResponse);
+const _wrapped_getAiConfig = withLogging('configuracoes.ai.getAiConfig', _getAiConfig);
+export async function getAiConfig(...args: Parameters<typeof _getAiConfig>) { return _wrapped_getAiConfig(...args); }
+const _wrapped_updateAiConfig = withLogging('configuracoes.ai.updateAiConfig', _updateAiConfig);
+export async function updateAiConfig(...args: Parameters<typeof _updateAiConfig>) { return _wrapped_updateAiConfig(...args); }
+const _wrapped_testAiConnection = withLogging('configuracoes.ai.testAiConnection', _testAiConnection);
+export async function testAiConnection(...args: Parameters<typeof _testAiConnection>) { return _wrapped_testAiConnection(...args); }
+const _wrapped_listAvailableModels = withLogging('configuracoes.ai.listAvailableModels', _listAvailableModels);
+export async function listAvailableModels(...args: Parameters<typeof _listAvailableModels>) { return _wrapped_listAvailableModels(...args); }
+const _wrapped_getAiUsageSummary = withLogging('configuracoes.ai.getAiUsageSummary', _getAiUsageSummary);
+export async function getAiUsageSummary(...args: Parameters<typeof _getAiUsageSummary>) { return _wrapped_getAiUsageSummary(...args); }
+const _wrapped_getTodaySpendAction = withLogging('configuracoes.ai.getTodaySpendAction', _getTodaySpendAction);
+export async function getTodaySpendAction(...args: Parameters<typeof _getTodaySpendAction>) { return _wrapped_getTodaySpendAction(...args); }
+const _wrapped_getSuggestedModel = withLogging('configuracoes.ai.getSuggestedModel', _getSuggestedModel);
+export async function getSuggestedModel(...args: Parameters<typeof _getSuggestedModel>) { return _wrapped_getSuggestedModel(...args); }
+const _wrapped_simulateAiResponse = withLogging('configuracoes.ai.simulateAiResponse', _simulateAiResponse);
+export async function simulateAiResponse(...args: Parameters<typeof _simulateAiResponse>) { return _wrapped_simulateAiResponse(...args); }

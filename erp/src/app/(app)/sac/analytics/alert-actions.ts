@@ -103,7 +103,11 @@ async function _deleteAlert(id: string): Promise<void> {
 // ---------------------------------------------------------------------------
 // Wrapped exports with logging
 // ---------------------------------------------------------------------------
-export const listAlerts = withLogging('sac.alerts.listAlerts', _listAlerts);
-export const upsertAlert = withLogging('sac.alerts.upsertAlert', _upsertAlert);
-export const toggleAlert = withLogging('sac.alerts.toggleAlert', _toggleAlert);
-export const deleteAlert = withLogging('sac.alerts.deleteAlert', _deleteAlert);
+const _wrapped_listAlerts = withLogging('sac.alerts.listAlerts', _listAlerts);
+export async function listAlerts(...args: Parameters<typeof _listAlerts>) { return _wrapped_listAlerts(...args); }
+const _wrapped_upsertAlert = withLogging('sac.alerts.upsertAlert', _upsertAlert);
+export async function upsertAlert(...args: Parameters<typeof _upsertAlert>) { return _wrapped_upsertAlert(...args); }
+const _wrapped_toggleAlert = withLogging('sac.alerts.toggleAlert', _toggleAlert);
+export async function toggleAlert(...args: Parameters<typeof _toggleAlert>) { return _wrapped_toggleAlert(...args); }
+const _wrapped_deleteAlert = withLogging('sac.alerts.deleteAlert', _deleteAlert);
+export async function deleteAlert(...args: Parameters<typeof _deleteAlert>) { return _wrapped_deleteAlert(...args); }

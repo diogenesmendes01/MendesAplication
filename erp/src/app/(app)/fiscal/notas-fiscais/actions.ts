@@ -272,7 +272,11 @@ async function _emitPendingInvoice(invoiceId: string, companyId: string) {
 // ---------------------------------------------------------------------------
 // Wrapped exports with logging
 // ---------------------------------------------------------------------------
-export const listInvoices = withLogging('notasFiscais.listInvoices', _listInvoices);
-export const listClientsForSelect = withLogging('notasFiscais.listClientsForSelect', _listClientsForSelect);
-export const cancelInvoice = withLogging('notasFiscais.cancelInvoice', _cancelInvoice);
-export const emitPendingInvoice = withLogging('notasFiscais.emitPendingInvoice', _emitPendingInvoice);
+const _wrapped_listInvoices = withLogging('notasFiscais.listInvoices', _listInvoices);
+export async function listInvoices(...args: Parameters<typeof _listInvoices>) { return _wrapped_listInvoices(...args); }
+const _wrapped_listClientsForSelect = withLogging('notasFiscais.listClientsForSelect', _listClientsForSelect);
+export async function listClientsForSelect(...args: Parameters<typeof _listClientsForSelect>) { return _wrapped_listClientsForSelect(...args); }
+const _wrapped_cancelInvoice = withLogging('notasFiscais.cancelInvoice', _cancelInvoice);
+export async function cancelInvoice(...args: Parameters<typeof _cancelInvoice>) { return _wrapped_cancelInvoice(...args); }
+const _wrapped_emitPendingInvoice = withLogging('notasFiscais.emitPendingInvoice', _emitPendingInvoice);
+export async function emitPendingInvoice(...args: Parameters<typeof _emitPendingInvoice>) { return _wrapped_emitPendingInvoice(...args); }

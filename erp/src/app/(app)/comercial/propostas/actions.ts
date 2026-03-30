@@ -1154,15 +1154,27 @@ async function _listProposalEvents(
 // ---------------------------------------------------------------------------
 // Wrapped exports with structured logging
 // ---------------------------------------------------------------------------
-export const listProposals = withLogging('comercial.propostas.listProposals', _listProposals);
-export const createProposal = withLogging('comercial.propostas.createProposal', _createProposal);
-export const updateProposal = withLogging('comercial.propostas.updateProposal', _updateProposal);
-export const getProposalById = withLogging('comercial.propostas.getProposalById', _getProposalById);
-export const updateProposalStatus = withLogging('comercial.propostas.updateProposalStatus', _updateProposalStatus);
-export const listClientsForProposal = withLogging('comercial.propostas.listClientsForProposal', _listClientsForProposal);
-export const getProvidersForProposal = withLogging('comercial.propostas.getProvidersForProposal', _getProvidersForProposal);
-export const previewRoutingForProposal = withLogging('comercial.propostas.previewRoutingForProposal', _previewRoutingForProposal);
-export const generateBoletosForProposal = withLogging('comercial.propostas.generateBoletosForProposal', _generateBoletosForProposal);
-export const listBoletosForProposal = withLogging('comercial.propostas.listBoletosForProposal', _listBoletosForProposal);
-export const updateBoletoStatus = withLogging('comercial.propostas.updateBoletoStatus', _updateBoletoStatus);
-export const listProposalEvents = withLogging('comercial.propostas.listProposalEvents', _listProposalEvents);
+const _wrapped_listProposals = withLogging('comercial.propostas.listProposals', _listProposals);
+export async function listProposals(...args: Parameters<typeof _listProposals>) { return _wrapped_listProposals(...args); }
+const _wrapped_createProposal = withLogging('comercial.propostas.createProposal', _createProposal);
+export async function createProposal(...args: Parameters<typeof _createProposal>) { return _wrapped_createProposal(...args); }
+const _wrapped_updateProposal = withLogging('comercial.propostas.updateProposal', _updateProposal);
+export async function updateProposal(...args: Parameters<typeof _updateProposal>) { return _wrapped_updateProposal(...args); }
+const _wrapped_getProposalById = withLogging('comercial.propostas.getProposalById', _getProposalById);
+export async function getProposalById(...args: Parameters<typeof _getProposalById>) { return _wrapped_getProposalById(...args); }
+const _wrapped_updateProposalStatus = withLogging('comercial.propostas.updateProposalStatus', _updateProposalStatus);
+export async function updateProposalStatus(...args: Parameters<typeof _updateProposalStatus>) { return _wrapped_updateProposalStatus(...args); }
+const _wrapped_listClientsForProposal = withLogging('comercial.propostas.listClientsForProposal', _listClientsForProposal);
+export async function listClientsForProposal(...args: Parameters<typeof _listClientsForProposal>) { return _wrapped_listClientsForProposal(...args); }
+const _wrapped_getProvidersForProposal = withLogging('comercial.propostas.getProvidersForProposal', _getProvidersForProposal);
+export async function getProvidersForProposal(...args: Parameters<typeof _getProvidersForProposal>) { return _wrapped_getProvidersForProposal(...args); }
+const _wrapped_previewRoutingForProposal = withLogging('comercial.propostas.previewRoutingForProposal', _previewRoutingForProposal);
+export async function previewRoutingForProposal(...args: Parameters<typeof _previewRoutingForProposal>) { return _wrapped_previewRoutingForProposal(...args); }
+const _wrapped_generateBoletosForProposal = withLogging('comercial.propostas.generateBoletosForProposal', _generateBoletosForProposal);
+export async function generateBoletosForProposal(...args: Parameters<typeof _generateBoletosForProposal>) { return _wrapped_generateBoletosForProposal(...args); }
+const _wrapped_listBoletosForProposal = withLogging('comercial.propostas.listBoletosForProposal', _listBoletosForProposal);
+export async function listBoletosForProposal(...args: Parameters<typeof _listBoletosForProposal>) { return _wrapped_listBoletosForProposal(...args); }
+const _wrapped_updateBoletoStatus = withLogging('comercial.propostas.updateBoletoStatus', _updateBoletoStatus);
+export async function updateBoletoStatus(...args: Parameters<typeof _updateBoletoStatus>) { return _wrapped_updateBoletoStatus(...args); }
+const _wrapped_listProposalEvents = withLogging('comercial.propostas.listProposalEvents', _listProposalEvents);
+export async function listProposalEvents(...args: Parameters<typeof _listProposalEvents>) { return _wrapped_listProposalEvents(...args); }
