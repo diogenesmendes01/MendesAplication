@@ -1,6 +1,11 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
+  // Packages used exclusively on the server (workers, queues, file processing).
+  // Marking them as external prevents webpack from attempting to bundle native
+  // addons and large server-only libs — they are resolved at runtime instead.
+  // NOTE: `serverExternalPackages` (root-level) is only available in Next.js 15+.
+  // In Next.js 14.x the correct key is still `experimental.serverComponentsExternalPackages`.
   experimental: {
     // Required in Next.js 14.x to enable the instrumentation.ts hook
     instrumentationHook: true,
@@ -10,9 +15,6 @@ const nextConfig = {
       "lucide-react",
       "@radix-ui/react-icons",
     ],
-    // Packages used exclusively on the server (workers, queues, file processing).
-    // Marking them as external prevents webpack from attempting to bundle native
-    // addons and large server-only libs — they are resolved at runtime instead.
     serverComponentsExternalPackages: [
       "bullmq",
       "ioredis",

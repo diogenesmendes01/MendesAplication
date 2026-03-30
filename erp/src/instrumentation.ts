@@ -12,6 +12,14 @@ export async function register() {
   // NEXT_RUNTIME is set to 'nodejs' for standard server routes and to 'edge'
   // for middleware / Edge API routes. Guard is required to avoid crashes.
   if (process.env.NEXT_RUNTIME === 'nodejs') {
-    await import('@/lib/workers/index');
+    try {
+      await import('@/lib/workers/index');
+    } catch (err) {
+      // Log the error but do NOT re-throw — an unhandled rejection here would
+      // crash the Next.js server silently. Workers failing to start is
+      // recoverable; the app should still serve requests.
+      // eslint-disable-next-line no-console
+      console.error('[instrumentation] Failed to start BullMQ workers:', err);
+    }
   }
 }
