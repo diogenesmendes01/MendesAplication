@@ -56,6 +56,40 @@ export const ErrorCode = {
 
 export type ErrorCodeValue = (typeof ErrorCode)[keyof typeof ErrorCode];
 
+// ---------------------------------------------------------------------------
+// Shared: statusToErrorCode (used by classifyError & classifyErrorByStatus)
+// ---------------------------------------------------------------------------
+
+/** Permission-related keywords for distinguishing 403 auth vs permission. */
+const PERMISSION_KEYWORDS = ["permission", "access denied", "not allowed", "forbidden"];
+
+/**
+ * Map an HTTP status code to an ErrorCode.
+ * Accepts an optional message to distinguish 403 auth vs 403 permission.
+ * @internal Shared logic for classifyError() and classifyErrorByStatus().
+ */
+export function statusToErrorCode(status: number, message?: string): ErrorCodeValue {
+  switch (status) {
+    case 401:
+      return ErrorCode.AUTH_FAILED;
+    case 403: {
+      if (message) {
+        const lower = message.toLowerCase();
+        if (PERMISSION_KEYWORDS.some((kw) => lower.includes(kw))) {
+          return ErrorCode.PERMISSION_DENIED;
+        }
+      }
+      return ErrorCode.AUTH_FAILED;
+    }
+    case 404:
+      return ErrorCode.NOT_FOUND;
+    case 429:
+      return ErrorCode.RATE_LIMIT_EXCEEDED;
+    default:
+      return ErrorCode.INTERNAL_ERROR;
+  }
+}
+
 /**
  * Classify an error into a structured ErrorCode based on its properties.
  * Used by withLogging and withApiLogging for consistent error categorization.
@@ -64,12 +98,13 @@ export function classifyError(err: unknown): ErrorCodeValue {
   if (err && typeof err === "object") {
     // HTTP-style status codes
     const status = (err as Record<string, unknown>).status ?? (err as Record<string, unknown>).statusCode;
-    if (status === 401 || status === 403) return ErrorCode.AUTH_FAILED;
-    if (status === 404) return ErrorCode.NOT_FOUND;
-    if (status === 429) return ErrorCode.RATE_LIMIT_EXCEEDED;
+    const message = (err as Record<string, unknown>).message as string | undefined;
+
+    if (typeof status === "number" && [401, 403, 404, 429].includes(status)) {
+      return statusToErrorCode(status, message);
+    }
 
     const name = (err as Record<string, unknown>).name as string | undefined;
-    const message = (err as Record<string, unknown>).message as string | undefined;
     const code = (err as Record<string, unknown>).code as string | undefined;
 
     // Prisma errors
@@ -85,8 +120,16 @@ export function classifyError(err: unknown): ErrorCodeValue {
       return ErrorCode.VALIDATION_ERROR;
     }
 
+    // Permission keywords in message (no status code)
+    if (message) {
+      const lower = message.toLowerCase();
+      if (PERMISSION_KEYWORDS.some((kw) => lower.includes(kw))) {
+        return ErrorCode.PERMISSION_DENIED;
+      }
+    }
+
     // Auth keywords
-    if (message?.toLowerCase().includes("unauthorized") || message?.toLowerCase().includes("forbidden")) {
+    if (message?.toLowerCase().includes("unauthorized")) {
       return ErrorCode.AUTH_FAILED;
     }
     if (message?.toLowerCase().includes("token expired") || message?.toLowerCase().includes("jwt expired")) {
@@ -104,19 +147,10 @@ export function classifyError(err: unknown): ErrorCodeValue {
 
 /**
  * Classify an error by HTTP status code (for API routes).
+ * Accepts an optional message to distinguish 403 auth vs 403 permission.
  */
-export function classifyErrorByStatus(status: number): ErrorCodeValue {
-  switch (status) {
-    case 401:
-    case 403:
-      return ErrorCode.AUTH_FAILED;
-    case 404:
-      return ErrorCode.NOT_FOUND;
-    case 429:
-      return ErrorCode.RATE_LIMIT_EXCEEDED;
-    default:
-      return ErrorCode.INTERNAL_ERROR;
-  }
+export function classifyErrorByStatus(status: number, message?: string): ErrorCodeValue {
+  return statusToErrorCode(status, message);
 }
 
 // ---------------------------------------------------------------------------
@@ -188,14 +222,14 @@ function sanitizeArray(arr: unknown[]): unknown[] {
 export const MAX_LOG_ARG_SIZE = 10_240; // 10KB
 
 /** Maximum array length before truncation. */
-const MAX_LOG_ARRAY_LENGTH = 100;
+export const MAX_LOG_ARRAY_LENGTH = 100;
 
 /**
  * Truncate large values before logging to prevent log bloat.
  *
  * - Strings > MAX_LOG_ARG_SIZE chars → truncated with suffix
  * - Arrays > 100 items → first 100 items + indicator
- * - Objects whose JSON > MAX_LOG_ARG_SIZE → truncated JSON string
+ * - Objects whose JSON > MAX_LOG_ARG_SIZE → `{ _truncated, originalSize, preview }`
  * - Primitives → returned as-is
  */
 export function truncateForLog(value: unknown): unknown {
@@ -221,7 +255,11 @@ export function truncateForLog(value: unknown): unknown {
     try {
       const json = JSON.stringify(value);
       if (json.length > MAX_LOG_ARG_SIZE) {
-        return json.slice(0, MAX_LOG_ARG_SIZE) + `...[truncated, original ${json.length} chars]`;
+        return {
+          _truncated: true,
+          originalSize: json.length,
+          preview: json.slice(0, MAX_LOG_ARG_SIZE) + "...",
+        };
       }
     } catch {
       // Circular reference or similar — return as-is

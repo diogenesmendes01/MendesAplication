@@ -351,4 +351,4 @@ async function _POST(
   return NextResponse.json({ received: true }, { status: 200 });
 }
 
-export const POST = withApiLogging("webhooks/payment", _POST);
+export const POST = withApiLogging("webhooks.payment", _POST);

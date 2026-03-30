@@ -152,4 +152,4 @@ async function _POST(req: NextRequest) {
   }
 }
 
-export const POST = withApiLogging("auth/login", _POST);
+export const POST = withApiLogging("auth.login", _POST);

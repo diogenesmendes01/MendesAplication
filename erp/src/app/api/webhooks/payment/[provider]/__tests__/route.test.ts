@@ -1,6 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
 
+
+vi.mock("@/lib/auth", () => ({
+  verifyAccessToken: vi.fn().mockReturnValue(null),
+}));
+
+vi.mock("@/lib/trace-context", () => ({
+  traceStore: {
+    run: vi.fn((_ctx: unknown, fn: () => unknown) => fn()),
+    getStore: vi.fn().mockReturnValue(null),
+  },
+}));
 // ---------------------------------------------------------------------------
 // Mocks — must be declared before any import that uses them
 // ---------------------------------------------------------------------------
