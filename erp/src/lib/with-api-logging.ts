@@ -55,6 +55,11 @@ export function withApiLogging(
       );
       return response;
     } catch (err) {
+      // Next.js uses throw for redirect() and notFound() — let them propagate
+      if (err && typeof err === 'object' && 'digest' in err) {
+        throw err;
+      }
+
       const durationMs = Date.now() - start;
       log.error(
         {
