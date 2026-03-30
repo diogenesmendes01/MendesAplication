@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { createChildLogger, sanitizeParams, truncateForLog, classifyError } from "@/lib/logger";
 import { traceStore } from "@/lib/trace-context";
 
@@ -23,11 +24,12 @@ export function withLibLogging<TArgs extends unknown[], TReturn>(
   return async (...args: TArgs): Promise<TReturn> => {
     const start = Date.now();
 
-    // Use propagated traceId if available
+    // Use propagated traceId if available, otherwise generate a new one for standalone invocations
     const store = traceStore.getStore();
+    const traceId = store?.traceId ?? randomUUID();
     const log = createChildLogger({
       action: actionName,
-      ...(store?.traceId ? { traceId: store.traceId } : {}),
+      traceId,
     });
 
     const sanitizedArgs = args.map((a) =>

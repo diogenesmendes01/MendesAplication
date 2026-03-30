@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { createChildLogger, sanitizeParams, truncateForLog, classifyError } from "@/lib/logger";
 import { getSession } from "@/lib/session";
 import { traceStore } from "@/lib/trace-context";
@@ -23,10 +24,6 @@ function extractCompanyId(args: unknown[]): string | undefined {
           }
         }
       }
-    }
-    // Also accept companyId as a plain string arg (first match by convention)
-    if (typeof arg === "string" && args.indexOf(arg) === 0) {
-      // Don't blindly pick strings — only objects above
     }
   }
   return undefined;
@@ -54,11 +51,12 @@ export function withLogging<TArgs extends unknown[], TReturn>(
   return async (...args: TArgs): Promise<TReturn> => {
     const start = Date.now();
 
-    // Use propagated traceId from API layer if available, otherwise createChildLogger generates one
+    // Use propagated traceId from API layer if available, otherwise generate a new one
     const store = traceStore.getStore();
+    const traceId = store?.traceId ?? randomUUID();
     const log = createChildLogger({
       action: actionName,
-      ...(store?.traceId ? { traceId: store.traceId } : {}),
+      traceId,
     });
 
     // Best-effort session extraction (non-blocking)
