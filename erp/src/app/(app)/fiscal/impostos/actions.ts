@@ -323,6 +323,9 @@ async function _markTaxEntryAsPaid(entryId: string, companyId: string) {
 // ---------------------------------------------------------------------------
 // Wrapped exports with logging
 // ---------------------------------------------------------------------------
-export const getTaxDashboardData = withLogging('impostos.getTaxDashboardData', _getTaxDashboardData);
-export const createTaxEntry = withLogging('impostos.createTaxEntry', _createTaxEntry);
-export const markTaxEntryAsPaid = withLogging('impostos.markTaxEntryAsPaid', _markTaxEntryAsPaid);
+const _wrapped_getTaxDashboardData = withLogging('impostos.getTaxDashboardData', _getTaxDashboardData);
+export async function getTaxDashboardData(...args: Parameters<typeof _getTaxDashboardData>) { return _wrapped_getTaxDashboardData(...args); }
+const _wrapped_createTaxEntry = withLogging('impostos.createTaxEntry', _createTaxEntry);
+export async function createTaxEntry(...args: Parameters<typeof _createTaxEntry>) { return _wrapped_createTaxEntry(...args); }
+const _wrapped_markTaxEntryAsPaid = withLogging('impostos.markTaxEntryAsPaid', _markTaxEntryAsPaid);
+export async function markTaxEntryAsPaid(...args: Parameters<typeof _markTaxEntryAsPaid>) { return _wrapped_markTaxEntryAsPaid(...args); }

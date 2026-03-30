@@ -621,11 +621,19 @@ async function _setDefaultProvider(
 // ---------------------------------------------------------------------------
 // Wrapped exports with logging
 // ---------------------------------------------------------------------------
-export const getPaymentProviders = withLogging('integracoes.getPaymentProviders', _getPaymentProviders);
-export const getAvailableProviders = withLogging('integracoes.getAvailableProviders', _getAvailableProviders);
-export const savePaymentProvider = withLogging('integracoes.savePaymentProvider', _savePaymentProvider);
-export const deletePaymentProvider = withLogging('integracoes.deletePaymentProvider', _deletePaymentProvider);
-export const testProviderConnection = withLogging('integracoes.testProviderConnection', _testProviderConnection);
-export const saveRoutingRules = withLogging('integracoes.saveRoutingRules', _saveRoutingRules);
-export const toggleProviderActive = withLogging('integracoes.toggleProviderActive', _toggleProviderActive);
-export const setDefaultProvider = withLogging('integracoes.setDefaultProvider', _setDefaultProvider);
+const _wrapped_getPaymentProviders = withLogging('integracoes.getPaymentProviders', _getPaymentProviders);
+export async function getPaymentProviders(...args: Parameters<typeof _getPaymentProviders>) { return _wrapped_getPaymentProviders(...args); }
+const _wrapped_getAvailableProviders = withLogging('integracoes.getAvailableProviders', _getAvailableProviders);
+export async function getAvailableProviders(...args: Parameters<typeof _getAvailableProviders>) { return _wrapped_getAvailableProviders(...args); }
+const _wrapped_savePaymentProvider = withLogging('integracoes.savePaymentProvider', _savePaymentProvider);
+export async function savePaymentProvider(...args: Parameters<typeof _savePaymentProvider>) { return _wrapped_savePaymentProvider(...args); }
+const _wrapped_deletePaymentProvider = withLogging('integracoes.deletePaymentProvider', _deletePaymentProvider);
+export async function deletePaymentProvider(...args: Parameters<typeof _deletePaymentProvider>) { return _wrapped_deletePaymentProvider(...args); }
+const _wrapped_testProviderConnection = withLogging('integracoes.testProviderConnection', _testProviderConnection);
+export async function testProviderConnection(...args: Parameters<typeof _testProviderConnection>) { return _wrapped_testProviderConnection(...args); }
+const _wrapped_saveRoutingRules = withLogging('integracoes.saveRoutingRules', _saveRoutingRules);
+export async function saveRoutingRules(...args: Parameters<typeof _saveRoutingRules>) { return _wrapped_saveRoutingRules(...args); }
+const _wrapped_toggleProviderActive = withLogging('integracoes.toggleProviderActive', _toggleProviderActive);
+export async function toggleProviderActive(...args: Parameters<typeof _toggleProviderActive>) { return _wrapped_toggleProviderActive(...args); }
+const _wrapped_setDefaultProvider = withLogging('integracoes.setDefaultProvider', _setDefaultProvider);
+export async function setDefaultProvider(...args: Parameters<typeof _setDefaultProvider>) { return _wrapped_setDefaultProvider(...args); }

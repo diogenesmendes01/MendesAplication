@@ -66,7 +66,11 @@ async function _getConfidenceCalibration(companyId: string, from?: string, to?: 
 // ---------------------------------------------------------------------------
 // Wrapped exports with logging
 // ---------------------------------------------------------------------------
-export const getFeedbackSummary = withLogging('sac.feedback.getFeedbackSummary', _getFeedbackSummary);
-export const getRejectReasons = withLogging('sac.feedback.getRejectReasons', _getRejectReasons);
-export const getEditPatterns = withLogging('sac.feedback.getEditPatterns', _getEditPatterns);
-export const getConfidenceCalibration = withLogging('sac.feedback.getConfidenceCalibration', _getConfidenceCalibration);
+const _wrapped_getFeedbackSummary = withLogging('sac.feedback.getFeedbackSummary', _getFeedbackSummary);
+export async function getFeedbackSummary(...args: Parameters<typeof _getFeedbackSummary>) { return _wrapped_getFeedbackSummary(...args); }
+const _wrapped_getRejectReasons = withLogging('sac.feedback.getRejectReasons', _getRejectReasons);
+export async function getRejectReasons(...args: Parameters<typeof _getRejectReasons>) { return _wrapped_getRejectReasons(...args); }
+const _wrapped_getEditPatterns = withLogging('sac.feedback.getEditPatterns', _getEditPatterns);
+export async function getEditPatterns(...args: Parameters<typeof _getEditPatterns>) { return _wrapped_getEditPatterns(...args); }
+const _wrapped_getConfidenceCalibration = withLogging('sac.feedback.getConfidenceCalibration', _getConfidenceCalibration);
+export async function getConfidenceCalibration(...args: Parameters<typeof _getConfidenceCalibration>) { return _wrapped_getConfidenceCalibration(...args); }

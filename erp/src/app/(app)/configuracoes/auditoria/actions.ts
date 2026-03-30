@@ -232,8 +232,13 @@ async function _getAuditCompanies(): Promise<
 // ---------------------------------------------------------------------------
 // Wrapped exports with logging
 // ---------------------------------------------------------------------------
-export const listAuditLogs = withLogging('auditoria.listAuditLogs', _listAuditLogs);
-export const exportAuditLogsCsv = withLogging('auditoria.exportAuditLogsCsv', _exportAuditLogsCsv);
-export const getAuditEntityTypes = withLogging('auditoria.getAuditEntityTypes', _getAuditEntityTypes);
-export const getAuditUsers = withLogging('auditoria.getAuditUsers', _getAuditUsers);
-export const getAuditCompanies = withLogging('auditoria.getAuditCompanies', _getAuditCompanies);
+const _wrapped_listAuditLogs = withLogging('auditoria.listAuditLogs', _listAuditLogs);
+export async function listAuditLogs(...args: Parameters<typeof _listAuditLogs>) { return _wrapped_listAuditLogs(...args); }
+const _wrapped_exportAuditLogsCsv = withLogging('auditoria.exportAuditLogsCsv', _exportAuditLogsCsv);
+export async function exportAuditLogsCsv(...args: Parameters<typeof _exportAuditLogsCsv>) { return _wrapped_exportAuditLogsCsv(...args); }
+const _wrapped_getAuditEntityTypes = withLogging('auditoria.getAuditEntityTypes', _getAuditEntityTypes);
+export async function getAuditEntityTypes(...args: Parameters<typeof _getAuditEntityTypes>) { return _wrapped_getAuditEntityTypes(...args); }
+const _wrapped_getAuditUsers = withLogging('auditoria.getAuditUsers', _getAuditUsers);
+export async function getAuditUsers(...args: Parameters<typeof _getAuditUsers>) { return _wrapped_getAuditUsers(...args); }
+const _wrapped_getAuditCompanies = withLogging('auditoria.getAuditCompanies', _getAuditCompanies);
+export async function getAuditCompanies(...args: Parameters<typeof _getAuditCompanies>) { return _wrapped_getAuditCompanies(...args); }

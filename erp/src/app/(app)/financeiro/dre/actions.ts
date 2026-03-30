@@ -426,6 +426,9 @@ async function _getCompaniesForDRE() {
 // ---------------------------------------------------------------------------
 // Wrapped exports with logging
 // ---------------------------------------------------------------------------
-export const getDREData = withLogging('dre.getDREData', _getDREData);
-export const getDREConsolidated = withLogging('dre.getDREConsolidated', _getDREConsolidated);
-export const getCompaniesForDRE = withLogging('dre.getCompaniesForDRE', _getCompaniesForDRE);
+const _wrapped_getDREData = withLogging('dre.getDREData', _getDREData);
+export async function getDREData(...args: Parameters<typeof _getDREData>) { return _wrapped_getDREData(...args); }
+const _wrapped_getDREConsolidated = withLogging('dre.getDREConsolidated', _getDREConsolidated);
+export async function getDREConsolidated(...args: Parameters<typeof _getDREConsolidated>) { return _wrapped_getDREConsolidated(...args); }
+const _wrapped_getCompaniesForDRE = withLogging('dre.getCompaniesForDRE', _getCompaniesForDRE);
+export async function getCompaniesForDRE(...args: Parameters<typeof _getCompaniesForDRE>) { return _wrapped_getCompaniesForDRE(...args); }

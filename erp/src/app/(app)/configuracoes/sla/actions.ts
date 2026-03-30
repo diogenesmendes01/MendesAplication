@@ -119,7 +119,11 @@ async function _saveBusinessHours(companyId: string, data: BusinessHours): Promi
 // ---------------------------------------------------------------------------
 // Wrapped exports with logging
 // ---------------------------------------------------------------------------
-export const getSlaConfigs = withLogging('sla.config.getSlaConfigs', _getSlaConfigs);
-export const saveSlaConfigs = withLogging('sla.config.saveSlaConfigs', _saveSlaConfigs);
-export const getBusinessHours = withLogging('sla.config.getBusinessHours', _getBusinessHours);
-export const saveBusinessHours = withLogging('sla.config.saveBusinessHours', _saveBusinessHours);
+const _wrapped_getSlaConfigs = withLogging('sla.config.getSlaConfigs', _getSlaConfigs);
+export async function getSlaConfigs(...args: Parameters<typeof _getSlaConfigs>) { return _wrapped_getSlaConfigs(...args); }
+const _wrapped_saveSlaConfigs = withLogging('sla.config.saveSlaConfigs', _saveSlaConfigs);
+export async function saveSlaConfigs(...args: Parameters<typeof _saveSlaConfigs>) { return _wrapped_saveSlaConfigs(...args); }
+const _wrapped_getBusinessHours = withLogging('sla.config.getBusinessHours', _getBusinessHours);
+export async function getBusinessHours(...args: Parameters<typeof _getBusinessHours>) { return _wrapped_getBusinessHours(...args); }
+const _wrapped_saveBusinessHours = withLogging('sla.config.saveBusinessHours', _saveBusinessHours);
+export async function saveBusinessHours(...args: Parameters<typeof _saveBusinessHours>) { return _wrapped_saveBusinessHours(...args); }

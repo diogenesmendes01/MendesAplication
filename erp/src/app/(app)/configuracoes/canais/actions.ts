@@ -384,10 +384,17 @@ async function _testRaConnection(
 // ---------------------------------------------------------------------------
 // Wrapped exports with logging
 // ---------------------------------------------------------------------------
-export const listChannels = withLogging('canais.listChannels', _listChannels);
-export const createChannel = withLogging('canais.createChannel', _createChannel);
-export const updateChannel = withLogging('canais.updateChannel', _updateChannel);
-export const toggleChannel = withLogging('canais.toggleChannel', _toggleChannel);
-export const testChannelConnection = withLogging('canais.testChannelConnection', _testChannelConnection);
-export const getWhatsAppStatus = withLogging('canais.getWhatsAppStatus', _getWhatsAppStatus);
-export const testRaConnection = withLogging('canais.testRaConnection', _testRaConnection);
+const _wrapped_listChannels = withLogging('canais.listChannels', _listChannels);
+export async function listChannels(...args: Parameters<typeof _listChannels>) { return _wrapped_listChannels(...args); }
+const _wrapped_createChannel = withLogging('canais.createChannel', _createChannel);
+export async function createChannel(...args: Parameters<typeof _createChannel>) { return _wrapped_createChannel(...args); }
+const _wrapped_updateChannel = withLogging('canais.updateChannel', _updateChannel);
+export async function updateChannel(...args: Parameters<typeof _updateChannel>) { return _wrapped_updateChannel(...args); }
+const _wrapped_toggleChannel = withLogging('canais.toggleChannel', _toggleChannel);
+export async function toggleChannel(...args: Parameters<typeof _toggleChannel>) { return _wrapped_toggleChannel(...args); }
+const _wrapped_testChannelConnection = withLogging('canais.testChannelConnection', _testChannelConnection);
+export async function testChannelConnection(...args: Parameters<typeof _testChannelConnection>) { return _wrapped_testChannelConnection(...args); }
+const _wrapped_getWhatsAppStatus = withLogging('canais.getWhatsAppStatus', _getWhatsAppStatus);
+export async function getWhatsAppStatus(...args: Parameters<typeof _getWhatsAppStatus>) { return _wrapped_getWhatsAppStatus(...args); }
+const _wrapped_testRaConnection = withLogging('canais.testRaConnection', _testRaConnection);
+export async function testRaConnection(...args: Parameters<typeof _testRaConnection>) { return _wrapped_testRaConnection(...args); }

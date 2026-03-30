@@ -245,5 +245,7 @@ async function _getClientTimeline(
 // ---------------------------------------------------------------------------
 // Wrapped exports with logging
 // ---------------------------------------------------------------------------
-export const getClientById = withLogging('clientes.detail.getClientById', _getClientById);
-export const getClientTimeline = withLogging('clientes.detail.getClientTimeline', _getClientTimeline);
+const _wrapped_getClientById = withLogging('clientes.detail.getClientById', _getClientById);
+export async function getClientById(...args: Parameters<typeof _getClientById>) { return _wrapped_getClientById(...args); }
+const _wrapped_getClientTimeline = withLogging('clientes.detail.getClientTimeline', _getClientTimeline);
+export async function getClientTimeline(...args: Parameters<typeof _getClientTimeline>) { return _wrapped_getClientTimeline(...args); }

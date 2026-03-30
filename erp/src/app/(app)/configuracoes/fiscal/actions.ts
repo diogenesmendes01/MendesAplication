@@ -257,7 +257,11 @@ export { fiscalConfigCache };
 // ---------------------------------------------------------------------------
 // Wrapped exports with logging
 // ---------------------------------------------------------------------------
-export const getFiscalConfig = withLogging('fiscal.getFiscalConfig', _getFiscalConfig);
-export const saveCertificado = withLogging('fiscal.saveCertificado', _saveCertificado);
-export const saveFiscalConfig = withLogging('fiscal.saveFiscalConfig', _saveFiscalConfig);
-export const getCachedFiscalConfig = withLogging('fiscal.getCachedFiscalConfig', _getCachedFiscalConfig);
+const _wrapped_getFiscalConfig = withLogging('fiscal.getFiscalConfig', _getFiscalConfig);
+export async function getFiscalConfig(...args: Parameters<typeof _getFiscalConfig>) { return _wrapped_getFiscalConfig(...args); }
+const _wrapped_saveCertificado = withLogging('fiscal.saveCertificado', _saveCertificado);
+export async function saveCertificado(...args: Parameters<typeof _saveCertificado>) { return _wrapped_saveCertificado(...args); }
+const _wrapped_saveFiscalConfig = withLogging('fiscal.saveFiscalConfig', _saveFiscalConfig);
+export async function saveFiscalConfig(...args: Parameters<typeof _saveFiscalConfig>) { return _wrapped_saveFiscalConfig(...args); }
+const _wrapped_getCachedFiscalConfig = withLogging('fiscal.getCachedFiscalConfig', _getCachedFiscalConfig);
+export async function getCachedFiscalConfig(...args: Parameters<typeof _getCachedFiscalConfig>) { return _wrapped_getCachedFiscalConfig(...args); }

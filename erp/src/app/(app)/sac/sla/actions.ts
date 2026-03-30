@@ -180,8 +180,13 @@ async function _getSlaDashboard(companyId: string): Promise<SlaDashboardResult> 
 // ---------------------------------------------------------------------------
 // Wrapped exports with logging
 // ---------------------------------------------------------------------------
-export const listSlaPolicies = withLogging('sac.sla.listSlaPolicies', _listSlaPolicies);
-export const createSlaPolicy = withLogging('sac.sla.createSlaPolicy', _createSlaPolicy);
-export const updateSlaPolicy = withLogging('sac.sla.updateSlaPolicy', _updateSlaPolicy);
-export const deleteSlaPolicy = withLogging('sac.sla.deleteSlaPolicy', _deleteSlaPolicy);
-export const getSlaDashboard = withLogging('sac.sla.getSlaDashboard', _getSlaDashboard);
+const _wrapped_listSlaPolicies = withLogging('sac.sla.listSlaPolicies', _listSlaPolicies);
+export async function listSlaPolicies(...args: Parameters<typeof _listSlaPolicies>) { return _wrapped_listSlaPolicies(...args); }
+const _wrapped_createSlaPolicy = withLogging('sac.sla.createSlaPolicy', _createSlaPolicy);
+export async function createSlaPolicy(...args: Parameters<typeof _createSlaPolicy>) { return _wrapped_createSlaPolicy(...args); }
+const _wrapped_updateSlaPolicy = withLogging('sac.sla.updateSlaPolicy', _updateSlaPolicy);
+export async function updateSlaPolicy(...args: Parameters<typeof _updateSlaPolicy>) { return _wrapped_updateSlaPolicy(...args); }
+const _wrapped_deleteSlaPolicy = withLogging('sac.sla.deleteSlaPolicy', _deleteSlaPolicy);
+export async function deleteSlaPolicy(...args: Parameters<typeof _deleteSlaPolicy>) { return _wrapped_deleteSlaPolicy(...args); }
+const _wrapped_getSlaDashboard = withLogging('sac.sla.getSlaDashboard', _getSlaDashboard);
+export async function getSlaDashboard(...args: Parameters<typeof _getSlaDashboard>) { return _wrapped_getSlaDashboard(...args); }

@@ -399,9 +399,15 @@ async function _listCategoriesForSelect(companyId: string): Promise<CategoryOpti
 // ---------------------------------------------------------------------------
 // Wrapped exports with logging
 // ---------------------------------------------------------------------------
-export const getPayableAlerts = withLogging('pagar.getPayableAlerts', _getPayableAlerts);
-export const listPayables = withLogging('pagar.listPayables', _listPayables);
-export const createPayable = withLogging('pagar.createPayable', _createPayable);
-export const updatePayable = withLogging('pagar.updatePayable', _updatePayable);
-export const markPayableAsPaid = withLogging('pagar.markPayableAsPaid', _markPayableAsPaid);
-export const listCategoriesForSelect = withLogging('pagar.listCategoriesForSelect', _listCategoriesForSelect);
+const _wrapped_getPayableAlerts = withLogging('pagar.getPayableAlerts', _getPayableAlerts);
+export async function getPayableAlerts(...args: Parameters<typeof _getPayableAlerts>) { return _wrapped_getPayableAlerts(...args); }
+const _wrapped_listPayables = withLogging('pagar.listPayables', _listPayables);
+export async function listPayables(...args: Parameters<typeof _listPayables>) { return _wrapped_listPayables(...args); }
+const _wrapped_createPayable = withLogging('pagar.createPayable', _createPayable);
+export async function createPayable(...args: Parameters<typeof _createPayable>) { return _wrapped_createPayable(...args); }
+const _wrapped_updatePayable = withLogging('pagar.updatePayable', _updatePayable);
+export async function updatePayable(...args: Parameters<typeof _updatePayable>) { return _wrapped_updatePayable(...args); }
+const _wrapped_markPayableAsPaid = withLogging('pagar.markPayableAsPaid', _markPayableAsPaid);
+export async function markPayableAsPaid(...args: Parameters<typeof _markPayableAsPaid>) { return _wrapped_markPayableAsPaid(...args); }
+const _wrapped_listCategoriesForSelect = withLogging('pagar.listCategoriesForSelect', _listCategoriesForSelect);
+export async function listCategoriesForSelect(...args: Parameters<typeof _listCategoriesForSelect>) { return _wrapped_listCategoriesForSelect(...args); }

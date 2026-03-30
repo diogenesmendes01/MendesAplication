@@ -187,5 +187,7 @@ async function _listClientsForPipeline(
 // ---------------------------------------------------------------------------
 // Wrapped exports with logging
 // ---------------------------------------------------------------------------
-export const listPipelineData = withLogging('pipeline.listPipelineData', _listPipelineData);
-export const listClientsForPipeline = withLogging('pipeline.listClientsForPipeline', _listClientsForPipeline);
+const _wrapped_listPipelineData = withLogging('pipeline.listPipelineData', _listPipelineData);
+export async function listPipelineData(...args: Parameters<typeof _listPipelineData>) { return _wrapped_listPipelineData(...args); }
+const _wrapped_listClientsForPipeline = withLogging('pipeline.listClientsForPipeline', _listClientsForPipeline);
+export async function listClientsForPipeline(...args: Parameters<typeof _listClientsForPipeline>) { return _wrapped_listClientsForPipeline(...args); }

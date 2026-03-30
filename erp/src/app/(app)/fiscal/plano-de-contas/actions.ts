@@ -488,9 +488,15 @@ async function _deleteAccount(id: string, companyId: string) {
 // ---------------------------------------------------------------------------
 // Wrapped exports with logging
 // ---------------------------------------------------------------------------
-export const seedDefaultChartOfAccounts = withLogging('planoContas.seedDefaultChartOfAccounts', _seedDefaultChartOfAccounts);
-export const listChartOfAccounts = withLogging('planoContas.listChartOfAccounts', _listChartOfAccounts);
-export const listParentOptions = withLogging('planoContas.listParentOptions', _listParentOptions);
-export const createAccount = withLogging('planoContas.createAccount', _createAccount);
-export const updateAccount = withLogging('planoContas.updateAccount', _updateAccount);
-export const deleteAccount = withLogging('planoContas.deleteAccount', _deleteAccount);
+const _wrapped_seedDefaultChartOfAccounts = withLogging('planoContas.seedDefaultChartOfAccounts', _seedDefaultChartOfAccounts);
+export async function seedDefaultChartOfAccounts(...args: Parameters<typeof _seedDefaultChartOfAccounts>) { return _wrapped_seedDefaultChartOfAccounts(...args); }
+const _wrapped_listChartOfAccounts = withLogging('planoContas.listChartOfAccounts', _listChartOfAccounts);
+export async function listChartOfAccounts(...args: Parameters<typeof _listChartOfAccounts>) { return _wrapped_listChartOfAccounts(...args); }
+const _wrapped_listParentOptions = withLogging('planoContas.listParentOptions', _listParentOptions);
+export async function listParentOptions(...args: Parameters<typeof _listParentOptions>) { return _wrapped_listParentOptions(...args); }
+const _wrapped_createAccount = withLogging('planoContas.createAccount', _createAccount);
+export async function createAccount(...args: Parameters<typeof _createAccount>) { return _wrapped_createAccount(...args); }
+const _wrapped_updateAccount = withLogging('planoContas.updateAccount', _updateAccount);
+export async function updateAccount(...args: Parameters<typeof _updateAccount>) { return _wrapped_updateAccount(...args); }
+const _wrapped_deleteAccount = withLogging('planoContas.deleteAccount', _deleteAccount);
+export async function deleteAccount(...args: Parameters<typeof _deleteAccount>) { return _wrapped_deleteAccount(...args); }
