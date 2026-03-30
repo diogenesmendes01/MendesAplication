@@ -53,4 +53,4 @@ async function _POST(req: NextRequest) {
   }
 }
 
-export const POST = withApiLogging("auth/logout", _POST);
+export const POST = withApiLogging("auth.logout", _POST);

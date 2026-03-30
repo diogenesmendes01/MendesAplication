@@ -150,4 +150,4 @@ async function _GET(
   }
 }
 
-export const GET = withApiLogging("boletos/pdf", _GET);
+export const GET = withApiLogging("boletos.pdf", _GET);

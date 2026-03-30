@@ -26,4 +26,4 @@ async function _GET() {
   return NextResponse.json(user);
 }
 
-export const GET = withApiLogging("auth/me", _GET);
+export const GET = withApiLogging("auth.me", _GET);

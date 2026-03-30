@@ -24,10 +24,14 @@ vi.mock("@/lib/session", () => ({
   getSession: vi.fn().mockResolvedValue({ userId: "user-1" }),
 }));
 
+vi.mock("@/lib/trace-context", () => ({
+  traceStore: { getStore: vi.fn().mockReturnValue(null) },
+}));
+
 // ─── Imports ──────────────────────────────────────────────────────────────────
 
 import { withLogging } from "../with-logging";
-import { sanitizeParams, truncateForLog, MAX_LOG_ARG_SIZE } from "../logger";
+import { sanitizeParams, truncateForLog, MAX_LOG_ARG_SIZE, MAX_LOG_ARRAY_LENGTH } from "../logger";
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
@@ -83,6 +87,31 @@ describe("withLogging", () => {
 
     const result = await wrapped();
     expect(result).toEqual({ id: 1, name: "test" });
+  });
+
+  it("extracts companyId from any arg position (deep search)", async () => {
+    const fn = vi.fn().mockResolvedValue("ok");
+    const wrapped = withLogging("test.deepSearch", fn);
+
+    // companyId in second arg
+    await wrapped("someString" as never, { companyId: "co-42" } as never);
+
+    expect(mockInfo).toHaveBeenCalledWith(
+      expect.objectContaining({ companyId: "co-42" }),
+      "action.start: test.deepSearch",
+    );
+  });
+
+  it("extracts companyId from nested object (1 level deep)", async () => {
+    const fn = vi.fn().mockResolvedValue("ok");
+    const wrapped = withLogging("test.nestedCompany", fn);
+
+    await wrapped({ data: { companyId: "co-nested" } } as never);
+
+    expect(mockInfo).toHaveBeenCalledWith(
+      expect.objectContaining({ companyId: "co-nested" }),
+      "action.start: test.nestedCompany",
+    );
   });
 });
 
@@ -148,13 +177,19 @@ describe("truncateForLog", () => {
     expect(truncateForLog(arr)).toEqual([1, 2, 3]);
   });
 
-  it("truncates large objects based on JSON size", () => {
+  it("truncates large objects to structured object with _truncated flag", () => {
     const bigObj: Record<string, string> = {};
     for (let i = 0; i < 500; i++) {
       bigObj[`key_${i}`] = "x".repeat(50);
     }
-    const result = truncateForLog(bigObj);
-    expect(typeof result).toBe("string");
-    expect((result as string)).toContain("...[truncated, original");
+    const result = truncateForLog(bigObj) as { _truncated: boolean; originalSize: number; preview: string };
+    expect(typeof result).toBe("object");
+    expect(result._truncated).toBe(true);
+    expect(result.originalSize).toBeGreaterThan(MAX_LOG_ARG_SIZE);
+    expect(result.preview).toContain("...");
+  });
+
+  it("MAX_LOG_ARRAY_LENGTH is exported", () => {
+    expect(MAX_LOG_ARRAY_LENGTH).toBe(100);
   });
 });
