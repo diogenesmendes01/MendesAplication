@@ -124,6 +124,17 @@ function defaultSyncDate(): string {
 }
 
 /**
+ * Returns a date 365 days ago, used as the lookback window for the very
+ * first sync of a new channel so that ALL historical tickets are imported
+ * regardless of when they were created/modified.
+ */
+function firstSyncDate(): string {
+  const d = new Date();
+  d.setDate(d.getDate() - 365);
+  return d.toISOString();
+}
+
+/**
  * Resolve the last sync date for a channel.
  * Priority: DB lastSyncAt > config.lastSyncDate > 7 days ago.
  */
@@ -791,8 +802,24 @@ export async function processReclameAquiInbound(_job: Job): Promise<void> {
       continue;
     }
 
-    // Resolve last sync date: DB field > config > 7 days ago
-    const lastSyncDate = resolveLastSyncDate(ch.lastSyncAt, config.lastSyncDate);
+    // Detect first sync: no DB lastSyncAt AND no lastSyncDate in config.
+    // On first sync we use a 365-day lookback window so ALL historical
+    // tickets (unanswered, older than 7 days, etc.) are imported.
+    // On subsequent syncs we use the normal incremental window.
+    const isFirstSync = !ch.lastSyncAt && !config.lastSyncDate;
+
+    // Resolve last sync date:
+    // - First sync  → 365 days ago (catch ALL historical tickets)
+    // - Incremental → DB lastSyncAt > config.lastSyncDate > 7 days ago
+    const lastSyncDate = isFirstSync
+      ? firstSyncDate()
+      : resolveLastSyncDate(ch.lastSyncAt, config.lastSyncDate);
+
+    if (isFirstSync) {
+      logger.info(
+        `[reclameaqui-inbound] First sync detected for channel ${ch.id} — importing all tickets from the last 365 days`
+      );
+    }
 
     try {
       // Authenticate
@@ -805,12 +832,25 @@ export async function processReclameAquiInbound(_job: Job): Promise<void> {
       const modifiedCount = await countModifiedTickets(client, lastSyncDate);
 
       if (modifiedCount === 0) {
-        logger.info(
-          `[reclameaqui-inbound] No changes since ${lastSyncDate} for channel ${ch.id}, skipping sync`
-        );
         summary.skippedByCount = true;
 
-        // Still update lastSyncAt to advance the window
+        if (isFirstSync) {
+          // On first sync, if the RA API returned 0 tickets in the last 365 days,
+          // there is genuinely nothing to import. We still advance lastSyncAt so
+          // the next run uses the normal incremental window (avoids re-checking
+          // the full 365-day range on every poll).
+          logger.info(
+            `[reclameaqui-inbound] First sync: no tickets found in the last 365 days for channel ${ch.id}, advancing lastSyncAt`
+          );
+        } else {
+          logger.info(
+            `[reclameaqui-inbound] No changes since ${lastSyncDate} for channel ${ch.id}, skipping sync`
+          );
+        }
+
+        // Advance lastSyncAt to move the incremental window forward.
+        // On first sync: only reached when there are truly 0 historical tickets.
+        // On subsequent syncs: normal behavior — no new changes since last run.
         const now = new Date();
         await prisma.channel.update({
           where: { id: ch.id },
@@ -926,6 +966,7 @@ export async function processReclameAquiInbound(_job: Job): Promise<void> {
 export {
   countModifiedTickets as _countModifiedTickets,
   resolveLastSyncDate as _resolveLastSyncDate,
+  firstSyncDate as _firstSyncDate,
   mapRaStatusToTicketStatus as _mapRaStatusToTicketStatus,
   mapInteractionDirection as _mapInteractionDirection,
 };
