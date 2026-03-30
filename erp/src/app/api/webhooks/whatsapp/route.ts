@@ -45,4 +45,4 @@ async function _POST(request: NextRequest) {
   return NextResponse.json({ ok: true });
 }
 
-export const POST = withApiLogging("webhooks/whatsapp", _POST);
+export const POST = withApiLogging("webhooks.whatsapp", _POST);

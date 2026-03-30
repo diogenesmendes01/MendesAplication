@@ -67,4 +67,4 @@ async function _GET(
   }
 }
 
-export const GET = withApiLogging("files/m2m", _GET);
+export const GET = withApiLogging("files.m2m", _GET);

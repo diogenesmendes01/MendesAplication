@@ -73,4 +73,4 @@ async function _POST() {
   return response;
 }
 
-export const POST = withApiLogging("auth/refresh", _POST);
+export const POST = withApiLogging("auth.refresh", _POST);

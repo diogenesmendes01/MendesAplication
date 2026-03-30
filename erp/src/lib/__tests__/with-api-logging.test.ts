@@ -22,6 +22,20 @@ vi.mock("@/lib/logger", async (importOriginal) => {
   };
 });
 
+vi.mock("@/lib/auth", () => ({
+  verifyAccessToken: vi.fn().mockReturnValue(null),
+}));
+
+vi.mock("@/lib/trace-context", () => {
+  const store = { traceId: "" };
+  return {
+    traceStore: {
+      run: vi.fn((_ctx: unknown, fn: () => unknown) => fn()),
+      getStore: vi.fn().mockReturnValue(store),
+    },
+  };
+});
+
 // ─── Imports ──────────────────────────────────────────────────────────────────
 
 import { withApiLogging } from "../with-api-logging";
@@ -30,6 +44,10 @@ import { withApiLogging } from "../with-api-logging";
 
 function makeReq(url = "http://localhost/api/test"): NextRequest {
   return new NextRequest(url);
+}
+
+function makeCtx(): { params: Promise<Record<string, string>> } {
+  return { params: Promise.resolve({}) };
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -43,7 +61,7 @@ describe("withApiLogging", () => {
     const handler = vi.fn().mockResolvedValue(NextResponse.json({ ok: true }));
     const wrapped = withApiLogging("test.route", handler);
 
-    const res = await wrapped(makeReq(), {});
+    const res = await wrapped(makeReq(), makeCtx());
 
     expect(res.status).toBe(200);
     expect(mockInfo).toHaveBeenCalledWith(
@@ -60,7 +78,7 @@ describe("withApiLogging", () => {
     const handler = vi.fn().mockRejectedValue(new Error("kaboom"));
     const wrapped = withApiLogging("test.error", handler);
 
-    const res = await wrapped(makeReq(), {});
+    const res = await wrapped(makeReq(), makeCtx());
 
     expect(res.status).toBe(500);
     expect(mockError).toHaveBeenCalledWith(
@@ -77,7 +95,7 @@ describe("withApiLogging", () => {
     const handler = vi.fn().mockRejectedValue(redirectError);
     const wrapped = withApiLogging("test.redirect", handler);
 
-    await expect(wrapped(makeReq(), {})).rejects.toBe(redirectError);
+    await expect(wrapped(makeReq(), makeCtx())).rejects.toBe(redirectError);
     // Error should NOT have been logged
     expect(mockError).not.toHaveBeenCalled();
   });
@@ -89,7 +107,7 @@ describe("withApiLogging", () => {
 
     const mockRandom = vi.spyOn(Math, "random").mockReturnValue(0.5);
 
-    await wrapped(makeReq(), {});
+    await wrapped(makeReq(), makeCtx());
 
     expect(mockInfo).not.toHaveBeenCalled();
 
@@ -102,7 +120,7 @@ describe("withApiLogging", () => {
 
     const mockRandom = vi.spyOn(Math, "random").mockReturnValue(0.5);
 
-    await wrapped(makeReq(), {});
+    await wrapped(makeReq(), makeCtx());
 
     // Even though sampling=0, errors ALWAYS log
     expect(mockError).toHaveBeenCalled();
@@ -116,7 +134,7 @@ describe("withApiLogging", () => {
 
     const mockRandom = vi.spyOn(Math, "random").mockReturnValue(0.3);
 
-    await wrapped(makeReq(), {});
+    await wrapped(makeReq(), makeCtx());
 
     // 0.3 < 0.5 → should log
     expect(mockInfo).toHaveBeenCalled();
