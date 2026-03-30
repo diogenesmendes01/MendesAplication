@@ -258,6 +258,78 @@ describe("reclameaqui-inbound count-first polling", () => {
     expect(daysDiff).toBeLessThan(366);
   });
 
+  it("first sync: emits first-sync detection log", async () => {
+    // Verifies the first-sync diagnostic log is emitted so ops can track backfills
+    mockChannelFindMany.mockResolvedValue([
+      makeChannel({
+        lastSyncAt: null,
+        config: {
+          clientId: "test-client",
+          clientSecret: "test-secret",
+          baseUrl: "https://app.hugme.com.br/api",
+        },
+      }),
+    ]);
+    mockCountTickets.mockResolvedValue({ data: 0 });
+
+    await processReclameAquiInbound(fakeJob);
+
+    expect(logger.info).toHaveBeenCalledWith(
+      expect.stringContaining("First sync detected")
+    );
+  });
+
+  it("incremental sync: uses lastSyncAt from DB, not 365-day window", async () => {
+    // Subsequent syncs must use the DB timestamp, never the 365-day fallback
+    const dbDate = new Date("2026-03-25T00:00:00Z");
+    mockChannelFindMany.mockResolvedValue([
+      makeChannel({ lastSyncAt: dbDate }),
+    ]);
+    mockCountTickets.mockResolvedValue({ data: 0 });
+
+    await processReclameAquiInbound(fakeJob);
+
+    // Should use the exact DB date, not a 365-day window
+    expect(mockCountTickets).toHaveBeenCalledWith({
+      last_modification_date: {
+        comparator: "gte",
+        value: dbDate.toISOString(),
+      },
+    });
+    // Sanity: the date is well within 30 days (definitely not 365)
+    const callArg = mockCountTickets.mock.calls[0][0];
+    const syncDate = new Date(callArg.last_modification_date.value);
+    const daysDiff = (Date.now() - syncDate.getTime()) / (1000 * 60 * 60 * 24);
+    expect(daysDiff).toBeLessThan(30);
+  });
+
+  it("config override: uses lastSyncDate from config when no DB lastSyncAt", async () => {
+    // When DB is null but config has a lastSyncDate, treat as incremental (not first sync)
+    const configDate = "2026-03-20T00:00:00.000Z";
+    mockChannelFindMany.mockResolvedValue([
+      makeChannel({
+        lastSyncAt: null,
+        config: {
+          clientId: "test-client",
+          clientSecret: "test-secret",
+          baseUrl: "https://app.hugme.com.br/api",
+          lastSyncDate: configDate,
+        },
+      }),
+    ]);
+    mockCountTickets.mockResolvedValue({ data: 0 });
+
+    await processReclameAquiInbound(fakeJob);
+
+    // Should use the config date (not 365 days ago — this is NOT a first sync)
+    expect(mockCountTickets).toHaveBeenCalledWith({
+      last_modification_date: {
+        comparator: "gte",
+        value: configDate,
+      },
+    });
+  });
+
   it("skips channel when API is unavailable", async () => {
     mockChannelFindMany.mockResolvedValue([makeChannel()]);
     mockCheckTicketAvailability.mockResolvedValue(false);
