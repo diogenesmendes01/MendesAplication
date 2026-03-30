@@ -5,6 +5,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Job } from "bullmq";
+import type { AiAgentJobData } from "../ai-agent";
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -93,7 +94,7 @@ import { processAiAgent } from "../ai-agent";
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function makeJob(data: Record<string, unknown>): Job<Record<string, unknown>> {
+function makeJob(data: Record<string, unknown>): Job<AiAgentJobData> {
   return {
     data: {
       ticketId: "ticket-1",
@@ -102,7 +103,7 @@ function makeJob(data: Record<string, unknown>): Job<Record<string, unknown>> {
       channel: "WHATSAPP",
       ...data,
     },
-  } as unknown as Job<Record<string, unknown>>;
+  } as unknown as Job<AiAgentJobData>;
 }
 
 beforeEach(() => {

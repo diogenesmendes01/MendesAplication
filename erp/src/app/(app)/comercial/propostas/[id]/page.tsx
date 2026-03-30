@@ -323,7 +323,7 @@ export default function ProposalDetailPage() {
       } else {
         setIssuedInvoiceMap({});
       }
-    } catch (_err) {
+    } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao carregar proposta");
     } finally {
       setLoading(false);
@@ -425,7 +425,7 @@ export default function ProposalDetailPage() {
         toast.success(`${result.boletos.length} boleto(s) gerado(s) com sucesso`);
       }
       await loadData();
-    } catch (_err) {
+    } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao gerar boletos");
     } finally {
       setGenerating(false);
@@ -440,7 +440,7 @@ export default function ProposalDetailPage() {
       toast.success("Proposta enviada por e-mail com sucesso");
       setSendProposalDialogOpen(false);
       await loadData();
-    } catch (_err) {
+    } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao enviar proposta por e-mail");
     } finally {
       setSendingProposal(false);
@@ -454,7 +454,7 @@ export default function ProposalDetailPage() {
       await updateProposalStatus(proposalId, "ACCEPTED" as const, selectedCompanyId);
       toast.success("Aceite registrado com sucesso");
       await loadData();
-    } catch (_err) {
+    } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao registrar aceite");
     } finally {
       setAcceptingProposal(false);
@@ -475,7 +475,7 @@ export default function ProposalDetailPage() {
       setSendBoletoDialogOpen(false);
       setSelectedBoletoForEmail(null);
       await loadData();
-    } catch (_err) {
+    } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao enviar boleto por e-mail");
     } finally {
       setSendingBoleto(false);
@@ -496,7 +496,7 @@ export default function ProposalDetailPage() {
       setEmitNfseDialogOpen(false);
       setSelectedBoletoForNfse(null);
       await loadData();
-    } catch (_err) {
+    } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao emitir NFS-e");
     } finally {
       setEmittingNfse(false);

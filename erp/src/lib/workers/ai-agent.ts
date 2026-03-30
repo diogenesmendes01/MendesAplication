@@ -22,7 +22,7 @@ import { markTicketPendingRecovery } from "@/lib/ai/recovery";
 // Types
 // ---------------------------------------------------------------------------
 
-interface AiAgentJobData {
+export interface AiAgentJobData {
   ticketId: string;
   companyId: string;
   messageContent: string;
