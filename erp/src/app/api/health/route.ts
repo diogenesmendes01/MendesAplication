@@ -11,4 +11,4 @@ async function _GET() {
   );
 }
 
-export const GET = withApiLogging("health", _GET);
+export const GET = withApiLogging("health", _GET, { sampling: 0.1 });

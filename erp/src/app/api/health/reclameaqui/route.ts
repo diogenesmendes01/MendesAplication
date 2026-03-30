@@ -50,4 +50,4 @@ async function _GET(): Promise<NextResponse<RaHealthResponse>> {
   return NextResponse.json({ healthy, channels: result });
 }
 
-export const GET = withApiLogging("health/reclameaqui", _GET);
+export const GET = withApiLogging("health/reclameaqui", _GET, { sampling: 0.1 });
