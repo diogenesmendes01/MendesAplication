@@ -92,12 +92,14 @@ describe("withLibLogging", () => {
     const wrapped = withLibLogging("worker.noTrace", fn);
     await wrapped();
 
-    // createChildLogger called without traceId — logger generates UUID internally
+    // When store is null, withLibLogging generates a random UUID as fallback
     expect(createChildLogger).toHaveBeenCalledWith(
       expect.objectContaining({ action: "worker.noTrace" }),
     );
     const callArg = (createChildLogger as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    expect(callArg.traceId).toBeUndefined();
+    expect(callArg.traceId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    );
   });
 
   it("preserves return value from wrapped function", async () => {
