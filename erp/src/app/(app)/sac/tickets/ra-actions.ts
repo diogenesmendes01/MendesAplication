@@ -13,6 +13,7 @@ import { Prisma } from "@prisma/client";
 import { logger } from "@/lib/logger";
 import { promises as fs } from "fs";
 import crypto from "crypto";
+import { decryptConfig } from "@/lib/encryption";
 
 import type { RaActionResult, RaReputationData, RaReputationResult, RaAvailableAction, RaTicketContext } from "./ra-actions.types";
 
@@ -87,7 +88,7 @@ async function getRaClientForCompany(companyId: string): Promise<{ client: Recla
     throw new Error("Canal Reclame Aqui não configurado para esta empresa");
   }
 
-  const config = channel.config as unknown as RaClientConfig & { companyId?: number };
+  const config = decryptConfig(channel.config as Record<string, unknown>) as unknown as RaClientConfig & { companyId?: number };
 
   if (!config.clientId || !config.clientSecret || !config.baseUrl) {
     throw new Error("Configuração do canal Reclame Aqui incompleta");
