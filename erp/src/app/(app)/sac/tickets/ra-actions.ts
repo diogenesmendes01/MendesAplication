@@ -648,7 +648,7 @@ export async function getRaReputation(
         finalGrade: r.finalGrade,
         avgGrade: r.avgGrade,
         complaintsCount: r.complaintsCount,
-        reputationCode: r.reputation?.code ?? "SEM_INDICE",
+        reputationCode: String(r.reputation?.code ?? "SEM_INDICE"),
         reputationName: r.reputation?.name ?? "Sem Índice",
       })),
     };

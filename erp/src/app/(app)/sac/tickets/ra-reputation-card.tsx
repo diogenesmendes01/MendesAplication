@@ -65,10 +65,11 @@ const SELO_MAP: Record<string, SeloConfig> = {
   },
 };
 
-function getSeloConfig(reputationCode: string): SeloConfig {
-  // RA API returns codes like "RA1000", "OTIMO", "BOM", "REGULAR", "RUIM",
-  // "NAO_RECOMENDADA", "SEM_INDICE" — normalize to uppercase
-  const normalized = reputationCode.toUpperCase().replace(/\s+/g, "_");
+function getSeloConfig(reputationCode: string | null | undefined): SeloConfig {
+  // RA API may return null/undefined/number instead of string — normalize defensively
+  const normalized = String(reputationCode || "SEM_INDICE")
+    .toUpperCase()
+    .replace(/\s+/g, "_");
   return SELO_MAP[normalized] ?? SELO_MAP.SEM_INDICE;
 }
 
