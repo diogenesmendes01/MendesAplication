@@ -20,30 +20,9 @@ vi.mock("@/lib/ai/provider", () => ({
   chatCompletion: vi.fn(),
 }));
 
-vi.mock("@/lib/logger", () => {
-  const _log = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), child: vi.fn() };
-  return {
-    logger: _log,
-    createChildLogger: vi.fn(() => _log),
-    sanitizeParams: vi.fn((obj: Record<string, unknown>) => obj),
-    truncateForLog: vi.fn((v: unknown) => v),
-    classifyError: vi.fn(() => "INTERNAL_ERROR"),
-    classifyErrorByStatus: vi.fn(() => "INTERNAL_ERROR"),
-    ErrorCode: {
-      AUTH_FAILED: "AUTH_FAILED",
-      VALIDATION_ERROR: "VALIDATION_ERROR",
-      NOT_FOUND: "NOT_FOUND",
-      PERMISSION_DENIED: "PERMISSION_DENIED",
-      EXTERNAL_SERVICE_ERROR: "EXTERNAL_SERVICE_ERROR",
-      DATABASE_ERROR: "DATABASE_ERROR",
-      ENCRYPTION_ERROR: "ENCRYPTION_ERROR",
-      RATE_LIMIT_EXCEEDED: "RATE_LIMIT_EXCEEDED",
-      INTERNAL_ERROR: "INTERNAL_ERROR",
-      AUTH_TOKEN_EXPIRED: "AUTH_TOKEN_EXPIRED",
-    },
-    MAX_LOG_ARG_SIZE: 10240,
-  };
-});
+vi.mock("@/lib/logger", () => ({
+  logger: { warn: vi.fn(), error: vi.fn(), info: vi.fn() },
+}));
 
 vi.mock("@/lib/encryption", () => ({
   decrypt: vi.fn((x: string) => `decrypted_${x}`),
@@ -162,7 +141,7 @@ describe("chatCompletionWithFallback", () => {
       .mockResolvedValueOnce({
         id: "1", provider: "openai", model: "gpt-4o-mini",
         status: "down", latencyMs: null, errorMessage: "503", checkedAt: new Date(),
-      } as never)
+      } as unknown as { status: string })
       .mockResolvedValueOnce(null); // anthropic - no previous check
 
     vi.mocked(chatCompletion).mockResolvedValueOnce({
@@ -180,20 +159,21 @@ describe("chatCompletionWithFallback", () => {
   });
 
   it("still tries last provider even if known down", async () => {
-    // All providers "down" in health check
+    // First two providers "down" in health check — only 2 checks happen (last skips health)
     vi.mocked(prisma.aiProviderHealth.findFirst)
-      .mockResolvedValueOnce({ id: "x", provider: "x", model: "x", status: "down", latencyMs: null, errorMessage: null, checkedAt: new Date() } as never)
-      .mockResolvedValueOnce({ id: "x", provider: "x", model: "x", status: "down", latencyMs: null, errorMessage: null, checkedAt: new Date() } as never)
-      .mockResolvedValueOnce({ id: "x", provider: "x", model: "x", status: "down", latencyMs: null, errorMessage: null, checkedAt: new Date() } as never); // Not actually checked for last
+      .mockResolvedValueOnce({ status: "down" } as unknown as { status: string })
+      .mockResolvedValueOnce({ status: "down" } as unknown as { status: string });
 
-    vi.mocked(chatCompletion)
-      .mockRejectedValueOnce(new Error("error"))
-      .mockResolvedValueOnce({ content: "Last resort!", usage: { inputTokens: 5, outputTokens: 2 } });
+    // chain[0] skipped (down), chain[1] skipped (down), chain[2] is last — tried regardless
+    vi.mocked(chatCompletion).mockResolvedValueOnce({
+      content: "Last resort!",
+      usage: { inputTokens: 5, outputTokens: 2 },
+    });
 
-    // chain[0] skipped (down), chain[1] skipped (down), chain[2] is last — must try
     const result = await chatCompletionWithFallback(messages, undefined, chain);
     expect(result.usedProvider).toBe("openai");
     expect(result.usedModel).toBe("gpt-3.5-turbo");
+    expect(chatCompletion).toHaveBeenCalledTimes(1);
   });
 
   it("passes temperature and maxTokens options", async () => {
