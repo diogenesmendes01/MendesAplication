@@ -6,6 +6,7 @@ import { requireAdmin } from "@/lib/session";
 import { logAuditEvent } from "@/lib/audit";
 import { encryptConfig, decryptConfig } from "@/lib/encryption";
 import { type ChannelType, type Prisma } from "@prisma/client";
+import { withLogging } from "@/lib/with-logging";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -45,7 +46,7 @@ export interface TestConnectionResult {
 // Server Actions
 // ---------------------------------------------------------------------------
 
-export async function listChannels(companyId: string): Promise<ChannelRow[]> {
+async function _listChannels(companyId: string): Promise<ChannelRow[]> {
   await requireCompanyAccess(companyId);
 
   const channels = await prisma.channel.findMany({
@@ -65,7 +66,7 @@ export async function listChannels(companyId: string): Promise<ChannelRow[]> {
   }));
 }
 
-export async function createChannel(input: CreateChannelInput): Promise<ChannelRow> {
+async function _createChannel(input: CreateChannelInput): Promise<ChannelRow> {
   const session = await requireAdmin();
   await requireCompanyAccess(input.companyId);
 
@@ -105,7 +106,7 @@ export async function createChannel(input: CreateChannelInput): Promise<ChannelR
   };
 }
 
-export async function updateChannel(input: UpdateChannelInput): Promise<ChannelRow> {
+async function _updateChannel(input: UpdateChannelInput): Promise<ChannelRow> {
   const session = await requireAdmin();
   await requireCompanyAccess(input.companyId);
 
@@ -154,7 +155,7 @@ export async function updateChannel(input: UpdateChannelInput): Promise<ChannelR
   };
 }
 
-export async function toggleChannel(
+async function _toggleChannel(
   channelId: string,
   companyId: string
 ): Promise<{ isActive: boolean }> {
@@ -187,7 +188,7 @@ export async function toggleChannel(
   return { isActive: channel.isActive };
 }
 
-export async function testChannelConnection(
+async function _testChannelConnection(
   channelId: string,
   companyId: string
 ): Promise<TestConnectionResult> {
@@ -285,7 +286,7 @@ export async function testChannelConnection(
   return { success: false, message: "Tipo de canal não suportado" };
 }
 
-export async function getWhatsAppStatus(
+async function _getWhatsAppStatus(
   companyId: string
 ): Promise<{ isConnected: boolean }> {
   try {
@@ -332,7 +333,7 @@ export interface TestRaConnectionResult {
   error?: string;
 }
 
-export async function testRaConnection(
+async function _testRaConnection(
   input: TestRaConnectionInput
 ): Promise<TestRaConnectionResult> {
   await requireAdmin();
@@ -379,3 +380,14 @@ export async function testRaConnection(
     return { success: false, error: message };
   }
 }
+
+// ---------------------------------------------------------------------------
+// Wrapped exports with logging
+// ---------------------------------------------------------------------------
+export const listChannels = withLogging('canais.listChannels', _listChannels);
+export const createChannel = withLogging('canais.createChannel', _createChannel);
+export const updateChannel = withLogging('canais.updateChannel', _updateChannel);
+export const toggleChannel = withLogging('canais.toggleChannel', _toggleChannel);
+export const testChannelConnection = withLogging('canais.testChannelConnection', _testChannelConnection);
+export const getWhatsAppStatus = withLogging('canais.getWhatsAppStatus', _getWhatsAppStatus);
+export const testRaConnection = withLogging('canais.testRaConnection', _testRaConnection);

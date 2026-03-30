@@ -6,6 +6,7 @@ import { requireSession } from "@/lib/session";
 import { logAuditEvent } from "@/lib/audit";
 import { type TaxType, type TaxStatus, Prisma } from "@prisma/client";
 import Decimal from "decimal.js";
+import { withLogging } from "@/lib/with-logging";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -98,7 +99,7 @@ function calculateTaxesFromInvoices(totalInvoiceValue: number): TaxCalculation[]
  * Get the full tax dashboard data.
  * Admin sees all companies consolidated; Manager sees only their company.
  */
-export async function getTaxDashboardData(): Promise<TaxDashboardData> {
+async function _getTaxDashboardData(): Promise<TaxDashboardData> {
   const session = await requireSession();
   const currentPeriod = getCurrentPeriod();
 
@@ -247,7 +248,7 @@ export async function getTaxDashboardData(): Promise<TaxDashboardData> {
 /**
  * Create a tax entry manually (e.g., to register a tax obligation).
  */
-export async function createTaxEntry(input: {
+async function _createTaxEntry(input: {
   companyId: string;
   type: TaxType;
   period: string;
@@ -286,7 +287,7 @@ export async function createTaxEntry(input: {
 /**
  * Mark a tax entry as paid.
  */
-export async function markTaxEntryAsPaid(entryId: string, companyId: string) {
+async function _markTaxEntryAsPaid(entryId: string, companyId: string) {
   const session = await requireCompanyAccess(companyId);
 
   const entry = await prisma.taxEntry.findFirst({
@@ -318,3 +319,10 @@ export async function markTaxEntryAsPaid(entryId: string, companyId: string) {
 
   return { success: true };
 }
+
+// ---------------------------------------------------------------------------
+// Wrapped exports with logging
+// ---------------------------------------------------------------------------
+export const getTaxDashboardData = withLogging('impostos.getTaxDashboardData', _getTaxDashboardData);
+export const createTaxEntry = withLogging('impostos.createTaxEntry', _createTaxEntry);
+export const markTaxEntryAsPaid = withLogging('impostos.markTaxEntryAsPaid', _markTaxEntryAsPaid);

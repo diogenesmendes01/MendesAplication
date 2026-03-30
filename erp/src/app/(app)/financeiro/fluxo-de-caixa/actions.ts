@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireCompanyAccess } from "@/lib/rbac";
 import { requireSession } from "@/lib/session";
+import { withLogging } from "@/lib/with-logging";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -115,7 +116,7 @@ function generateAllPeriodKeys(
 // Server Action
 // ---------------------------------------------------------------------------
 
-export async function getCashFlowData(
+async function _getCashFlowData(
   params: CashFlowParams
 ): Promise<CashFlowSummary> {
   // Auth check
@@ -273,7 +274,7 @@ export async function getCashFlowData(
   };
 }
 
-export async function getCompaniesForCashFlow() {
+async function _getCompaniesForCashFlow() {
   const session = await requireSession();
 
   if (session.role === "ADMIN") {
@@ -299,3 +300,9 @@ export async function getCompaniesForCashFlow() {
     .filter(Boolean)
     .sort((a, b) => a.nomeFantasia.localeCompare(b.nomeFantasia));
 }
+
+// ---------------------------------------------------------------------------
+// Wrapped exports with logging
+// ---------------------------------------------------------------------------
+export const getCashFlowData = withLogging('fluxoCaixa.getCashFlowData', _getCashFlowData);
+export const getCompaniesForCashFlow = withLogging('fluxoCaixa.getCompaniesForCashFlow', _getCompaniesForCashFlow);

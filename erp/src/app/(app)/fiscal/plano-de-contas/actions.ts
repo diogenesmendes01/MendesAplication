@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requireCompanyAccess } from "@/lib/rbac";
 import { logAuditEvent } from "@/lib/audit";
 import { Prisma, type AccountType } from "@prisma/client";
+import { withLogging } from "@/lib/with-logging";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -152,7 +153,7 @@ const DEFAULT_CHART: DefaultAccount[] = [
  * Seed the default chart of accounts for a company.
  * Skips accounts that already exist (by code+companyId).
  */
-export async function seedDefaultChartOfAccounts(companyId: string) {
+async function _seedDefaultChartOfAccounts(companyId: string) {
   const session = await requireCompanyAccess(companyId);
 
   // Check if company already has accounts
@@ -206,7 +207,7 @@ export async function seedDefaultChartOfAccounts(companyId: string) {
 /**
  * List all chart of accounts for a company as a flat list, ordered by code.
  */
-export async function listChartOfAccounts(
+async function _listChartOfAccounts(
   companyId: string
 ): Promise<AccountNode[]> {
   await requireCompanyAccess(companyId);
@@ -250,7 +251,7 @@ export async function listChartOfAccounts(
 /**
  * List accounts as flat options for parent selector (exclude self and descendants).
  */
-export async function listParentOptions(
+async function _listParentOptions(
   companyId: string,
   excludeId?: string
 ): Promise<ParentOption[]> {
@@ -299,7 +300,7 @@ export async function listParentOptions(
 /**
  * Create a new chart of accounts entry.
  */
-export async function createAccount(input: CreateAccountInput) {
+async function _createAccount(input: CreateAccountInput) {
   const session = await requireCompanyAccess(input.companyId);
 
   if (!input.code?.trim()) {
@@ -360,7 +361,7 @@ export async function createAccount(input: CreateAccountInput) {
 /**
  * Update an existing chart of accounts entry.
  */
-export async function updateAccount(input: UpdateAccountInput) {
+async function _updateAccount(input: UpdateAccountInput) {
   const session = await requireCompanyAccess(input.companyId);
 
   if (!input.code?.trim()) {
@@ -443,7 +444,7 @@ export async function updateAccount(input: UpdateAccountInput) {
  * Delete a chart of accounts entry.
  * Children are re-parented to the deleted account's parent (or become roots).
  */
-export async function deleteAccount(id: string, companyId: string) {
+async function _deleteAccount(id: string, companyId: string) {
   const session = await requireCompanyAccess(companyId);
 
   const account = await prisma.chartOfAccounts.findFirst({
@@ -483,3 +484,13 @@ export async function deleteAccount(id: string, companyId: string) {
 
   return { success: true };
 }
+
+// ---------------------------------------------------------------------------
+// Wrapped exports with logging
+// ---------------------------------------------------------------------------
+export const seedDefaultChartOfAccounts = withLogging('planoContas.seedDefaultChartOfAccounts', _seedDefaultChartOfAccounts);
+export const listChartOfAccounts = withLogging('planoContas.listChartOfAccounts', _listChartOfAccounts);
+export const listParentOptions = withLogging('planoContas.listParentOptions', _listParentOptions);
+export const createAccount = withLogging('planoContas.createAccount', _createAccount);
+export const updateAccount = withLogging('planoContas.updateAccount', _updateAccount);
+export const deleteAccount = withLogging('planoContas.deleteAccount', _deleteAccount);

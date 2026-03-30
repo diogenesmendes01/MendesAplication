@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireCompanyAccess } from "@/lib/rbac";
 import { requireSession } from "@/lib/session";
+import { withLogging } from "@/lib/with-logging";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -180,7 +181,7 @@ async function computeDREForCompany(
 // Server Actions
 // ---------------------------------------------------------------------------
 
-export async function getDREData(params: DREParams): Promise<DREData> {
+async function _getDREData(params: DREParams): Promise<DREData> {
   // Auth check
   if (params.companyId) {
     await requireCompanyAccess(params.companyId);
@@ -280,7 +281,7 @@ export async function getDREData(params: DREParams): Promise<DREData> {
   };
 }
 
-export async function getDREConsolidated(
+async function _getDREConsolidated(
   params: Omit<DREParams, "companyId">
 ): Promise<DREConsolidatedReport> {
   const session = await requireSession();
@@ -398,7 +399,7 @@ export async function getDREConsolidated(
   };
 }
 
-export async function getCompaniesForDRE() {
+async function _getCompaniesForDRE() {
   const session = await requireSession();
 
   if (session.role === "ADMIN") {
@@ -421,3 +422,10 @@ export async function getCompaniesForDRE() {
     .filter(Boolean)
     .sort((a, b) => a.nomeFantasia.localeCompare(b.nomeFantasia));
 }
+
+// ---------------------------------------------------------------------------
+// Wrapped exports with logging
+// ---------------------------------------------------------------------------
+export const getDREData = withLogging('dre.getDREData', _getDREData);
+export const getDREConsolidated = withLogging('dre.getDREConsolidated', _getDREConsolidated);
+export const getCompaniesForDRE = withLogging('dre.getCompaniesForDRE', _getCompaniesForDRE);

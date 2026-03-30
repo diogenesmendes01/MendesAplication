@@ -26,7 +26,7 @@ vi.mock("@/lib/prisma", () => ({
     ticketMessage: {
       create: vi.fn().mockResolvedValue({ id: "msg-1" }),
     },
-    $transaction: vi.fn().mockImplementation((fn: (...args: unknown[]) => unknown) =>
+    $transaction: vi.fn().mockImplementation((fn: (...args: unknown[]) => string) =>
       fn({
         client: {
           findFirst: vi.fn().mockResolvedValue(null),
@@ -85,14 +85,30 @@ vi.mock("@/lib/reclameaqui/client", () => {
   };
 });
 
-vi.mock("@/lib/logger", () => ({
-  logger: {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-  },
-}));
+vi.mock("@/lib/logger", () => {
+  const _log = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), child: vi.fn() };
+  return {
+    logger: _log,
+    createChildLogger: vi.fn(() => _log),
+    sanitizeParams: vi.fn((obj: Record<string, unknown>) => obj),
+    truncateForLog: vi.fn((v: unknown) => v),
+    classifyError: vi.fn(() => "INTERNAL_ERROR"),
+    classifyErrorByStatus: vi.fn(() => "INTERNAL_ERROR"),
+    ErrorCode: {
+      AUTH_FAILED: "AUTH_FAILED",
+      VALIDATION_ERROR: "VALIDATION_ERROR",
+      NOT_FOUND: "NOT_FOUND",
+      PERMISSION_DENIED: "PERMISSION_DENIED",
+      EXTERNAL_SERVICE_ERROR: "EXTERNAL_SERVICE_ERROR",
+      DATABASE_ERROR: "DATABASE_ERROR",
+      ENCRYPTION_ERROR: "ENCRYPTION_ERROR",
+      RATE_LIMIT_EXCEEDED: "RATE_LIMIT_EXCEEDED",
+      INTERNAL_ERROR: "INTERNAL_ERROR",
+      AUTH_TOKEN_EXPIRED: "AUTH_TOKEN_EXPIRED",
+    },
+    MAX_LOG_ARG_SIZE: 10240,
+  };
+});
 
 import { processReclameAquiInbound } from "../reclameaqui-inbound";
 import { logger } from "@/lib/logger";
@@ -327,11 +343,11 @@ describe("reclameaqui-inbound count-first polling", () => {
 // ─── Unit tests for exported helpers ───────────────────────────────────────
 
 describe("resolveLastSyncDate", () => {
-  let resolveLastSyncDate: (dbLastSyncAt: Date | null, configLastSyncDate?: string) => string;
+  let resolveLastSyncDate: (...args: unknown[]) => string;
 
   beforeEach(async () => {
     const mod = await import("../reclameaqui-inbound");
-    resolveLastSyncDate = (mod as unknown as Record<string, (...args: unknown[]) => unknown>)._resolveLastSyncDate;
+    resolveLastSyncDate = (mod as unknown as Record<string, (...args: unknown[]) => string>)._resolveLastSyncDate;
   });
 
   it("returns DB date when available", () => {
@@ -355,7 +371,7 @@ describe("resolveLastSyncDate", () => {
 describe("countModifiedTickets", () => {
   it("returns the count from API response", async () => {
     const mod = await import("../reclameaqui-inbound");
-    const countModifiedTickets = (mod as unknown as Record<string, (...args: unknown[]) => unknown>)._countModifiedTickets;
+    const countModifiedTickets = (mod as unknown as Record<string, (...args: unknown[]) => string>)._countModifiedTickets;
 
     const mockClient = {
       countTickets: vi.fn().mockResolvedValue({ data: 42 }),
@@ -373,7 +389,7 @@ describe("countModifiedTickets", () => {
 
   it("returns 0 when API returns undefined data", async () => {
     const mod = await import("../reclameaqui-inbound");
-    const countModifiedTickets = (mod as unknown as Record<string, (...args: unknown[]) => unknown>)._countModifiedTickets;
+    const countModifiedTickets = (mod as unknown as Record<string, (...args: unknown[]) => string>)._countModifiedTickets;
 
     const mockClient = {
       countTickets: vi.fn().mockResolvedValue({}),

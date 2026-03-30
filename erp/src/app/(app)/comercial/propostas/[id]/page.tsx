@@ -351,9 +351,9 @@ export default function ProposalDetailPage() {
       setProviders(providersList);
       setRoutingPreview(preview);
       setSelectedProviderId("__auto__");
-    } catch (err) {
+    } catch (_err) {
       // eslint-disable-next-line no-console
-      console.error("Failed to load providers:", err);
+      // silently handled — UI shows default state
       setProviders([]);
       setRoutingPreview(null);
     } finally {
@@ -379,9 +379,9 @@ export default function ProposalDetailPage() {
           parseFloat(proposal.totalValue) / Math.max(1, parseInt(installments, 10) || 1),
         );
         setRoutingPreview(preview);
-      } catch (err) {
+      } catch (_err) {
         // eslint-disable-next-line no-console
-        console.error("Failed to update routing preview:", err);
+        // silently handled — preview is best-effort
       }
     }, 300);
 

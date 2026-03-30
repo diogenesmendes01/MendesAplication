@@ -1,6 +1,7 @@
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import { logger } from "@/lib/logger";
 
 // Segurança: JWT_SECRET e REFRESH_SECRET NUNCA devem ter fallback hardcoded.
 // Um fallback fixo significa que qualquer pessoa com acesso ao código-fonte pode
@@ -67,7 +68,8 @@ export function verifyAccessToken(token: string): JwtPayload | null {
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
     return decoded;
-  } catch {
+  } catch (err) {
+    logger.warn({ err, context: "verifyAccessToken" }, "access token verification failed");
     return null;
   }
 }
@@ -79,7 +81,8 @@ export function verifyRefreshToken(token: string): JwtPayload | null {
   try {
     const decoded = jwt.verify(token, REFRESH_SECRET) as JwtPayload;
     return decoded;
-  } catch {
+  } catch (err) {
+    logger.warn({ err, context: "verifyRefreshToken" }, "refresh token verification failed");
     return null;
   }
 }

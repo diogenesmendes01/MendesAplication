@@ -7,6 +7,7 @@ import { isValidCpf, stripCpf, formatCpf } from "@/lib/cpf";
 import { isValidCnpj, stripCnpj, formatCnpj } from "@/lib/cnpj";
 import { Prisma } from "@prisma/client";
 import { getSharedCompanyIds } from "@/lib/shared-clients";
+import { withLogging } from "@/lib/with-logging";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -82,7 +83,7 @@ function validateClientInput(input: ClientInput) {
 // Server Actions
 // ---------------------------------------------------------------------------
 
-export async function listClients(
+async function _listClients(
   params: ListClientsParams
 ): Promise<PaginatedResult<ClientRow>> {
   await requireCompanyAccess(params.companyId);
@@ -147,7 +148,7 @@ export async function listClients(
   };
 }
 
-export async function createClient(input: ClientInput, companyId: string) {
+async function _createClient(input: ClientInput, companyId: string) {
   const session = await requireCompanyAccess(companyId);
   validateClientInput(input);
 
@@ -190,7 +191,7 @@ export async function createClient(input: ClientInput, companyId: string) {
   return { id: client.id };
 }
 
-export async function updateClient(
+async function _updateClient(
   clientId: string,
   input: ClientInput,
   companyId: string
@@ -247,7 +248,7 @@ export async function updateClient(
   return { id: client.id };
 }
 
-export async function getClientForEdit(clientId: string, companyId: string) {
+async function _getClientForEdit(clientId: string, companyId: string) {
   await requireCompanyAccess(companyId);
 
   const sharedIds = await getSharedCompanyIds(companyId);
@@ -270,3 +271,11 @@ export async function getClientForEdit(clientId: string, companyId: string) {
     type: client.type as "PF" | "PJ",
   };
 }
+
+// ---------------------------------------------------------------------------
+// Wrapped exports with logging
+// ---------------------------------------------------------------------------
+export const listClients = withLogging('clientes.listClients', _listClients);
+export const createClient = withLogging('clientes.createClient', _createClient);
+export const updateClient = withLogging('clientes.updateClient', _updateClient);
+export const getClientForEdit = withLogging('clientes.getClientForEdit', _getClientForEdit);

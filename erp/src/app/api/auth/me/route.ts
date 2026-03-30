@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
+import { withApiLogging } from "@/lib/with-api-logging";
 
-export async function GET() {
+async function _GET() {
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -24,3 +25,5 @@ export async function GET() {
 
   return NextResponse.json(user);
 }
+
+export const GET = withApiLogging("auth/me", _GET);

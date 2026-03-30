@@ -5,6 +5,7 @@ import { requireCompanyAccess } from "@/lib/rbac";
 import { logAuditEvent } from "@/lib/audit";
 import { Prisma, type PaymentStatus, type Recurrence } from "@prisma/client";
 import Decimal from "decimal.js";
+import { withLogging } from "@/lib/with-logging";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -87,7 +88,7 @@ export interface PayableAlertSummary {
  * Auto-update PENDING payables whose dueDate has passed to OVERDUE,
  * then return summary counts for the alert banner.
  */
-export async function getPayableAlerts(
+async function _getPayableAlerts(
   companyId: string
 ): Promise<PayableAlertSummary> {
   await requireCompanyAccess(companyId);
@@ -131,7 +132,7 @@ export async function getPayableAlerts(
   return { dueThisWeek, overdue };
 }
 
-export async function listPayables(
+async function _listPayables(
   params: ListPayablesParams
 ): Promise<PaginatedResult<PayableRow>> {
   await requireCompanyAccess(params.companyId);
@@ -211,7 +212,7 @@ export async function listPayables(
   };
 }
 
-export async function createPayable(input: CreatePayableInput) {
+async function _createPayable(input: CreatePayableInput) {
   const session = await requireCompanyAccess(input.companyId);
 
   if (!input.supplier?.trim()) {
@@ -266,7 +267,7 @@ export async function createPayable(input: CreatePayableInput) {
   return { id: payable.id };
 }
 
-export async function updatePayable(input: UpdatePayableInput) {
+async function _updatePayable(input: UpdatePayableInput) {
   const session = await requireCompanyAccess(input.companyId);
 
   if (!input.supplier?.trim()) {
@@ -338,7 +339,7 @@ export async function updatePayable(input: UpdatePayableInput) {
   return { id: updated.id };
 }
 
-export async function markPayableAsPaid(
+async function _markPayableAsPaid(
   id: string,
   companyId: string,
   paidAt?: Date,
@@ -383,7 +384,7 @@ export async function markPayableAsPaid(
   return { success: true };
 }
 
-export async function listCategoriesForSelect(companyId: string): Promise<CategoryOption[]> {
+async function _listCategoriesForSelect(companyId: string): Promise<CategoryOption[]> {
   await requireCompanyAccess(companyId);
 
   const categories = await prisma.financialCategory.findMany({
@@ -394,3 +395,13 @@ export async function listCategoriesForSelect(companyId: string): Promise<Catego
 
   return categories;
 }
+
+// ---------------------------------------------------------------------------
+// Wrapped exports with logging
+// ---------------------------------------------------------------------------
+export const getPayableAlerts = withLogging('pagar.getPayableAlerts', _getPayableAlerts);
+export const listPayables = withLogging('pagar.listPayables', _listPayables);
+export const createPayable = withLogging('pagar.createPayable', _createPayable);
+export const updatePayable = withLogging('pagar.updatePayable', _updatePayable);
+export const markPayableAsPaid = withLogging('pagar.markPayableAsPaid', _markPayableAsPaid);
+export const listCategoriesForSelect = withLogging('pagar.listCategoriesForSelect', _listCategoriesForSelect);

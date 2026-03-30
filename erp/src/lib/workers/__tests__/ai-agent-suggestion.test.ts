@@ -5,6 +5,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Job } from "bullmq";
+import type { AiAgentJobData } from "../ai-agent";
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -29,6 +30,14 @@ vi.mock("@/lib/prisma", () => ({
     ticketMessage: {
       create: (...a: unknown[]) => mockPrismaTicketMessageCreate(...a),
     },
+    aiConfig: {
+      findMany: vi.fn().mockResolvedValue([]),
+      findFirst: vi.fn().mockResolvedValue(null),
+    },
+    aiProviderHealth: {
+      findFirst: vi.fn().mockResolvedValue(null),
+      create: vi.fn().mockResolvedValue({}),
+    },
   },
 }));
 
@@ -38,6 +47,7 @@ vi.mock("@/lib/ai/agent", () => ({
 
 vi.mock("@/lib/ai/resolve-config", () => ({
   resolveAiConfigSelect: (...args: unknown[]) => mockResolveAiConfigSelect(...args),
+  resolveAiConfig: (...args: unknown[]) => mockResolveAiConfigSelect(...args),
 }));
 
 vi.mock("@/lib/ai/suggestion-mode", () => ({
@@ -52,13 +62,30 @@ vi.mock("@/lib/queue", () => ({
   reclameaquiOutboundQueue: { add: vi.fn() },
 }));
 
-vi.mock("@/lib/logger", () => ({
-  logger: {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
-}));
+vi.mock("@/lib/logger", () => {
+  const _log = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), child: vi.fn() };
+  return {
+    logger: _log,
+    createChildLogger: vi.fn(() => _log),
+    sanitizeParams: vi.fn((obj: Record<string, unknown>) => obj),
+    truncateForLog: vi.fn((v: unknown) => v),
+    classifyError: vi.fn(() => "INTERNAL_ERROR"),
+    classifyErrorByStatus: vi.fn(() => "INTERNAL_ERROR"),
+    ErrorCode: {
+      AUTH_FAILED: "AUTH_FAILED",
+      VALIDATION_ERROR: "VALIDATION_ERROR",
+      NOT_FOUND: "NOT_FOUND",
+      PERMISSION_DENIED: "PERMISSION_DENIED",
+      EXTERNAL_SERVICE_ERROR: "EXTERNAL_SERVICE_ERROR",
+      DATABASE_ERROR: "DATABASE_ERROR",
+      ENCRYPTION_ERROR: "ENCRYPTION_ERROR",
+      RATE_LIMIT_EXCEEDED: "RATE_LIMIT_EXCEEDED",
+      INTERNAL_ERROR: "INTERNAL_ERROR",
+      AUTH_TOKEN_EXPIRED: "AUTH_TOKEN_EXPIRED",
+    },
+    MAX_LOG_ARG_SIZE: 10240,
+  };
+});
 
 // ─── Import after mocks ──────────────────────────────────────────────────────
 
@@ -66,7 +93,8 @@ import { processAiAgent } from "../ai-agent";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function makeJob(data: Record<string, unknown>): Job<Record<string, unknown>> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function makeJob(data: Record<string, unknown>): Job<AiAgentJobData> {
   return {
     data: {
       ticketId: "ticket-1",
@@ -75,7 +103,7 @@ function makeJob(data: Record<string, unknown>): Job<Record<string, unknown>> {
       channel: "WHATSAPP",
       ...data,
     },
-  } as unknown as Job<Record<string, unknown>>;
+  } as unknown as Job<AiAgentJobData>;
 }
 
 beforeEach(() => {

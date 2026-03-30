@@ -34,9 +34,30 @@ vi.mock("@/lib/sse", () => ({
   sseBus: { publish: vi.fn() },
 }));
 
-vi.mock("@/lib/logger", () => ({
-  logger: { warn: vi.fn(), error: vi.fn(), info: vi.fn() },
-}));
+vi.mock("@/lib/logger", () => {
+  const _log = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), child: vi.fn() };
+  return {
+    logger: _log,
+    createChildLogger: vi.fn(() => _log),
+    sanitizeParams: vi.fn((obj: Record<string, unknown>) => obj),
+    truncateForLog: vi.fn((v: unknown) => v),
+    classifyError: vi.fn(() => "INTERNAL_ERROR"),
+    classifyErrorByStatus: vi.fn(() => "INTERNAL_ERROR"),
+    ErrorCode: {
+      AUTH_FAILED: "AUTH_FAILED",
+      VALIDATION_ERROR: "VALIDATION_ERROR",
+      NOT_FOUND: "NOT_FOUND",
+      PERMISSION_DENIED: "PERMISSION_DENIED",
+      EXTERNAL_SERVICE_ERROR: "EXTERNAL_SERVICE_ERROR",
+      DATABASE_ERROR: "DATABASE_ERROR",
+      ENCRYPTION_ERROR: "ENCRYPTION_ERROR",
+      RATE_LIMIT_EXCEEDED: "RATE_LIMIT_EXCEEDED",
+      INTERNAL_ERROR: "INTERNAL_ERROR",
+      AUTH_TOKEN_EXPIRED: "AUTH_TOKEN_EXPIRED",
+    },
+    MAX_LOG_ARG_SIZE: 10240,
+  };
+});
 
 vi.mock("@/lib/encryption", () => ({
   decrypt: vi.fn((x: string) => `decrypted_${x}`),
@@ -156,18 +177,18 @@ describe("areAllProvidersDown", () => {
 
   it("returns true when all providers are down", async () => {
     vi.mocked(prisma.aiProviderHealth.findMany).mockResolvedValueOnce([
-      { provider: "openai", model: "gpt-4o-mini", status: "down", latencyMs: null, checkedAt: new Date() },
-      { provider: "anthropic", model: "claude-haiku-4-20250414", status: "down", latencyMs: null, checkedAt: new Date() },
-    ] as unknown as { provider: string; model: string; status: string; latencyMs: number | null; checkedAt: Date }[]);
+      { id: "h1", provider: "openai", model: "gpt-4o-mini", status: "down", latencyMs: null, errorMessage: null, checkedAt: new Date() },
+      { id: "h2", provider: "anthropic", model: "claude-haiku-4-20250414", status: "down", latencyMs: null, errorMessage: null, checkedAt: new Date() },
+    ] as never);
 
     expect(await areAllProvidersDown()).toBe(true);
   });
 
   it("returns false when at least one provider is up", async () => {
     vi.mocked(prisma.aiProviderHealth.findMany).mockResolvedValueOnce([
-      { provider: "openai", model: "gpt-4o-mini", status: "down", latencyMs: null, checkedAt: new Date() },
-      { provider: "anthropic", model: "claude-haiku-4-20250414", status: "up", latencyMs: 800, checkedAt: new Date() },
-    ] as unknown as { provider: string; model: string; status: string; latencyMs: number | null; checkedAt: Date }[]);
+      { id: "h3", provider: "openai", model: "gpt-4o-mini", status: "down", latencyMs: null, errorMessage: null, checkedAt: new Date() },
+      { id: "h4", provider: "anthropic", model: "claude-haiku-4-20250414", status: "up", latencyMs: 800, errorMessage: null, checkedAt: new Date() },
+    ] as never);
 
     expect(await areAllProvidersDown()).toBe(false);
   });

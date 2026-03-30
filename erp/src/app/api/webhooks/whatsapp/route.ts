@@ -1,9 +1,10 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { logger } from "@/lib/logger";
+import { withApiLogging } from "@/lib/with-api-logging";
 
 const WHATSAPP_WEBHOOK_SECRET = process.env.WHATSAPP_WEBHOOK_SECRET || "";
 
-export async function POST(request: Request) {
+async function _POST(request: NextRequest) {
   // Validate webhook secret from header or query param
   const apiKey =
     request.headers.get("apikey") ??
@@ -43,3 +44,5 @@ export async function POST(request: Request) {
 
   return NextResponse.json({ ok: true });
 }
+
+export const POST = withApiLogging("webhooks/whatsapp", _POST);

@@ -7,6 +7,7 @@ import { encrypt } from "@/lib/encryption";
 import { invalidateNfseProviderCache } from "@/lib/nfse/factory";
 import { Prisma } from "@prisma/client";
 import type { TaxRegime } from "@prisma/client";
+import { withLogging } from "@/lib/with-logging";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -37,7 +38,7 @@ export interface FiscalConfigData {
 // Server Actions
 // ---------------------------------------------------------------------------
 
-export async function getFiscalConfig(companyId: string): Promise<FiscalConfigData> {
+async function _getFiscalConfig(companyId: string): Promise<FiscalConfigData> {
   await requireCompanyAccess(companyId);
 
   const config = await prisma.fiscalConfig.findUnique({
@@ -93,7 +94,7 @@ export async function getFiscalConfig(companyId: string): Promise<FiscalConfigDa
  * Salva o certificado .pfx (base64) e sua senha de forma encriptada.
  * Ação separada para evitar reenvio do arquivo a cada save de config.
  */
-export async function saveCertificado(
+async function _saveCertificado(
   companyId: string,
   pfxBase64: string,
   senha: string
@@ -121,7 +122,7 @@ export async function saveCertificado(
   return { success: true };
 }
 
-export async function saveFiscalConfig(companyId: string, data: FiscalConfigData) {
+async function _saveFiscalConfig(companyId: string, data: FiscalConfigData) {
   const session = await requireCompanyAccess(companyId);
 
   // Server-side validation
@@ -197,7 +198,7 @@ export async function saveFiscalConfig(companyId: string, data: FiscalConfigData
 const fiscalConfigCache = new Map<string, { data: FiscalConfigData; timestamp: number }>();
 const FISCAL_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
-export async function getCachedFiscalConfig(companyId: string): Promise<FiscalConfigData> {
+async function _getCachedFiscalConfig(companyId: string): Promise<FiscalConfigData> {
   const cached = fiscalConfigCache.get(companyId);
   if (cached && Date.now() - cached.timestamp < FISCAL_CACHE_TTL) {
     return cached.data;
@@ -252,3 +253,11 @@ export async function getCachedFiscalConfig(companyId: string): Promise<FiscalCo
 }
 
 export { fiscalConfigCache };
+
+// ---------------------------------------------------------------------------
+// Wrapped exports with logging
+// ---------------------------------------------------------------------------
+export const getFiscalConfig = withLogging('fiscal.getFiscalConfig', _getFiscalConfig);
+export const saveCertificado = withLogging('fiscal.saveCertificado', _saveCertificado);
+export const saveFiscalConfig = withLogging('fiscal.saveFiscalConfig', _saveFiscalConfig);
+export const getCachedFiscalConfig = withLogging('fiscal.getCachedFiscalConfig', _getCachedFiscalConfig);

@@ -95,6 +95,9 @@ const baseConfig = {
     raPrivateBeforePublic: true,
     raAutoRequestEvaluation: false,
     raEscalationKeywords: ["processo", "advogado", "procon"],
+    operationMode: "auto" as const,
+    hybridThreshold: 0.7,
+    alwaysRequireApproval: [],
 };
 
 // ─── testAiConnection ─────────────────────────────────────────────────────────
@@ -367,6 +370,9 @@ describe("updateAiConfig", () => {
     raPrivateBeforePublic: true,
     raAutoRequestEvaluation: false,
     raEscalationKeywords: ["processo", "advogado", "procon"],
+    operationMode: "auto" as const,
+    hybridThreshold: 0.7,
+    alwaysRequireApproval: [],
   };
 
   beforeEach(() => {
@@ -561,6 +567,9 @@ describe("Provider parity — frontend ↔ backend", () => {
         raEscalationKeywords: [],
         dailySpendLimitBrl: null,
         temperature: 0.7,
+        operationMode: "auto" as const,
+        hybridThreshold: 0.7,
+        alwaysRequireApproval: [],
       });
     } catch (e: unknown) {
       errorMsg = (e as Error).message;

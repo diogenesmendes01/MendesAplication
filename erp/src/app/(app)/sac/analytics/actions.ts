@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireCompanyAccess } from "@/lib/rbac";
 import { Prisma } from "@prisma/client";
+import { withLogging } from "@/lib/with-logging";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -72,7 +73,7 @@ export interface AiKpis {
 
 // ─── KPIs ─────────────────────────────────────────────────────────────────────
 
-export async function getAiKpis(
+async function _getAiKpis(
   companyId: string,
   period: DateRange,
 ): Promise<AiKpis> {
@@ -140,7 +141,7 @@ export async function getAiKpis(
 
 // ─── Cost by Day ──────────────────────────────────────────────────────────────
 
-export async function getCostByDay(
+async function _getCostByDay(
   companyId: string,
   period: DateRange,
 ): Promise<CostByDay[]> {
@@ -171,7 +172,7 @@ export async function getCostByDay(
 
 // ─── Cost by Channel ──────────────────────────────────────────────────────────
 
-export async function getCostByChannel(
+async function _getCostByChannel(
   companyId: string,
   period: DateRange,
 ): Promise<CostByChannel[]> {
@@ -197,7 +198,7 @@ export async function getCostByChannel(
 
 // ─── Top Tickets by Cost ──────────────────────────────────────────────────────
 
-export async function getTopTicketsByCost(
+async function _getTopTicketsByCost(
   companyId: string,
   period: DateRange,
   limit = 10,
@@ -227,7 +228,7 @@ export async function getTopTicketsByCost(
 
 // ─── Confidence by Channel ────────────────────────────────────────────────────
 
-export async function getConfidenceByChannel(
+async function _getConfidenceByChannel(
   companyId: string,
   period: DateRange,
 ): Promise<{ channel: string; avgConfidence: number; count: number }[]> {
@@ -252,7 +253,7 @@ export async function getConfidenceByChannel(
 
 // ─── Suggestion Breakdown ─────────────────────────────────────────────────────
 
-export async function getSuggestionBreakdown(
+async function _getSuggestionBreakdown(
   companyId: string,
   period: DateRange,
 ): Promise<SuggestionBreakdown> {
@@ -299,7 +300,7 @@ const CONFIDENCE_BUCKETS = [
   { min: 0.0, max: 0.6, label: "< 60%" },
 ];
 
-export async function getConfidenceCalibration(
+async function _getConfidenceCalibration(
   companyId: string,
   period: DateRange,
 ): Promise<ConfidenceBucket[]> {
@@ -337,7 +338,7 @@ export async function getConfidenceCalibration(
 
 // ─── Escalation Rate ──────────────────────────────────────────────────────────
 
-export async function getEscalationRate(
+async function _getEscalationRate(
   companyId: string,
   period: DateRange,
 ): Promise<EscalationData> {
@@ -378,7 +379,7 @@ export async function getEscalationRate(
 
 // ─── Recent Escalations ─────────────────────────────────────────────────────
 
-export async function getRecentEscalations(
+async function _getRecentEscalations(
   companyId: string,
   limit = 10,
 ): Promise<
@@ -437,7 +438,7 @@ export async function getRecentEscalations(
 
 // ─── Top Tools ────────────────────────────────────────────────────────────────
 
-export async function getTopTools(
+async function _getTopTools(
   companyId: string,
   period: DateRange,
   limit = 10,
@@ -466,3 +467,17 @@ export async function getTopTools(
     .sort((a, b) => b.count - a.count)
     .slice(0, limit);
 }
+
+// ---------------------------------------------------------------------------
+// Wrapped exports with logging
+// ---------------------------------------------------------------------------
+export const getAiKpis = withLogging('sac.analytics.getAiKpis', _getAiKpis);
+export const getCostByDay = withLogging('sac.analytics.getCostByDay', _getCostByDay);
+export const getCostByChannel = withLogging('sac.analytics.getCostByChannel', _getCostByChannel);
+export const getTopTicketsByCost = withLogging('sac.analytics.getTopTicketsByCost', _getTopTicketsByCost);
+export const getConfidenceByChannel = withLogging('sac.analytics.getConfidenceByChannel', _getConfidenceByChannel);
+export const getSuggestionBreakdown = withLogging('sac.analytics.getSuggestionBreakdown', _getSuggestionBreakdown);
+export const getConfidenceCalibration = withLogging('sac.analytics.getConfidenceCalibration', _getConfidenceCalibration);
+export const getEscalationRate = withLogging('sac.analytics.getEscalationRate', _getEscalationRate);
+export const getRecentEscalations = withLogging('sac.analytics.getRecentEscalations', _getRecentEscalations);
+export const getTopTools = withLogging('sac.analytics.getTopTools', _getTopTools);

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { NextRequest } from "next/server";
 
 // ---------------------------------------------------------------------------
 // Mocks — must be declared before any import that uses them
@@ -49,22 +50,47 @@ vi.mock("@/lib/audit", () => ({
 }));
 
 // Mock logger
-vi.mock("@/lib/logger", () => ({
-  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
-}));
+vi.mock("@/lib/logger", () => {
+  const _log = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), child: vi.fn() };
+  return {
+    logger: _log,
+    createChildLogger: vi.fn(() => _log),
+    sanitizeParams: vi.fn((obj: Record<string, unknown>) => obj),
+    truncateForLog: vi.fn((v: unknown) => v),
+    classifyError: vi.fn(() => "INTERNAL_ERROR"),
+    classifyErrorByStatus: vi.fn(() => "INTERNAL_ERROR"),
+    ErrorCode: {
+      AUTH_FAILED: "AUTH_FAILED",
+      VALIDATION_ERROR: "VALIDATION_ERROR",
+      NOT_FOUND: "NOT_FOUND",
+      PERMISSION_DENIED: "PERMISSION_DENIED",
+      EXTERNAL_SERVICE_ERROR: "EXTERNAL_SERVICE_ERROR",
+      DATABASE_ERROR: "DATABASE_ERROR",
+      ENCRYPTION_ERROR: "ENCRYPTION_ERROR",
+      RATE_LIMIT_EXCEEDED: "RATE_LIMIT_EXCEEDED",
+      INTERNAL_ERROR: "INTERNAL_ERROR",
+      AUTH_TOKEN_EXPIRED: "AUTH_TOKEN_EXPIRED",
+    },
+    MAX_LOG_ARG_SIZE: 10240,
+  };
+});
 
 // Mock next/server
-vi.mock("next/server", () => ({
-  NextResponse: {
-    json: (body: unknown, init?: { status?: number }) => {
-      const status = init?.status ?? 200;
-      return {
-        status,
-        json: async () => body,
-      };
+vi.mock("next/server", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("next/server")>();
+  return {
+    ...actual,
+    NextResponse: {
+      json: (body: unknown, init?: { status?: number }) => {
+        const status = init?.status ?? 200;
+        return {
+          status,
+          json: async () => body,
+        };
+      },
     },
-  },
-}));
+  };
+});
 
 // ---------------------------------------------------------------------------
 // Imports (after mocks)
@@ -83,8 +109,8 @@ const mockedLogAudit = vi.mocked(logAuditEvent);
 // Helpers
 // ---------------------------------------------------------------------------
 
-function makeRequest(body: string, headers?: Record<string, string>): Request {
-  return new Request("http://localhost/api/webhooks/payment/prov-001", {
+function makeRequest(body: string, headers?: Record<string, string>): NextRequest {
+  return new NextRequest("http://localhost/api/webhooks/payment/prov-001", {
     method: "POST",
     body,
     headers: {

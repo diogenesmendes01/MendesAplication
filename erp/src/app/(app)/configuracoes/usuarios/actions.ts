@@ -5,6 +5,7 @@ import { requireAdmin } from "@/lib/session";
 import { hashPassword } from "@/lib/auth";
 import { logAuditEvent } from "@/lib/audit";
 import { Prisma } from "@prisma/client";
+import { withLogging } from "@/lib/with-logging";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -92,7 +93,7 @@ function validateUpdateUserInput(input: UpdateUserInput) {
 /**
  * Create a new user. Only ADMIN users can call this.
  */
-export async function createUser(input: CreateUserInput) {
+async function _createUser(input: CreateUserInput) {
   const session = await requireAdmin();
   validateCreateUserInput(input);
 
@@ -138,7 +139,7 @@ export async function createUser(input: CreateUserInput) {
 /**
  * Update an existing user. Only ADMIN users can call this.
  */
-export async function updateUser(id: string, input: UpdateUserInput) {
+async function _updateUser(id: string, input: UpdateUserInput) {
   const session = await requireAdmin();
   validateUpdateUserInput(input);
 
@@ -196,7 +197,7 @@ export async function updateUser(id: string, input: UpdateUserInput) {
  * List users with pagination and optional search.
  * Only ADMIN users can call this.
  */
-export async function listUsers(params: ListUsersParams = {}) {
+async function _listUsers(params: ListUsersParams = {}) {
   await requireAdmin();
 
   const page = Math.max(1, params.page ?? 1);
@@ -245,7 +246,7 @@ export async function listUsers(params: ListUsersParams = {}) {
  * Replaces all existing company assignments for this user.
  * Only ADMIN users can call this.
  */
-export async function assignUserToCompanies(
+async function _assignUserToCompanies(
   userId: string,
   assignments: CompanyAssignment[]
 ) {
@@ -309,7 +310,7 @@ export async function assignUserToCompanies(
  * Toggle a user's status between ACTIVE and INACTIVE.
  * Only ADMIN users can call this.
  */
-export async function toggleUserStatus(id: string) {
+async function _toggleUserStatus(id: string) {
   const session = await requireAdmin();
 
   const user = await prisma.user.findUnique({ where: { id } });
@@ -349,7 +350,7 @@ export async function toggleUserStatus(id: string) {
  * List all active companies (for company assignment UI).
  * Only ADMIN users can call this.
  */
-export async function listAllCompanies() {
+async function _listAllCompanies() {
   await requireAdmin();
 
   return prisma.company.findMany({
@@ -363,7 +364,7 @@ export async function listAllCompanies() {
  * Get a user by ID with their company assignments.
  * Only ADMIN users can call this.
  */
-export async function getUserById(id: string) {
+async function _getUserById(id: string) {
   await requireAdmin();
 
   const user = await prisma.user.findUnique({
@@ -390,3 +391,14 @@ export async function getUserById(id: string) {
 
   return user;
 }
+
+// ---------------------------------------------------------------------------
+// Wrapped exports with logging
+// ---------------------------------------------------------------------------
+export const createUser = withLogging('usuarios.createUser', _createUser);
+export const updateUser = withLogging('usuarios.updateUser', _updateUser);
+export const listUsers = withLogging('usuarios.listUsers', _listUsers);
+export const assignUserToCompanies = withLogging('usuarios.assignUserToCompanies', _assignUserToCompanies);
+export const toggleUserStatus = withLogging('usuarios.toggleUserStatus', _toggleUserStatus);
+export const listAllCompanies = withLogging('usuarios.listAllCompanies', _listAllCompanies);
+export const getUserById = withLogging('usuarios.getUserById', _getUserById);

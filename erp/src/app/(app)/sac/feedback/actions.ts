@@ -2,13 +2,14 @@
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { requireCompanyAccess } from "@/lib/rbac";
+import { withLogging } from "@/lib/with-logging";
 
 export interface FeedbackSummary { total: number; positive: number; correction: number; negative: number; approvalRate: number; editRate: number; rejectionRate: number; byCategory: Array<{ category: string; count: number }>; byChannel: Array<{ channel: string; count: number }>; }
 export interface RejectReason { reason: string; count: number; category: string | null; examples: string[]; }
 export interface EditPattern { avgChangePercent: number; totalEdits: number; minorEdits: number; majorEdits: number; topChanges: Array<{ originalSnippet: string; editedSnippet: string; changePercent: number }>; }
 export interface ConfidenceCalibration { bucket: string; range: [number, number]; total: number; approved: number; rejected: number; edited: number; approvalRate: number; }
 
-export async function getFeedbackSummary(companyId: string, from?: string, to?: string): Promise<FeedbackSummary> {
+async function _getFeedbackSummary(companyId: string, from?: string, to?: string): Promise<FeedbackSummary> {
   await requireCompanyAccess(companyId);
   const dateFilter: Record<string, unknown> = {};
   if (from) dateFilter.gte = new Date(from);
@@ -28,7 +29,7 @@ export async function getFeedbackSummary(companyId: string, from?: string, to?: 
   return { total, positive, correction, negative, approvalRate: total > 0 ? positive / total : 0, editRate: total > 0 ? correction / total : 0, rejectionRate: total > 0 ? negative / total : 0, byCategory, byChannel };
 }
 
-export async function getRejectReasons(companyId: string, from?: string, to?: string): Promise<RejectReason[]> {
+async function _getRejectReasons(companyId: string, from?: string, to?: string): Promise<RejectReason[]> {
   await requireCompanyAccess(companyId);
   const dateFilter: Record<string, unknown> = {};
   if (from) dateFilter.gte = new Date(from);
@@ -39,7 +40,7 @@ export async function getRejectReasons(companyId: string, from?: string, to?: st
   return Array.from(reasonMap.entries()).map(([reason, data]) => ({ reason, ...data })).sort((a, b) => b.count - a.count);
 }
 
-export async function getEditPatterns(companyId: string, from?: string, to?: string): Promise<EditPattern> {
+async function _getEditPatterns(companyId: string, from?: string, to?: string): Promise<EditPattern> {
   await requireCompanyAccess(companyId);
   const dateFilter: Record<string, unknown> = {};
   if (from) dateFilter.gte = new Date(from);
@@ -52,7 +53,7 @@ export async function getEditPatterns(companyId: string, from?: string, to?: str
   return { avgChangePercent: totalEdits > 0 ? Math.round((totalChangePercent / totalEdits) * 100) / 100 : 0, totalEdits, minorEdits, majorEdits, topChanges: topChanges.slice(0, 5) };
 }
 
-export async function getConfidenceCalibration(companyId: string, from?: string, to?: string): Promise<ConfidenceCalibration[]> {
+async function _getConfidenceCalibration(companyId: string, from?: string, to?: string): Promise<ConfidenceCalibration[]> {
   await requireCompanyAccess(companyId);
   const dateFilter: Record<string, unknown> = {};
   if (from) dateFilter.gte = new Date(from);
@@ -61,3 +62,11 @@ export async function getConfidenceCalibration(companyId: string, from?: string,
   const buckets: Array<{ label: string; range: [number, number] }> = [{ label: "0-20%", range: [0, 0.2] },{ label: "20-40%", range: [0.2, 0.4] },{ label: "40-60%", range: [0.4, 0.6] },{ label: "60-80%", range: [0.6, 0.8] },{ label: "80-100%", range: [0.8, 1.01] }];
   return buckets.map(({ label, range }) => { const ib = feedbacks.filter((f) => { const c = f.suggestion?.confidence ?? 0; return c >= range[0] && c < range[1]; }); const t = ib.length; return { bucket: label, range, total: t, approved: ib.filter((f) => f.type === "positive").length, rejected: ib.filter((f) => f.type === "negative").length, edited: ib.filter((f) => f.type === "correction").length, approvalRate: t > 0 ? ib.filter((f) => f.type === "positive").length / t : 0 }; });
 }
+
+// ---------------------------------------------------------------------------
+// Wrapped exports with logging
+// ---------------------------------------------------------------------------
+export const getFeedbackSummary = withLogging('sac.feedback.getFeedbackSummary', _getFeedbackSummary);
+export const getRejectReasons = withLogging('sac.feedback.getRejectReasons', _getRejectReasons);
+export const getEditPatterns = withLogging('sac.feedback.getEditPatterns', _getEditPatterns);
+export const getConfidenceCalibration = withLogging('sac.feedback.getConfidenceCalibration', _getConfidenceCalibration);

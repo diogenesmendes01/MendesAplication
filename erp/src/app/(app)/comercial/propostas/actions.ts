@@ -15,6 +15,7 @@ import { decrypt } from "@/lib/encryption";
 import type { CreateBoletoInput, CreateBoletoResult, PaymentGateway } from "@/lib/payment/types";
 import { MAX_INSTALLMENTS } from "@/lib/payment/constants";
 import { logger } from "@/lib/logger";
+import { withLogging } from "@/lib/with-logging";
 
 // ---------------------------------------------------------------------------
 // Proposal Event Helper
@@ -185,7 +186,7 @@ function addMonthsSafe(base: Date, months: number): Date {
 // Server Actions
 // ---------------------------------------------------------------------------
 
-export async function listProposals(
+async function _listProposals(
   params: ListProposalsParams
 ): Promise<PaginatedResult<ProposalRow>> {
   await requireCompanyAccess(params.companyId);
@@ -265,7 +266,7 @@ export async function listProposals(
   };
 }
 
-export async function createProposal(
+async function _createProposal(
   input: CreateProposalInput,
   companyId: string
 ) {
@@ -328,7 +329,7 @@ export async function createProposal(
   return { id: proposal.id };
 }
 
-export async function updateProposal(
+async function _updateProposal(
   input: UpdateProposalInput,
   companyId: string
 ) {
@@ -404,7 +405,7 @@ export async function updateProposal(
   return { id: proposal.id };
 }
 
-export async function getProposalById(proposalId: string, companyId: string): Promise<ProposalDetail> {
+async function _getProposalById(proposalId: string, companyId: string): Promise<ProposalDetail> {
   await requireCompanyAccess(companyId);
 
   const proposal = await prisma.proposal.findFirst({
@@ -445,7 +446,7 @@ export async function getProposalById(proposalId: string, companyId: string): Pr
   };
 }
 
-export async function updateProposalStatus(
+async function _updateProposalStatus(
   proposalId: string,
   newStatus: ProposalStatus,
   companyId: string
@@ -491,7 +492,7 @@ export async function updateProposalStatus(
   return { success: true };
 }
 
-export async function listClientsForProposal(
+async function _listClientsForProposal(
   companyId: string
 ): Promise<ClientOption[]> {
   await requireCompanyAccess(companyId);
@@ -558,7 +559,7 @@ export interface RoutingPreviewResult {
 /**
  * Get active providers for the company (for dropdown selection).
  */
-export async function getProvidersForProposal(
+async function _getProvidersForProposal(
   companyId: string,
 ): Promise<ProviderOption[]> {
   await requireCompanyAccess(companyId);
@@ -576,7 +577,7 @@ export async function getProvidersForProposal(
  * Preview which provider would be used for automatic routing.
  * Bug #7 fix: caller should pass the per-installment value, NOT the total.
  */
-export async function previewRoutingForProposal(
+async function _previewRoutingForProposal(
   companyId: string,
   clientType: string,
   value: number,
@@ -697,7 +698,7 @@ async function resolveGatewayForBoleto(
 // Boleto Server Actions
 // ---------------------------------------------------------------------------
 
-export async function generateBoletosForProposal(
+async function _generateBoletosForProposal(
   input: GenerateBoletosInput
 ): Promise<{ boletos: BoletoRow[]; error?: string }> {
   const session = await requireCompanyAccess(input.companyId);
@@ -975,7 +976,7 @@ export async function generateBoletosForProposal(
   };
 }
 
-export async function listBoletosForProposal(
+async function _listBoletosForProposal(
   proposalId: string,
   companyId: string
 ): Promise<BoletoRow[]> {
@@ -1005,7 +1006,7 @@ export async function listBoletosForProposal(
   }));
 }
 
-export async function updateBoletoStatus(
+async function _updateBoletoStatus(
   boletoId: string,
   newStatus: BoletoStatus,
   companyId: string
@@ -1130,7 +1131,7 @@ export interface ProposalEventRow {
   createdAt: string;
 }
 
-export async function listProposalEvents(
+async function _listProposalEvents(
   proposalId: string,
   companyId: string
 ): Promise<ProposalEventRow[]> {
@@ -1149,3 +1150,19 @@ export async function listProposalEvents(
     createdAt: e.createdAt.toISOString(),
   }));
 }
+
+// ---------------------------------------------------------------------------
+// Wrapped exports with structured logging
+// ---------------------------------------------------------------------------
+export const listProposals = withLogging('comercial.propostas.listProposals', _listProposals);
+export const createProposal = withLogging('comercial.propostas.createProposal', _createProposal);
+export const updateProposal = withLogging('comercial.propostas.updateProposal', _updateProposal);
+export const getProposalById = withLogging('comercial.propostas.getProposalById', _getProposalById);
+export const updateProposalStatus = withLogging('comercial.propostas.updateProposalStatus', _updateProposalStatus);
+export const listClientsForProposal = withLogging('comercial.propostas.listClientsForProposal', _listClientsForProposal);
+export const getProvidersForProposal = withLogging('comercial.propostas.getProvidersForProposal', _getProvidersForProposal);
+export const previewRoutingForProposal = withLogging('comercial.propostas.previewRoutingForProposal', _previewRoutingForProposal);
+export const generateBoletosForProposal = withLogging('comercial.propostas.generateBoletosForProposal', _generateBoletosForProposal);
+export const listBoletosForProposal = withLogging('comercial.propostas.listBoletosForProposal', _listBoletosForProposal);
+export const updateBoletoStatus = withLogging('comercial.propostas.updateBoletoStatus', _updateBoletoStatus);
+export const listProposalEvents = withLogging('comercial.propostas.listProposalEvents', _listProposalEvents);

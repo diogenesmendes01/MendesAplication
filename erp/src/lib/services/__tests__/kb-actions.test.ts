@@ -1,13 +1,50 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("@/lib/session", () => ({ requireSession: vi.fn().mockResolvedValue({ userId: "u1", email: "t@t.com", role: "ADMIN" }), getSession: vi.fn().mockResolvedValue({ userId: "u1", email: "t@t.com", role: "ADMIN" }) }));
 vi.mock("@/lib/rbac", () => ({ canAccessCompany: vi.fn().mockResolvedValue(true) }));
-vi.mock("@/lib/logger", () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }));
+vi.mock("@/lib/logger", () => {
+  const _log = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), child: vi.fn() };
+  return {
+    logger: _log,
+    createChildLogger: vi.fn(() => _log),
+    sanitizeParams: vi.fn((obj: Record<string, unknown>) => obj),
+    truncateForLog: vi.fn((v: unknown) => v),
+    classifyError: vi.fn(() => "INTERNAL_ERROR"),
+    classifyErrorByStatus: vi.fn(() => "INTERNAL_ERROR"),
+    ErrorCode: {
+      AUTH_FAILED: "AUTH_FAILED",
+      VALIDATION_ERROR: "VALIDATION_ERROR",
+      NOT_FOUND: "NOT_FOUND",
+      PERMISSION_DENIED: "PERMISSION_DENIED",
+      EXTERNAL_SERVICE_ERROR: "EXTERNAL_SERVICE_ERROR",
+      DATABASE_ERROR: "DATABASE_ERROR",
+      ENCRYPTION_ERROR: "ENCRYPTION_ERROR",
+      RATE_LIMIT_EXCEEDED: "RATE_LIMIT_EXCEEDED",
+      INTERNAL_ERROR: "INTERNAL_ERROR",
+      AUTH_TOKEN_EXPIRED: "AUTH_TOKEN_EXPIRED",
+    },
+    MAX_LOG_ARG_SIZE: 10240,
+  };
+});
 const mDC = vi.fn(), mDFM = vi.fn(), mDFF = vi.fn(), mDU = vi.fn(), mDD = vi.fn(), mDCnt = vi.fn();
 const mCC = vi.fn(), mCFM = vi.fn(), mCDM = vi.fn(), mCCnt = vi.fn();
 const mVC = vi.fn(), mVFM = vi.fn();
 vi.mock("@/lib/prisma", () => ({ prisma: { document: { create: (...a: unknown[]) => mDC(...a), findMany: (...a: unknown[]) => mDFM(...a), findFirst: (...a: unknown[]) => mDFF(...a), update: (...a: unknown[]) => mDU(...a), delete: (...a: unknown[]) => mDD(...a), count: (...a: unknown[]) => mDCnt(...a) }, documentChunk: { create: (...a: unknown[]) => mCC(...a), findMany: (...a: unknown[]) => mCFM(...a), deleteMany: (...a: unknown[]) => mCDM(...a), count: (...a: unknown[]) => mCCnt(...a) }, documentVersion: { create: (...a: unknown[]) => mVC(...a), findMany: (...a: unknown[]) => mVFM(...a), findFirst: vi.fn() } } }));
 vi.mock("@/lib/ai/embeddings", () => ({ generateEmbedding: vi.fn().mockResolvedValue(new Array(1536).fill(0.1)) }));
-const { listDocuments, createDocument, updateDocument, deleteDocument, getDocumentChunks, getDocumentVersions, getKBStats, getAllTags } = await import("@/lib/services/kb-actions");
+import { beforeAll } from "vitest";
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let listDocuments: any, createDocument: any, updateDocument: any, deleteDocument: any, getDocumentChunks: any, getDocumentVersions: any, getKBStats: any, getAllTags: any;
+beforeAll(async () => {
+  const mod = await import("@/lib/services/kb-actions");
+  listDocuments = mod.listDocuments;
+  createDocument = mod.createDocument;
+  updateDocument = mod.updateDocument;
+  deleteDocument = mod.deleteDocument;
+  getDocumentChunks = mod.getDocumentChunks;
+  getDocumentVersions = mod.getDocumentVersions;
+  getKBStats = mod.getKBStats;
+  getAllTags = mod.getAllTags;
+});
 
 describe("KB Actions", () => {
   beforeEach(() => vi.clearAllMocks());

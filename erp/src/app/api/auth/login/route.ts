@@ -8,6 +8,7 @@ import {
 import { logAuditEvent } from "@/lib/audit";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { logger } from "@/lib/logger";
+import { withApiLogging } from "@/lib/with-api-logging";
 
 // ---------------------------------------------------------------------------
 // Rate limiting via Redis — compartilha estado entre réplicas.
@@ -17,7 +18,7 @@ import { logger } from "@/lib/logger";
 const MAX_ATTEMPTS = 10;
 const WINDOW_MS = 15 * 60 * 1000; // 15 minutos
 
-export async function POST(req: NextRequest) {
+async function _POST(req: NextRequest) {
   try {
     // Extrair IP do cliente para rate limiting
     const clientIp =
@@ -150,3 +151,5 @@ export async function POST(req: NextRequest) {
     );
   }
 }
+
+export const POST = withApiLogging("auth/login", _POST);

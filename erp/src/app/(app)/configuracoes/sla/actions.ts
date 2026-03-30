@@ -5,6 +5,7 @@ import { requireCompanyAccess } from "@/lib/rbac";
 import { requireAdmin } from "@/lib/session";
 import { logAuditEvent } from "@/lib/audit";
 import type { Prisma, SlaType, TicketPriority, ChannelType } from "@prisma/client";
+import { withLogging } from "@/lib/with-logging";
 
 export interface SlaConfigRow {
   id: string | null;
@@ -53,7 +54,7 @@ const DEFAULT_REFUND_SLAS: Omit<SlaConfigRow, "id">[] = [
   { type: "REFUND", priority: null, stage: "total", channelType: null, deadlineMinutes: 2880, alertBeforeMinutes: 480, autoEscalate: true, autoPriorityBump: false, escalateToRole: null },
 ];
 
-export async function getSlaConfigs(companyId: string): Promise<SlaConfigRow[]> {
+async function _getSlaConfigs(companyId: string): Promise<SlaConfigRow[]> {
   await requireCompanyAccess(companyId);
   const configs = await prisma.slaConfig.findMany({
     where: { companyId },
@@ -67,7 +68,7 @@ export async function getSlaConfigs(companyId: string): Promise<SlaConfigRow[]> 
   }));
 }
 
-export async function saveSlaConfigs(companyId: string, configs: SaveSlaConfigInput[]): Promise<void> {
+async function _saveSlaConfigs(companyId: string, configs: SaveSlaConfigInput[]): Promise<void> {
   const session = await requireAdmin();
   await requireCompanyAccess(companyId);
   await prisma.$transaction(async (tx) => {
@@ -84,7 +85,7 @@ export async function saveSlaConfigs(companyId: string, configs: SaveSlaConfigIn
   await logAuditEvent({ userId: session.userId, action: "UPDATE", entity: "SlaConfig", entityId: companyId, dataAfter: configs as unknown as Prisma.InputJsonValue, companyId });
 }
 
-export async function getBusinessHours(companyId: string): Promise<BusinessHours> {
+async function _getBusinessHours(companyId: string): Promise<BusinessHours> {
   await requireCompanyAccess(companyId);
   const config = await prisma.slaConfig.findFirst({ where: { companyId, stage: "business_hours" } });
   if (!config) return { enabled: false, startHour: 8, endHour: 18, workDays: [1, 2, 3, 4, 5] };
@@ -96,7 +97,7 @@ export async function getBusinessHours(companyId: string): Promise<BusinessHours
   return { enabled: true, startHour, endHour, workDays };
 }
 
-export async function saveBusinessHours(companyId: string, data: BusinessHours): Promise<void> {
+async function _saveBusinessHours(companyId: string, data: BusinessHours): Promise<void> {
   const session = await requireAdmin();
   await requireCompanyAccess(companyId);
   if (!data.enabled) {
@@ -114,3 +115,11 @@ export async function saveBusinessHours(companyId: string, data: BusinessHours):
   }
   await logAuditEvent({ userId: session.userId, action: "UPDATE", entity: "BusinessHours", entityId: companyId, dataAfter: data as unknown as Prisma.InputJsonValue, companyId });
 }
+
+// ---------------------------------------------------------------------------
+// Wrapped exports with logging
+// ---------------------------------------------------------------------------
+export const getSlaConfigs = withLogging('sla.config.getSlaConfigs', _getSlaConfigs);
+export const saveSlaConfigs = withLogging('sla.config.saveSlaConfigs', _saveSlaConfigs);
+export const getBusinessHours = withLogging('sla.config.getBusinessHours', _getBusinessHours);
+export const saveBusinessHours = withLogging('sla.config.saveBusinessHours', _saveBusinessHours);

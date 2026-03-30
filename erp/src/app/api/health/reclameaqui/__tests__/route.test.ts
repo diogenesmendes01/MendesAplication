@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { NextRequest } from "next/server";
 
 const mockFindMany = vi.fn();
 
@@ -9,6 +10,8 @@ vi.mock("@/lib/prisma", () => ({
 }));
 
 import { GET } from "../route";
+
+const mockReq = new NextRequest("http://localhost/api/health/reclameaqui");
 
 describe("GET /api/health/reclameaqui", () => {
   beforeEach(() => {
@@ -22,7 +25,7 @@ describe("GET /api/health/reclameaqui", () => {
       { id: "ch2", companyId: "co2", lastSyncAt: recentSync },
     ]);
 
-    const res = await GET();
+    const res = await GET(mockReq, {});
     const data = await res.json();
 
     expect(res.status).toBe(200);
@@ -40,7 +43,7 @@ describe("GET /api/health/reclameaqui", () => {
       { id: "ch2", companyId: "co2", lastSyncAt: staleSync },
     ]);
 
-    const res = await GET();
+    const res = await GET(mockReq, {});
     const data = await res.json();
 
     expect(data.healthy).toBe(false);
@@ -53,7 +56,7 @@ describe("GET /api/health/reclameaqui", () => {
       { id: "ch1", companyId: "co1", lastSyncAt: null },
     ]);
 
-    const res = await GET();
+    const res = await GET(mockReq, {});
     const data = await res.json();
 
     expect(data.healthy).toBe(false);
@@ -64,7 +67,7 @@ describe("GET /api/health/reclameaqui", () => {
   it("returns healthy=false when no channels exist", async () => {
     mockFindMany.mockResolvedValue([]);
 
-    const res = await GET();
+    const res = await GET(mockReq, {});
     const data = await res.json();
 
     expect(data.healthy).toBe(false);
@@ -74,7 +77,7 @@ describe("GET /api/health/reclameaqui", () => {
   it("queries only active RECLAMEAQUI channels", async () => {
     mockFindMany.mockResolvedValue([]);
 
-    await GET();
+    await GET(mockReq, {});
 
     expect(mockFindMany).toHaveBeenCalledWith({
       where: { type: "RECLAMEAQUI", isActive: true },
@@ -88,7 +91,7 @@ describe("GET /api/health/reclameaqui", () => {
       { id: "ch1", companyId: "co1", lastSyncAt: syncDate },
     ]);
 
-    const res = await GET();
+    const res = await GET(mockReq, {});
     const data = await res.json();
 
     expect(data.channels[0].lastSync).toBe("2026-03-28T10:00:00.000Z");

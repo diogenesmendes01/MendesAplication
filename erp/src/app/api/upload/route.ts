@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyAccessToken } from "@/lib/auth";
 import { canAccessCompany } from "@/lib/rbac";
 import { uploadFile } from "@/lib/file-upload";
+import { withApiLogging } from "@/lib/with-api-logging";
 
-export async function POST(req: NextRequest) {
+async function _POST(req: NextRequest) {
   try {
     // Verificar autenticação
     const token = req.cookies.get("accessToken")?.value
@@ -57,3 +58,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: message }, { status: 400 });
   }
 }
+
+export const POST = withApiLogging("upload", _POST);

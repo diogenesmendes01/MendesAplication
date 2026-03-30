@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { requireCompanyAccess } from "@/lib/rbac";
+import { withLogging } from "@/lib/with-logging";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -37,7 +38,7 @@ export interface TimelineItem {
 // Server Actions
 // ---------------------------------------------------------------------------
 
-export async function getClientById(
+async function _getClientById(
   clientId: string,
   companyId: string
 ): Promise<ClientDetail> {
@@ -75,7 +76,7 @@ export async function getClientById(
   };
 }
 
-export async function getClientTimeline(
+async function _getClientTimeline(
   clientId: string,
   companyId: string,
   filterType?: TimelineItemType
@@ -240,3 +241,9 @@ export async function getClientTimeline(
 
   return items;
 }
+
+// ---------------------------------------------------------------------------
+// Wrapped exports with logging
+// ---------------------------------------------------------------------------
+export const getClientById = withLogging('clientes.detail.getClientById', _getClientById);
+export const getClientTimeline = withLogging('clientes.detail.getClientTimeline', _getClientTimeline);

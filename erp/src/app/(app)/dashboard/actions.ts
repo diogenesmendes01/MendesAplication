@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/session";
 
 import type Decimal from "decimal.js";
+import { withLogging } from "@/lib/with-logging";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -249,7 +250,7 @@ function getChartDateRange(period: PeriodType, customStart?: string, customEnd?:
 // Server Action: getDashboardData
 // ---------------------------------------------------------------------------
 
-export async function getDashboardData(filters: DashboardFilters): Promise<DashboardData> {
+async function _getDashboardData(filters: DashboardFilters): Promise<DashboardData> {
   const session = await requireSession();
   const companyIds = await resolveCompanyIds(session, filters.companyId);
 
@@ -516,7 +517,7 @@ export async function getDashboardData(filters: DashboardFilters): Promise<Dashb
 // Dashboard Alerts
 // ---------------------------------------------------------------------------
 
-export async function getDashboardAlerts(companyId?: string): Promise<DashboardAlert[]> {
+async function _getDashboardAlerts(companyId?: string): Promise<DashboardAlert[]> {
   const session = await requireSession();
   const companyIds = await resolveCompanyIds(session, companyId);
 
@@ -635,7 +636,7 @@ export async function getDashboardAlerts(companyId?: string): Promise<DashboardA
 // Standalone Server Actions (US-004)
 // ---------------------------------------------------------------------------
 
-export async function getRevenueExpenseChart(): Promise<MonthlyChartEntry[]> {
+async function _getRevenueExpenseChart(): Promise<MonthlyChartEntry[]> {
   const session = await requireSession();
   const companyIds = await resolveCompanyIds(session);
   if (companyIds.length === 0) return [];
@@ -697,7 +698,7 @@ export async function getRevenueExpenseChart(): Promise<MonthlyChartEntry[]> {
   return chart;
 }
 
-export async function getUpcomingPayables(): Promise<UpcomingPayable[]> {
+async function _getUpcomingPayables(): Promise<UpcomingPayable[]> {
   const session = await requireSession();
   const companyIds = await resolveCompanyIds(session);
   if (companyIds.length === 0) return [];
@@ -731,7 +732,7 @@ export async function getUpcomingPayables(): Promise<UpcomingPayable[]> {
   });
 }
 
-export async function getRecentProposals(): Promise<RecentProposal[]> {
+async function _getRecentProposals(): Promise<RecentProposal[]> {
   const session = await requireSession();
   const companyIds = await resolveCompanyIds(session);
   if (companyIds.length === 0) return [];
@@ -753,7 +754,7 @@ export async function getRecentProposals(): Promise<RecentProposal[]> {
   }));
 }
 
-export async function getSlaTickets(): Promise<TicketWithSLA[]> {
+async function _getSlaTickets(): Promise<TicketWithSLA[]> {
   const session = await requireSession();
   const companyIds = await resolveCompanyIds(session);
   if (companyIds.length === 0) return [];
@@ -787,3 +788,13 @@ export async function getSlaTickets(): Promise<TicketWithSLA[]> {
       : "?",
   }));
 }
+
+// ---------------------------------------------------------------------------
+// Wrapped exports with logging
+// ---------------------------------------------------------------------------
+export const getDashboardData = withLogging('dashboard.getDashboardData', _getDashboardData);
+export const getDashboardAlerts = withLogging('dashboard.getDashboardAlerts', _getDashboardAlerts);
+export const getRevenueExpenseChart = withLogging('dashboard.getRevenueExpenseChart', _getRevenueExpenseChart);
+export const getUpcomingPayables = withLogging('dashboard.getUpcomingPayables', _getUpcomingPayables);
+export const getRecentProposals = withLogging('dashboard.getRecentProposals', _getRecentProposals);
+export const getSlaTickets = withLogging('dashboard.getSlaTickets', _getSlaTickets);
