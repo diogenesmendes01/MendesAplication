@@ -144,16 +144,20 @@ export async function checkRaSlaDeadlines(): Promise<{ atRisk: number; breached:
         daysOverdue: Math.abs(daysRemaining),
       });
 
-      await prisma.auditLog.create({
-        data: {
-          userId: "SYSTEM",
-          action: "RA_SLA_BREACHED",
-          entity: "Ticket",
-          entityId: ticket.id,
-          companyId: ticket.companyId,
-          dataAfter: { daysOverdue: Math.abs(daysRemaining), deadline: ticket.raSlaDeadline.toISOString() },
-        },
-      });
+      try {
+        await prisma.auditLog.create({
+          data: {
+            userId: null,
+            action: "RA_SLA_BREACHED",
+            entity: "Ticket",
+            entityId: ticket.id,
+            companyId: ticket.companyId,
+            dataAfter: { daysOverdue: Math.abs(daysRemaining), deadline: ticket.raSlaDeadline.toISOString() },
+          },
+        });
+      } catch (auditErr) {
+        logger.error({ metric: "audit.create.failure", action: "RA_SLA_BREACHED", ticketId: ticket.id, err: String(auditErr) }, "[sla-check] Failed to create audit log for RA_SLA_BREACHED");
+      }
 
       logger.warn(`[sla-check] RA SLA breached: ticket=${ticket.id} overdue=${Math.abs(daysRemaining)} days`);
       breached++;
@@ -170,16 +174,20 @@ export async function checkRaSlaDeadlines(): Promise<{ atRisk: number; breached:
         daysRemaining,
       });
 
-      await prisma.auditLog.create({
-        data: {
-          userId: "SYSTEM",
-          action: "RA_SLA_AT_RISK",
-          entity: "Ticket",
-          entityId: ticket.id,
-          companyId: ticket.companyId,
-          dataAfter: { daysRemaining, deadline: ticket.raSlaDeadline.toISOString() },
-        },
-      });
+      try {
+        await prisma.auditLog.create({
+          data: {
+            userId: null,
+            action: "RA_SLA_AT_RISK",
+            entity: "Ticket",
+            entityId: ticket.id,
+            companyId: ticket.companyId,
+            dataAfter: { daysRemaining, deadline: ticket.raSlaDeadline.toISOString() },
+          },
+        });
+      } catch (auditErr) {
+        logger.error({ metric: "audit.create.failure", action: "RA_SLA_AT_RISK", ticketId: ticket.id, err: String(auditErr) }, "[sla-check] Failed to create audit log for RA_SLA_AT_RISK");
+      }
 
       logger.info(`[sla-check] RA SLA at risk: ticket=${ticket.id} daysRemaining=${daysRemaining}`);
       atRisk++;

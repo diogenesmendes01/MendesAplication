@@ -301,13 +301,17 @@ async function handleSlaBreach(
     ticketId: ticket.id, stage, escalatedTo, priority: newPriority,
   });
 
-  await prisma.auditLog.create({
-    data: {
-      userId: "SYSTEM", action: "SLA_BREACHED", entity: "Ticket",
-      entityId: ticket.id, companyId: ticket.companyId,
-      dataAfter: { stage, deadlineMinutes: config.deadlineMinutes, actualMinutes, escalatedTo, newPriority },
-    },
-  });
+  try {
+    await prisma.auditLog.create({
+      data: {
+        userId: null, action: "SLA_BREACHED", entity: "Ticket",
+        entityId: ticket.id, companyId: ticket.companyId,
+        dataAfter: { stage, deadlineMinutes: config.deadlineMinutes, actualMinutes, escalatedTo, newPriority },
+      },
+    });
+  } catch (auditErr) {
+    logger.error({ metric: "audit.create.failure", action: "SLA_BREACHED", ticketId: ticket.id, err: String(auditErr) }, "[sla-engine] Failed to create audit log for SLA_BREACHED");
+  }
 
   logger.warn(`[sla-engine] SLA breach: ticket=${ticket.id} stage=${stage} deadline=${config.deadlineMinutes}min actual=${actualMinutes}min`);
 }
@@ -320,13 +324,17 @@ async function handleSlaAtRisk(ticket: TicketWithChannel, stage: string): Promis
 
   sseBus.publish(`sac:${ticket.companyId}`, "sla-at-risk", { ticketId: ticket.id, stage, minutesLeft });
 
-  await prisma.auditLog.create({
-    data: {
-      userId: "SYSTEM", action: "SLA_AT_RISK", entity: "Ticket",
-      entityId: ticket.id, companyId: ticket.companyId,
-      dataAfter: { stage, minutesLeft },
-    },
-  });
+  try {
+    await prisma.auditLog.create({
+      data: {
+        userId: null, action: "SLA_AT_RISK", entity: "Ticket",
+        entityId: ticket.id, companyId: ticket.companyId,
+        dataAfter: { stage, minutesLeft },
+      },
+    });
+  } catch (auditErr) {
+    logger.error({ metric: "audit.create.failure", action: "SLA_AT_RISK", ticketId: ticket.id, err: String(auditErr) }, "[sla-engine] Failed to create audit log for SLA_AT_RISK");
+  }
 
   logger.info(`[sla-engine] SLA at risk: ticket=${ticket.id} stage=${stage} minutesLeft=${minutesLeft}`);
 }

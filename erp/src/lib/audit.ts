@@ -18,7 +18,8 @@ export type AuditAction =
   | "ai_fallback_chain_updated";
 
 export interface AuditEventParams {
-  userId: string;
+  /** The user who triggered the event. Pass `null` for system/worker-generated events. */
+  userId: string | null;
   action: AuditAction;
   entity: string;
   entityId: string;
