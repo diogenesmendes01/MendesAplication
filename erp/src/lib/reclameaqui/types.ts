@@ -376,7 +376,7 @@ export interface RaReputation {
   reputation: {
     code: string;
     name: string;
-  };
+  } | null;
 }
 
 /**
