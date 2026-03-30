@@ -17,9 +17,9 @@ import {
   upsertAlert,
   toggleAlert,
   deleteAlert,
-  METRIC_TYPES,
   type AiAlertRow,
 } from "../alert-actions";
+import { METRIC_TYPES } from "../alert-actions.types";
 
 interface AlertsPanelProps {
   companyId: string;
