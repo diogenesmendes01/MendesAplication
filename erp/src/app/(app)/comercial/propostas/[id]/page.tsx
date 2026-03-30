@@ -323,7 +323,7 @@ export default function ProposalDetailPage() {
       } else {
         setIssuedInvoiceMap({});
       }
-    } catch (err) {
+    } catch (_err) {
       toast.error(err instanceof Error ? err.message : "Erro ao carregar proposta");
     } finally {
       setLoading(false);
@@ -351,7 +351,7 @@ export default function ProposalDetailPage() {
       setProviders(providersList);
       setRoutingPreview(preview);
       setSelectedProviderId("__auto__");
-    } catch (err) {
+    } catch (_err) {
       // eslint-disable-next-line no-console
       // silently handled — UI shows default state
       setProviders([]);
@@ -379,7 +379,7 @@ export default function ProposalDetailPage() {
           parseFloat(proposal.totalValue) / Math.max(1, parseInt(installments, 10) || 1),
         );
         setRoutingPreview(preview);
-      } catch (err) {
+      } catch (_err) {
         // eslint-disable-next-line no-console
         // silently handled — preview is best-effort
       }
@@ -425,7 +425,7 @@ export default function ProposalDetailPage() {
         toast.success(`${result.boletos.length} boleto(s) gerado(s) com sucesso`);
       }
       await loadData();
-    } catch (err) {
+    } catch (_err) {
       toast.error(err instanceof Error ? err.message : "Erro ao gerar boletos");
     } finally {
       setGenerating(false);
@@ -440,7 +440,7 @@ export default function ProposalDetailPage() {
       toast.success("Proposta enviada por e-mail com sucesso");
       setSendProposalDialogOpen(false);
       await loadData();
-    } catch (err) {
+    } catch (_err) {
       toast.error(err instanceof Error ? err.message : "Erro ao enviar proposta por e-mail");
     } finally {
       setSendingProposal(false);
@@ -454,7 +454,7 @@ export default function ProposalDetailPage() {
       await updateProposalStatus(proposalId, "ACCEPTED" as const, selectedCompanyId);
       toast.success("Aceite registrado com sucesso");
       await loadData();
-    } catch (err) {
+    } catch (_err) {
       toast.error(err instanceof Error ? err.message : "Erro ao registrar aceite");
     } finally {
       setAcceptingProposal(false);
@@ -475,7 +475,7 @@ export default function ProposalDetailPage() {
       setSendBoletoDialogOpen(false);
       setSelectedBoletoForEmail(null);
       await loadData();
-    } catch (err) {
+    } catch (_err) {
       toast.error(err instanceof Error ? err.message : "Erro ao enviar boleto por e-mail");
     } finally {
       setSendingBoleto(false);
@@ -496,7 +496,7 @@ export default function ProposalDetailPage() {
       setEmitNfseDialogOpen(false);
       setSelectedBoletoForNfse(null);
       await loadData();
-    } catch (err) {
+    } catch (_err) {
       toast.error(err instanceof Error ? err.message : "Erro ao emitir NFS-e");
     } finally {
       setEmittingNfse(false);

@@ -347,7 +347,7 @@ describe("resolveLastSyncDate", () => {
 
   beforeEach(async () => {
     const mod = await import("../reclameaqui-inbound");
-    resolveLastSyncDate = (mod as unknown as Record<string, (...args: any[]) => any>)._resolveLastSyncDate;
+    resolveLastSyncDate = (mod as unknown as Record<string, (...args: unknown[]) => unknown>)._resolveLastSyncDate;
   });
 
   it("returns DB date when available", () => {
@@ -371,7 +371,7 @@ describe("resolveLastSyncDate", () => {
 describe("countModifiedTickets", () => {
   it("returns the count from API response", async () => {
     const mod = await import("../reclameaqui-inbound");
-    const countModifiedTickets = (mod as unknown as Record<string, (...args: any[]) => any>)._countModifiedTickets;
+    const countModifiedTickets = (mod as unknown as Record<string, (...args: unknown[]) => unknown>)._countModifiedTickets;
 
     const mockClient = {
       countTickets: vi.fn().mockResolvedValue({ data: 42 }),
@@ -389,7 +389,7 @@ describe("countModifiedTickets", () => {
 
   it("returns 0 when API returns undefined data", async () => {
     const mod = await import("../reclameaqui-inbound");
-    const countModifiedTickets = (mod as unknown as Record<string, (...args: any[]) => any>)._countModifiedTickets;
+    const countModifiedTickets = (mod as unknown as Record<string, (...args: unknown[]) => unknown>)._countModifiedTickets;
 
     const mockClient = {
       countTickets: vi.fn().mockResolvedValue({}),

@@ -369,14 +369,14 @@ const [raContext, setRaContext] = useState<any>(null);
         try {
           const raCtx = await getRaTicketContext(ticketId, selectedCompanyId);
           setRaContext(raCtx);
-        } catch (err) {
+        } catch (_err) {
           // Error handled silently — RA context is optional
           toast.error("Erro ao carregar contexto do Reclame Aqui");
         } finally {
           setLoadingRaContext(false);
         }
       }
-    } catch (err) {
+    } catch (_err) {
       toast.error(
         err instanceof Error ? err.message : "Erro ao carregar ticket"
       );
@@ -406,7 +406,7 @@ const [raContext, setRaContext] = useState<any>(null);
         prev ? { ...prev, status: result.status } : prev
       );
       toast.success(`Status atualizado para: ${statusLabel(result.status)}`);
-    } catch (err) {
+    } catch (_err) {
       toast.error(
         err instanceof Error ? err.message : "Erro ao atualizar status"
       );
@@ -436,7 +436,7 @@ const [raContext, setRaContext] = useState<any>(null);
           ? `Ticket reatribuído para ${result.assignee.name}`
           : "Responsável removido"
       );
-    } catch (err) {
+    } catch (_err) {
       toast.error(
         err instanceof Error ? err.message : "Erro ao reatribuir ticket"
       );
@@ -456,7 +456,7 @@ const [raContext, setRaContext] = useState<any>(null);
       setTags(updatedTags);
       setNewTag("");
       toast.success("Tag adicionada");
-    } catch (err) {
+    } catch (_err) {
       toast.error(err instanceof Error ? err.message : "Erro ao adicionar tag");
     }
   }
@@ -467,7 +467,7 @@ const [raContext, setRaContext] = useState<any>(null);
       const updatedTags = await removeTag(ticket.id, selectedCompanyId, tag);
       setTags(updatedTags);
       toast.success("Tag removida");
-    } catch (err) {
+    } catch (_err) {
       toast.error(err instanceof Error ? err.message : "Erro ao remover tag");
     }
   }
@@ -505,7 +505,7 @@ const [raContext, setRaContext] = useState<any>(null);
       setLinkSearch("");
       setLinkResults([]);
       loadTicket();
-    } catch (err) {
+    } catch (_err) {
       toast.error(err instanceof Error ? err.message : "Erro ao vincular cliente");
     } finally {
       setLinking(false);
@@ -529,7 +529,7 @@ const [raContext, setRaContext] = useState<any>(null);
       setCreateDialogOpen(false);
       setNewClientForm({ name: "", cpfCnpj: "", type: "PJ", email: "", telefone: "", razaoSocial: "", endereco: "" });
       loadTicket();
-    } catch (err) {
+    } catch (_err) {
       toast.error(err instanceof Error ? err.message : "Erro ao criar cliente");
     } finally {
       setLinking(false);
@@ -549,7 +549,7 @@ const [raContext, setRaContext] = useState<any>(null);
       await approveRefund(refundId, selectedCompanyId);
       toast.success("Reembolso aprovado");
       getTicketRefunds(ticketId, selectedCompanyId).then(setRefunds).catch(() => {});
-    } catch (err) {
+    } catch (_err) {
       toast.error(err instanceof Error ? err.message : "Erro ao aprovar reembolso");
     } finally {
       setApprovingRefundId(null);
@@ -566,7 +566,7 @@ const [raContext, setRaContext] = useState<any>(null);
       setRejectRefundId("");
       setRejectReason("");
       getTicketRefunds(ticketId, selectedCompanyId).then(setRefunds).catch(() => {});
-    } catch (err) {
+    } catch (_err) {
       toast.error(err instanceof Error ? err.message : "Erro ao rejeitar reembolso");
     } finally {
       setSubmittingReject(false);
@@ -588,7 +588,7 @@ const [raContext, setRaContext] = useState<any>(null);
       toast.success("Cancelamento aprovado e executado");
       getCancellationInfo(ticketId, selectedCompanyId).then(setCancellation).catch(() => {});
       loadTicket();
-    } catch (err) {
+    } catch (_err) {
       toast.error(err instanceof Error ? err.message : "Erro ao aprovar cancelamento");
     } finally {
       setApprovingCancel(false);
@@ -610,7 +610,7 @@ const [raContext, setRaContext] = useState<any>(null);
       });
       toast.success("PDF exportado com sucesso");
       setExportDialogOpen(false);
-    } catch (err) {
+    } catch (_err) {
       toast.error(err instanceof Error ? err.message : "Erro ao exportar PDF");
     } finally {
       setExporting(false);
@@ -632,7 +632,7 @@ const [raContext, setRaContext] = useState<any>(null);
       }
       toast.success("Solicitação de avaliação enviada ao Reclame Aqui");
       loadTicket();
-    } catch (err) {
+    } catch (_err) {
       toast.error(err instanceof Error ? err.message : "Erro inesperado");
     } finally {
       setRequestingEval(false);
@@ -658,7 +658,7 @@ const [raContext, setRaContext] = useState<any>(null);
       }
       toast.success("Mensagem privada encerrada");
       loadTicket();
-    } catch (err) {
+    } catch (_err) {
       toast.error(err instanceof Error ? err.message : "Erro inesperado");
     } finally {
       setFinishingPrivate(false);
@@ -693,7 +693,7 @@ const [raContext, setRaContext] = useState<any>(null);
       setRaPrivateMessage("");
       setRaPrivateFiles([]);
       loadTicket();
-    } catch (err) {
+    } catch (_err) {
       toast.error(err instanceof Error ? err.message : "Erro inesperado");
     } finally {
       setSendingRaPrivate(false);
