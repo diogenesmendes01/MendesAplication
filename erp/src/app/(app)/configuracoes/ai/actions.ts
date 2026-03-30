@@ -14,6 +14,7 @@ import type { Prisma, ChannelType } from "@prisma/client";
 import { createAsyncRateLimiter } from "@/lib/rate-limiter";
 import { logger } from "@/lib/logger";
 import { resolveAiConfig } from "@/lib/ai/resolve-config";
+import { withLogging } from "@/lib/with-logging";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -213,7 +214,7 @@ async function checkSimulationRateLimit(companyId: string): Promise<boolean> {
  * falls back to global config (channel=null).
  * When channel is null/undefined: returns the global config.
  */
-export async function getAiConfig(
+async function _getAiConfig(
   companyId: string,
   channel?: ChannelType | null,
 ): Promise<AiConfigData> {
@@ -243,7 +244,7 @@ const MASKED_API_KEY_PATTERN = /^\*{4}/;
  * When channel is provided: upserts the channel-specific config row.
  * When channel is null/undefined: upserts the global config row.
  */
-export async function updateAiConfig(
+async function _updateAiConfig(
   companyId: string,
   data: AiConfigData,
   channel?: ChannelType | null,
@@ -394,7 +395,7 @@ export async function updateAiConfig(
  * Test the AI connection for a company by making a minimal API call.
  * Uses the global config (channel=null) for connection testing.
  */
-export async function testAiConnection(
+async function _testAiConnection(
   companyId: string,
 ): Promise<{ ok: boolean; error?: string }> {
   await requireAdmin();
@@ -463,7 +464,7 @@ export async function testAiConnection(
  * List available models for the company's configured provider.
  * Uses the global config (channel=null) for model discovery.
  */
-export async function listAvailableModels(
+async function _listAvailableModels(
   companyId: string,
   providerOverride?: string,
 ): Promise<string[]> {
@@ -495,7 +496,7 @@ export async function listAvailableModels(
 /**
  * Get AI usage summary for the frontend consumption tab.
  */
-export async function getAiUsageSummary(
+async function _getAiUsageSummary(
   companyId: string,
   days: number,
 ): Promise<UsageSummary> {
@@ -512,7 +513,7 @@ export async function getAiUsageSummary(
 /**
  * Get today's spend for the company (BRL).
  */
-export async function getTodaySpendAction(
+async function _getTodaySpendAction(
   companyId: string,
 ): Promise<number> {
   await requireAdmin();
@@ -524,7 +525,7 @@ export async function getTodaySpendAction(
 /**
  * Get model suggestion based on provider and daily budget.
  */
-export async function getSuggestedModel(
+async function _getSuggestedModel(
   companyId: string,
   provider: string,
   dailyBudgetBrl: number,
@@ -539,7 +540,7 @@ export async function getSuggestedModel(
  * Uses the real persona and knowledge base but does NOT send messages or save to DB.
  * Rate limited to 10 simulations per minute per company.
  */
-export async function simulateAiResponse(
+async function _simulateAiResponse(
   companyId: string,
   message: string,
   channel: "WHATSAPP" | "EMAIL",
@@ -634,3 +635,14 @@ export async function simulateAiResponse(
   };
 }
 
+// ---------------------------------------------------------------------------
+// Wrapped exports with structured logging
+// ---------------------------------------------------------------------------
+export const getAiConfig = withLogging('configuracoes.ai.getAiConfig', _getAiConfig);
+export const updateAiConfig = withLogging('configuracoes.ai.updateAiConfig', _updateAiConfig);
+export const testAiConnection = withLogging('configuracoes.ai.testAiConnection', _testAiConnection);
+export const listAvailableModels = withLogging('configuracoes.ai.listAvailableModels', _listAvailableModels);
+export const getAiUsageSummary = withLogging('configuracoes.ai.getAiUsageSummary', _getAiUsageSummary);
+export const getTodaySpendAction = withLogging('configuracoes.ai.getTodaySpendAction', _getTodaySpendAction);
+export const getSuggestedModel = withLogging('configuracoes.ai.getSuggestedModel', _getSuggestedModel);
+export const simulateAiResponse = withLogging('configuracoes.ai.simulateAiResponse', _simulateAiResponse);

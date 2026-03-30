@@ -14,6 +14,7 @@ import type { JwtPayload } from "@/lib/auth";
 import { sseBus } from "@/lib/sse";
 import { getCompanyKpis, invalidateKpiCache, fetchSlaConfigs } from "@/lib/kpi-cache";
 import { logger } from "@/lib/logger";
+import { withLogging } from "@/lib/with-logging";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -251,7 +252,7 @@ async function _listTicketsInternal(
   };
 }
 
-export async function listTickets(
+async function _listTickets(
   params: ListTicketsParams
 ): Promise<PaginatedResult<TicketRow>> {
   const session = await requireCompanyAccess(params.companyId);
@@ -271,7 +272,7 @@ async function _getTicketTabCountsInternal(companyId: string, _session: JwtPaylo
   };
 }
 
-export async function getTicketTabCounts(companyId: string): Promise<{
+async function _getTicketTabCounts(companyId: string): Promise<{
   slaCritical: number;
   refunds: number;
 }> {
@@ -289,7 +290,7 @@ async function _getSlaAlertCountsInternal(companyId: string, _session: JwtPayloa
   return { breached: kpis.slaBreachedCount, atRisk: kpis.slaAtRiskCount };
 }
 
-export async function getSlaAlertCounts(companyId: string): Promise<{
+async function _getSlaAlertCounts(companyId: string): Promise<{
   breached: number;
   atRisk: number;
 }> {
@@ -297,7 +298,7 @@ export async function getSlaAlertCounts(companyId: string): Promise<{
   return _getSlaAlertCountsInternal(companyId, session);
 }
 
-export async function createTicket(input: CreateTicketInput) {
+async function _createTicket(input: CreateTicketInput) {
   const session = await requireCompanyAccess(input.companyId);
 
   if (!input.clientId?.trim()) {
@@ -366,7 +367,7 @@ export async function createTicket(input: CreateTicketInput) {
   return { id: ticket.id };
 }
 
-export async function listClientsForSelect(companyId: string) {
+async function _listClientsForSelect(companyId: string) {
   await requireCompanyAccess(companyId);
 
   const sharedIds = await getSharedCompanyIds(companyId);
@@ -398,7 +399,7 @@ async function _listUsersForAssignInternal(companyId: string, _session: JwtPaylo
   return users;
 }
 
-export async function listUsersForAssign(companyId: string) {
+async function _listUsersForAssign(companyId: string) {
   const session = await requireCompanyAccess(companyId);
   return _listUsersForAssignInternal(companyId, session);
 }
@@ -489,7 +490,7 @@ async function _getTicketByIdInternal(
   };
 }
 
-export async function getTicketById(
+async function _getTicketById(
   ticketId: string,
   companyId: string
 ): Promise<TicketDetail> {
@@ -506,7 +507,7 @@ const VALID_STATUS_TRANSITIONS: Record<TicketStatus, TicketStatus[]> = {
   MERGED: [],
 };
 
-export async function updateTicketStatus(
+async function _updateTicketStatus(
   ticketId: string,
   companyId: string,
   newStatus: TicketStatus
@@ -559,7 +560,7 @@ export async function updateTicketStatus(
   return { status: updated.status };
 }
 
-export async function toggleTicketAi(
+async function _toggleTicketAi(
   ticketId: string,
   companyId: string,
   enabled: boolean
@@ -600,12 +601,12 @@ async function _getAiConfigEnabledInternal(companyId: string, _session: JwtPaylo
   return config?.enabled ?? false;
 }
 
-export async function getAiConfigEnabled(companyId: string): Promise<boolean> {
+async function _getAiConfigEnabled(companyId: string): Promise<boolean> {
   const session = await requireCompanyAccess(companyId);
   return _getAiConfigEnabledInternal(companyId, session);
 }
 
-export async function reassignTicket(
+async function _reassignTicket(
   ticketId: string,
   companyId: string,
   assigneeId: string | null
@@ -669,7 +670,7 @@ export interface TicketMessageRow {
   } | null;
 }
 
-export async function listTicketMessages(
+async function _listTicketMessages(
   ticketId: string,
   companyId: string
 ): Promise<TicketMessageRow[]> {
@@ -708,7 +709,7 @@ export interface CreateTicketReplyInput {
   sendViaEmail: boolean;
 }
 
-export async function createTicketReply(input: CreateTicketReplyInput) {
+async function _createTicketReply(input: CreateTicketReplyInput) {
   const session = await requireCompanyAccess(input.companyId);
 
   if (!input.content?.trim()) {
@@ -828,7 +829,7 @@ export interface TimelineEvent {
   newStatus: string | null;
 }
 
-export async function listTimelineEvents(
+async function _listTimelineEvents(
   ticketId: string,
   companyId: string,
   since?: string, // ISO timestamp — only return events after this time
@@ -987,7 +988,7 @@ export async function listTimelineEvents(
 // Internal Notes
 // ---------------------------------------------------------------------------
 
-export async function createInternalNote(
+async function _createInternalNote(
   ticketId: string,
   companyId: string,
   content: string,
@@ -1059,7 +1060,7 @@ export interface EmailRecipient {
   role: string | null;
 }
 
-export async function getEmailRecipients(
+async function _getEmailRecipients(
   ticketId: string,
   companyId: string
 ): Promise<EmailRecipient[]> {
@@ -1120,7 +1121,7 @@ export type AttachmentData = {
   storagePath: string;
 };
 
-export async function sendEmailReply(
+async function _sendEmailReply(
   ticketId: string,
   companyId: string,
   to: string,
@@ -1222,7 +1223,7 @@ export async function sendEmailReply(
 // Ticket Attachments
 // ---------------------------------------------------------------------------
 
-export async function attachFileToTicket(
+async function _attachFileToTicket(
   ticketId: string,
   companyId: string,
   attachmentData: {
@@ -1283,7 +1284,7 @@ export interface WhatsAppRecipient {
   role: string | null;
 }
 
-export async function getWhatsAppRecipients(
+async function _getWhatsAppRecipients(
   ticketId: string,
   companyId: string
 ): Promise<WhatsAppRecipient[]> {
@@ -1393,7 +1394,7 @@ export async function getWhatsAppRecipients(
 // Send WhatsApp Message
 // ---------------------------------------------------------------------------
 
-export async function sendWhatsAppMessage(
+async function _sendWhatsAppMessage(
   ticketId: string,
   companyId: string,
   to: string,
@@ -1545,7 +1546,7 @@ async function _getClientFinancialSummaryInternal(
   };
 }
 
-export async function getClientFinancialSummary(
+async function _getClientFinancialSummary(
   clientId: string,
   companyId: string
 ): Promise<ClientFinancialSummary> {
@@ -1566,7 +1567,7 @@ export interface ClientForLink {
 }
 
 /** Search clients for linking (excludes unknown placeholder) */
-export async function searchClientsForLink(
+async function _searchClientsForLink(
   companyId: string,
   search: string
 ): Promise<ClientForLink[]> {
@@ -1616,7 +1617,7 @@ function extractSenderInfo(description: string): {
 }
 
 /** Link ticket to existing client, optionally creating an AdditionalContact */
-export async function linkContactToClient(
+async function _linkContactToClient(
   ticketId: string,
   companyId: string,
   clientId: string
@@ -1688,7 +1689,7 @@ export async function linkContactToClient(
 }
 
 /** Create a new client and link to ticket */
-export async function createClientAndLink(
+async function _createClientAndLink(
   ticketId: string,
   companyId: string,
   clientData: {
@@ -1835,7 +1836,7 @@ async function _getTicketRefundsInternal(
   }));
 }
 
-export async function getTicketRefunds(
+async function _getTicketRefunds(
   ticketId: string,
   companyId: string
 ): Promise<RefundSummary[]> {
@@ -1848,7 +1849,7 @@ async function _getUserRoleInternal(companyId: string, session: JwtPayload): Pro
   return session.role;
 }
 
-export async function getUserRole(companyId: string): Promise<string> {
+async function _getUserRole(companyId: string): Promise<string> {
   const session = await requireCompanyAccess(companyId);
   return _getUserRoleInternal(companyId, session);
 }
@@ -1857,7 +1858,7 @@ export async function getUserRole(companyId: string): Promise<string> {
 // Refund Request (US-082)
 // ---------------------------------------------------------------------------
 
-export async function requestRefund(
+async function _requestRefund(
   ticketId: string,
   companyId: string,
   amount: number,
@@ -2023,7 +2024,7 @@ export async function requestRefund(
 // Refund Approval / Rejection
 // ---------------------------------------------------------------------------
 
-export async function approveRefund(refundId: string, companyId: string) {
+async function _approveRefund(refundId: string, companyId: string) {
   const session = await requireCompanyAccess(companyId);
 
   // Only ADMIN and MANAGER can approve refunds
@@ -2122,7 +2123,7 @@ export async function approveRefund(refundId: string, companyId: string) {
   return { success: true };
 }
 
-export async function rejectRefund(
+async function _rejectRefund(
   refundId: string,
   companyId: string,
   reason: string
@@ -2198,7 +2199,7 @@ export async function rejectRefund(
 // Refund Execution
 // ---------------------------------------------------------------------------
 
-export async function executeRefund(
+async function _executeRefund(
   refundId: string,
   companyId: string,
   data: {
@@ -2470,7 +2471,7 @@ export interface TicketListBootstrap {
   slaAlerts: Awaited<ReturnType<typeof getSlaAlertCounts>>;
 }
 
-export async function getTicketListBootstrap(
+async function _getTicketListBootstrap(
   params: ListTicketsParams
 ): Promise<TicketListBootstrap> {
   const session = await requireCompanyAccess(params.companyId);
@@ -2488,7 +2489,7 @@ export async function getTicketListBootstrap(
 // Tags
 // ---------------------------------------------------------------------------
 
-export async function addTag(
+async function _addTag(
   ticketId: string,
   companyId: string,
   tag: string
@@ -2530,7 +2531,7 @@ export async function addTag(
   return updated.tags;
 }
 
-export async function removeTag(
+async function _removeTag(
   ticketId: string,
   companyId: string,
   tag: string
@@ -2623,7 +2624,7 @@ async function _getCancellationInfoInternal(
   };
 }
 
-export async function getCancellationInfo(
+async function _getCancellationInfo(
   ticketId: string,
   companyId: string
 ): Promise<CancellationInfo> {
@@ -2631,7 +2632,7 @@ export async function getCancellationInfo(
   return _getCancellationInfoInternal(ticketId, companyId, session);
 }
 
-export async function requestCancellation(
+async function _requestCancellation(
   ticketId: string,
   companyId: string,
   type: CancellationType,
@@ -2713,7 +2714,7 @@ export async function requestCancellation(
   return { success: true };
 }
 
-export async function approveCancellation(
+async function _approveCancellation(
   ticketId: string,
   companyId: string
 ) {
@@ -2861,7 +2862,7 @@ export interface TicketDetailBootstrap {
   userRole: string;
 }
 
-export async function getTicketDetailBootstrap(
+async function _getTicketDetailBootstrap(
   ticketId: string,
   companyId: string
 ): Promise<TicketDetailBootstrap | null> {
@@ -2902,7 +2903,7 @@ export interface KanbanColumnData {
 
 export type KanbanBootstrapResult = Record<TicketStatus, KanbanColumnData>;
 
-export async function getKanbanBootstrap(
+async function _getKanbanBootstrap(
   companyId: string,
   channelType?: ChannelType
 ): Promise<KanbanBootstrapResult> {
@@ -2932,3 +2933,45 @@ export async function getKanbanBootstrap(
     ])
   ) as KanbanBootstrapResult;
 }
+
+// ---------------------------------------------------------------------------
+// Wrapped exports with structured logging
+// ---------------------------------------------------------------------------
+export const listTickets = withLogging('sac.tickets.listTickets', _listTickets);
+export const getTicketTabCounts = withLogging('sac.tickets.getTicketTabCounts', _getTicketTabCounts);
+export const getSlaAlertCounts = withLogging('sac.tickets.getSlaAlertCounts', _getSlaAlertCounts);
+export const createTicket = withLogging('sac.tickets.createTicket', _createTicket);
+export const listClientsForSelect = withLogging('sac.tickets.listClientsForSelect', _listClientsForSelect);
+export const listUsersForAssign = withLogging('sac.tickets.listUsersForAssign', _listUsersForAssign);
+export const getTicketById = withLogging('sac.tickets.getTicketById', _getTicketById);
+export const updateTicketStatus = withLogging('sac.tickets.updateTicketStatus', _updateTicketStatus);
+export const toggleTicketAi = withLogging('sac.tickets.toggleTicketAi', _toggleTicketAi);
+export const getAiConfigEnabled = withLogging('sac.tickets.getAiConfigEnabled', _getAiConfigEnabled);
+export const reassignTicket = withLogging('sac.tickets.reassignTicket', _reassignTicket);
+export const listTicketMessages = withLogging('sac.tickets.listTicketMessages', _listTicketMessages);
+export const createTicketReply = withLogging('sac.tickets.createTicketReply', _createTicketReply);
+export const listTimelineEvents = withLogging('sac.tickets.listTimelineEvents', _listTimelineEvents);
+export const createInternalNote = withLogging('sac.tickets.createInternalNote', _createInternalNote);
+export const getEmailRecipients = withLogging('sac.tickets.getEmailRecipients', _getEmailRecipients);
+export const sendEmailReply = withLogging('sac.tickets.sendEmailReply', _sendEmailReply);
+export const attachFileToTicket = withLogging('sac.tickets.attachFileToTicket', _attachFileToTicket);
+export const getWhatsAppRecipients = withLogging('sac.tickets.getWhatsAppRecipients', _getWhatsAppRecipients);
+export const sendWhatsAppMessage = withLogging('sac.tickets.sendWhatsAppMessage', _sendWhatsAppMessage);
+export const getClientFinancialSummary = withLogging('sac.tickets.getClientFinancialSummary', _getClientFinancialSummary);
+export const searchClientsForLink = withLogging('sac.tickets.searchClientsForLink', _searchClientsForLink);
+export const linkContactToClient = withLogging('sac.tickets.linkContactToClient', _linkContactToClient);
+export const createClientAndLink = withLogging('sac.tickets.createClientAndLink', _createClientAndLink);
+export const getTicketRefunds = withLogging('sac.tickets.getTicketRefunds', _getTicketRefunds);
+export const getUserRole = withLogging('sac.tickets.getUserRole', _getUserRole);
+export const requestRefund = withLogging('sac.tickets.requestRefund', _requestRefund);
+export const approveRefund = withLogging('sac.tickets.approveRefund', _approveRefund);
+export const rejectRefund = withLogging('sac.tickets.rejectRefund', _rejectRefund);
+export const executeRefund = withLogging('sac.tickets.executeRefund', _executeRefund);
+export const getTicketListBootstrap = withLogging('sac.tickets.getTicketListBootstrap', _getTicketListBootstrap);
+export const addTag = withLogging('sac.tickets.addTag', _addTag);
+export const removeTag = withLogging('sac.tickets.removeTag', _removeTag);
+export const getCancellationInfo = withLogging('sac.tickets.getCancellationInfo', _getCancellationInfo);
+export const requestCancellation = withLogging('sac.tickets.requestCancellation', _requestCancellation);
+export const approveCancellation = withLogging('sac.tickets.approveCancellation', _approveCancellation);
+export const getTicketDetailBootstrap = withLogging('sac.tickets.getTicketDetailBootstrap', _getTicketDetailBootstrap);
+export const getKanbanBootstrap = withLogging('sac.tickets.getKanbanBootstrap', _getKanbanBootstrap);
