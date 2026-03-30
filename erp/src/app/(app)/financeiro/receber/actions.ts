@@ -6,6 +6,7 @@ import { logAuditEvent } from "@/lib/audit";
 import { Prisma, type PaymentStatus } from "@prisma/client";
 import Decimal from "decimal.js";
 import { getSharedCompanyIds } from "@/lib/shared-clients";
+import { withLogging } from "@/lib/with-logging";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -57,7 +58,7 @@ export interface ReceivableRow {
 // Server Actions
 // ---------------------------------------------------------------------------
 
-export async function listReceivables(
+async function _listReceivables(
   params: ListReceivablesParams
 ): Promise<PaginatedResult<ReceivableRow>> {
   await requireCompanyAccess(params.companyId);
@@ -135,7 +136,7 @@ export async function listReceivables(
   };
 }
 
-export async function createReceivable(input: CreateReceivableInput) {
+async function _createReceivable(input: CreateReceivableInput) {
   const session = await requireCompanyAccess(input.companyId);
 
   if (!input.clientId?.trim()) {
@@ -185,7 +186,7 @@ export async function createReceivable(input: CreateReceivableInput) {
   return { id: receivable.id };
 }
 
-export async function markReceivableAsPaid(
+async function _markReceivableAsPaid(
   id: string,
   companyId: string,
   paidAt?: Date,
@@ -230,7 +231,7 @@ export async function markReceivableAsPaid(
   return { success: true };
 }
 
-export async function listClientsForSelect(companyId: string) {
+async function _listClientsForSelect(companyId: string) {
   await requireCompanyAccess(companyId);
 
   const sharedIds = await getSharedCompanyIds(companyId);
@@ -242,3 +243,11 @@ export async function listClientsForSelect(companyId: string) {
 
   return clients;
 }
+
+// ---------------------------------------------------------------------------
+// Wrapped exports with logging
+// ---------------------------------------------------------------------------
+export const listReceivables = withLogging('receber.listReceivables', _listReceivables);
+export const createReceivable = withLogging('receber.createReceivable', _createReceivable);
+export const markReceivableAsPaid = withLogging('receber.markReceivableAsPaid', _markReceivableAsPaid);
+export const listClientsForSelect = withLogging('receber.listClientsForSelect', _listClientsForSelect);

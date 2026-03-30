@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requireCompanyAccess } from "@/lib/rbac";
 import { type InvoiceStatus, Prisma } from "@prisma/client";
 import { getSharedCompanyIds } from "@/lib/shared-clients";
+import { withLogging } from "@/lib/with-logging";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -52,7 +53,7 @@ export interface InvoiceRow {
 // Server Actions
 // ---------------------------------------------------------------------------
 
-export async function listInvoices(
+async function _listInvoices(
   params: ListInvoicesParams
 ): Promise<PaginatedResult<InvoiceRow>> {
   await requireCompanyAccess(params.companyId);
@@ -128,7 +129,7 @@ export async function listInvoices(
   };
 }
 
-export async function listClientsForSelect(companyId: string) {
+async function _listClientsForSelect(companyId: string) {
   await requireCompanyAccess(companyId);
 
   const sharedIds = await getSharedCompanyIds(companyId);
@@ -144,7 +145,7 @@ export async function listClientsForSelect(companyId: string) {
 /**
  * Cancel an issued invoice.
  */
-export async function cancelInvoice(
+async function _cancelInvoice(
   invoiceId: string,
   companyId: string,
   motivo = "Erro na emissão"
@@ -224,7 +225,7 @@ export async function cancelInvoice(
  * Deletes the PENDING record first (emitInvoiceForBoleto checks for duplicates),
  * then recreates it if emission fails so the user can retry.
  */
-export async function emitPendingInvoice(invoiceId: string, companyId: string) {
+async function _emitPendingInvoice(invoiceId: string, companyId: string) {
   await requireCompanyAccess(companyId);
 
   const invoice = await prisma.invoice.findFirst({
@@ -267,3 +268,11 @@ export async function emitPendingInvoice(invoiceId: string, companyId: string) {
     throw err;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Wrapped exports with logging
+// ---------------------------------------------------------------------------
+export const listInvoices = withLogging('notasFiscais.listInvoices', _listInvoices);
+export const listClientsForSelect = withLogging('notasFiscais.listClientsForSelect', _listClientsForSelect);
+export const cancelInvoice = withLogging('notasFiscais.cancelInvoice', _cancelInvoice);
+export const emitPendingInvoice = withLogging('notasFiscais.emitPendingInvoice', _emitPendingInvoice);

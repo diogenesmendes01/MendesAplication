@@ -9,6 +9,7 @@ import { PROVIDER_REGISTRY, getGateway, isProviderType } from "@/lib/payment";
 import type { ProviderDefinition } from "@/lib/payment";
 import { Prisma } from "@prisma/client";
 import type { ClientType } from "@prisma/client";
+import { withLogging } from "@/lib/with-logging";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -100,7 +101,7 @@ function maskCredentials(
 // getPaymentProviders — list providers for a company (masked credentials)
 // ---------------------------------------------------------------------------
 
-export async function getPaymentProviders(
+async function _getPaymentProviders(
   companyId: string,
 ): Promise<PaymentProviderData[]> {
   await requireCompanyAccess(companyId);
@@ -170,7 +171,7 @@ export async function getPaymentProviders(
 // getAvailableProviders — return PROVIDER_REGISTRY for dropdown
 // ---------------------------------------------------------------------------
 
-export async function getAvailableProviders(): Promise<ProviderDefinition[]> {
+async function _getAvailableProviders(): Promise<ProviderDefinition[]> {
   return Object.values(PROVIDER_REGISTRY);
 }
 
@@ -180,7 +181,7 @@ export async function getAvailableProviders(): Promise<ProviderDefinition[]> {
 // PR #35 fix: create provider uses placeholder webhookUrl then updates atomically
 // ---------------------------------------------------------------------------
 
-export async function savePaymentProvider(
+async function _savePaymentProvider(
   companyId: string,
   data: SavePaymentProviderInput,
 ): Promise<{ id: string }> {
@@ -352,7 +353,7 @@ export async function savePaymentProvider(
 // deletePaymentProvider — delete provider (cascade handles rules)
 // ---------------------------------------------------------------------------
 
-export async function deletePaymentProvider(
+async function _deletePaymentProvider(
   companyId: string,
   id: string,
 ): Promise<{ success: boolean }> {
@@ -396,7 +397,7 @@ export async function deletePaymentProvider(
 // testProviderConnection — decrypt credentials and test
 // ---------------------------------------------------------------------------
 
-export async function testProviderConnection(
+async function _testProviderConnection(
   companyId: string,
   id: string,
 ): Promise<{ ok: boolean; message: string }> {
@@ -472,7 +473,7 @@ export async function testProviderConnection(
 // saveRoutingRules — replace all rules for a provider
 // ---------------------------------------------------------------------------
 
-export async function saveRoutingRules(
+async function _saveRoutingRules(
   companyId: string,
   providerId: string,
   rules: SaveRoutingRuleInput[],
@@ -527,7 +528,7 @@ export async function saveRoutingRules(
 // toggleProviderActive — activate/deactivate provider
 // ---------------------------------------------------------------------------
 
-export async function toggleProviderActive(
+async function _toggleProviderActive(
   companyId: string,
   id: string,
 ): Promise<{ isActive: boolean }> {
@@ -576,7 +577,7 @@ export async function toggleProviderActive(
 // Already uses $transaction (Bug #20 was fixed here)
 // ---------------------------------------------------------------------------
 
-export async function setDefaultProvider(
+async function _setDefaultProvider(
   companyId: string,
   id: string,
 ): Promise<{ success: boolean }> {
@@ -616,3 +617,15 @@ export async function setDefaultProvider(
 
   return { success: true };
 }
+
+// ---------------------------------------------------------------------------
+// Wrapped exports with logging
+// ---------------------------------------------------------------------------
+export const getPaymentProviders = withLogging('integracoes.getPaymentProviders', _getPaymentProviders);
+export const getAvailableProviders = withLogging('integracoes.getAvailableProviders', _getAvailableProviders);
+export const savePaymentProvider = withLogging('integracoes.savePaymentProvider', _savePaymentProvider);
+export const deletePaymentProvider = withLogging('integracoes.deletePaymentProvider', _deletePaymentProvider);
+export const testProviderConnection = withLogging('integracoes.testProviderConnection', _testProviderConnection);
+export const saveRoutingRules = withLogging('integracoes.saveRoutingRules', _saveRoutingRules);
+export const toggleProviderActive = withLogging('integracoes.toggleProviderActive', _toggleProviderActive);
+export const setDefaultProvider = withLogging('integracoes.setDefaultProvider', _setDefaultProvider);

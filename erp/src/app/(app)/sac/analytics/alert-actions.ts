@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireCompanyAccess } from "@/lib/rbac";
 import { revalidatePath } from "next/cache";
+import { withLogging } from "@/lib/with-logging";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -35,7 +36,7 @@ export const METRIC_TYPES = [
 
 // ─── List ─────────────────────────────────────────────────────────────────────
 
-export async function listAlerts(companyId: string): Promise<AiAlertRow[]> {
+async function _listAlerts(companyId: string): Promise<AiAlertRow[]> {
   await requireCompanyAccess(companyId);
 
   return prisma.aiAlert.findMany({
@@ -46,7 +47,7 @@ export async function listAlerts(companyId: string): Promise<AiAlertRow[]> {
 
 // ─── Upsert (create or update by companyId + metricType) ──────────────────────
 
-export async function upsertAlert(input: AiAlertInput): Promise<AiAlertRow> {
+async function _upsertAlert(input: AiAlertInput): Promise<AiAlertRow> {
   await requireCompanyAccess(input.companyId);
 
   const data = {
@@ -76,7 +77,7 @@ export async function upsertAlert(input: AiAlertInput): Promise<AiAlertRow> {
 
 // ─── Toggle Enabled ───────────────────────────────────────────────────────────
 
-export async function toggleAlert(
+async function _toggleAlert(
   id: string,
   enabled: boolean,
 ): Promise<AiAlertRow> {
@@ -94,7 +95,7 @@ export async function toggleAlert(
 
 // ─── Delete ───────────────────────────────────────────────────────────────────
 
-export async function deleteAlert(id: string): Promise<void> {
+async function _deleteAlert(id: string): Promise<void> {
   // Fetch the alert first to verify tenant ownership
   const alert = await prisma.aiAlert.findUniqueOrThrow({ where: { id } });
   await requireCompanyAccess(alert.companyId);
@@ -102,3 +103,11 @@ export async function deleteAlert(id: string): Promise<void> {
   await prisma.aiAlert.delete({ where: { id } });
   revalidatePath("/sac/analytics");
 }
+
+// ---------------------------------------------------------------------------
+// Wrapped exports with logging
+// ---------------------------------------------------------------------------
+export const listAlerts = withLogging('sac.alerts.listAlerts', _listAlerts);
+export const upsertAlert = withLogging('sac.alerts.upsertAlert', _upsertAlert);
+export const toggleAlert = withLogging('sac.alerts.toggleAlert', _toggleAlert);
+export const deleteAlert = withLogging('sac.alerts.deleteAlert', _deleteAlert);

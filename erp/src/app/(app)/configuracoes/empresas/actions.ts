@@ -6,6 +6,7 @@ import { isValidCnpj, stripCnpj, formatCnpj } from "@/lib/cnpj";
 import { logAuditEvent } from "@/lib/audit";
 import { Prisma } from "@prisma/client";
 import { seedDefaultChartOfAccounts } from "@/app/(app)/fiscal/plano-de-contas/actions";
+import { withLogging } from "@/lib/with-logging";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -63,7 +64,7 @@ function validateCompanyInput(input: CompanyInput) {
 /**
  * Create a new company. Only ADMIN users can call this.
  */
-export async function createCompany(input: CompanyInput) {
+async function _createCompany(input: CompanyInput) {
   const session = await requireAdmin();
   validateCompanyInput(input);
 
@@ -113,7 +114,7 @@ export async function createCompany(input: CompanyInput) {
 /**
  * Update an existing company. Only ADMIN users can call this.
  */
-export async function updateCompany(id: string, input: CompanyInput) {
+async function _updateCompany(id: string, input: CompanyInput) {
   const session = await requireAdmin();
   validateCompanyInput(input);
 
@@ -161,7 +162,7 @@ export async function updateCompany(id: string, input: CompanyInput) {
  * List companies with pagination and optional search.
  * Only ADMIN users can call this.
  */
-export async function listCompanies(
+async function _listCompanies(
   params: ListCompaniesParams = {}
 ): Promise<PaginatedResult<Awaited<ReturnType<typeof prisma.company.findMany>>[number]>> {
   await requireAdmin();
@@ -202,7 +203,7 @@ export async function listCompanies(
 /**
  * Get a single company by ID. Only ADMIN users can call this.
  */
-export async function getCompanyById(id: string) {
+async function _getCompanyById(id: string) {
   await requireAdmin();
 
   const company = await prisma.company.findUnique({ where: { id } });
@@ -217,7 +218,7 @@ export async function getCompanyById(id: string) {
  * Toggle a company's status between ACTIVE and INACTIVE.
  * Only ADMIN users can call this.
  */
-export async function toggleCompanyStatus(id: string) {
+async function _toggleCompanyStatus(id: string) {
   const session = await requireAdmin();
 
   const company = await prisma.company.findUnique({ where: { id } });
@@ -243,3 +244,12 @@ export async function toggleCompanyStatus(id: string) {
 
   return updated;
 }
+
+// ---------------------------------------------------------------------------
+// Wrapped exports with logging
+// ---------------------------------------------------------------------------
+export const createCompany = withLogging('empresas.createCompany', _createCompany);
+export const updateCompany = withLogging('empresas.updateCompany', _updateCompany);
+export const listCompanies = withLogging('empresas.listCompanies', _listCompanies);
+export const getCompanyById = withLogging('empresas.getCompanyById', _getCompanyById);
+export const toggleCompanyStatus = withLogging('empresas.toggleCompanyStatus', _toggleCompanyStatus);

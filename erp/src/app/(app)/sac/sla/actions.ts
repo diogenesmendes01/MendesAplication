@@ -5,6 +5,7 @@ import { requireCompanyAccess } from "@/lib/rbac";
 import { requireAdmin } from "@/lib/session";
 import { logAuditEvent } from "@/lib/audit";
 import type { Prisma, SlaType, TicketPriority, ChannelType } from "@prisma/client";
+import { withLogging } from "@/lib/with-logging";
 
 export interface SlaPolicyRow {
   id: string;
@@ -55,7 +56,7 @@ export interface SlaDashboardResult {
   atRiskCount: number;
 }
 
-export async function listSlaPolicies(companyId: string): Promise<SlaPolicyRow[]> {
+async function _listSlaPolicies(companyId: string): Promise<SlaPolicyRow[]> {
   await requireCompanyAccess(companyId);
   const configs = await prisma.slaConfig.findMany({
     where: { companyId },
@@ -71,7 +72,7 @@ export async function listSlaPolicies(companyId: string): Promise<SlaPolicyRow[]
   }));
 }
 
-export async function createSlaPolicy(companyId: string, input: CreateSlaPolicyInput): Promise<SlaPolicyRow> {
+async function _createSlaPolicy(companyId: string, input: CreateSlaPolicyInput): Promise<SlaPolicyRow> {
   const session = await requireAdmin();
   await requireCompanyAccess(companyId);
   const created = await prisma.slaConfig.create({
@@ -98,7 +99,7 @@ export async function createSlaPolicy(companyId: string, input: CreateSlaPolicyI
   };
 }
 
-export async function updateSlaPolicy(companyId: string, input: UpdateSlaPolicyInput): Promise<SlaPolicyRow> {
+async function _updateSlaPolicy(companyId: string, input: UpdateSlaPolicyInput): Promise<SlaPolicyRow> {
   const session = await requireAdmin();
   await requireCompanyAccess(companyId);
   const updated = await prisma.slaConfig.update({
@@ -125,14 +126,14 @@ export async function updateSlaPolicy(companyId: string, input: UpdateSlaPolicyI
   };
 }
 
-export async function deleteSlaPolicy(companyId: string, policyId: string): Promise<void> {
+async function _deleteSlaPolicy(companyId: string, policyId: string): Promise<void> {
   const session = await requireAdmin();
   await requireCompanyAccess(companyId);
   await prisma.slaConfig.delete({ where: { id: policyId } });
   await logAuditEvent({ userId: session.userId, action: "DELETE", entity: "SlaConfig", entityId: policyId, companyId });
 }
 
-export async function getSlaDashboard(companyId: string): Promise<SlaDashboardResult> {
+async function _getSlaDashboard(companyId: string): Promise<SlaDashboardResult> {
   await requireCompanyAccess(companyId);
 
   const atRiskRaw = await prisma.ticket.findMany({
@@ -175,3 +176,12 @@ export async function getSlaDashboard(companyId: string): Promise<SlaDashboardRe
     compliancePercent, breachedCount, atRiskCount,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Wrapped exports with logging
+// ---------------------------------------------------------------------------
+export const listSlaPolicies = withLogging('sac.sla.listSlaPolicies', _listSlaPolicies);
+export const createSlaPolicy = withLogging('sac.sla.createSlaPolicy', _createSlaPolicy);
+export const updateSlaPolicy = withLogging('sac.sla.updateSlaPolicy', _updateSlaPolicy);
+export const deleteSlaPolicy = withLogging('sac.sla.deleteSlaPolicy', _deleteSlaPolicy);
+export const getSlaDashboard = withLogging('sac.sla.getSlaDashboard', _getSlaDashboard);

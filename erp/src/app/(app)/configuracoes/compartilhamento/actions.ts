@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
 import { logAuditEvent } from "@/lib/audit";
 import { Prisma } from "@prisma/client";
+import { withLogging } from "@/lib/with-logging";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -27,7 +28,7 @@ export interface CompanyOption {
 // Server Actions
 // ---------------------------------------------------------------------------
 
-export async function listSharingGroups(): Promise<SharingGroup[]> {
+async function _listSharingGroups(): Promise<SharingGroup[]> {
   await requireAdmin();
 
   const groups = await prisma.sharedClientGroup.findMany({
@@ -48,7 +49,7 @@ export async function listSharingGroups(): Promise<SharingGroup[]> {
   }));
 }
 
-export async function listAvailableCompanies(): Promise<CompanyOption[]> {
+async function _listAvailableCompanies(): Promise<CompanyOption[]> {
   await requireAdmin();
 
   const companies = await prisma.company.findMany({
@@ -65,7 +66,7 @@ export async function listAvailableCompanies(): Promise<CompanyOption[]> {
   return companies;
 }
 
-export async function createSharingGroup(
+async function _createSharingGroup(
   name: string,
   companyIds: string[]
 ): Promise<{ id: string }> {
@@ -117,7 +118,7 @@ export async function createSharingGroup(
   return { id: group.id };
 }
 
-export async function updateSharingGroup(
+async function _updateSharingGroup(
   groupId: string,
   name: string,
   companyIds: string[]
@@ -191,7 +192,7 @@ export async function updateSharingGroup(
   });
 }
 
-export async function deleteSharingGroup(groupId: string): Promise<void> {
+async function _deleteSharingGroup(groupId: string): Promise<void> {
   const session = await requireAdmin();
 
   const existing = await prisma.sharedClientGroup.findUnique({
@@ -221,3 +222,12 @@ export async function deleteSharingGroup(groupId: string): Promise<void> {
     } as unknown as Prisma.InputJsonValue,
   });
 }
+
+// ---------------------------------------------------------------------------
+// Wrapped exports with logging
+// ---------------------------------------------------------------------------
+export const listSharingGroups = withLogging('compartilhamento.listSharingGroups', _listSharingGroups);
+export const listAvailableCompanies = withLogging('compartilhamento.listAvailableCompanies', _listAvailableCompanies);
+export const createSharingGroup = withLogging('compartilhamento.createSharingGroup', _createSharingGroup);
+export const updateSharingGroup = withLogging('compartilhamento.updateSharingGroup', _updateSharingGroup);
+export const deleteSharingGroup = withLogging('compartilhamento.deleteSharingGroup', _deleteSharingGroup);

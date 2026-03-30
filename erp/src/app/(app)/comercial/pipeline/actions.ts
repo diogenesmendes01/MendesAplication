@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requireCompanyAccess } from "@/lib/rbac";
 import { Prisma } from "@prisma/client";
 import Decimal from "decimal.js";
+import { withLogging } from "@/lib/with-logging";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -54,7 +55,7 @@ export interface ClientOption {
 // Server Actions
 // ---------------------------------------------------------------------------
 
-export async function listPipelineData(
+async function _listPipelineData(
   filters: PipelineFilters
 ): Promise<PipelineData> {
   await requireCompanyAccess(filters.companyId);
@@ -169,7 +170,7 @@ export async function listPipelineData(
   return { columns, conversionRate };
 }
 
-export async function listClientsForPipeline(
+async function _listClientsForPipeline(
   companyId: string
 ): Promise<ClientOption[]> {
   await requireCompanyAccess(companyId);
@@ -182,3 +183,9 @@ export async function listClientsForPipeline(
 
   return clients;
 }
+
+// ---------------------------------------------------------------------------
+// Wrapped exports with logging
+// ---------------------------------------------------------------------------
+export const listPipelineData = withLogging('pipeline.listPipelineData', _listPipelineData);
+export const listClientsForPipeline = withLogging('pipeline.listClientsForPipeline', _listClientsForPipeline);

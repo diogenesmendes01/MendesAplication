@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requireCompanyAccess } from "@/lib/rbac";
 import { logAuditEvent } from "@/lib/audit";
 import type { WorkflowTrigger, WorkflowStep } from "@/lib/ai/workflow-types";
+import { withLogging } from "@/lib/with-logging";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -46,7 +47,7 @@ export interface UpdateWorkflowInput {
 
 // ─── List workflows ──────────────────────────────────────────────────────────
 
-export async function listWorkflows(companyId: string): Promise<WorkflowData[]> {
+async function _listWorkflows(companyId: string): Promise<WorkflowData[]> {
   await requireCompanyAccess(companyId);
 
   const workflows = await prisma.workflow.findMany({
@@ -74,7 +75,7 @@ export async function listWorkflows(companyId: string): Promise<WorkflowData[]> 
 
 // ─── Create workflow ─────────────────────────────────────────────────────────
 
-export async function createWorkflow(companyId: string, input: CreateWorkflowInput): Promise<WorkflowData> {
+async function _createWorkflow(companyId: string, input: CreateWorkflowInput): Promise<WorkflowData> {
   const { userId } = await requireCompanyAccess(companyId);
 
   const workflow = await prisma.workflow.create({
@@ -118,7 +119,7 @@ export async function createWorkflow(companyId: string, input: CreateWorkflowInp
 
 // ─── Update workflow ─────────────────────────────────────────────────────────
 
-export async function updateWorkflow(companyId: string, workflowId: string, input: UpdateWorkflowInput): Promise<WorkflowData> {
+async function _updateWorkflow(companyId: string, workflowId: string, input: UpdateWorkflowInput): Promise<WorkflowData> {
   const { userId } = await requireCompanyAccess(companyId);
 
   const existing = await prisma.workflow.findFirst({ where: { id: workflowId, companyId } });
@@ -178,7 +179,7 @@ export interface ExecutionStatusData {
   error: string | null;
 }
 
-export async function getExecutionStatus(companyId: string, executionId: string): Promise<ExecutionStatusData | null> {
+async function _getExecutionStatus(companyId: string, executionId: string): Promise<ExecutionStatusData | null> {
   await requireCompanyAccess(companyId);
 
   const execution = await prisma.workflowExecution.findFirst({
@@ -206,7 +207,7 @@ export async function getExecutionStatus(companyId: string, executionId: string)
 
 // ─── List executions ─────────────────────────────────────────────────────────
 
-export async function listExecutions(companyId: string, workflowId?: string, status?: string, limit = 50): Promise<ExecutionStatusData[]> {
+async function _listExecutions(companyId: string, workflowId?: string, status?: string, limit = 50): Promise<ExecutionStatusData[]> {
   await requireCompanyAccess(companyId);
 
   const where: Record<string, unknown> = { companyId };
@@ -237,3 +238,12 @@ export async function listExecutions(companyId: string, workflowId?: string, sta
     };
   });
 }
+
+// ---------------------------------------------------------------------------
+// Wrapped exports with logging
+// ---------------------------------------------------------------------------
+export const listWorkflows = withLogging('workflows.listWorkflows', _listWorkflows);
+export const createWorkflow = withLogging('workflows.createWorkflow', _createWorkflow);
+export const updateWorkflow = withLogging('workflows.updateWorkflow', _updateWorkflow);
+export const getExecutionStatus = withLogging('workflows.getExecutionStatus', _getExecutionStatus);
+export const listExecutions = withLogging('workflows.listExecutions', _listExecutions);

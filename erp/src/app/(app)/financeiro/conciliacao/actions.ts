@@ -5,6 +5,7 @@ import { requireCompanyAccess } from "@/lib/rbac";
 import { logAuditEvent } from "@/lib/audit";
 import { Prisma, type BankTransactionStatus, type PaymentStatus } from "@prisma/client";
 import Decimal from "decimal.js";
+import { withLogging } from "@/lib/with-logging";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -265,7 +266,7 @@ function parseBrazilianNumber(raw: string): number {
 // Server Actions
 // ---------------------------------------------------------------------------
 
-export async function importBankTransactions(
+async function _importBankTransactions(
   companyId: string,
   fileContent: string,
   fileName: string
@@ -320,7 +321,7 @@ export async function importBankTransactions(
   return { imported, skipped, errors: errors.slice(0, 5) };
 }
 
-export async function listBankTransactions(
+async function _listBankTransactions(
   params: ListBankTransactionsParams
 ): Promise<PaginatedResult<BankTransactionRow>> {
   const { companyId, page = 1, pageSize = 20, status, dateFrom, dateTo, search } = params;
@@ -369,7 +370,7 @@ export async function listBankTransactions(
   };
 }
 
-export async function deleteBankTransaction(id: string, companyId: string): Promise<void> {
+async function _deleteBankTransaction(id: string, companyId: string): Promise<void> {
   const session = await requireCompanyAccess(companyId);
 
   const existing = await prisma.bankTransaction.findFirst({ where: { id, companyId } });
@@ -391,7 +392,7 @@ export async function deleteBankTransaction(id: string, companyId: string): Prom
 // Reconciliation Summary
 // ---------------------------------------------------------------------------
 
-export async function getReconciliationSummary(
+async function _getReconciliationSummary(
   companyId: string
 ): Promise<ReconciliationSummary> {
   await requireCompanyAccess(companyId);
@@ -411,7 +412,7 @@ export async function getReconciliationSummary(
 // List Unmatched System Records (receivables + payables)
 // ---------------------------------------------------------------------------
 
-export async function listUnmatchedSystemRecords(
+async function _listUnmatchedSystemRecords(
   companyId: string
 ): Promise<SystemRecordRow[]> {
   await requireCompanyAccess(companyId);
@@ -486,7 +487,7 @@ export async function listUnmatchedSystemRecords(
 
 const DATE_PROXIMITY_DAYS = 5;
 
-export async function autoMatchTransactions(
+async function _autoMatchTransactions(
   companyId: string
 ): Promise<{ matched: number }> {
   const session = await requireCompanyAccess(companyId);
@@ -610,7 +611,7 @@ export async function autoMatchTransactions(
 // Manual match
 // ---------------------------------------------------------------------------
 
-export async function manualMatchTransaction(
+async function _manualMatchTransaction(
   bankTransactionId: string,
   matchedType: "RECEIVABLE" | "PAYABLE",
   matchedEntityId: string,
@@ -668,7 +669,7 @@ export async function manualMatchTransaction(
 // Unmatch (undo reconciliation)
 // ---------------------------------------------------------------------------
 
-export async function unmatchTransaction(
+async function _unmatchTransaction(
   bankTransactionId: string,
   companyId: string
 ): Promise<void> {
@@ -694,3 +695,15 @@ export async function unmatchTransaction(
     companyId,
   });
 }
+
+// ---------------------------------------------------------------------------
+// Wrapped exports with logging
+// ---------------------------------------------------------------------------
+export const importBankTransactions = withLogging('conciliacao.importBankTransactions', _importBankTransactions);
+export const listBankTransactions = withLogging('conciliacao.listBankTransactions', _listBankTransactions);
+export const deleteBankTransaction = withLogging('conciliacao.deleteBankTransaction', _deleteBankTransaction);
+export const getReconciliationSummary = withLogging('conciliacao.getReconciliationSummary', _getReconciliationSummary);
+export const listUnmatchedSystemRecords = withLogging('conciliacao.listUnmatchedSystemRecords', _listUnmatchedSystemRecords);
+export const autoMatchTransactions = withLogging('conciliacao.autoMatchTransactions', _autoMatchTransactions);
+export const manualMatchTransaction = withLogging('conciliacao.manualMatchTransaction', _manualMatchTransaction);
+export const unmatchTransaction = withLogging('conciliacao.unmatchTransaction', _unmatchTransaction);

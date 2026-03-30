@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireCompanyAccess } from "@/lib/rbac";
 import type { ChannelType } from "@prisma/client";
+import { withLogging } from "@/lib/with-logging";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -36,7 +37,7 @@ export interface SuggestionFilters {
 // Actions
 // ---------------------------------------------------------------------------
 
-export async function listSuggestions(
+async function _listSuggestions(
   companyId: string,
   filters?: SuggestionFilters,
 ): Promise<{ items: SuggestionListItem[]; total: number }> {
@@ -90,7 +91,7 @@ export async function listSuggestions(
   };
 }
 
-export async function getSuggestionStats(companyId: string) {
+async function _getSuggestionStats(companyId: string) {
   await requireCompanyAccess(companyId);
 
   const grouped = await prisma.aiSuggestion.groupBy({
@@ -111,3 +112,9 @@ export async function getSuggestionStats(companyId: string) {
     edited: counts["EDITED"] ?? 0,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Wrapped exports with logging
+// ---------------------------------------------------------------------------
+export const listSuggestions = withLogging('sac.suggestions.listSuggestions', _listSuggestions);
+export const getSuggestionStats = withLogging('sac.suggestions.getSuggestionStats', _getSuggestionStats);

@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
 import type { Prisma } from "@prisma/client";
+import { withLogging } from "@/lib/with-logging";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -47,7 +48,7 @@ export interface PaginatedResult<T> {
 /**
  * List audit logs with filters and pagination. Only ADMIN can access.
  */
-export async function listAuditLogs(
+async function _listAuditLogs(
   params: ListAuditLogsParams = {}
 ): Promise<PaginatedResult<AuditLogEntry>> {
   await requireAdmin();
@@ -122,7 +123,7 @@ export async function listAuditLogs(
 /**
  * Export audit logs as CSV string with the same filters. Only ADMIN can access.
  */
-export async function exportAuditLogsCsv(
+async function _exportAuditLogsCsv(
   params: ListAuditLogsParams = {}
 ): Promise<string> {
   await requireAdmin();
@@ -188,7 +189,7 @@ function csvEscape(value: string): string {
 /**
  * Get distinct entity types from audit logs. Used for the entity filter dropdown.
  */
-export async function getAuditEntityTypes(): Promise<string[]> {
+async function _getAuditEntityTypes(): Promise<string[]> {
   await requireAdmin();
 
   const result = await prisma.auditLog.findMany({
@@ -203,7 +204,7 @@ export async function getAuditEntityTypes(): Promise<string[]> {
 /**
  * Get users for the user filter dropdown.
  */
-export async function getAuditUsers(): Promise<
+async function _getAuditUsers(): Promise<
   { id: string; name: string }[]
 > {
   await requireAdmin();
@@ -217,7 +218,7 @@ export async function getAuditUsers(): Promise<
 /**
  * Get companies for the company filter dropdown.
  */
-export async function getAuditCompanies(): Promise<
+async function _getAuditCompanies(): Promise<
   { id: string; nomeFantasia: string }[]
 > {
   await requireAdmin();
@@ -227,3 +228,12 @@ export async function getAuditCompanies(): Promise<
     orderBy: { nomeFantasia: "asc" },
   });
 }
+
+// ---------------------------------------------------------------------------
+// Wrapped exports with logging
+// ---------------------------------------------------------------------------
+export const listAuditLogs = withLogging('auditoria.listAuditLogs', _listAuditLogs);
+export const exportAuditLogsCsv = withLogging('auditoria.exportAuditLogsCsv', _exportAuditLogsCsv);
+export const getAuditEntityTypes = withLogging('auditoria.getAuditEntityTypes', _getAuditEntityTypes);
+export const getAuditUsers = withLogging('auditoria.getAuditUsers', _getAuditUsers);
+export const getAuditCompanies = withLogging('auditoria.getAuditCompanies', _getAuditCompanies);
