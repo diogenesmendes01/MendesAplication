@@ -234,7 +234,7 @@ describe("reclameaqui-inbound count-first polling", () => {
     });
   });
 
-  it("falls back to 7 days ago when both DB and config are empty", async () => {
+  it("uses 365-day lookback on first sync (no DB lastSyncAt, no config lastSyncDate)", async () => {
     mockChannelFindMany.mockResolvedValue([
       makeChannel({
         lastSyncAt: null,
@@ -249,12 +249,13 @@ describe("reclameaqui-inbound count-first polling", () => {
 
     await processReclameAquiInbound(fakeJob);
 
-    // Should be ~7 days ago
+    // First sync: both lastSyncAt (DB) and lastSyncDate (config) are absent →
+    // should use a 365-day lookback window, not the 7-day fallback.
     const callArg = mockCountTickets.mock.calls[0][0];
     const syncDate = new Date(callArg.last_modification_date.value);
     const daysDiff = (Date.now() - syncDate.getTime()) / (1000 * 60 * 60 * 24);
-    expect(daysDiff).toBeGreaterThan(6.9);
-    expect(daysDiff).toBeLessThan(7.1);
+    expect(daysDiff).toBeGreaterThan(364);
+    expect(daysDiff).toBeLessThan(366);
   });
 
   it("skips channel when API is unavailable", async () => {
