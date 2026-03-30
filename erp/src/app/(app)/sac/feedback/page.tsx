@@ -1,4 +1,4 @@
-/* eslint-disable no-console */
+
 "use client";
 import { useEffect, useState, useCallback } from "react";
 import { useCompany } from "@/contexts/company-context";
@@ -24,7 +24,7 @@ export default function FeedbackPage() {
   const [cal, setCal] = useState<ConfidenceCalibration[]>([]);
   const load = useCallback(async () => {
     if (!cid) return; setLoading(true);
-    try { const { from, to } = getPeriodDates(period); const [s,r,e,c] = await Promise.all([getFeedbackSummary(cid,from,to), getRejectReasons(cid,from,to), getEditPatterns(cid,from,to), getConfidenceCalibration(cid,from,to)]); setSummary(s); setReasons(r); setEdits(e); setCal(c); } catch(err) { console.error(err); } finally { setLoading(false); }
+    try { const { from, to } = getPeriodDates(period); const [s,r,e,c] = await Promise.all([getFeedbackSummary(cid,from,to), getRejectReasons(cid,from,to), getEditPatterns(cid,from,to), getConfidenceCalibration(cid,from,to)]); setSummary(s); setReasons(r); setEdits(e); setCal(c); } catch { /* error handled by UI state */ } finally { setLoading(false); }
   }, [cid, period]);
   useEffect(() => { load(); }, [load]);
   if (!cid) return <div className="flex items-center justify-center py-12 text-muted-foreground">Selecione uma empresa.</div>;

@@ -370,7 +370,7 @@ const [raContext, setRaContext] = useState<any>(null);
           const raCtx = await getRaTicketContext(ticketId, selectedCompanyId);
           setRaContext(raCtx);
         } catch (err) {
-          console.error("Failed to load RA context:", err); // eslint-disable-line no-console
+          // Error handled silently — RA context is optional
           toast.error("Erro ao carregar contexto do Reclame Aqui");
         } finally {
           setLoadingRaContext(false);

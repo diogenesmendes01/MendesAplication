@@ -353,7 +353,7 @@ export default function ProposalDetailPage() {
       setSelectedProviderId("__auto__");
     } catch (err) {
       // eslint-disable-next-line no-console
-      console.error("Failed to load providers:", err);
+      // silently handled — UI shows default state
       setProviders([]);
       setRoutingPreview(null);
     } finally {
@@ -381,7 +381,7 @@ export default function ProposalDetailPage() {
         setRoutingPreview(preview);
       } catch (err) {
         // eslint-disable-next-line no-console
-        console.error("Failed to update routing preview:", err);
+        // silently handled — preview is best-effort
       }
     }, 300);
 

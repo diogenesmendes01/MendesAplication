@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAccessToken, type JwtPayload } from "@/lib/auth";
+import { logger } from "@/lib/logger";
 
 /**
  * Extract the Bearer token from the Authorization header.
@@ -28,6 +29,7 @@ export function withAuth(
   ) => {
     const token = extractBearerToken(req);
     if (!token) {
+      logger.warn({ path: req.nextUrl.pathname, method: req.method }, "auth middleware: missing bearer token — 401");
       return NextResponse.json(
         { error: "Token de autenticação não fornecido" },
         { status: 401 }
@@ -36,6 +38,7 @@ export function withAuth(
 
     const payload = verifyAccessToken(token);
     if (!payload) {
+      logger.warn({ path: req.nextUrl.pathname, method: req.method }, "auth middleware: invalid/expired token — 401");
       return NextResponse.json(
         { error: "Token inválido ou expirado" },
         { status: 401 }

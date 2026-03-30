@@ -1,3 +1,4 @@
+import { logger } from "@/lib/logger";
 import crypto from "crypto";
 
 // ---------------------------------------------------------------------------
@@ -167,7 +168,8 @@ export function decryptConfig(config: Record<string, unknown>): Record<string, u
     if (typeof result[field] === "string" && result[field]) {
       try {
         result[field] = decrypt(result[field] as string);
-      } catch {
+      } catch (err) {
+        logger.warn({ err, field }, "decryptConfig: failed to decrypt field, keeping as-is");
         // Campo pode não estar criptografado ainda — manter como está
       }
     }
