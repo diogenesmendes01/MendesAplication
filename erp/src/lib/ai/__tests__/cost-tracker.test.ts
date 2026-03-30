@@ -6,6 +6,24 @@ const mockCreate = vi.fn();
 const mockAggregate = vi.fn();
 const mockGroupBy = vi.fn();
 
+vi.mock("@/lib/ai/rate-limiter", () => ({
+  logInteraction: vi.fn(),
+}));
+
+vi.mock("@/lib/logger", () => {
+  const _log = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), child: vi.fn() };
+  return {
+    logger: _log,
+    createChildLogger: vi.fn(() => _log),
+    sanitizeParams: vi.fn((obj: Record<string, unknown>) => obj),
+    truncateForLog: vi.fn((v: unknown) => v),
+    classifyError: vi.fn(() => "INTERNAL_ERROR"),
+    classifyErrorByStatus: vi.fn(() => "INTERNAL_ERROR"),
+    ErrorCode: {},
+    MAX_LOG_ARG_SIZE: 10240,
+  };
+});
+
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     aiUsageLog: {
