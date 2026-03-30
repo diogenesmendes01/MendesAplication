@@ -295,7 +295,7 @@ describe("getTicketSlaStatus", () => {
 
     const result = await getTicketSlaStatus("tk-1");
     expect(result!.firstResponse.respondedAt).not.toBeNull();
-    expect(result!.resolution.resolvedAt).not.toBeNull();
+    expect(result!.resolution.respondedAt).not.toBeNull();
     expect(result!.overallStatus).toBe("ok");
   });
 

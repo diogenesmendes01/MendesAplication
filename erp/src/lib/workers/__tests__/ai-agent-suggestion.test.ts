@@ -66,7 +66,8 @@ import { processAiAgent } from "../ai-agent";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function makeJob(data: Record<string, unknown>): Job<Record<string, unknown>> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function makeJob(data: Record<string, unknown>): Job<any> {
   return {
     data: {
       ticketId: "ticket-1",
@@ -75,7 +76,7 @@ function makeJob(data: Record<string, unknown>): Job<Record<string, unknown>> {
       channel: "WHATSAPP",
       ...data,
     },
-  } as unknown as Job<Record<string, unknown>>;
+  } as unknown as Job<any>;
 }
 
 beforeEach(() => {

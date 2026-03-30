@@ -156,18 +156,18 @@ describe("areAllProvidersDown", () => {
 
   it("returns true when all providers are down", async () => {
     vi.mocked(prisma.aiProviderHealth.findMany).mockResolvedValueOnce([
-      { provider: "openai", model: "gpt-4o-mini", status: "down", latencyMs: null, checkedAt: new Date() },
-      { provider: "anthropic", model: "claude-haiku-4-20250414", status: "down", latencyMs: null, checkedAt: new Date() },
-    ] as unknown as { provider: string; model: string; status: string; latencyMs: number | null; checkedAt: Date }[]);
+      { id: "h1", provider: "openai", model: "gpt-4o-mini", status: "down", latencyMs: null, errorMessage: null, checkedAt: new Date() },
+      { id: "h2", provider: "anthropic", model: "claude-haiku-4-20250414", status: "down", latencyMs: null, errorMessage: null, checkedAt: new Date() },
+    ] as never);
 
     expect(await areAllProvidersDown()).toBe(true);
   });
 
   it("returns false when at least one provider is up", async () => {
     vi.mocked(prisma.aiProviderHealth.findMany).mockResolvedValueOnce([
-      { provider: "openai", model: "gpt-4o-mini", status: "down", latencyMs: null, checkedAt: new Date() },
-      { provider: "anthropic", model: "claude-haiku-4-20250414", status: "up", latencyMs: 800, checkedAt: new Date() },
-    ] as unknown as { provider: string; model: string; status: string; latencyMs: number | null; checkedAt: Date }[]);
+      { id: "h3", provider: "openai", model: "gpt-4o-mini", status: "down", latencyMs: null, errorMessage: null, checkedAt: new Date() },
+      { id: "h4", provider: "anthropic", model: "claude-haiku-4-20250414", status: "up", latencyMs: 800, errorMessage: null, checkedAt: new Date() },
+    ] as never);
 
     expect(await areAllProvidersDown()).toBe(false);
   });

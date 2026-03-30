@@ -1,4 +1,4 @@
-import { vi, describe, it, expect, beforeEach } from "vitest";
+import { vi, describe, it, expect, beforeEach, beforeAll } from "vitest";
 
 const mockPrisma = {
   aiConfig: { findFirst: vi.fn(), findMany: vi.fn() },
@@ -7,7 +7,20 @@ const mockPrisma = {
 vi.mock("@/lib/prisma", () => ({ prisma: mockPrisma }));
 vi.mock("@/lib/logger", () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
-const { recordAuditTrail, getAuditTrail, exportAuditTrailCSV, exportAuditTrailJSON, cleanupAuditTrails } = await import("@/lib/ai/audit-trail");
+let recordAuditTrail: Awaited<typeof import("@/lib/ai/audit-trail")>["recordAuditTrail"];
+let getAuditTrail: Awaited<typeof import("@/lib/ai/audit-trail")>["getAuditTrail"];
+let exportAuditTrailCSV: Awaited<typeof import("@/lib/ai/audit-trail")>["exportAuditTrailCSV"];
+let exportAuditTrailJSON: Awaited<typeof import("@/lib/ai/audit-trail")>["exportAuditTrailJSON"];
+let cleanupAuditTrails: Awaited<typeof import("@/lib/ai/audit-trail")>["cleanupAuditTrails"];
+
+beforeAll(async () => {
+  const mod = await import("@/lib/ai/audit-trail");
+  recordAuditTrail = mod.recordAuditTrail;
+  getAuditTrail = mod.getAuditTrail;
+  exportAuditTrailCSV = mod.exportAuditTrailCSV;
+  exportAuditTrailJSON = mod.exportAuditTrailJSON;
+  cleanupAuditTrails = mod.cleanupAuditTrails;
+});
 
 const baseEntry = {
   ticketId: "ticket-1", companyId: "company-1", channel: "WHATSAPP" as const, iteration: 1,

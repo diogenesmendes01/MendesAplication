@@ -1,9 +1,10 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mapRaStatusToTicketStatus } from "../reclameaqui-inbound";
 
 // Mock logger to capture warnings
-const mockWarn = jest.fn();
-jest.mock("@/lib/logger", () => ({
-  logger: { warn: (...args) => mockWarn(...args) },
+const mockWarn = vi.fn();
+vi.mock("@/lib/logger", () => ({
+  logger: { warn: (...args: unknown[]) => mockWarn(...args) },
 }));
 
 describe("mapRaStatusToTicketStatus", () => {
@@ -24,7 +25,7 @@ describe("mapRaStatusToTicketStatus", () => {
     [8, "Réplica empresa"],
     [11, "Moderação"],
     [20, "Réplica pendente"],
-  ])("maps status %i (%s) → IN_PROGRESS", (id) => {
+  ])("maps status %i (%s) → IN_PROGRESS", (id: number) => {
     expect(mapRaStatusToTicketStatus(id)).toBe("IN_PROGRESS");
   });
 
@@ -32,7 +33,7 @@ describe("mapRaStatusToTicketStatus", () => {
     [9, "Avaliado"],
     [18, "Avaliado Resolvido"],
     [19, "Avaliado Não Resolvido"],
-  ])("maps status %i (%s) → RESOLVED", (id) => {
+  ])("maps status %i (%s) → RESOLVED", (id: number) => {
     expect(mapRaStatusToTicketStatus(id)).toBe("RESOLVED");
   });
 
@@ -41,7 +42,7 @@ describe("mapRaStatusToTicketStatus", () => {
     [12, "Desativado consumidor"],
     [13, "Inativa no RA"],
     [17, "Redistribuição"],
-  ])("maps status %i (%s) → CLOSED", (id) => {
+  ])("maps status %i (%s) → CLOSED", (id: number) => {
     expect(mapRaStatusToTicketStatus(id)).toBe("CLOSED");
   });
 

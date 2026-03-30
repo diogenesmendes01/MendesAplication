@@ -103,7 +103,7 @@ describe("Tool classification", () => {
   });
 
   it("has no overlap between read-only and write sets", () => {
-    for (const tool of READ_ONLY_TOOLS) {
+    for (const tool of Array.from(READ_ONLY_TOOLS)) {
       expect(WRITE_TOOLS.has(tool)).toBe(false);
     }
   });

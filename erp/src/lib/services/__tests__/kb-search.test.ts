@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest";
 
 vi.mock("@/lib/session", () => ({
   requireSession: vi.fn().mockResolvedValue({ userId: "u1", email: "t@t.com", role: "ADMIN" }),
@@ -45,8 +45,15 @@ vi.mock("@/lib/ai/embeddings", () => ({
   generateEmbedding: vi.fn().mockResolvedValue(embedding),
 }));
 
-const { searchKnowledge, rechunkDocument, restoreVersion, uploadAndExtractText } =
-  await import("@/lib/services/kb-actions");
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let searchKnowledge: any, rechunkDocument: any, restoreVersion: any, uploadAndExtractText: any;
+beforeAll(async () => {
+  const mod = await import("@/lib/services/kb-actions");
+  searchKnowledge = mod.searchKnowledge;
+  rechunkDocument = mod.rechunkDocument;
+  restoreVersion = mod.restoreVersion;
+  uploadAndExtractText = mod.uploadAndExtractText;
+});
 
 describe("KB Search", () => {
   beforeEach(() => vi.clearAllMocks());

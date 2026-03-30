@@ -7,7 +7,21 @@ const mCC = vi.fn(), mCFM = vi.fn(), mCDM = vi.fn(), mCCnt = vi.fn();
 const mVC = vi.fn(), mVFM = vi.fn();
 vi.mock("@/lib/prisma", () => ({ prisma: { document: { create: (...a: unknown[]) => mDC(...a), findMany: (...a: unknown[]) => mDFM(...a), findFirst: (...a: unknown[]) => mDFF(...a), update: (...a: unknown[]) => mDU(...a), delete: (...a: unknown[]) => mDD(...a), count: (...a: unknown[]) => mDCnt(...a) }, documentChunk: { create: (...a: unknown[]) => mCC(...a), findMany: (...a: unknown[]) => mCFM(...a), deleteMany: (...a: unknown[]) => mCDM(...a), count: (...a: unknown[]) => mCCnt(...a) }, documentVersion: { create: (...a: unknown[]) => mVC(...a), findMany: (...a: unknown[]) => mVFM(...a), findFirst: vi.fn() } } }));
 vi.mock("@/lib/ai/embeddings", () => ({ generateEmbedding: vi.fn().mockResolvedValue(new Array(1536).fill(0.1)) }));
-const { listDocuments, createDocument, updateDocument, deleteDocument, getDocumentChunks, getDocumentVersions, getKBStats, getAllTags } = await import("@/lib/services/kb-actions");
+import { beforeAll } from "vitest";
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let listDocuments: any, createDocument: any, updateDocument: any, deleteDocument: any, getDocumentChunks: any, getDocumentVersions: any, getKBStats: any, getAllTags: any;
+beforeAll(async () => {
+  const mod = await import("@/lib/services/kb-actions");
+  listDocuments = mod.listDocuments;
+  createDocument = mod.createDocument;
+  updateDocument = mod.updateDocument;
+  deleteDocument = mod.deleteDocument;
+  getDocumentChunks = mod.getDocumentChunks;
+  getDocumentVersions = mod.getDocumentVersions;
+  getKBStats = mod.getKBStats;
+  getAllTags = mod.getAllTags;
+});
 
 describe("KB Actions", () => {
   beforeEach(() => vi.clearAllMocks());

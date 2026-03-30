@@ -15,13 +15,15 @@ vi.mock("@/lib/sse", () => ({
 }));
 vi.mock("@/lib/reclameaqui/client", () => {
   class ReclameAquiError extends Error {
-    public code: number;
-    public statusCode: number;
-    constructor(message: string, code: number, statusCode = 0) {
+    public readonly code: number;
+    public readonly httpStatus: number;
+    public readonly originalMessage: string;
+    constructor(message: string, code: number, httpStatus = 0, originalMessage = "") {
       super(message);
       this.name = "ReclameAquiError";
       this.code = code;
-      this.statusCode = statusCode;
+      this.httpStatus = httpStatus;
+      this.originalMessage = originalMessage;
     }
   }
   return {
@@ -36,15 +38,15 @@ import { ReclameAquiError } from "@/lib/reclameaqui/client";
 describe("isRetriableError", () => {
   describe("retriable errors (should return true)", () => {
     it("rate limit error (4290)", () => {
-      expect(isRetriableError(new ReclameAquiError("Rate limit", 4290))).toBe(true);
+      expect(isRetriableError(new ReclameAquiError("Rate limit", 4290, 0, "Rate limit"))).toBe(true);
     });
 
     it("internal server error (5000)", () => {
-      expect(isRetriableError(new ReclameAquiError("Server error", 5000))).toBe(true);
+      expect(isRetriableError(new ReclameAquiError("Server error", 5000, 0, "Server error"))).toBe(true);
     });
 
     it("service unavailable (5030)", () => {
-      expect(isRetriableError(new ReclameAquiError("Unavailable", 5030))).toBe(true);
+      expect(isRetriableError(new ReclameAquiError("Unavailable", 5030, 0, "Unavailable"))).toBe(true);
     });
 
     it("network errors (plain Error)", () => {
@@ -62,7 +64,7 @@ describe("isRetriableError", () => {
     });
 
     it("unknown RA error code defaults to retriable", () => {
-      expect(isRetriableError(new ReclameAquiError("Unknown", 9999))).toBe(true);
+      expect(isRetriableError(new ReclameAquiError("Unknown", 9999, 0, "Unknown"))).toBe(true);
     });
   });
 
@@ -89,7 +91,7 @@ describe("isRetriableError", () => {
     ] as const;
 
     it.each(permanentCodes)("code %d (%s)", (code, desc) => {
-      expect(isRetriableError(new ReclameAquiError(desc, code))).toBe(false);
+      expect(isRetriableError(new ReclameAquiError(desc, code, 0, desc))).toBe(false);
     });
   });
 });

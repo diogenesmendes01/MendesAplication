@@ -74,8 +74,8 @@ describe("AI Observability Actions", () => {
   describe("getCostByDay", () => {
     it("returns daily cost breakdown", async () => {
       mockQueryRaw.mockResolvedValue([
-        { day: new Date("2026-03-01"), cost_brl: 5.25, calls: 42n },
-        { day: new Date("2026-03-02"), cost_brl: 3.1, calls: 28n },
+        { day: new Date("2026-03-01"), cost_brl: 5.25, calls: BigInt(42) },
+        { day: new Date("2026-03-02"), cost_brl: 3.1, calls: BigInt(28) },
       ]);
 
       const { getCostByDay } = await import("../actions");

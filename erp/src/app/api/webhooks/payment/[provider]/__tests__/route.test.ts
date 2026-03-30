@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { NextRequest } from "next/server";
 
 // ---------------------------------------------------------------------------
 // Mocks — must be declared before any import that uses them
@@ -83,8 +84,8 @@ const mockedLogAudit = vi.mocked(logAuditEvent);
 // Helpers
 // ---------------------------------------------------------------------------
 
-function makeRequest(body: string, headers?: Record<string, string>): Request {
-  return new Request("http://localhost/api/webhooks/payment/prov-001", {
+function makeRequest(body: string, headers?: Record<string, string>): NextRequest {
+  return new NextRequest("http://localhost/api/webhooks/payment/prov-001", {
     method: "POST",
     body,
     headers: {
