@@ -152,6 +152,12 @@ function raStatusColor(statusId: number | null): string {
       return "bg-yellow-100 text-yellow-800";
     case RA_STATUS.AVALIADO_RESOLVIDO:
       return "bg-emerald-100 text-emerald-800";
+    // AVALIADO (9) é tratado como atenção junto com AVALIADO_NAO_RESOLVIDO (19):
+    // no código anterior a string "Avaliado" nunca matchava nenhum case e caía
+    // no default (cinza). Com IDs numéricos, mapeamos explicitamente para vermelho
+    // porque "avaliado sem distinção de resolução" indica que o consumidor já
+    // avaliou e o desfecho ainda não foi qualificado como resolvido — requer
+    // atenção da equipe. Comportamento intencional, não uma regressão.
     case RA_STATUS.AVALIADO:
     case RA_STATUS.AVALIADO_NAO_RESOLVIDO:
       return "bg-red-100 text-red-800";

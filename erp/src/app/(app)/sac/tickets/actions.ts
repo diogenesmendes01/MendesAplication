@@ -165,6 +165,10 @@ async function _listTicketsInternal(
 
   const [rows, total] = await Promise.all([
     prisma.ticket.findMany({
+      // Usa `include` (sem `select` restritivo no nível raiz), portanto todos os
+      // campos escalares do modelo Ticket — incluindo `raStatusId` — são
+      // retornados automaticamente pelo Prisma. Não é necessário listar
+      // `raStatusId` explicitamente em um select para que ele seja populado.
       where,
       orderBy: { createdAt: "desc" },
       skip,
