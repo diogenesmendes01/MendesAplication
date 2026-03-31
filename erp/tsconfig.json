@@ -35,6 +35,7 @@
   ],
   "exclude": [
     "node_modules",
-    "jest.config.ts"
+    "jest.config.ts",
+    "**/__tests__/**"
   ]
 }
