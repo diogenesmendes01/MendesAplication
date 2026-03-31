@@ -5,6 +5,7 @@ import { getCompanyKpis } from "@/lib/kpi-cache";
 import { prisma } from "@/lib/prisma";
 import { RA_STATUS } from "@/lib/reclameaqui/types";
 import type { ChannelType } from "@prisma/client";
+import { RA_STATUS } from "@/lib/reclameaqui/types";
 
 // ---------------------------------------------------------------------------
 // Types
