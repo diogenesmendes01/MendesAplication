@@ -3,6 +3,7 @@
 import { requireCompanyAccess } from "@/lib/rbac";
 import { getCompanyKpis } from "@/lib/kpi-cache";
 import { prisma } from "@/lib/prisma";
+import { RA_STATUS } from "@/lib/reclameaqui/types";
 import type { ChannelType } from "@prisma/client";
 
 // ---------------------------------------------------------------------------
@@ -340,14 +341,14 @@ export async function getChannelDashboard(
         prisma.ticket.count({
           where: {
             ...channelWhere,
-            raStatusName: { contains: "Respondid" },
+            raStatusId: RA_STATUS.RESPONDIDO,
           },
         }),
         prisma.ticket.count({
           where: { ...channelWhere, raResolvedIssue: true },
         }),
         prisma.ticket.count({
-          where: { ...channelWhere, raStatusId: 11 },
+          where: { ...channelWhere, raStatusId: RA_STATUS.MODERACAO },
         }),
         prisma.ticket.count({
           where: { ...channelWhere, raSlaDeadline: { not: null }, slaAtRisk: true, slaBreached: false, status: { in: ["OPEN", "IN_PROGRESS", "WAITING_CLIENT"] } },
