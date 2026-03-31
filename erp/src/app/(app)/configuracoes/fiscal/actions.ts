@@ -252,7 +252,6 @@ async function _getCachedFiscalConfig(companyId: string): Promise<FiscalConfigDa
   return data;
 }
 
-export { fiscalConfigCache };
 
 // ---------------------------------------------------------------------------
 // Wrapped exports with logging

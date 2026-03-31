@@ -347,7 +347,7 @@ export async function getChannelDashboard(
           where: { ...channelWhere, raResolvedIssue: true },
         }),
         prisma.ticket.count({
-          where: { ...channelWhere, raCanModerate: true },
+          where: { ...channelWhere, raStatusId: 11 },
         }),
         prisma.ticket.count({
           where: { ...channelWhere, raSlaDeadline: { not: null }, slaAtRisk: true, slaBreached: false, status: { in: ["OPEN", "IN_PROGRESS", "WAITING_CLIENT"] } },
