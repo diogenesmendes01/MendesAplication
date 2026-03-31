@@ -4,6 +4,7 @@ import { requireCompanyAccess } from "@/lib/rbac";
 import { getCompanyKpis } from "@/lib/kpi-cache";
 import { prisma } from "@/lib/prisma";
 import type { ChannelType } from "@prisma/client";
+import { RA_STATUS_ID } from "./ra-actions.types";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -347,7 +348,7 @@ export async function getChannelDashboard(
           where: { ...channelWhere, raResolvedIssue: true },
         }),
         prisma.ticket.count({
-          where: { ...channelWhere, raStatusId: 11 },
+          where: { ...channelWhere, raStatusId: RA_STATUS_ID.PENDING_MODERATION },
         }),
         prisma.ticket.count({
           where: { ...channelWhere, raSlaDeadline: { not: null }, slaAtRisk: true, slaBreached: false, status: { in: ["OPEN", "IN_PROGRESS", "WAITING_CLIENT"] } },

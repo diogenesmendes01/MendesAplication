@@ -1,5 +1,11 @@
 // Types extracted from ra-actions.ts to avoid "use server" export restriction
 
+/** IDs de status do RA Trustvox — mapeiam os status do sistema externo */
+export const RA_STATUS_ID = {
+  /** Status "Moderação pendente" no RA Trustvox */
+  PENDING_MODERATION: 11,
+} as const;
+
 export interface RaActionResult {
   success: boolean;
   error?: string;
