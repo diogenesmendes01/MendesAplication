@@ -13,6 +13,7 @@ import type {
   RaInteractionDetail,
 } from "@/lib/reclameaqui/types";
 import {
+  RA_STATUS,
   RA_INTERACTION_TYPES,
   RA_DETAIL_TYPES,
 } from "@/lib/reclameaqui/types";
@@ -71,23 +72,23 @@ type TxClient = Prisma.TransactionClient;
  */
 export function mapRaStatusToTicketStatus(raStatusId: number): TicketStatus {
   switch (raStatusId) {
-    case 5:
+    case RA_STATUS.NAO_RESPONDIDO:
       return "OPEN";
-    case 6:
+    case RA_STATUS.RESPONDIDO:
       return "WAITING_CLIENT";
-    case 7:
-    case 8:
-    case 11:
-    case 20:
+    case RA_STATUS.REPLICA_CONSUMIDOR:
+    case RA_STATUS.REPLICA_EMPRESA:
+    case RA_STATUS.MODERACAO:
+    case RA_STATUS.REPLICA_PENDENTE:
       return "IN_PROGRESS";
-    case 9:
-    case 18:
-    case 19:
+    case RA_STATUS.AVALIADO:
+    case RA_STATUS.AVALIADO_RESOLVIDO:
+    case RA_STATUS.AVALIADO_NAO_RESOLVIDO:
       return "RESOLVED";
-    case 10:
-    case 12:
-    case 13:
-    case 17:
+    case RA_STATUS.CONGELADO:
+    case RA_STATUS.DESATIVADO_CONSUMIDOR:
+    case RA_STATUS.INATIVA_RA:
+    case RA_STATUS.REDISTRIBUICAO:
       return "CLOSED";
     default:
       logger.warn({ raStatusId }, "[reclameaqui] Unknown RA status ID, defaulting to OPEN");
@@ -486,7 +487,7 @@ async function createNewTicket(
         raRating: raTicket.rating,
         raResolvedIssue: raTicket.resolved_issue,
         raBackDoingBusiness: raTicket.back_doing_business,
-        raFrozen: raStatusId === 10,
+        raFrozen: raStatusId === RA_STATUS.CONGELADO,
         raReason: raTicket.ra_reason ?? null,
         raFeeling: raTicket.ra_feeling ?? null,
         raCategories: raTicket.categories?.map(c => c.description) ?? [],
@@ -594,7 +595,7 @@ async function updateExistingTicket(
         raRating: raTicket.rating,
         raResolvedIssue: raTicket.resolved_issue,
         raBackDoingBusiness: raTicket.back_doing_business,
-        raFrozen: raStatusId === 10,
+        raFrozen: raStatusId === RA_STATUS.CONGELADO,
         raReason: raTicket.ra_reason ?? null,
         raFeeling: raTicket.ra_feeling ?? null,
         raCategories: raTicket.categories?.map(c => c.description) ?? [],

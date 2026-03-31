@@ -59,6 +59,7 @@ import {
   type TicketTab,
 } from "../tickets/actions";
 import type { ChannelType, TicketPriority } from "@prisma/client";
+import { RA_STATUS } from "@/lib/reclameaqui/types";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -139,21 +140,24 @@ function channelIcon(channelType: string | null) {
   }
 }
 
-function raStatusColor(statusName: string | null): string {
-  switch (statusName) {
-    case "Não respondido":
+function raStatusColor(statusId: number | null): string {
+  switch (statusId) {
+    case RA_STATUS.NAO_RESPONDIDO:
       return "bg-red-100 text-red-800";
-    case "Respondido":
+    case RA_STATUS.RESPONDIDO:
       return "bg-green-100 text-green-800";
-    case "Réplica":
-    case "Réplica consumidor":
-    case "Réplica empresa":
+    case RA_STATUS.REPLICA_CONSUMIDOR:
+    case RA_STATUS.REPLICA_EMPRESA:
+    case RA_STATUS.REPLICA_PENDENTE:
       return "bg-yellow-100 text-yellow-800";
-    case "Avaliado Resolvido":
+    case RA_STATUS.AVALIADO_RESOLVIDO:
       return "bg-emerald-100 text-emerald-800";
-    case "Avaliado Não Resolvido":
+    case RA_STATUS.AVALIADO:
+    case RA_STATUS.AVALIADO_NAO_RESOLVIDO:
       return "bg-red-100 text-red-800";
-    case "Congelado":
+    case RA_STATUS.CONGELADO:
+    case RA_STATUS.DESATIVADO_CONSUMIDOR:
+    case RA_STATUS.INATIVA_RA:
       return "bg-gray-100 text-gray-700";
     default:
       return "bg-gray-100 text-gray-600";
@@ -230,7 +234,7 @@ function TicketRowCells({ row }: { row: TicketRow }) {
           </span>
           {row.channelType === "RECLAMEAQUI" && row.raStatusName && (
             <span
-              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${raStatusColor(row.raStatusName)}`}
+              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${raStatusColor(row.raStatusId)}`}
             >
               {row.raStatusName}
             </span>

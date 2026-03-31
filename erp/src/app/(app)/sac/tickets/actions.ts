@@ -77,6 +77,7 @@ export interface TicketRow {
   raExternalId: string | null;
   raStatusName: string | null;
   raRating: string | null;
+  raStatusId: number | null;
   hasPendingSuggestion: boolean;
 }
 
@@ -233,6 +234,7 @@ async function _listTicketsInternal(
       assignee: r.assignee,
       raExternalId: r.raExternalId ?? null,
       raStatusName: r.raStatusName ?? null,
+      raStatusId: r.raStatusId ?? null,
       raRating: r.raRating ?? null,
       hasPendingSuggestion: (r._count?.messages ?? 0) > 0,
     };
