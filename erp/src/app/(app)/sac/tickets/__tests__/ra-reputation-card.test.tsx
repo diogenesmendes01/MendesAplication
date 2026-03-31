@@ -31,7 +31,7 @@ describe('RA Reputation Card - getSeloConfig', () => {
   });
 
   it('handles numeric input correctly', () => {
-    const result = getSeloConfig(1 as any);
+    const result = getSeloConfig(1 as unknown);
     expect(result).toEqual(SELO_MAP.SEM_INDICE);
   });
 

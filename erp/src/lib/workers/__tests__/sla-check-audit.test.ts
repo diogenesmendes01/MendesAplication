@@ -78,7 +78,7 @@ vi.mock("@/lib/sla-engine", () => ({
 // ---------------------------------------------------------------------------
 
 const PAST = new Date(Date.now() - 24 * 60 * 60 * 1000); // 1 day ago (breached)
-const SOON = new Date(Date.now() + 60 * 60 * 1000);      // 1 hour from now (at risk)
+const _SOON = new Date(Date.now() + 60 * 60 * 1000);      // 1 hour from now (at risk)
 
 function makeTicket(overrides: Record<string, unknown> = {}) {
   return {
