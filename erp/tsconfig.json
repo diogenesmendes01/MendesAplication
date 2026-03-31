@@ -25,7 +25,8 @@
       "@/*": [
         "./src/*"
       ]
-    }
+    },
+    "types": ["vitest/globals"]
   },
   "include": [
     "next-env.d.ts",
@@ -35,7 +36,6 @@
   ],
   "exclude": [
     "node_modules",
-    "jest.config.ts",
-    "**/__tests__/**"
+    "jest.config.ts"
   ]
 }
