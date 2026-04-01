@@ -137,6 +137,7 @@ export async function getRaTicketContext(
       raFrozen: true,
       raConsumerConsideration: true,
       raCompanyConsideration: true,
+      raFormFields: true,
       client: { select: { name: true, email: true, telefone: true, cpfCnpj: true } },
       channel: { select: { type: true } },
       messages: {
@@ -213,6 +214,7 @@ export async function getRaTicketContext(
     raSlaDeadline: t.raSlaDeadline?.toISOString() ?? null,
     consumerConsideration: ticket.raConsumerConsideration,
     companyConsideration: ticket.raCompanyConsideration,
+    raFormFields: (t.raFormFields as { name: string; value: string }[] | null) ?? null,
     whatsappEval: t.raWhatsappEvalSent != null ? {
       sent: t.raWhatsappEvalSent,
       done: t.raWhatsappEvalDone,

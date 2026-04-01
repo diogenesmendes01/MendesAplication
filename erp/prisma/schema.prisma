@@ -526,6 +526,8 @@ model Ticket {
   raActive               Boolean   @default(true)
   raModerationStatus     String?
   raSlaDeadline          DateTime?
+  raHugmeId              String?   // id interno HugMe (ex: "fXATJb6FZ1a_EIMl") — usado pra API calls
+  raFormFields           Json?     // [{name: "Qual o seu CNPJ?", value: "10.532.754/0001-46"}, ...]
   aiEnabled              Boolean   @default(true)
   aiDisabledReason       String? // "budget_exceeded" | "rate_limited" | "manual" | null
   aiPendingRecovery      Boolean   @default(false)

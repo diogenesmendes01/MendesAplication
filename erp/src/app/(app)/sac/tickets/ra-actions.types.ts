@@ -76,6 +76,7 @@ export interface RaTicketContext {
   isFinished?: boolean;
   isEvaluated?: boolean;
   isModerated?: boolean;
+  raFormFields: { name: string; value: string }[] | null;
   lastSuggestion?: {
     id: string;
     content: string;

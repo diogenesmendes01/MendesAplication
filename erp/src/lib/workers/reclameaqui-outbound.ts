@@ -177,7 +177,9 @@ async function getTicketWithRaChannel(ticketId: string) {
     baseUrl: config.baseUrl,
   });
 
-  return { ticket, raExternalId: ticket.raExternalId, client, companyId: ticket.company?.id ?? ticket.companyId };
+  // Use raHugmeId for API calls (internal HugMe ID); fall back to raExternalId for legacy data
+  const raHugmeId = ticket.raHugmeId ?? ticket.raExternalId;
+  return { ticket, raExternalId: ticket.raExternalId, raHugmeId, client, companyId: ticket.company?.id ?? ticket.companyId };
 }
 
 /**
@@ -359,11 +361,11 @@ async function handleOutboundError(params: {
 // ---------------------------------------------------------------------------
 
 async function handleSendPublic(job: Job, ticketId: string, message: string): Promise<void> {
-  const { ticket, raExternalId, client, companyId } = await getTicketWithRaChannel(ticketId);
+  const { ticket, raHugmeId, client, companyId } = await getTicketWithRaChannel(ticketId);
 
   try {
     await client.authenticate();
-    await client.sendPublicMessage(raExternalId, message);
+    await client.sendPublicMessage(raHugmeId!, message);
 
     await createOutboundMessage({
       ticketId: ticket.id,
@@ -398,13 +400,13 @@ async function handleSendPrivate(
   filePaths?: string[],
   filesBase64?: string[]
 ): Promise<void> {
-  const { ticket, raExternalId, client, companyId } = await getTicketWithRaChannel(ticketId);
+  const { ticket, raHugmeId, client, companyId } = await getTicketWithRaChannel(ticketId);
 
   try {
     await client.authenticate();
     // Read files from disk (new) or decode base64 (legacy backward compat)
     const fileBuffers = await resolveFileBuffers(filePaths, filesBase64);
-    await client.sendPrivateMessage(raExternalId, message, email, fileBuffers);
+    await client.sendPrivateMessage(raHugmeId!, message, email, fileBuffers);
 
     await createOutboundMessage({
       ticketId: ticket.id,
@@ -436,14 +438,14 @@ async function handleSendDual(
   publicMessage: string,
   email: string
 ): Promise<void> {
-  const { ticket, raExternalId, client, companyId } = await getTicketWithRaChannel(ticketId);
+  const { ticket, raHugmeId, client, companyId } = await getTicketWithRaChannel(ticketId);
 
   await client.authenticate();
 
   // 1. Send private message first
   let privateFailed = false;
   try {
-    await client.sendPrivateMessage(raExternalId, privateMessage, email);
+    await client.sendPrivateMessage(raHugmeId!, privateMessage, email);
 
     await createOutboundMessage({
       ticketId: ticket.id,
@@ -492,7 +494,7 @@ async function handleSendDual(
 
   // 2. Send public message (even if private failed)
   try {
-    await client.sendPublicMessage(raExternalId, publicMessage);
+    await client.sendPublicMessage(raHugmeId!, publicMessage);
 
     await createOutboundMessage({
       ticketId: ticket.id,
@@ -556,7 +558,7 @@ async function handleSendDual(
 }
 
 async function handleRequestEvaluation(job: Job, ticketId: string): Promise<void> {
-  const { ticket, raExternalId, client, companyId } = await getTicketWithRaChannel(ticketId);
+  const { ticket, raHugmeId, client, companyId } = await getTicketWithRaChannel(ticketId);
 
   if (!ticket.raCanEvaluate) {
     logger.warn(`[reclameaqui-outbound] Ticket ${ticket.id} cannot request evaluation (raCanEvaluate=false)`);
@@ -571,7 +573,7 @@ async function handleRequestEvaluation(job: Job, ticketId: string): Promise<void
 
   try {
     await client.authenticate();
-    await client.requestEvaluation(raExternalId);
+    await client.requestEvaluation(raHugmeId!);
 
     await createOutboundMessage({
       ticketId: ticket.id,
@@ -607,13 +609,13 @@ async function handleRequestModeration(
   filePaths?: string[],
   filesBase64?: string[]
 ): Promise<void> {
-  const { ticket, raExternalId, client, companyId } = await getTicketWithRaChannel(ticketId);
+  const { ticket, raHugmeId, client, companyId } = await getTicketWithRaChannel(ticketId);
 
   try {
     await client.authenticate();
     // Read files from disk (new) or decode base64 (legacy backward compat)
     const modFileBuffers = await resolveFileBuffers(filePaths, filesBase64);
-    await client.requestModeration(raExternalId, reason, message, migrateTO, modFileBuffers);
+    await client.requestModeration(raHugmeId!, reason, message, migrateTO, modFileBuffers);
 
     await createOutboundMessage({
       ticketId: ticket.id,
@@ -644,11 +646,11 @@ async function handleRequestModeration(
 }
 
 async function handleFinishPrivate(job: Job, ticketId: string): Promise<void> {
-  const { ticket, raExternalId, client, companyId } = await getTicketWithRaChannel(ticketId);
+  const { ticket, raHugmeId, client, companyId } = await getTicketWithRaChannel(ticketId);
 
   try {
     await client.authenticate();
-    await client.finishPrivateMessage(raExternalId);
+    await client.finishPrivateMessage(raHugmeId!);
 
     await createOutboundMessage({
       ticketId: ticket.id,
