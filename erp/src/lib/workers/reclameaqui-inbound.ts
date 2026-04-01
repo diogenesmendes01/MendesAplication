@@ -200,6 +200,20 @@ export function getRaBusinessDaysRemaining(deadline: Date, from: Date = new Date
  * (type 151) by prefixing with [Auto-Moderação] and appending the
  * moderated title from detail_type 40 if present.
  */
+
+/**
+ * Type guard for RA custom form fields.
+ * Ensures each field has a string `name` and `value` before saving to DB.
+ */
+function isValidFormField(field: unknown): field is { name: string; value: string } {
+  return (
+    field !== null &&
+    typeof field === "object" &&
+    typeof (field as Record<string, unknown>).name === "string" &&
+    typeof (field as Record<string, unknown>).value === "string"
+  );
+}
+
 function buildMessageContent(interaction: RaInteraction): string {
   const typeId = interaction.ticket_interaction_type_id;
   let content = interaction.message || "";
@@ -482,7 +496,8 @@ async function createNewTicket(
     );
     const formFields = manifestacao?.details
       ?.filter(d => d.ticket_detail_type_id === RA_DETAIL_TYPES.SPECIAL_FIELDS)
-      ?.map(d => ({ name: d.name, value: d.value })) ?? [];
+      ?.map(d => ({ name: d.name, value: d.value }))
+      ?.filter(isValidFormField) ?? [];
 
     // Create ticket
     const ticket = await tx.ticket.create({
@@ -635,7 +650,8 @@ async function updateExistingTicket(
           );
           const fields = mani?.details
             ?.filter(d => d.ticket_detail_type_id === RA_DETAIL_TYPES.SPECIAL_FIELDS)
-            ?.map(d => ({ name: d.name, value: d.value })) ?? [];
+            ?.map(d => ({ name: d.name, value: d.value }))
+            ?.filter(isValidFormField) ?? [];
           return fields.length > 0 ? { raFormFields: fields } : {};
         })()),
       },
