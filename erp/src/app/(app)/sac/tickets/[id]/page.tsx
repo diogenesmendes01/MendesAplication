@@ -34,7 +34,6 @@ import {
   Sparkles,
   ThumbsDown,
   ThumbsUp,
-  ArrowUpRight,
   ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -798,13 +797,13 @@ export default function TicketDetailPage() {
               </span>
               {ticket.raExternalId && (
                 <a
-                  href={`https://www.reclameaqui.com.br/empresa/ocorrencia/ver/${ticket.raExternalId}/`}
+                  href={`https://www.reclameaqui.com.br/empresa/trustcloud/lista-reclamacoes/?problema=${ticket.raExternalId}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 rounded-full border border-purple-300 bg-white px-2.5 py-1 text-xs font-medium text-purple-700 hover:bg-purple-100 transition-colors"
+                  className="inline-flex items-center gap-1.5 text-sm text-purple-700 hover:text-purple-900 font-mono bg-purple-50 border border-purple-200 rounded px-2 py-1"
                 >
-                  <ArrowUpRight className="h-3 w-3" />
-                  Ver no RA
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  ID RA: {ticket.raExternalId}
                 </a>
               )}
             </div>

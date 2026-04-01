@@ -442,6 +442,11 @@ export interface TicketDetail {
   raSlaDeadline: string | null;
   mergedIntoId: string | null;
   mergedAt: string | null;
+  raReason: string | null;
+  raFeeling: string | null;
+  raCategories: string[];
+  raConsumerConsideration: string | null;
+  raCompanyConsideration: string | null;
 }
 
 async function _getTicketByIdInternal(
@@ -493,6 +498,11 @@ async function _getTicketByIdInternal(
     raSlaDeadline: ticket.raSlaDeadline?.toISOString() ?? null,
     mergedIntoId: ticket.mergedIntoId ?? null,
     mergedAt: ticket.mergedAt?.toISOString() ?? null,
+    raReason: ticket.raReason ?? null,
+    raFeeling: ticket.raFeeling ?? null,
+    raCategories: ticket.raCategories ?? [],
+    raConsumerConsideration: ticket.raConsumerConsideration ?? null,
+    raCompanyConsideration: ticket.raCompanyConsideration ?? null,
   };
 }
 
