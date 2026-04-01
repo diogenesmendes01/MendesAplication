@@ -34,7 +34,6 @@ import {
   Sparkles,
   ThumbsDown,
   ThumbsUp,
-  ArrowUpRight,
   ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
