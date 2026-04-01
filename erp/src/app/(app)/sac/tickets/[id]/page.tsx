@@ -56,17 +56,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import {
-  AlertDialog,
-  AlertDialogTrigger,
-  AlertDialogContent,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogCancel,
-  AlertDialogAction,
-} from "@/components/ui/alert-dialog";
 import { useCompany } from "@/contexts/company-context";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -104,7 +93,6 @@ import {
   sendPrivateMessageWithAttachments,
   sendRaResponse,
 } from "../ra-actions";
-import { RaFileUpload } from "../../components/ra-file-upload";
 import LinkedTicketsBanner from "./linked-tickets-banner";
 import MergedTicketBanner from "./merged-ticket-banner";
 import RaActionBar from "./ra-action-bar";
@@ -294,7 +282,7 @@ export default function TicketDetailPage() {
   const [aiConfigEnabled, setAiConfigEnabled] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [raContext, setRaContext] = useState<any>(null);
-  const [loadingRaContext, setLoadingRaContext] = useState(false);
+  const [_loadingRaContext, setLoadingRaContext] = useState(false);
 
   // AI suggestion pre-populate state (US-RA-R03)
   const [initialPublicMessage, setInitialPublicMessage] = useState<string>("");
