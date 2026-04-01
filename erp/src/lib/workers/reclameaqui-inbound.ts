@@ -418,7 +418,7 @@ async function createNewTicket(
   // If somehow null/undefined slips through (e.g. channel deleted between query and create),
   // throw an explicit error instead of saving a ticket with null channelId.
   if (!channelId) {
-    throw new Error(`[reclameaqui-inbound] channelId obrigatório para criação de ticket RA ${raTicket.source_external_id}`);
+    throw new Error(`[reclameaqui-inbound] channelId is required for RA ticket creation: ${raTicket.source_external_id}`);
   }
 
   const customer = raTicket.customer;
@@ -977,4 +977,5 @@ export {
   firstSyncDate as _firstSyncDate,
   mapRaStatusToTicketStatus as _mapRaStatusToTicketStatus,
   mapInteractionDirection as _mapInteractionDirection,
+  createNewTicket as _createNewTicket,
 };

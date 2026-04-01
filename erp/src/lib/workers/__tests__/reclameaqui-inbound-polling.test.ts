@@ -472,3 +472,38 @@ describe("countModifiedTickets", () => {
     expect(result).toBe(0);
   });
 });
+
+describe("createNewTicket — channelId defensive guard", () => {
+  const makeRaTicket = (extId: string) => ({
+    source_external_id: extId,
+    status: "OPEN",
+    customer: { name: "Test", email: [], cpf: [], phone_numbers: [] },
+  });
+
+  it("throws when channelId is null", async () => {
+    const mod = await import("../reclameaqui-inbound");
+    const createNewTicket = (mod as unknown as Record<string, (...args: unknown[]) => Promise<void>>)._createNewTicket;
+
+    await expect(
+      createNewTicket(makeRaTicket("RA-001"), "company-1", null, "OPEN", 1, "Aberto", {}, undefined)
+    ).rejects.toThrow("[reclameaqui-inbound] channelId is required for RA ticket creation");
+  });
+
+  it("throws when channelId is undefined", async () => {
+    const mod = await import("../reclameaqui-inbound");
+    const createNewTicket = (mod as unknown as Record<string, (...args: unknown[]) => Promise<void>>)._createNewTicket;
+
+    await expect(
+      createNewTicket(makeRaTicket("RA-002"), "company-1", undefined, "OPEN", 1, "Aberto", {}, undefined)
+    ).rejects.toThrow("[reclameaqui-inbound] channelId is required for RA ticket creation");
+  });
+
+  it("error message contains source_external_id", async () => {
+    const mod = await import("../reclameaqui-inbound");
+    const createNewTicket = (mod as unknown as Record<string, (...args: unknown[]) => Promise<void>>)._createNewTicket;
+
+    await expect(
+      createNewTicket(makeRaTicket("RA-XYZ-999"), "company-1", null, "OPEN", 1, "Aberto", {}, undefined)
+    ).rejects.toThrow("RA-XYZ-999");
+  });
+});
