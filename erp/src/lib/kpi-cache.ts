@@ -157,12 +157,12 @@ export async function getCompanyKpis(
     }),
     // Group by channel type via raw SQL (join with channels table)
     prisma.$queryRaw<{ channel: string; count: bigint }[]>`
-      SELECT COALESCE(c."type", 'WEB') as channel, COUNT(*)::bigint as count
+      SELECT COALESCE(c."type"::text, 'WEB') as channel, COUNT(*)::bigint as count
       FROM tickets t
       LEFT JOIN channels c ON t."channelId" = c.id
       WHERE t."companyId" = ${companyId}
         AND t.status IN ('OPEN', 'IN_PROGRESS', 'WAITING_CLIENT')
-      GROUP BY COALESCE(c."type", 'WEB')
+      GROUP BY COALESCE(c."type"::text, 'WEB')
     `,
     // Average response time (minutes from ticket creation to first message)
     prisma.$queryRaw<{ avg_minutes: number | null }[]>`
