@@ -447,6 +447,7 @@ export interface TicketDetail {
   raCategories: string[];
   raConsumerConsideration: string | null;
   raCompanyConsideration: string | null;
+  raFormFields: { name: string; value: string }[] | null;
 }
 
 async function _getTicketByIdInternal(
@@ -503,6 +504,7 @@ async function _getTicketByIdInternal(
     raCategories: ticket.raCategories ?? [],
     raConsumerConsideration: ticket.raConsumerConsideration ?? null,
     raCompanyConsideration: ticket.raCompanyConsideration ?? null,
+    raFormFields: ticket.raFormFields as { name: string; value: string }[] | null ?? null,
   };
 }
 

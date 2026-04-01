@@ -1088,7 +1088,27 @@ export default function TicketDetailPage() {
               </CardContent>
             </Card>
 
-            {/* 3. SLA Reclame Aqui */}
+            {/* 3. Dados da Reclamação (form fields) */}
+            {ticket.raFormFields && (ticket.raFormFields as { name: string; value: string }[]).length > 0 && (
+              <Card className="border-purple-200">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-purple-600" />
+                    Dados da Reclamação
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {(ticket.raFormFields as { name: string; value: string }[]).map((field, i) => (
+                    <div key={i}>
+                      <p className="text-xs font-medium text-muted-foreground">{field.name}</p>
+                      <p className="text-sm">{field.value}</p>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* 4. SLA Reclame Aqui */}
             {ticket.raSlaDeadline && !["RESOLVED", "CLOSED"].includes(ticket.status) && (
               <Card className={(() => {
                 const dl = new Date(ticket.raSlaDeadline);

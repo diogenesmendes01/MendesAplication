@@ -476,6 +476,14 @@ async function createNewTicket(
     }
 
 
+    // Extract custom form fields from MANIFESTACAO interaction (SPECIAL_FIELDS detail type)
+    const manifestacao = raTicket.interactions?.find(
+      i => i.ticket_interaction_type_id === RA_INTERACTION_TYPES.MANIFESTACAO
+    );
+    const formFields = manifestacao?.details
+      ?.filter(d => d.ticket_detail_type_id === RA_DETAIL_TYPES.SPECIAL_FIELDS)
+      ?.map(d => ({ name: d.name, value: d.value })) ?? [];
+
     // Create ticket
     const ticket = await tx.ticket.create({
       data: {
@@ -487,6 +495,7 @@ async function createNewTicket(
         status: ticketStatus,
         priority: "HIGH",
         raExternalId: raTicket.source_external_id,
+        raHugmeId: raTicket.id?.toString() ?? null,
         raStatusId,
         raStatusName,
         raCanEvaluate: raTicket.request_evaluation ?? false,
@@ -510,6 +519,7 @@ async function createNewTicket(
         raSlaDeadline: calculateRaSlaDeadline(raTicket.creation_date),
         raConsumerConsideration: raTicket.consumer_consideration ?? null,
         raCompanyConsideration: raTicket.company_consideration ?? null,
+        raFormFields: formFields.length > 0 ? formFields : undefined,
         tags: ["reclame-aqui"],
       },
     });
@@ -618,6 +628,16 @@ async function updateExistingTicket(
         raSlaDeadline: calculateRaSlaDeadline(raTicket.creation_date),
         raConsumerConsideration: raTicket.consumer_consideration ?? null,
         raCompanyConsideration: raTicket.company_consideration ?? null,
+        raHugmeId: raTicket.id?.toString() ?? null,
+        ...((() => {
+          const mani = raTicket.interactions?.find(
+            i => i.ticket_interaction_type_id === RA_INTERACTION_TYPES.MANIFESTACAO
+          );
+          const fields = mani?.details
+            ?.filter(d => d.ticket_detail_type_id === RA_DETAIL_TYPES.SPECIAL_FIELDS)
+            ?.map(d => ({ name: d.name, value: d.value })) ?? [];
+          return fields.length > 0 ? { raFormFields: fields } : {};
+        })()),
       },
     });
 
