@@ -414,6 +414,13 @@ async function createNewTicket(
   metrics: SyncMetrics,
   raClient?: ReclameAquiClient
 ): Promise<void> {
+  // Defensive guard: channelId is required for RA tickets
+  // If somehow null/undefined slips through (e.g. channel deleted between query and create),
+  // throw an explicit error instead of saving a ticket with null channelId.
+  if (!channelId) {
+    throw new Error(`[reclameaqui-inbound] channelId obrigatório para criação de ticket RA ${raTicket.source_external_id}`);
+  }
+
   const customer = raTicket.customer;
   const customerEmail = customer.email?.[0]?.trim().toLowerCase();
   const customerPhone = customer.phone_numbers?.[0] || null;
