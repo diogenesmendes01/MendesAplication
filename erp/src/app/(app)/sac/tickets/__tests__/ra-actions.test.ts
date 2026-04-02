@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect } from "vitest";
 
 /**
  * Unit tests for RA reputation code null-safety logic
@@ -35,34 +35,25 @@ describe("RA Actions - reputationCode transformation", () => {
  * Validates that field names match job worker expectations
  */
 describe("RA Actions - sendRaResponse job payloads", () => {
-  let mockQueueAdd: ReturnType<typeof vi.fn>;
-
-  beforeEach(() => {
-    mockQueueAdd = vi.fn().mockResolvedValue({ id: "job-123" });
-  });
-
   const testCases = [
     {
-      name: "RA_SEND_DUAL",
       jobName: "RA_SEND_DUAL",
       expectedFields: ["ticketId", "raExternalId", "companyId", "publicMessage", "privateMessage", "email"],
       excludeFields: ["message"],
     },
     {
-      name: "RA_SEND_PUBLIC",
       jobName: "RA_SEND_PUBLIC",
       expectedFields: ["ticketId", "raExternalId", "companyId", "message"],
       excludeFields: ["publicMessage", "privateMessage", "email"],
     },
     {
-      name: "RA_SEND_PRIVATE",
       jobName: "RA_SEND_PRIVATE",
       expectedFields: ["ticketId", "raExternalId", "companyId", "message", "email"],
       excludeFields: ["publicMessage", "privateMessage"],
     },
   ];
 
-  testCases.forEach(({ name, jobName, expectedFields, excludeFields }) => {
+  testCases.forEach(({ jobName, expectedFields, excludeFields }) => {
     it(`${jobName} payload contains required fields [${expectedFields.join(", ")}]`, () => {
       // Mock payload that would be sent to the queue
       const payload = {
