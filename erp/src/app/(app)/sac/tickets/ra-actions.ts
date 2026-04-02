@@ -456,14 +456,26 @@ export async function sendRaResponse(
       jobName = "RA_SEND_PRIVATE";
     }
 
-    await reclameaquiOutboundQueue.add(jobName, {
-      ticketId,
-      raExternalId: ticket.raExternalId,
-      companyId,
-      publicMessage: hasPublic ? publicMessage.trim() : undefined,
-      privateMessage: hasPrivate ? privateMessage!.trim() : undefined,
-      email: recipientEmail,
-    }, RA_OUTBOUND_JOB_OPTS);
+    if (jobName === "RA_SEND_DUAL") {
+      await reclameaquiOutboundQueue.add("RA_SEND_DUAL", {
+        ticketId,
+        publicMessage: publicMessage!.trim(),
+        privateMessage: privateMessage!.trim(),
+        email: recipientEmail,
+      }, RA_OUTBOUND_JOB_OPTS);
+    } else if (jobName === "RA_SEND_PUBLIC") {
+      await reclameaquiOutboundQueue.add("RA_SEND_PUBLIC", {
+        ticketId,
+        message: publicMessage!.trim(),
+      }, RA_OUTBOUND_JOB_OPTS);
+    } else {
+      // RA_SEND_PRIVATE
+      await reclameaquiOutboundQueue.add("RA_SEND_PRIVATE", {
+        ticketId,
+        message: privateMessage!.trim(),
+        email: recipientEmail,
+      }, RA_OUTBOUND_JOB_OPTS);
+    }
 
     await logAuditEvent({
       userId: session.userId,
