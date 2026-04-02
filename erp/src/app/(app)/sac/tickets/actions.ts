@@ -435,6 +435,7 @@ export interface TicketDetail {
   channelType: ChannelType | null;
   aiEnabled: boolean;
   raExternalId: string | null;
+  raHugmeId: string | null;
   raStatusName: string | null;
   raRating: string | null;
   raCanEvaluate: boolean;
@@ -492,6 +493,7 @@ async function _getTicketByIdInternal(
     channelType: ticket.channel?.type ?? null,
     aiEnabled: ticket.aiEnabled,
     raExternalId: ticket.raExternalId ?? null,
+    raHugmeId: ticket.raHugmeId ?? null,
     raStatusName: ticket.raStatusName ?? null,
     raRating: ticket.raRating ?? null,
     raCanEvaluate: ticket.raCanEvaluate ?? false,

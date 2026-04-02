@@ -919,6 +919,7 @@ export default function TicketDetailPage() {
               ticketId={ticketId}
               companyId={selectedCompanyId}
               raExternalId={ticket.raExternalId ?? null}
+              raHugmeId={ticket.raHugmeId ?? null}
               raCanEvaluate={ticket.raCanEvaluate === true}
               raCanModerate={ticket.raCanModerate === true}
               onRequestEvaluation={handleRequestRaEvaluation}

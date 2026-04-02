@@ -28,6 +28,7 @@ interface RaActionBarProps {
   ticketId: string;
   companyId: string;
   raExternalId: string | null;
+  raHugmeId: string | null;
   raCanEvaluate: boolean;
   raCanModerate: boolean;
   onRequestEvaluation: () => Promise<void>;
@@ -43,6 +44,7 @@ interface RaActionBarProps {
 
 export default function RaActionBar({
   raExternalId,
+  raHugmeId,
   raCanEvaluate,
   raCanModerate,
   onRequestEvaluation,
@@ -51,9 +53,14 @@ export default function RaActionBar({
   requestingEval,
   finishingPrivate,
 }: RaActionBarProps) {
-  const raUrl = raExternalId
+  // Use raHugmeId (slug) for the correct company area URL
+  // Fallback to raExternalId (numeric) for legacy tickets without raHugmeId
+  const raUrl = raHugmeId
+    ? `https://www.reclameaqui.com.br/area-da-empresa/reclamacoes/${raHugmeId}`
+    : raExternalId
     ? `https://www.reclameaqui.com.br/empresa/ocorrencia/ver/${raExternalId}/`
     : null;
+
 
   return (
     <TooltipProvider>
