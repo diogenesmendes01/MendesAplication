@@ -18,6 +18,10 @@
  *
  * (A flag --project tsconfig.json não funciona com moduleResolution: "bundler" + ts-node.
  *  Use tsconfig.scripts.json que faz override para module: "commonjs")
+ *
+ * Flags:
+ *   --dry-run   Loga o que faria sem commitar nenhuma alteração no banco.
+ *               Útil para validar antes de rodar em produção.
  */
 
 import { PrismaClient } from "@prisma/client";
@@ -33,6 +37,9 @@ const prisma = new PrismaClient();
 
 const RATE_LIMIT_MS = 100; // 100ms entre chamadas por client
 
+// Parse --dry-run flag
+const DRY_RUN = process.argv.includes("--dry-run");
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -42,6 +49,10 @@ function sleep(ms: number): Promise<void> {
 // ---------------------------------------------------------------------------
 
 async function main() {
+  if (DRY_RUN) {
+    console.log("🔔 DRY-RUN ativo — nenhuma alteração será salva no banco.\n");
+  }
+
   console.log("🔍 Buscando tickets com raExternalId preenchido e raHugmeId vazio...");
 
   const tickets = await prisma.ticket.findMany({
@@ -75,6 +86,7 @@ async function main() {
 
   let updated = 0;
   let errors = 0;
+  let skipped_pre = 0; // tickets pulados ANTES do loop principal (canal inativo/inválido)
 
   // Agrupar por channelId para reutilizar o mesmo client (e respeitar rate limit por client)
   const ticketsByChannel = new Map<
@@ -85,9 +97,9 @@ async function main() {
   for (const ticket of tickets) {
     if (!ticket.channel || ticket.channel.type !== "RECLAMEAQUI" || !ticket.channel.isActive) {
       console.warn(
-        `⚠️  [${updated + errors + 1}/${total}] Ticket ${ticket.id} sem canal RA ativo — pulando`
+        `⚠️  [skip ${skipped_pre + 1}/${total}] Ticket ${ticket.id} sem canal RA ativo — pulando`
       );
-      errors++;
+      skipped_pre++;
       continue;
     }
 
@@ -97,6 +109,9 @@ async function main() {
     }
     ticketsByChannel.get(channelId)!.push(ticket);
   }
+
+  // Tickets elegíveis para processar (excluídos os pulados no agrupamento)
+  const eligible = total - skipped_pre;
 
   // Processar por canal
   for (const [channelId, channelTickets] of Array.from(ticketsByChannel.entries())) {
@@ -123,8 +138,10 @@ async function main() {
       });
 
       // Autenticar uma vez por canal
-      await client.authenticate();
-      console.log(`🔑 Canal ${channelId}: autenticado (${channelTickets.length} tickets)`);
+      if (!DRY_RUN) {
+        await client.authenticate();
+      }
+      console.log(`🔑 Canal ${channelId}: ${DRY_RUN ? "autenticação pulada (dry-run)" : "autenticado"} (${channelTickets.length} tickets)`);
     } catch (err) {
       console.error(`❌ Falha ao autenticar canal ${channelId}:`, err instanceof Error ? err.message : err);
       errors += channelTickets.length;
@@ -134,29 +151,43 @@ async function main() {
     // Processar cada ticket do canal
     for (const ticket of channelTickets) {
       const processed = updated + errors + 1;
-      const label = `[${processed}/${total}] Ticket ${ticket.id} (raExternalId: ${ticket.raExternalId})`;
+      const label = `[${processed}/${eligible}] Ticket ${ticket.id} (raExternalId: ${ticket.raExternalId})`;
 
       try {
-        const response = await client.getTickets({
-          source_external_id: ticket.raExternalId!,
-          page_size: 1,
-        });
-
-        const raTicket = response?.data?.[0];
-
-        if (!raTicket) {
-          console.warn(`⚠️  ${label} — não encontrado no RA (provavelmente deletado)`);
-          errors++;
+        if (DRY_RUN) {
+          console.log(`🔔 ${label} → DRY-RUN: chamaria getTickets({ source_external_id: "${ticket.raExternalId}", page_size: 2 }) e atualizaria raHugmeId`);
+          updated++;
         } else {
-          const raHugmeId = raTicket.id.toString();
-
-          await prisma.ticket.update({
-            where: { id: ticket.id },
-            data: { raHugmeId },
+          // page_size: 2 para detectar ambiguidade (2+ tickets com mesmo source_external_id)
+          const response = await client.getTickets({
+            source_external_id: ticket.raExternalId!,
+            page_size: 2,
           });
 
-          console.log(`✅ ${label} → raHugmeId = ${raHugmeId}`);
-          updated++;
+          const raTicket = response?.data?.[0];
+
+          if (!raTicket) {
+            console.warn(`⚠️  ${label} — não encontrado no RA (provavelmente deletado)`);
+            errors++;
+          } else {
+            // Detectar ambiguidade: múltiplos tickets com o mesmo source_external_id
+            if (response.data.length > 1) {
+              console.warn(
+                `⚠️  ${label} — múltiplos resultados (${response.data.length}) para source_external_id=${ticket.raExternalId}. ` +
+                `Usando data[0].id=${raTicket.id} — verificar manualmente.`
+              );
+            }
+
+            const raHugmeId = raTicket.id.toString();
+
+            await prisma.ticket.update({
+              where: { id: ticket.id },
+              data: { raHugmeId },
+            });
+
+            console.log(`✅ ${label} → raHugmeId = ${raHugmeId}`);
+            updated++;
+          }
         }
       } catch (err) {
         if (err instanceof ReclameAquiError) {
@@ -168,7 +199,9 @@ async function main() {
       }
 
       // Rate limiting: 100ms entre chamadas por client
-      await sleep(RATE_LIMIT_MS);
+      if (!DRY_RUN) {
+        await sleep(RATE_LIMIT_MS);
+      }
     }
   }
 
@@ -176,13 +209,16 @@ async function main() {
   // Sumário final
   // ---------------------------------------------------------------------------
   console.log("\n─────────────────────────────────────────");
-  console.log(`📊 Backfill concluído:`);
-  console.log(`   Total processado : ${total}`);
-  console.log(`   ✅ Atualizados   : ${updated}`);
-  console.log(`   ❌ Erros/pulados : ${errors}`);
+  console.log(`📊 Backfill ${DRY_RUN ? "(DRY-RUN) " : ""}concluído:`);
+  console.log(`   Total encontrado   : ${total}`);
+  console.log(`   ⏭️  Pulados (pré)   : ${skipped_pre}`);
+  console.log(`   ✅ Atualizados     : ${updated}`);
+  console.log(`   ❌ Erros           : ${errors}`);
   console.log("─────────────────────────────────────────\n");
 
-  if (errors > 0) {
+  if (DRY_RUN) {
+    console.log("🔔 DRY-RUN concluído. Nenhuma alteração foi salva.");
+  } else if (errors > 0) {
     console.warn(`⚠️  ${errors} tickets não foram atualizados. Verifique os logs acima.`);
   }
 }
