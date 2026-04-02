@@ -75,7 +75,6 @@ export interface TicketRow {
     name: string;
   } | null;
   raExternalId: string | null;
-  raHugmeId: string | null;
   raStatusName: string | null;
   raRating: string | null;
   raStatusId: number | null;

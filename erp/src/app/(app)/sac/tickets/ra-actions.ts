@@ -314,6 +314,8 @@ export async function approveSuggestion(
 
     // Enqueue outbound job — fall back to RA_SEND_PUBLIC if no client email
     if (clientEmail && privateMessage) {
+      // raExternalId and companyId are NOT consumed by the worker (it re-fetches from DB).
+      // They are included here for observability — visible in structured logs when debugging job failures.
       await reclameaquiOutboundQueue.add("RA_SEND_DUAL", {
         messageId,
         ticketId: message.ticket.id,
@@ -325,6 +327,8 @@ export async function approveSuggestion(
       }, RA_OUTBOUND_JOB_OPTS);
     } else {
       // No email available — can only send public message
+      // raExternalId and companyId are NOT consumed by the worker (it re-fetches from DB).
+      // They are included here for observability — visible in structured logs when debugging job failures.
       await reclameaquiOutboundQueue.add("RA_SEND_PUBLIC", {
         messageId,
         ticketId: message.ticket.id,
@@ -456,32 +460,24 @@ export async function sendRaResponse(
       jobName = "RA_SEND_PRIVATE";
     }
 
-    if (jobName === "RA_SEND_DUAL") {
-      await reclameaquiOutboundQueue.add("RA_SEND_DUAL", {
-        ticketId,
-        raExternalId: ticket.raExternalId,
-        companyId,
-        publicMessage: publicMessage!.trim(),
-        privateMessage: privateMessage!.trim(),
-        email: recipientEmail,
-      }, RA_OUTBOUND_JOB_OPTS);
-    } else if (jobName === "RA_SEND_PUBLIC") {
-      await reclameaquiOutboundQueue.add("RA_SEND_PUBLIC", {
-        ticketId,
-        raExternalId: ticket.raExternalId,
-        companyId,
-        message: publicMessage!.trim(),
-      }, RA_OUTBOUND_JOB_OPTS);
-    } else {
-      // RA_SEND_PRIVATE
-      await reclameaquiOutboundQueue.add("RA_SEND_PRIVATE", {
-        ticketId,
-        raExternalId: ticket.raExternalId,
-        companyId,
-        message: privateMessage!.trim(),
-        email: recipientEmail,
-      }, RA_OUTBOUND_JOB_OPTS);
-    }
+    // Payload map per job type — fields must match worker interfaces:
+    //   RA_SEND_PUBLIC/PRIVATE: { ticketId, message, email? }
+    //   RA_SEND_DUAL: { ticketId, publicMessage, privateMessage, email }
+    // raExternalId and companyId are NOT consumed by the worker (it re-fetches from DB).
+    // They are included for observability — visible in structured logs when debugging failures.
+    const jobSpecificPayload =
+      jobName === "RA_SEND_DUAL"
+        ? { publicMessage: publicMessage!.trim(), privateMessage: privateMessage!.trim(), email: recipientEmail }
+        : jobName === "RA_SEND_PUBLIC"
+        ? { message: publicMessage!.trim() }
+        : { message: privateMessage!.trim(), email: recipientEmail };
+
+    await reclameaquiOutboundQueue.add(jobName, {
+      ticketId,
+      raExternalId: ticket.raExternalId,
+      companyId,
+      ...jobSpecificPayload,
+    }, RA_OUTBOUND_JOB_OPTS);
 
     await logAuditEvent({
       userId: session.userId,
@@ -992,12 +988,16 @@ export async function retryFailedRaMessage(
 
     // Re-enqueue
     if (isInternal) {
+      // raExternalId and companyId are NOT consumed by the worker (it re-fetches from DB).
+      // They are included here for observability — visible in structured logs when debugging job failures.
       await reclameaquiOutboundQueue.add(jobName, {
         ticketId: message.ticket.id,
         message: message.content,
         email: message.ticket.client.email,
       }, RA_OUTBOUND_JOB_OPTS);
     } else {
+      // raExternalId and companyId are NOT consumed by the worker (it re-fetches from DB).
+      // They are included here for observability — visible in structured logs when debugging job failures.
       await reclameaquiOutboundQueue.add(jobName, {
         ticketId: message.ticket.id,
         message: message.content,
