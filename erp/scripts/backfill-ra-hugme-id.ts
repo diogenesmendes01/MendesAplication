@@ -228,10 +228,10 @@ async function main() {
 // ---------------------------------------------------------------------------
 
 main()
+  .finally(async () => {
+    await prisma.$disconnect();
+  })
   .catch((err) => {
     console.error("💥 Erro fatal no backfill:", err);
     process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
   });
