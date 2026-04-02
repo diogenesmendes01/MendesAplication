@@ -459,6 +459,8 @@ export async function sendRaResponse(
     if (jobName === "RA_SEND_DUAL") {
       await reclameaquiOutboundQueue.add("RA_SEND_DUAL", {
         ticketId,
+        raExternalId: ticket.raExternalId,
+        companyId,
         publicMessage: publicMessage!.trim(),
         privateMessage: privateMessage!.trim(),
         email: recipientEmail,
@@ -466,12 +468,16 @@ export async function sendRaResponse(
     } else if (jobName === "RA_SEND_PUBLIC") {
       await reclameaquiOutboundQueue.add("RA_SEND_PUBLIC", {
         ticketId,
+        raExternalId: ticket.raExternalId,
+        companyId,
         message: publicMessage!.trim(),
       }, RA_OUTBOUND_JOB_OPTS);
     } else {
       // RA_SEND_PRIVATE
       await reclameaquiOutboundQueue.add("RA_SEND_PRIVATE", {
         ticketId,
+        raExternalId: ticket.raExternalId,
+        companyId,
         message: privateMessage!.trim(),
         email: recipientEmail,
       }, RA_OUTBOUND_JOB_OPTS);
