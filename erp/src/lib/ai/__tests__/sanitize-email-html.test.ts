@@ -62,9 +62,9 @@ describe("sanitizeEmailHtml", () => {
     expect(sanitizeEmailHtml('<b class="x">texto</b>')).toBe("<b>texto</b>");
   });
 
-  it("strips style attribute from allowed tag", () => {
+  it("preserves style attribute on allowed tags (rich text support)", () => {
     expect(sanitizeEmailHtml('<p style="color:red">texto</p>')).toBe(
-      "<p>texto</p>"
+      '<p style="color:red">texto</p>'
     );
   });
 
@@ -82,15 +82,16 @@ describe("sanitizeEmailHtml", () => {
     expect(result).not.toContain("</script");
   });
 
-  it("removes <img> tags (tracking pixel prevention)", () => {
+  it("strips http:// src from <img> tags (http scheme blocked)", () => {
     const result = sanitizeEmailHtml('<img src="http://evil.com/pixel.gif" />');
-    expect(result).not.toContain("<img");
+    // img tag remains but src is stripped (only https/data allowed for img src)
     expect(result).not.toContain("evil.com");
+    expect(result).not.toContain("http://");
   });
 
-  it("removes <img onerror> XSS payload", () => {
+  it("strips onerror and JS from <img> — XSS payload neutralised", () => {
     const result = sanitizeEmailHtml('<img onerror="alert(1)" src="x" />');
-    expect(result).not.toContain("<img");
+    // event handler stripped; non-https src stripped; tag remains empty/harmless
     expect(result).not.toContain("onerror");
     expect(result).not.toContain("alert");
   });
@@ -101,9 +102,9 @@ describe("sanitizeEmailHtml", () => {
     expect(result).toContain("click");
   });
 
-  it("removes <div> tags but keeps text content", () => {
+  it("preserves <div> tags (rich text support)", () => {
     const result = sanitizeEmailHtml("<div>conteúdo</div>");
-    expect(result).not.toContain("<div");
+    expect(result).toContain("<div");
     expect(result).toContain("conteúdo");
   });
 
@@ -135,9 +136,9 @@ describe("sanitizeEmailHtml", () => {
 
   // --- Mixed / nested HTML ---
 
-  it("handles nested allowed inside disallowed: <div><b>ok</b></div> → <b>ok</b>", () => {
+  it("preserves nested <div><b>ok</b></div> (both tags now allowed)", () => {
     const result = sanitizeEmailHtml("<div><b>ok</b></div>");
-    expect(result).not.toContain("<div");
+    expect(result).toContain("<div");
     expect(result).toContain("<b>ok</b>");
   });
 
@@ -152,10 +153,10 @@ describe("sanitizeEmailHtml", () => {
 
   // --- Security payloads (from Tech Lead recommendation) ---
 
-  it("removes tracking pixel <img src='http://evil.com/pixel'>", () => {
+  it("strips http:// tracking pixel src — evil.com not present in output", () => {
     const result = sanitizeEmailHtml('<img src="http://evil.com/pixel" />');
-    expect(result).not.toContain("<img");
     expect(result).not.toContain("evil.com");
+    expect(result).not.toContain("http://");
   });
 
   it("removes <style> tags", () => {
