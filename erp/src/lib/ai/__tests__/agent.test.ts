@@ -331,3 +331,70 @@ describe("runAgentDryRun", () => {
     expect((await runAgentDryRun("c1", "Ola")).error).toContain("no_default_model_for_provider");
   });
 });
+
+// ─── enabledTools per channel (feat/ai-config-enabled-tools) ──────────────────
+
+describe("runAgent — enabledTools filter passed to getToolsForChannel", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockDecrypt.mockImplementation((v: string) => `decrypted:${v}`);
+    mockGetBrlUsdRateSync.mockReturnValue(5.0);
+    mockGetTodaySpend.mockResolvedValue(0);
+    mockCheckAndReserveSpend.mockResolvedValue(true);
+    mockLogUsage.mockResolvedValue(undefined);
+    mockPrismaTicketMessageFindMany.mockResolvedValue([]);
+    mockPrismaTicketMessageCreate.mockResolvedValue({});
+    mockPrismaTicketUpdate.mockResolvedValue({});
+    mockGetEnvProviderConfig.mockReturnValue(null);
+    mockChatCompletion.mockResolvedValue({ content: "ok", usage: { inputTokens: 10, outputTokens: 5 } });
+  });
+
+  it("passes whatsappEnabledTools to getToolsForChannel for WHATSAPP channel", async () => {
+    const enabledTools = ["SEARCH_DOCUMENTS", "GET_CLIENT_INFO"];
+    mockPrismaAiConfigFindUnique.mockResolvedValue({
+      ...baseAiConfig,
+      whatsappEnabled: true,
+      whatsappEnabledTools: enabledTools,
+      emailEnabledTools: [],
+      raEnabledTools: [],
+    });
+    mockPrismaTicketFindUnique.mockResolvedValue({
+      ...baseTicket,
+      channel: { type: "WHATSAPP" },
+    });
+    await runAgent("ticket-1", "oi");
+    expect(mockGetToolsForChannel).toHaveBeenCalledWith("WHATSAPP", enabledTools);
+  });
+
+  it("passes raEnabledTools to getToolsForChannel for RECLAMEAQUI channel", async () => {
+    const enabledTools = ["SEARCH_DOCUMENTS"];
+    mockPrismaAiConfigFindUnique.mockResolvedValue({
+      ...baseAiConfig,
+      raEnabled: true,
+      whatsappEnabledTools: [],
+      emailEnabledTools: [],
+      raEnabledTools: enabledTools,
+    });
+    mockPrismaTicketFindUnique.mockResolvedValue({
+      ...baseTicket,
+      channel: { type: "RECLAMEAQUI" },
+    });
+    await runAgent("ticket-1", "reclamação");
+    expect(mockGetToolsForChannel).toHaveBeenCalledWith("RECLAMEAQUI", enabledTools);
+  });
+
+  it("passes empty array when enabledTools fields are absent (backward compat)", async () => {
+    // Config without the new fields (old record)
+    mockPrismaAiConfigFindUnique.mockResolvedValue({
+      ...baseAiConfig,
+      whatsappEnabled: true,
+      // no whatsappEnabledTools field
+    });
+    mockPrismaTicketFindUnique.mockResolvedValue({
+      ...baseTicket,
+      channel: { type: "WHATSAPP" },
+    });
+    await runAgent("ticket-1", "oi");
+    expect(mockGetToolsForChannel).toHaveBeenCalledWith("WHATSAPP", []);
+  });
+});

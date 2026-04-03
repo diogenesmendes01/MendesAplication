@@ -223,3 +223,82 @@ describe("ALL_TOOLS", () => {
     expect(ALL_TOOLS).toHaveLength(6);
   });
 });
+
+// ─── getToolsForChannel — enabledTools filter (feat/ai-config-enabled-tools) ──
+
+describe("getToolsForChannel — enabledTools filter", () => {
+  it("returns all channel tools when enabledTools is empty (default)", () => {
+    expect(getToolsForChannel("WHATSAPP", [])).toEqual(WHATSAPP_TOOLS);
+    expect(getToolsForChannel("EMAIL", [])).toEqual(EMAIL_TOOLS);
+    expect(getToolsForChannel("RECLAMEAQUI", [])).toEqual(RECLAMEAQUI_TOOLS);
+  });
+
+  it("returns all channel tools when enabledTools is undefined", () => {
+    expect(getToolsForChannel("WHATSAPP", undefined)).toEqual(WHATSAPP_TOOLS);
+    expect(getToolsForChannel("RECLAMEAQUI", undefined)).toEqual(RECLAMEAQUI_TOOLS);
+  });
+
+  it("filters to only the specified tools plus always-on tools", () => {
+    const result = getToolsForChannel("WHATSAPP", ["SEARCH_DOCUMENTS"]);
+    const names = result.map((t) => t.name);
+
+    // Requested tool present
+    expect(names).toContain("SEARCH_DOCUMENTS");
+
+    // Always-on tools present regardless
+    expect(names).toContain("GET_HISTORY");
+    expect(names).toContain("ESCALATE");
+    expect(names).toContain("RESPOND");
+
+    // Non-requested, non-always-on tools absent
+    expect(names).not.toContain("GET_CLIENT_INFO");
+    expect(names).not.toContain("CREATE_NOTE");
+    expect(names).not.toContain("LOOKUP_CLIENT_BY_CNPJ");
+    expect(names).not.toContain("READ_ATTACHMENT");
+  });
+
+  it("always-on tools are preserved even when not in enabledTools list", () => {
+    // Pass an empty tool ID — only always-on should survive
+    const result = getToolsForChannel("RECLAMEAQUI", ["NONEXISTENT_TOOL"]);
+    const names = result.map((t) => t.name);
+
+    expect(names).toContain("GET_HISTORY");
+    expect(names).toContain("ESCALATE");
+    expect(names).toContain("RESPOND_RECLAMEAQUI");
+    expect(names).not.toContain("SEARCH_DOCUMENTS");
+    expect(names).not.toContain("GET_CLIENT_INFO");
+  });
+
+  it("EMAIL always-on includes RESPOND_EMAIL not RESPOND", () => {
+    const result = getToolsForChannel("EMAIL", ["NONEXISTENT"]);
+    const names = result.map((t) => t.name);
+
+    expect(names).toContain("RESPOND_EMAIL");
+    expect(names).not.toContain("RESPOND");
+  });
+
+  it("multiple enabled tools are all included", () => {
+    const result = getToolsForChannel("WHATSAPP", ["SEARCH_DOCUMENTS", "GET_CLIENT_INFO", "CREATE_NOTE"]);
+    const names = result.map((t) => t.name);
+
+    expect(names).toContain("SEARCH_DOCUMENTS");
+    expect(names).toContain("GET_CLIENT_INFO");
+    expect(names).toContain("CREATE_NOTE");
+  });
+
+  it("filtered result is a subset of the full channel tool set", () => {
+    const full = getToolsForChannel("WHATSAPP");
+    const filtered = getToolsForChannel("WHATSAPP", ["SEARCH_DOCUMENTS"]);
+
+    for (const tool of filtered) {
+      expect(full.map((t) => t.name)).toContain(tool.name);
+    }
+  });
+
+  it("result never contains tools outside the channel set even if listed in enabledTools", () => {
+    // RESPOND_EMAIL is not in WHATSAPP_TOOLS — should not appear even if listed
+    const result = getToolsForChannel("WHATSAPP", ["RESPOND_EMAIL", "SEARCH_DOCUMENTS"]);
+    const names = result.map((t) => t.name);
+    expect(names).not.toContain("RESPOND_EMAIL");
+  });
+});

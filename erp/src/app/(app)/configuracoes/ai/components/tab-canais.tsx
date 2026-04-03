@@ -472,7 +472,7 @@ function SectionWhatsApp({ companyId, config, setConfig }: TabCanaisProps) {
       {/* WhatsApp usa config.operationMode (global por ora) */}
       <OperationModeCard config={config} setConfig={setConfig} />
 
-      {/* Card 5: Ferramentas do Agente */}
+      {/* Ferramentas — WhatsApp: controla o que o agente pode fazer no canal */}
       <ToolsCard
         tools={WA_TOOLS_DEF}
         enabledTools={config.whatsappEnabledTools}
@@ -571,7 +571,7 @@ function SectionEmail({ companyId, config, setConfig }: TabCanaisProps) {
       {/* Email usa config.operationMode (global por ora) */}
       <OperationModeCard config={config} setConfig={setConfig} />
 
-            {/* Card: Ferramentas do Agente */}
+            {/* Ferramentas — Email: controla o que o agente pode fazer no canal */}
       <ToolsCard
         tools={EMAIL_TOOLS_DEF}
         enabledTools={config.emailEnabledTools}
@@ -789,7 +789,7 @@ function SectionReclameAqui({ companyId, config, setConfig }: TabCanaisProps) {
         </CardContent>
       </Card>
 
-            {/* Card: Ferramentas do Agente */}
+            {/* Ferramentas — Reclame Aqui: controla o que o agente pode fazer no canal */}
       <ToolsCard
         tools={RA_TOOLS_DEF}
         enabledTools={config.raEnabledTools}
