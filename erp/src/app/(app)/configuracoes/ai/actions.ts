@@ -559,7 +559,7 @@ async function _getSuggestedModel(
 async function _simulateAiResponse(
   companyId: string,
   message: string,
-  channel: "WHATSAPP" | "EMAIL",
+  channel: "WHATSAPP" | "EMAIL" | "RECLAMEAQUI",
 ): Promise<SimulationResult> {
   await requireAdmin();
   await requireCompanyAccess(companyId);
@@ -586,7 +586,7 @@ async function _simulateAiResponse(
   }
 
   // Runtime validation for channel (TypeScript-only types aren't enforced at HTTP boundaries)
-  const VALID_CHANNELS = ["WHATSAPP", "EMAIL"] as const;
+  const VALID_CHANNELS = ["WHATSAPP", "EMAIL", "RECLAMEAQUI"] as const;
   if (!VALID_CHANNELS.includes(channel as (typeof VALID_CHANNELS)[number])) {
     return {
       response: "",
@@ -623,6 +623,7 @@ async function _simulateAiResponse(
       "api_key_decrypt_failed": "Erro ao acessar a configuração de API key.",
       "email_channel_disabled": "Canal Email está desabilitado nas configurações.",
       "whatsapp_channel_disabled": "Canal WhatsApp está desabilitado nas configurações.",
+      "reclameaqui_channel_disabled": "Canal Reclame Aqui está desabilitado nas configurações.",
       "AI not enabled": "A IA está desabilitada. Habilite nas configurações gerais.",
       "daily_spend_limit_reached": "Limite de gasto diário atingido.",
       "max iterations reached": "Limite de iterações atingido sem resposta.",
