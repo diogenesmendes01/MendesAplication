@@ -1061,6 +1061,37 @@ ${CNPJ_INSTRUCTIONS}${ATTACHMENT_INSTRUCTIONS}
       prompt += `\n- ⚠️ O cliente NÃO foi identificado por CNPJ (cpfCnpj sintético). Priorize a identificação: use LOOKUP_CLIENT_BY_CNPJ se encontrar CNPJ no contexto, ou pergunte o CNPJ ao consumidor na mensagem privada.`;
     }
 
+    // Structured form fields from complaint opening form (CNPJ, relationship, preferred channel, etc.)
+    if (raContext.formFields && raContext.formFields.length > 0) {
+      prompt += `\n\n## DADOS DO FORMULÁRIO DE ABERTURA:`;
+      for (const field of raContext.formFields) {
+        prompt += `\n- ${field.name}: ${field.value}`;
+      }
+
+      const cnpjField = raContext.formFields.find(f =>
+        f.name.toLowerCase().includes("cnpj") || f.name.toLowerCase().includes("cpf")
+      );
+      const channelField = raContext.formFields.find(f =>
+        f.name.toLowerCase().includes("canal") || f.name.toLowerCase().includes("atendimento")
+      );
+      const relationField = raContext.formFields.find(f =>
+        f.name.toLowerCase().includes("relação") || f.name.toLowerCase().includes("relacao")
+      );
+
+      if (cnpjField || channelField || relationField) {
+        prompt += `\n\n## INSTRUÇÕES BASEADAS NO FORMULÁRIO:`;
+        if (cnpjField) {
+          prompt += `\n- O consumidor informou ${cnpjField.name.trim()}: ${cnpjField.value.trim()}. Use LOOKUP_CLIENT_BY_CNPJ com este valor como PRIMEIRA ação — não pergunte o CNPJ novamente.`;
+        }
+        if (channelField) {
+          prompt += `\n- Canal de atendimento preferencial do consumidor: ${channelField.value.trim()}. Considere isso ao orientar o próximo passo.`;
+        }
+        if (relationField) {
+          prompt += `\n- Relação do reclamante com a empresa: ${relationField.value.trim()}.`;
+        }
+      }
+    }
+
   }
   if (historyContext) {
     prompt += `\n\n## HISTÓRICO DA RECLAMAÇÃO:\n${historyContext}`;
