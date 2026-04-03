@@ -651,6 +651,69 @@ async function _simulateAiResponse(
   };
 }
 
+
+/**
+ * Test an AI API key directly (without saving).
+ * Accepts a plaintext API key and provider — does NOT read from DB.
+ * Used to validate a key before saving it.
+ */
+async function _testAiKeyDirect(
+  companyId: string,
+  provider: string,
+  apiKey: string,
+): Promise<{ ok: boolean; error?: string }> {
+  await requireAdmin();
+  await requireCompanyAccess(companyId);
+
+  if (!VALID_PROVIDERS.includes(provider as typeof VALID_PROVIDERS[number])) {
+    return { ok: false, error: "Provider inválido." };
+  }
+
+  if (!apiKey || apiKey.trim().length < 8) {
+    return { ok: false, error: "API key muito curta." };
+  }
+
+  if (!(await checkTestConnectionRateLimit(companyId))) {
+    return { ok: false, error: "Limite de testes atingido (máx 5/min). Aguarde um momento." };
+  }
+
+  try {
+    await chatCompletion(
+      [{ role: "user", content: "Hi" }],
+      undefined,
+      {
+        provider,
+        apiKey: apiKey.trim(),
+        maxTokens: 5,
+      },
+    );
+    return { ok: true };
+  } catch (err) {
+    const safeErr =
+      err instanceof Error
+        ? err.message
+            .replace(/sk-[^\s"]+/g, "sk-[REDACTED]")
+            .replace(/[a-zA-Z0-9]{32,}/g, "[REDACTED]")
+        : String(err);
+    logger.error({ err: safeErr }, "[testAiKeyDirect] provider error:");
+
+    const raw = err instanceof Error ? err.message : String(err);
+    let message: string;
+    if (/401|unauthorized|incorrect api key|invalid.*(key|token)/i.test(raw)) {
+      message = "API key inválida ou sem permissão. Verifique a chave configurada.";
+    } else if (/429|rate.?limit|quota/i.test(raw)) {
+      message = "Limite de requisições atingido no provider. Tente novamente em instantes.";
+    } else if (/5\d{2}|server error|internal error|service unavailable/i.test(raw)) {
+      message = "Erro interno no servidor do provider. Tente novamente mais tarde.";
+    } else if (/timeout|timed out|ETIMEDOUT/i.test(raw)) {
+      message = "Timeout ao conectar ao provider. Verifique a conexão.";
+    } else {
+      message = "Erro ao testar conexão com o provider. Verifique as configurações.";
+    }
+    return { ok: false, error: message };
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Wrapped exports with structured logging
 // ---------------------------------------------------------------------------
@@ -670,3 +733,5 @@ const _wrapped_getSuggestedModel = withLogging('configuracoes.ai.getSuggestedMod
 export async function getSuggestedModel(...args: Parameters<typeof _getSuggestedModel>) { return _wrapped_getSuggestedModel(...args); }
 const _wrapped_simulateAiResponse = withLogging('configuracoes.ai.simulateAiResponse', _simulateAiResponse);
 export async function simulateAiResponse(...args: Parameters<typeof _simulateAiResponse>) { return _wrapped_simulateAiResponse(...args); }
+const _wrapped_testAiKeyDirect = withLogging('configuracoes.ai.testAiKeyDirect', _testAiKeyDirect);
+export async function testAiKeyDirect(...args: Parameters<typeof _testAiKeyDirect>) { return _wrapped_testAiKeyDirect(...args); }
