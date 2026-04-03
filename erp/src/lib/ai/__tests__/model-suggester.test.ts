@@ -35,13 +35,13 @@ describe("suggestModel", () => {
   describe("anthropic provider", () => {
     it("returns the cheapest model when budget is near zero", () => {
       const result = suggestModel("anthropic", 0.001);
-      expect(result.model).toBe("claude-haiku-4-20250414");
+      expect(result.model).toBe("claude-3-haiku-20240307");
     });
 
     it("returns opus when budget covers it", () => {
-      const opusCost = dailyCostBrl("claude-opus-4-20250514");
+      const opusCost = dailyCostBrl("claude-opus-4-5");
       const result = suggestModel("anthropic", opusCost + 1);
-      expect(result.model).toBe("claude-opus-4-20250514");
+      expect(result.model).toBe("claude-opus-4-5");
     });
   });
 
