@@ -96,7 +96,6 @@ import {
 } from "../ra-actions";
 import LinkedTicketsBanner from "./linked-tickets-banner";
 import MergedTicketBanner from "./merged-ticket-banner";
-import RaActionBar from "./ra-action-bar";
 import RaResponsePanel from "./ra-response-panel";
 import RaSuggestionCard from "./ra-suggestion-card";
 
@@ -220,26 +219,6 @@ function SlaCard({ label, deadline, breached }: { label: string; deadline: strin
   );
 }
 
-function RaSlaInline({ deadline }: { deadline: string }) {
-  const dl = new Date(deadline);
-  const now = new Date();
-  const target = new Date(dl); target.setHours(0, 0, 0, 0);
-  const cursor = new Date(now); cursor.setHours(0, 0, 0, 0);
-  let days = 0;
-  if (cursor >= target) {
-    const d = new Date(target);
-    while (d < cursor) { d.setDate(d.getDate() + 1); if (d.getDay() !== 0 && d.getDay() !== 6) days--; }
-  } else {
-    const d = new Date(cursor);
-    while (d < target) { d.setDate(d.getDate() + 1); if (d.getDay() !== 0 && d.getDay() !== 6) days++; }
-  }
-  let cls = "bg-emerald-100 text-emerald-800";
-  let txt = `${days}d úteis`;
-  if (days <= 0) { cls = "bg-black text-white"; txt = days === 0 ? "Vence hoje" : `${Math.abs(days)}d expirado`; }
-  else if (days <= 2) { cls = "bg-red-100 text-red-800"; txt = `⚠️ ${days}d`; }
-  else if (days <= 5) { cls = "bg-yellow-100 text-yellow-800"; txt = `${days}d úteis`; }
-  return <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold ${cls}`}><Clock className="h-3 w-3" />{txt}</span>;
-}
 
 // ---------------------------------------------------------------------------
 // Status transitions
