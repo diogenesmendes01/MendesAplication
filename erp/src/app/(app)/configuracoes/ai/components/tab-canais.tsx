@@ -137,7 +137,7 @@ function toggleTool(
 ): string[] {
   const allIds = allTools.map((t) => t.id);
   if (!allIds.includes(toolId)) {
-    console.warn(`[toggleTool] Invalid toolId: ${toolId}. Ignoring.`);
+    // Unknown toolId — silent no-op (TypeScript types prevent this at compile time)
     return enabledTools;
   }
   if (enabled) {

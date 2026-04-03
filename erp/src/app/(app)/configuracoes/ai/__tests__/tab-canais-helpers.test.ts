@@ -25,7 +25,6 @@ function toggleTool(
 ): string[] {
   const allIds = allTools.map((t) => t.id);
   if (!allIds.includes(toolId)) {
-    console.warn(`[toggleTool] Invalid toolId: ${toolId}. Ignoring.`);
     return enabledTools;
   }
   if (enabled) {
