@@ -167,7 +167,7 @@ export function TabGeral({
         const isActive = savedConfig.enabled;
 
         const allOk = hasApiKey && hasPersona && isActive;
-        const noneOk = !hasApiKey && !hasPersona;
+        
 
         // Determine banner color
         let bannerClass = "border-amber-200 bg-amber-50";
