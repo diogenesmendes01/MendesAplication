@@ -27,6 +27,32 @@ import type { Logger } from "pino";
  * requests. ~R$0.05 covers most GPT-4o-mini / Claude Haiku iterations.
  */
 const ESTIMATED_COST_PER_ITERATION_BRL = 0.05;
+// ── Per-channel tool filter helper ───────────────────────────────────────────
+
+/**
+ * Safely reads the per-channel enabledTools array from an AiConfig record.
+ *
+ * The three fields (whatsappEnabledTools, emailEnabledTools, raEnabledTools) were
+ * added in migration 20260403160000_ai_config_enabled_tools and may be absent on
+ * older records returned by Prisma before the migration runs. This helper uses a
+ * type-safe cast (string[] | undefined) with a fallback to [] so the agent never
+ * receives undefined and getToolsForChannel always gets a valid array.
+ *
+ * Semantics: empty [] = all tools enabled (backward-compatible default).
+ */
+function getEnabledToolsForChannel(
+  aiConfig: NonNullable<unknown>,
+  channel: "WHATSAPP" | "EMAIL" | "RECLAMEAQUI",
+): string[] {
+  const cfg = aiConfig as Record<string, unknown>;
+  const key =
+    channel === "RECLAMEAQUI" ? "raEnabledTools"
+    : channel === "EMAIL"     ? "emailEnabledTools"
+    :                           "whatsappEnabledTools";
+  return (cfg[key] as string[] | undefined) ?? [];
+}
+
+
 
 // ─── Result types ─────────────────────────────────────────────────────────────
 
@@ -585,7 +611,11 @@ export async function runAgent(
     };
   }
 
-  const tools = getToolsForChannel(channel);
+  // Read per-channel enabled tools from config. Uses a helper to safely access
+  // the new String[] fields that may not exist on older Prisma records (before
+  // migration 20260403160000_ai_config_enabled_tools runs in prod).
+  const _enabledTools = getEnabledToolsForChannel(aiConfig, channel);
+  const tools = getToolsForChannel(channel, _enabledTools);
 
   const loopResult = await runAgentLoop({
     messages,
@@ -784,7 +814,11 @@ export async function runAgentDryRun(
     };
   }
 
-  const tools = getToolsForChannel(channel);
+  // Read per-channel enabled tools from config. Uses a helper to safely access
+  // the new String[] fields that may not exist on older Prisma records (before
+  // migration 20260403160000_ai_config_enabled_tools runs in prod).
+  const _enabledTools = getEnabledToolsForChannel(aiConfig, channel);
+  const tools = getToolsForChannel(channel, _enabledTools);
 
   const loopResult = await runAgentLoop({
     messages,

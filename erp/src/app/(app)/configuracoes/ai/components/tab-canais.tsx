@@ -68,26 +68,91 @@ const OPERATION_MODES = [
   },
 ] as const;
 
-// ── Tool lists (UI only — no backend yet) ────────────────────────────────────
+// ── Tool definitions per channel ─────────────────────────────────────────────
+//
+// Design notes:
+// - ToolDef.id must match the tool name in tools.ts (e.g. "SEARCH_DOCUMENTS")
+// - The UI only exposes toggleable tools; always-on tools (GET_HISTORY, ESCALATE,
+//   RESPOND*) are never shown — users cannot inadvertently disable them.
+// - Saving an empty enabledTools[] means "all tools enabled" (backward-compatible):
+//   the agent (getToolsForChannel) returns the full set when the array is empty.
+// - Schema consistency: whatsappEnabledTools / emailEnabledTools / raEnabledTools
+//   in AiConfig (Prisma) ↔ AiConfigData (actions.ts) ↔ config state (tab-canais.tsx)
 
-const WHATSAPP_TOOLS = [
-  "Consultar histórico do cliente",
-  "Verificar status de boletos",
-  "Emitir 2ª via de boleto automaticamente",
-  "Acessar base de conhecimento (RAG)",
-  "Criar ticket automaticamente",
+/** Maps a real tool ID (tools.ts name) to a human-readable label for the UI. */
+interface ToolDef {
+  id: string;
+  label: string;
+}
+
+const WA_TOOLS_DEF: ToolDef[] = [
+  { id: "SEARCH_DOCUMENTS", label: "Acessar base de conhecimento (RAG)" },
+  { id: "GET_CLIENT_INFO", label: "Consultar dados do cliente" },
+  { id: "LOOKUP_CLIENT_BY_CNPJ", label: "Buscar cliente por CNPJ/CPF" },
+  { id: "LINK_TICKET_TO_CLIENT", label: "Vincular ticket ao cliente" },
+  { id: "READ_ATTACHMENT", label: "Ler anexos da conversa" },
+  { id: "CREATE_NOTE", label: "Criar nota interna no ticket" },
 ];
 
-const EMAIL_TOOLS = [
-  "Consultar histórico do cliente",
-  "Acessar base de conhecimento (RAG)",
-  "Responder com anexos",
+const EMAIL_TOOLS_DEF: ToolDef[] = [
+  { id: "SEARCH_DOCUMENTS", label: "Acessar base de conhecimento (RAG)" },
+  { id: "GET_CLIENT_INFO", label: "Consultar dados do cliente" },
+  { id: "LOOKUP_CLIENT_BY_CNPJ", label: "Buscar cliente por CNPJ/CPF" },
+  { id: "READ_ATTACHMENT", label: "Ler anexos do email" },
+  { id: "CREATE_NOTE", label: "Criar nota interna no ticket" },
 ];
 
-const RA_TOOLS = [
-  "Acessar base de conhecimento (RAG)",
-  "Buscar dados do cliente por CNPJ/CPF",
+const RA_TOOLS_DEF: ToolDef[] = [
+  { id: "SEARCH_DOCUMENTS", label: "Acessar base de conhecimento (RAG)" },
+  { id: "GET_CLIENT_INFO", label: "Consultar dados do cliente" },
+  { id: "LOOKUP_CLIENT_BY_CNPJ", label: "Buscar cliente por CNPJ/CPF" },
+  { id: "LINK_TICKET_TO_CLIENT", label: "Vincular ticket ao cliente" },
+  { id: "READ_ATTACHMENT", label: "Ler anexos da reclamação" },
+  { id: "CREATE_NOTE", label: "Criar nota interna no ticket" },
 ];
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+//
+// Invariant: an empty enabledTools array means ALL tools are enabled.
+// This matches the backend contract in getToolsForChannel() and allows
+// existing configs (pre-feature) to work without any data migration.
+
+/**
+ * Returns true if the tool should be shown as ON in the UI.
+ * An empty enabledTools list means "all tools enabled" (default/unset state).
+ */
+function isToolEnabled(enabledTools: string[], toolId: string): boolean {
+  return enabledTools.length === 0 || enabledTools.includes(toolId);
+}
+
+/**
+ * Toggles a tool on/off in the enabledTools array, preserving the
+ * "empty = all enabled" invariant:
+ * - Enabling the last disabled tool → collapses back to [] (all enabled)
+ * - Disabling any tool from [] (all enabled) → expands to all-except-disabled
+ * - Invalid toolId → returns enabledTools unchanged (safe no-op)
+ */
+function toggleTool(
+  enabledTools: string[],
+  toolId: string,
+  enabled: boolean,
+  allTools: ToolDef[],
+): string[] {
+  const allIds = allTools.map((t) => t.id);
+  if (!allIds.includes(toolId)) {
+    // Unknown toolId — silent no-op (TypeScript types prevent this at compile time)
+    return enabledTools;
+  }
+  if (enabled) {
+    const newList = Array.from(new Set(enabledTools.concat([toolId])));
+    // Collapse back to empty when all are enabled
+    return allIds.every((id) => newList.includes(id)) ? [] : newList;
+  } else {
+    // If currently "all enabled" (empty), expand to all-except-this
+    const currentList = enabledTools.length === 0 ? allIds : enabledTools;
+    return currentList.filter((id) => id !== toolId);
+  }
+}
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -103,7 +168,13 @@ interface TabCanaisProps {
  * Radio-card selector for operationMode (WhatsApp and Email share config.operationMode).
  * TODO: in the future, each channel will have its own operationMode via channel override.
  */
-function OperationModeCard({ config, setConfig }: { config: AiConfigData; setConfig: React.Dispatch<React.SetStateAction<AiConfigData>> }) {
+function OperationModeCard({
+  config,
+  setConfig,
+}: {
+  config: AiConfigData;
+  setConfig: React.Dispatch<React.SetStateAction<AiConfigData>>;
+}) {
   const isHybrid = config.operationMode === "hybrid";
 
   return (
@@ -116,7 +187,8 @@ function OperationModeCard({ config, setConfig }: { config: AiConfigData; setCon
         <CardDescription>
           Define como a IA age neste canal.{" "}
           <span className="text-muted-foreground/70 italic">
-            (Global por ora — no futuro cada canal terá seu próprio modo via channel override.)
+            (Global por ora — no futuro cada canal terá seu próprio modo via
+            channel override.)
           </span>
         </CardDescription>
       </CardHeader>
@@ -140,7 +212,9 @@ function OperationModeCard({ config, setConfig }: { config: AiConfigData; setCon
                 {mode.icon}
                 <span className="text-sm font-semibold">{mode.label}</span>
               </div>
-              <p className="text-xs text-muted-foreground">{mode.description}</p>
+              <p className="text-xs text-muted-foreground">
+                {mode.description}
+              </p>
             </button>
           ))}
         </div>
@@ -149,7 +223,9 @@ function OperationModeCard({ config, setConfig }: { config: AiConfigData; setCon
           <div className="rounded-md border border-yellow-200 bg-yellow-50 p-3 flex items-start gap-2">
             <AlertTriangle className="h-4 w-4 text-yellow-600 mt-0.5 shrink-0" />
             <p className="text-xs text-yellow-800">
-              <strong>Atenção:</strong> No modo automático, a IA executa todas as ações sem revisão humana. Recomendado apenas para operações maduras com persona bem calibrada.
+              <strong>Atenção:</strong> No modo automático, a IA executa todas
+              as ações sem revisão humana. Recomendado apenas para operações
+              maduras com persona bem calibrada.
             </p>
           </div>
         )}
@@ -185,42 +261,42 @@ function OperationModeCard({ config, setConfig }: { config: AiConfigData; setCon
 }
 
 /**
- * Tool toggle list — UI only, no backend yet.
- * TODO: conectar ao backend quando feature de ferramentas for implementada
+ * Tool toggle card — fully functional, persisted per channel.
  */
 function ToolsCard({
   tools,
-  toolState,
-  setToolState,
+  enabledTools,
+  onToggle,
 }: {
-  tools: string[];
-  toolState: Record<string, boolean>;
-  setToolState: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+  tools: ToolDef[];
+  enabledTools: string[];
+  onToggle: (toolId: string, enabled: boolean) => void;
 }) {
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Ferramentas do Agente</CardTitle>
         <CardDescription>
-          Habilite as ferramentas que o agente pode usar neste canal.{" "}
-          <span className="text-muted-foreground/70 italic">
-            {/* TODO: conectar ao backend quando feature de ferramentas for implementada */}
-            (Interface apenas — configuração persistida em breve.)
-          </span>
+          Controle quais ferramentas o agente pode usar neste canal. Ferramentas
+          desativadas não estarão disponíveis ao processar tickets.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         {tools.map((tool) => (
-          <div key={tool} className="flex items-center justify-between rounded-lg border p-3">
-            <Label htmlFor={`tool-${tool}`} className="text-sm cursor-pointer">
-              {tool}
+          <div
+            key={tool.id}
+            className="flex items-center justify-between rounded-lg border p-3"
+          >
+            <Label
+              htmlFor={`tool-${tool.id}`}
+              className="text-sm cursor-pointer"
+            >
+              {tool.label}
             </Label>
             <Switch
-              id={`tool-${tool}`}
-              checked={toolState[tool] ?? false}
-              onCheckedChange={(checked) =>
-                setToolState((prev) => ({ ...prev, [tool]: checked }))
-              }
+              id={`tool-${tool.id}`}
+              checked={isToolEnabled(enabledTools, tool.id)}
+              onCheckedChange={(checked) => onToggle(tool.id, checked)}
             />
           </div>
         ))}
@@ -253,13 +329,19 @@ function ChannelSimulatorCard({
     setSimRunning(true);
     setSimResult(null);
     try {
-      const result = await simulateAiResponse(companyId, simMessage.trim(), channel);
+      const result = await simulateAiResponse(
+        companyId,
+        simMessage.trim(),
+        channel,
+      );
       setSimResult(result);
       if (result.error) {
         toast.error(`Simulação concluída com erro: ${result.error}`);
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao executar simulação");
+      toast.error(
+        err instanceof Error ? err.message : "Erro ao executar simulação",
+      );
     } finally {
       setSimRunning(false);
     }
@@ -277,7 +359,8 @@ function ChannelSimulatorCard({
       <CardHeader>
         <CardTitle className="text-base">Simulador</CardTitle>
         <CardDescription>
-          Teste como a IA responderia neste canal. Nenhuma mensagem real é enviada.
+          Teste como a IA responderia neste canal. Nenhuma mensagem real é
+          enviada.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -308,7 +391,10 @@ function ChannelSimulatorCard({
         </div>
         <p className="text-xs text-muted-foreground">
           Enter para enviar · Shift+Enter para nova linha ·{" "}
-          <span className="text-green-700 font-medium inline-flex items-center gap-1"><CheckCircle2 className="h-4 w-4 shrink-0 text-green-600" />Simulações não consomem o limite diário real</span>
+          <span className="text-green-700 font-medium inline-flex items-center gap-1">
+            <CheckCircle2 className="h-4 w-4 shrink-0 text-green-600" />
+            Simulações não consomem o limite diário real
+          </span>
         </p>
 
         {simResult && (
@@ -316,34 +402,51 @@ function ChannelSimulatorCard({
             <div className="rounded-lg border bg-muted/30 p-4">
               <div className="flex items-center gap-2 mb-2">
                 <Bot className="h-4 w-4 text-violet-600" />
-                <span className="text-sm font-medium text-violet-600">Resposta da IA</span>
+                <span className="text-sm font-medium text-violet-600">
+                  Resposta da IA
+                </span>
                 {simResult.error && (
-                  <Badge variant="destructive" className="text-xs">{simResult.error}</Badge>
+                  <Badge variant="destructive" className="text-xs">
+                    {simResult.error}
+                  </Badge>
                 )}
               </div>
               {simResult.response ? (
-                <div className="whitespace-pre-wrap text-sm leading-relaxed">{simResult.response}</div>
+                <div className="whitespace-pre-wrap text-sm leading-relaxed">
+                  {simResult.response}
+                </div>
               ) : (
-                <p className="text-sm text-muted-foreground italic">Nenhuma resposta gerada</p>
+                <p className="text-sm text-muted-foreground italic">
+                  Nenhuma resposta gerada
+                </p>
               )}
               {simResult.simulationWarning && (
                 <p className="text-xs text-muted-foreground mt-2 border border-green-200 bg-green-50 rounded px-2 py-1">
-                  <span className="inline-flex items-center gap-1"><Info className="h-4 w-4 shrink-0" />{simResult.simulationWarning}</span>
+                  <span className="inline-flex items-center gap-1">
+                    <Info className="h-4 w-4 shrink-0" />
+                    {simResult.simulationWarning}
+                  </span>
                 </p>
               )}
             </div>
             <div className="grid grid-cols-3 gap-3">
               <div className="rounded-md border p-3 text-center">
                 <p className="text-xs text-muted-foreground">Tokens (input)</p>
-                <p className="text-lg font-bold font-mono">{simResult.inputTokens.toLocaleString("pt-BR")}</p>
+                <p className="text-lg font-bold font-mono">
+                  {simResult.inputTokens.toLocaleString("pt-BR")}
+                </p>
               </div>
               <div className="rounded-md border p-3 text-center">
                 <p className="text-xs text-muted-foreground">Tokens (output)</p>
-                <p className="text-lg font-bold font-mono">{simResult.outputTokens.toLocaleString("pt-BR")}</p>
+                <p className="text-lg font-bold font-mono">
+                  {simResult.outputTokens.toLocaleString("pt-BR")}
+                </p>
               </div>
               <div className="rounded-md border p-3 text-center">
                 <p className="text-xs text-muted-foreground">Custo estimado</p>
-                <p className="text-lg font-bold font-mono">R$ {simResult.estimatedCostBrl.toFixed(4)}</p>
+                <p className="text-lg font-bold font-mono">
+                  R$ {simResult.estimatedCostBrl.toFixed(4)}
+                </p>
               </div>
             </div>
           </div>
@@ -352,7 +455,9 @@ function ChannelSimulatorCard({
         {!simResult && !simRunning && (
           <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-8 text-muted-foreground">
             <Play className="mb-2 h-6 w-6" />
-            <p className="text-sm">Digite uma mensagem e clique em &quot;Simular&quot;</p>
+            <p className="text-sm">
+              Digite uma mensagem e clique em &quot;Simular&quot;
+            </p>
           </div>
         )}
 
@@ -370,11 +475,6 @@ function ChannelSimulatorCard({
 // ── WhatsApp section ──────────────────────────────────────────────────────────
 
 function SectionWhatsApp({ companyId, config, setConfig }: TabCanaisProps) {
-  // TODO: conectar ao backend quando feature de ferramentas for implementada
-  const [whatsappTools, setWhatsappTools] = useState<Record<string, boolean>>(
-    Object.fromEntries(WHATSAPP_TOOLS.map((t) => [t, false])),
-  );
-
   return (
     <div className="space-y-4">
       {/* Card 1: Enable toggle */}
@@ -398,7 +498,9 @@ function SectionWhatsApp({ companyId, config, setConfig }: TabCanaisProps) {
               }
             />
             <Label htmlFor="whatsapp-enabled" className="font-medium">
-              {config.whatsappEnabled ? "IA ativa no WhatsApp" : "IA desativada no WhatsApp"}
+              {config.whatsappEnabled
+                ? "IA ativa no WhatsApp"
+                : "IA desativada no WhatsApp"}
             </Label>
           </div>
         </CardContent>
@@ -409,7 +511,8 @@ function SectionWhatsApp({ companyId, config, setConfig }: TabCanaisProps) {
         <CardHeader>
           <CardTitle className="text-base">Persona do Canal</CardTitle>
           <CardDescription>
-            Sobrescreve a persona principal apenas neste canal. Se vazio, herda a persona da aba Persona.
+            Sobrescreve a persona principal apenas neste canal. Se vazio, herda
+            a persona da aba Persona.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -432,7 +535,9 @@ function SectionWhatsApp({ companyId, config, setConfig }: TabCanaisProps) {
           <CardTitle className="text-base">Mensagem de Boas-vindas</CardTitle>
           <CardDescription>
             Enviada automaticamente quando um novo ticket é criado via WhatsApp.{" "}
-            <Badge variant="outline" className="text-xs">Exclusivo WhatsApp</Badge>
+            <Badge variant="outline" className="text-xs">
+              Exclusivo WhatsApp
+            </Badge>
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -451,11 +556,21 @@ function SectionWhatsApp({ companyId, config, setConfig }: TabCanaisProps) {
       {/* WhatsApp usa config.operationMode (global por ora) */}
       <OperationModeCard config={config} setConfig={setConfig} />
 
-      {/* Card 5: Ferramentas do Agente */}
+      {/* Ferramentas — WhatsApp: controla o que o agente pode fazer no canal */}
       <ToolsCard
-        tools={WHATSAPP_TOOLS}
-        toolState={whatsappTools}
-        setToolState={setWhatsappTools}
+        tools={WA_TOOLS_DEF}
+        enabledTools={config.whatsappEnabledTools}
+        onToggle={(toolId, enabled) =>
+          setConfig((prev) => ({
+            ...prev,
+            whatsappEnabledTools: toggleTool(
+              prev.whatsappEnabledTools,
+              toolId,
+              enabled,
+              WA_TOOLS_DEF,
+            ),
+          }))
+        }
       />
 
       {/* Card 6: Simulador */}
@@ -467,11 +582,6 @@ function SectionWhatsApp({ companyId, config, setConfig }: TabCanaisProps) {
 // ── Email section ─────────────────────────────────────────────────────────────
 
 function SectionEmail({ companyId, config, setConfig }: TabCanaisProps) {
-  // TODO: conectar ao backend quando feature de ferramentas for implementada
-  const [emailTools, setEmailTools] = useState<Record<string, boolean>>(
-    Object.fromEntries(EMAIL_TOOLS.map((t) => [t, false])),
-  );
-
   return (
     <div className="space-y-4">
       {/* Card 1: Enable toggle */}
@@ -495,7 +605,9 @@ function SectionEmail({ companyId, config, setConfig }: TabCanaisProps) {
               }
             />
             <Label htmlFor="email-enabled" className="font-medium">
-              {config.emailEnabled ? "IA ativa no Email" : "IA desativada no Email"}
+              {config.emailEnabled
+                ? "IA ativa no Email"
+                : "IA desativada no Email"}
             </Label>
           </div>
         </CardContent>
@@ -506,14 +618,18 @@ function SectionEmail({ companyId, config, setConfig }: TabCanaisProps) {
         <CardHeader>
           <CardTitle className="text-base">Persona Email</CardTitle>
           <CardDescription>
-            Sobrescreve a persona principal apenas neste canal. Se vazio, herda a persona da aba Persona.
+            Sobrescreve a persona principal apenas neste canal. Se vazio, herda
+            a persona da aba Persona.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <Textarea
             value={config.emailPersona ?? ""}
             onChange={(e) =>
-              setConfig((prev) => ({ ...prev, emailPersona: e.target.value || null }))
+              setConfig((prev) => ({
+                ...prev,
+                emailPersona: e.target.value || null,
+              }))
             }
             placeholder={
               config.persona
@@ -537,9 +653,14 @@ function SectionEmail({ companyId, config, setConfig }: TabCanaisProps) {
           <Textarea
             value={config.emailSignature ?? ""}
             onChange={(e) =>
-              setConfig((prev) => ({ ...prev, emailSignature: e.target.value || null }))
+              setConfig((prev) => ({
+                ...prev,
+                emailSignature: e.target.value || null,
+              }))
             }
-            placeholder={"Ex: Atenciosamente,\nEquipe de Suporte\ncontato@empresa.com"}
+            placeholder={
+              "Ex: Atenciosamente,\nEquipe de Suporte\ncontato@empresa.com"
+            }
             rows={4}
           />
         </CardContent>
@@ -549,11 +670,21 @@ function SectionEmail({ companyId, config, setConfig }: TabCanaisProps) {
       {/* Email usa config.operationMode (global por ora) */}
       <OperationModeCard config={config} setConfig={setConfig} />
 
-      {/* Card 5: Ferramentas */}
+      {/* Ferramentas — Email: controla o que o agente pode fazer no canal */}
       <ToolsCard
-        tools={EMAIL_TOOLS}
-        toolState={emailTools}
-        setToolState={setEmailTools}
+        tools={EMAIL_TOOLS_DEF}
+        enabledTools={config.emailEnabledTools}
+        onToggle={(toolId, enabled) =>
+          setConfig((prev) => ({
+            ...prev,
+            emailEnabledTools: toggleTool(
+              prev.emailEnabledTools,
+              toolId,
+              enabled,
+              EMAIL_TOOLS_DEF,
+            ),
+          }))
+        }
       />
 
       {/* Card 6: Simulador */}
@@ -566,10 +697,6 @@ function SectionEmail({ companyId, config, setConfig }: TabCanaisProps) {
 
 function SectionReclameAqui({ companyId, config, setConfig }: TabCanaisProps) {
   const [keywordInput, setKeywordInput] = useState("");
-  // TODO: conectar ao backend quando feature de ferramentas for implementada
-  const [raTools, setRaTools] = useState<Record<string, boolean>>(
-    Object.fromEntries(RA_TOOLS.map((t) => [t, false])),
-  );
 
   function addKeyword() {
     const keyword = keywordInput.trim().toLowerCase();
@@ -588,7 +715,9 @@ function SectionReclameAqui({ companyId, config, setConfig }: TabCanaisProps) {
   function removeKeyword(keyword: string) {
     setConfig((prev) => ({
       ...prev,
-      raEscalationKeywords: prev.raEscalationKeywords.filter((k) => k !== keyword),
+      raEscalationKeywords: prev.raEscalationKeywords.filter(
+        (k) => k !== keyword,
+      ),
     }));
   }
 
@@ -622,7 +751,9 @@ function SectionReclameAqui({ companyId, config, setConfig }: TabCanaisProps) {
               }
             />
             <Label htmlFor="ra-enabled" className="font-medium">
-              {config.raEnabled ? "IA ativa no Reclame Aqui" : "IA desativada no Reclame Aqui"}
+              {config.raEnabled
+                ? "IA ativa no Reclame Aqui"
+                : "IA desativada no Reclame Aqui"}
             </Label>
           </div>
         </CardContent>
@@ -633,7 +764,8 @@ function SectionReclameAqui({ companyId, config, setConfig }: TabCanaisProps) {
         <CardHeader>
           <CardTitle className="text-base">Persona Reclame Aqui</CardTitle>
           <CardDescription>
-            Sobrescreve a persona principal neste canal. Usa o campo emailPersona como override — se vazio, herda a persona principal.
+            Sobrescreve a persona principal neste canal. Usa o campo
+            emailPersona como override — se vazio, herda a persona principal.
             {/* TODO: no futuro, usar campo raPersona dedicado quando disponível */}
           </CardDescription>
         </CardHeader>
@@ -641,13 +773,18 @@ function SectionReclameAqui({ companyId, config, setConfig }: TabCanaisProps) {
           <Textarea
             value={config.emailPersona ?? ""}
             onChange={(e) =>
-              setConfig((prev) => ({ ...prev, emailPersona: e.target.value || null }))
+              setConfig((prev) => ({
+                ...prev,
+                emailPersona: e.target.value || null,
+              }))
             }
             placeholder="Ex: Você é um especialista em resolução de reclamações. Seja empático, direto e sempre ofereça uma solução concreta. Lembre-se que a conversa é pública e afeta a reputação da empresa."
             rows={6}
           />
           <p className="mt-2 text-xs text-muted-foreground flex items-center gap-1">
-            <Info className="h-4 w-4 shrink-0" />Campo compartilhado com persona Email enquanto campo dedicado RA não está disponível.
+            <Info className="h-4 w-4 shrink-0" />
+            Campo compartilhado com persona Email enquanto campo dedicado RA não
+            está disponível.
           </p>
         </CardContent>
       </Card>
@@ -673,7 +810,9 @@ function SectionReclameAqui({ companyId, config, setConfig }: TabCanaisProps) {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="suggest">Sugerir e aguardar aprovação</SelectItem>
+              <SelectItem value="suggest">
+                Sugerir e aguardar aprovação
+              </SelectItem>
               <SelectItem value="auto">Responder automaticamente</SelectItem>
               <SelectItem value="off">IA desligada</SelectItem>
             </SelectContent>
@@ -684,7 +823,9 @@ function SectionReclameAqui({ companyId, config, setConfig }: TabCanaisProps) {
       {/* Card 4: Configurações RA */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Configurações Reclame Aqui</CardTitle>
+          <CardTitle className="text-base">
+            Configurações Reclame Aqui
+          </CardTitle>
           <CardDescription>
             Ajuste o comportamento do agente nas interações do Reclame Aqui
           </CardDescription>
@@ -697,14 +838,18 @@ function SectionReclameAqui({ companyId, config, setConfig }: TabCanaisProps) {
                 Resposta privada antes da pública
               </Label>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Envia uma mensagem privada ao consumidor antes de publicar a resposta pública
+                Envia uma mensagem privada ao consumidor antes de publicar a
+                resposta pública
               </p>
             </div>
             <Switch
               id="ra-private-before-public"
               checked={config.raPrivateBeforePublic}
               onCheckedChange={(checked) =>
-                setConfig((prev) => ({ ...prev, raPrivateBeforePublic: checked }))
+                setConfig((prev) => ({
+                  ...prev,
+                  raPrivateBeforePublic: checked,
+                }))
               }
             />
           </div>
@@ -716,14 +861,18 @@ function SectionReclameAqui({ companyId, config, setConfig }: TabCanaisProps) {
                 Solicitar avaliação automaticamente
               </Label>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Solicita automaticamente que o consumidor avalie o atendimento após a resposta pública
+                Solicita automaticamente que o consumidor avalie o atendimento
+                após a resposta pública
               </p>
             </div>
             <Switch
               id="ra-auto-evaluation"
               checked={config.raAutoRequestEvaluation}
               onCheckedChange={(checked) =>
-                setConfig((prev) => ({ ...prev, raAutoRequestEvaluation: checked }))
+                setConfig((prev) => ({
+                  ...prev,
+                  raAutoRequestEvaluation: checked,
+                }))
               }
             />
           </div>
@@ -732,7 +881,8 @@ function SectionReclameAqui({ companyId, config, setConfig }: TabCanaisProps) {
           <div className="space-y-2">
             <Label>Palavras-chave de Escalação</Label>
             <p className="text-xs text-muted-foreground">
-              Quando a reclamação contiver essas palavras, o ticket será escalado para um humano
+              Quando a reclamação contiver essas palavras, o ticket será
+              escalado para um humano
             </p>
             <div className="flex gap-2">
               <Input
@@ -749,7 +899,11 @@ function SectionReclameAqui({ companyId, config, setConfig }: TabCanaisProps) {
             {config.raEscalationKeywords.length > 0 && (
               <div className="flex flex-wrap gap-2 mt-2">
                 {config.raEscalationKeywords.map((keyword) => (
-                  <Badge key={keyword} variant="secondary" className="gap-1 pr-1">
+                  <Badge
+                    key={keyword}
+                    variant="secondary"
+                    className="gap-1 pr-1"
+                  >
                     {keyword}
                     <button
                       type="button"
@@ -766,11 +920,21 @@ function SectionReclameAqui({ companyId, config, setConfig }: TabCanaisProps) {
         </CardContent>
       </Card>
 
-      {/* Card 5: Ferramentas */}
+      {/* Ferramentas — Reclame Aqui: controla o que o agente pode fazer no canal */}
       <ToolsCard
-        tools={RA_TOOLS}
-        toolState={raTools}
-        setToolState={setRaTools}
+        tools={RA_TOOLS_DEF}
+        enabledTools={config.raEnabledTools}
+        onToggle={(toolId, enabled) =>
+          setConfig((prev) => ({
+            ...prev,
+            raEnabledTools: toggleTool(
+              prev.raEnabledTools,
+              toolId,
+              enabled,
+              RA_TOOLS_DEF,
+            ),
+          }))
+        }
       />
 
       {/* Card 6: Simulador RA */}
@@ -801,15 +965,27 @@ export function TabCanais({ companyId, config, setConfig }: TabCanaisProps) {
         </TabsList>
 
         <TabsContent value="whatsapp" className="mt-4">
-          <SectionWhatsApp companyId={companyId} config={config} setConfig={setConfig} />
+          <SectionWhatsApp
+            companyId={companyId}
+            config={config}
+            setConfig={setConfig}
+          />
         </TabsContent>
 
         <TabsContent value="email" className="mt-4">
-          <SectionEmail companyId={companyId} config={config} setConfig={setConfig} />
+          <SectionEmail
+            companyId={companyId}
+            config={config}
+            setConfig={setConfig}
+          />
         </TabsContent>
 
         <TabsContent value="reclameaqui" className="mt-4">
-          <SectionReclameAqui companyId={companyId} config={config} setConfig={setConfig} />
+          <SectionReclameAqui
+            companyId={companyId}
+            config={config}
+            setConfig={setConfig}
+          />
         </TabsContent>
       </Tabs>
     </div>

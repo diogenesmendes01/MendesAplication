@@ -909,6 +909,15 @@ model AiConfig {
   raAutoRequestEvaluation Boolean  @default(false)
   raEscalationKeywords    String[] @default(["processo", "advogado", "procon", "judicial", "indenização"])
 
+  // Per-channel tool toggles.
+  // Semantics: empty array = all tools enabled (backward-compatible default).
+  // Populated only when an admin explicitly restricts tools for that channel.
+  // The agent (getToolsForChannel) reads these at runtime and filters accordingly.
+  // Always-on tools (GET_HISTORY, ESCALATE, RESPOND*) are never filtered out.
+  whatsappEnabledTools  String[]
+  emailEnabledTools     String[]
+  raEnabledTools        String[]
+
   // --- Modo de Operação (suggestion mode) ---
   operationMode         String   @default("auto") // "auto" | "suggest" | "hybrid"
   hybridThreshold       Float    @default(0.8) // Confidence threshold for hybrid mode (0.0-1.0)
