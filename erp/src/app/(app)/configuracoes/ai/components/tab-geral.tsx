@@ -38,6 +38,7 @@ import {
 } from "@/components/ui/tooltip";
 import {
   testAiConnection,
+  testAiKeyDirect,
   listAvailableModels,
   getSuggestedModel,
 } from "../actions";
@@ -69,7 +70,8 @@ export function TabGeral({
   const [connectionError, setConnectionError] = useState("");
   const [suggestion, setSuggestion] = useState<ModelSuggestionData | null>(null);
 
-  const isTestDisabled = testingConnection || hasUnsavedChanges;
+  const hasKeyToTest = !!(config.apiKey && config.apiKey.length > 0);
+  const isTestDisabled = testingConnection || !hasKeyToTest;
 
   // ── Load models when provider changes ─────────────────────────────────────
   const loadModels = useCallback(async () => {
@@ -118,7 +120,17 @@ export function TabGeral({
     setConnectionStatus("idle");
     setConnectionError("");
     try {
-      const result = await testAiConnection(companyId);
+      const isMasked = config.apiKey ? /^\*{4}/.test(config.apiKey) : false;
+      let result: { ok: boolean; error?: string };
+
+      if (isMasked) {
+        // Key is the saved/masked one — test via DB
+        result = await testAiConnection(companyId);
+      } else {
+        // Key is plaintext (new or edited) — test directly without saving
+        result = await testAiKeyDirect(companyId, config.provider, config.apiKey ?? "");
+      }
+
       if (result.ok) {
         setConnectionStatus("success");
         toast.success("Conexão com o provider estabelecida!");
@@ -129,9 +141,7 @@ export function TabGeral({
       }
     } catch (err) {
       setConnectionStatus("error");
-      setConnectionError(
-        err instanceof Error ? err.message : "Erro desconhecido",
-      );
+      setConnectionError(err instanceof Error ? err.message : "Erro desconhecido");
     } finally {
       setTestingConnection(false);
     }
@@ -287,7 +297,7 @@ export function TabGeral({
                 placeholder="sk-..."
                 className="flex-1 max-w-md font-mono"
               />
-              {hasUnsavedChanges ? (
+              {!hasKeyToTest ? (
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -297,7 +307,7 @@ export function TabGeral({
                       </span>
                     </TooltipTrigger>
                     <TooltipContent side="bottom">
-                      <p>Salve as configurações antes de testar a conexão</p>
+                      <p>Digite uma API key para testar a conexão</p>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
@@ -310,15 +320,12 @@ export function TabGeral({
                 🔑 Chave configurada. Para alterar, digite uma nova chave.
               </p>
             )}
-            {hasUnsavedChanges && (
-              <p className="text-sm text-amber-600">
-                ⚠ Salve as alterações antes de testar a conexão. O teste valida
-                a chave salva no sistema, não a digitada no formulário.
-              </p>
-            )}
+
             {connectionStatus === "success" && (
               <p className="text-sm text-green-600">
-                ✓ Conexão estabelecida com sucesso
+                {/^\*{4}/.test(config.apiKey ?? "")
+                  ? "✓ Conexão estabelecida com sucesso"
+                  : "✓ Chave válida — salve para confirmar"}
               </p>
             )}
             {connectionStatus === "error" && connectionError && (
