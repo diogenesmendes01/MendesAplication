@@ -1,6 +1,6 @@
 "use client";
 
-import { Save, Loader2 } from "lucide-react";
+import { Save, Loader2, Settings2, Bot, Layers, BarChart3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -78,10 +78,10 @@ export default function AiConfigPage() {
       {/* 4-tab structure: Configuração · Persona · Canais · Gestão */}
       <Tabs defaultValue="configuracao" className="space-y-4">
         <TabsList>
-          <TabsTrigger value="configuracao">⚙️ Configuração</TabsTrigger>
-          <TabsTrigger value="persona">🤖 Persona</TabsTrigger>
-          <TabsTrigger value="canais">📡 Canais</TabsTrigger>
-          <TabsTrigger value="gestao">📊 Gestão</TabsTrigger>
+          <TabsTrigger value="configuracao" className="gap-1.5"><Settings2 className="h-4 w-4" /> Configuração</TabsTrigger>
+          <TabsTrigger value="persona" className="gap-1.5"><Bot className="h-4 w-4" /> Persona</TabsTrigger>
+          <TabsTrigger value="canais" className="gap-1.5"><Layers className="h-4 w-4" /> Canais</TabsTrigger>
+          <TabsTrigger value="gestao" className="gap-1.5"><BarChart3 className="h-4 w-4" /> Gestão</TabsTrigger>
         </TabsList>
 
         <TabsContent value="configuracao">

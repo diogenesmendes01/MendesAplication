@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   XCircle,
   AlertTriangle,
+  KeyRound,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -220,7 +221,12 @@ export function TabGeral({
             {(!hasApiKey || !hasPersona) && (
               <p className={`mt-2 text-xs ${descClass}`}>
                 {isActive
-                  ? "⚠️ Agente ativo sem configuração mínima — pode falhar ao responder."
+                  ? (
+                    <span className="flex items-center gap-1">
+                      <AlertTriangle className="h-4 w-4 text-red-600 shrink-0" />
+                      Agente ativo sem configuração mínima — pode falhar ao responder.
+                    </span>
+                  )
                   : "Configure API Key e Persona (aba Persona) para ativar o agente."}
               </p>
             )}
@@ -291,20 +297,22 @@ export function TabGeral({
               )}
             </div>
             {config.apiKey && /^\*{4}/.test(config.apiKey) && (
-              <p className="text-sm text-muted-foreground">
-                🔑 Chave configurada. Para alterar, digite uma nova chave.
+              <p className="text-sm text-muted-foreground flex items-center gap-1">
+                <KeyRound className="h-3 w-3" />
+                Chave configurada. Para alterar, digite uma nova chave.
               </p>
             )}
 
             {connectionStatus === "success" && (
-              <p className="text-sm text-green-600">
+              <p className="text-sm text-green-600 flex items-center gap-1">
+                <CheckCircle2 className="h-4 w-4" />
                 {/^\*{4}/.test(config.apiKey ?? "")
-                  ? "✓ Conexão estabelecida com sucesso"
-                  : "✓ Chave válida — salve para confirmar"}
+                  ? "Conexão estabelecida com sucesso"
+                  : "Chave válida — salve para confirmar"}
               </p>
             )}
             {connectionStatus === "error" && connectionError && (
-              <p className="text-sm text-red-600">✗ {connectionError}</p>
+              <p className="text-sm text-red-600 flex items-center gap-1"><XCircle className="h-4 w-4" /> {connectionError}</p>
             )}
           </div>
 
