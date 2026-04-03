@@ -8,14 +8,11 @@ import {
   Loader2,
   CheckCircle2,
   XCircle,
-  Lightbulb,
   AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Slider } from "@/components/ui/slider";
 import {
   Card,
   CardContent,
@@ -40,9 +37,10 @@ import {
   testAiConnection,
   testAiKeyDirect,
   listAvailableModels,
-  getSuggestedModel,
 } from "../actions";
-import { PROVIDERS, type AiConfigData, type ModelSuggestionData } from "./types";
+import { PROVIDERS, type AiConfigData } from "./types";
+
+// Temperatura e Limite Diário foram movidos para TabGestao > Parâmetros
 
 interface TabGeralProps {
   companyId: string;
@@ -68,7 +66,6 @@ export function TabGeral({
     "idle" | "success" | "error"
   >("idle");
   const [connectionError, setConnectionError] = useState("");
-  const [suggestion, setSuggestion] = useState<ModelSuggestionData | null>(null);
 
   const hasKeyToTest = !!(config.apiKey && config.apiKey.length > 0);
   const isTestDisabled = testingConnection || !hasKeyToTest;
@@ -92,21 +89,6 @@ export function TabGeral({
       loadModels();
     }
   }, [loading, companyId, config.provider, loadModels]);
-
-  // ── Load suggestion when budget or provider changes ───────────────────────
-  // Fix #143: companyId (selectedCompanyId) in deps + null-check + stale cleanup
-  useEffect(() => {
-    if (!companyId || !config.dailySpendLimitBrl || config.dailySpendLimitBrl <= 0) {
-      setSuggestion(null);
-      return;
-    }
-
-    let cancelled = false;
-    getSuggestedModel(companyId, config.provider, config.dailySpendLimitBrl).then(
-      (result) => { if (!cancelled) setSuggestion(result); },
-    );
-    return () => { cancelled = true; };
-  }, [companyId, config.provider, config.dailySpendLimitBrl]);
 
   function handleProviderChange(provider: string) {
     setConfig((prev) => ({ ...prev, provider, model: "" }));
@@ -177,9 +159,7 @@ export function TabGeral({
         const isActive = savedConfig.enabled;
 
         const allOk = hasApiKey && hasPersona && isActive;
-        
 
-        // Determine banner color
         let bannerClass = "border-amber-200 bg-amber-50";
         let titleClass = "text-amber-800";
         let descClass = "text-amber-700";
@@ -193,7 +173,6 @@ export function TabGeral({
           Icon = CheckCircle2;
           iconClass = "text-green-600";
         } else if (isActive && (!hasApiKey || !hasPersona)) {
-          // Agent is active but missing required config — danger
           bannerClass = "border-red-200 bg-red-50";
           titleClass = "text-red-800";
           descClass = "text-red-700";
@@ -238,18 +217,18 @@ export function TabGeral({
                 <span className={`text-xs ${descClass}`}>Agente Ativo</span>
               </div>
             </div>
-            {!hasApiKey || !hasPersona ? (
+            {(!hasApiKey || !hasPersona) && (
               <p className={`mt-2 text-xs ${descClass}`}>
                 {isActive
                   ? "⚠️ Agente ativo sem configuração mínima — pode falhar ao responder."
-                  : "Configure API Key e Persona para ativar o agente."}
+                  : "Configure API Key e Persona (aba Persona) para ativar o agente."}
               </p>
-            ) : null}
+            )}
           </div>
         );
       })()}
 
-      {/* Provider + API Key */}
+      {/* Provider + API Key + Model */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-lg">
@@ -289,10 +268,7 @@ export function TabGeral({
                 type="password"
                 value={config.apiKey ?? ""}
                 onChange={(e) =>
-                  setConfig((prev) => ({
-                    ...prev,
-                    apiKey: e.target.value,
-                  }))
+                  setConfig((prev) => ({ ...prev, apiKey: e.target.value }))
                 }
                 placeholder="sk-..."
                 className="flex-1 max-w-md font-mono"
@@ -301,7 +277,6 @@ export function TabGeral({
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      {/* Wrapper span: disabled buttons swallow pointer events, preventing tooltip display */}
                       <span tabIndex={0} className="inline-flex">
                         {testButtonElement}
                       </span>
@@ -346,9 +321,7 @@ export function TabGeral({
               <SelectTrigger className="w-full max-w-xs">
                 <SelectValue
                   placeholder={
-                    loadingModels
-                      ? "Carregando modelos..."
-                      : "Selecione o modelo"
+                    loadingModels ? "Carregando modelos..." : "Selecione o modelo"
                   }
                 />
               </SelectTrigger>
@@ -367,95 +340,6 @@ export function TabGeral({
               </p>
             )}
           </div>
-        </CardContent>
-      </Card>
-
-      {/* Temperature + Daily Limit */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Parâmetros</CardTitle>
-          <CardDescription>
-            Ajuste a criatividade e o limite de gasto diário
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Temperature */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <Label>Temperatura</Label>
-              <span className="text-sm font-mono text-muted-foreground">
-                {config.temperature.toFixed(1)}
-              </span>
-            </div>
-            <Slider
-              value={[config.temperature]}
-              onValueChange={([value]) =>
-                setConfig((prev) => ({ ...prev, temperature: value }))
-              }
-              min={0}
-              max={1}
-              step={0.1}
-              className="max-w-md"
-            />
-            <p className="text-xs text-muted-foreground">
-              0.0 = respostas mais determinísticas · 1.0 = respostas mais
-              criativas
-            </p>
-          </div>
-
-          {/* Daily Spend Limit */}
-          <div className="space-y-2">
-            <Label>Limite de gasto diário (R$)</Label>
-            <div className="flex items-center gap-2 max-w-xs">
-              <span className="text-sm text-muted-foreground">R$</span>
-              <Input
-                type="number"
-                value={config.dailySpendLimitBrl ?? ""}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setConfig((prev) => ({
-                    ...prev,
-                    dailySpendLimitBrl:
-                      val === "" ? null : parseFloat(val),
-                  }));
-                }}
-                placeholder="Sem limite"
-                min={0.01}
-                step={0.5}
-                className={`w-32 ${config.dailySpendLimitBrl !== null && config.dailySpendLimitBrl <= 0 ? "border-red-500 focus-visible:ring-red-500" : ""}`}
-              />
-            </div>
-            {config.dailySpendLimitBrl !== null && config.dailySpendLimitBrl <= 0 && (
-              <p className="text-xs text-red-500">
-                O limite deve ser um valor positivo (maior que zero).
-              </p>
-            )}
-            <p className="text-xs text-muted-foreground">
-              Deixe vazio para não limitar. Quando o limite for atingido, o
-              agente para de responder automaticamente.
-            </p>
-          </div>
-
-          {/* Model suggestion badge */}
-          {suggestion && config.dailySpendLimitBrl && (
-            <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-3">
-              <Lightbulb className="mt-0.5 h-4 w-4 text-amber-600 shrink-0" />
-              <div className="text-sm">
-                <span className="font-medium text-amber-800">
-                  Sugestão:
-                </span>{" "}
-                <span className="text-amber-700">
-                  Com R${config.dailySpendLimitBrl.toFixed(2)}/dia,
-                  recomendamos o modelo{" "}
-                  <Badge variant="secondary" className="font-mono text-xs">
-                    {suggestion.model}
-                  </Badge>{" "}
-                  (custo estimado: R$
-                  {suggestion.estimatedDailyCostBrl.toFixed(2)}/dia)
-                </span>
-              </div>
-            </div>
-          )}
         </CardContent>
       </Card>
     </div>
