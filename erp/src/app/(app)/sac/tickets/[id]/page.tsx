@@ -1108,54 +1108,7 @@ export default function TicketDetailPage() {
               </Card>
             )}
 
-            {/* 4. SLA Reclame Aqui */}
-            {ticket.raSlaDeadline && !["RESOLVED", "CLOSED"].includes(ticket.status) && (
-              <Card className={(() => {
-                const dl = new Date(ticket.raSlaDeadline);
-                const now = new Date();
-                const target = new Date(dl); target.setHours(0,0,0,0);
-                const cursor = new Date(now); cursor.setHours(0,0,0,0);
-                let days = 0;
-                if (cursor >= target) { const d = new Date(target); while (d < cursor) { d.setDate(d.getDate() + 1); if (d.getDay() !== 0 && d.getDay() !== 6) days--; } }
-                else { const d = new Date(cursor); while (d < target) { d.setDate(d.getDate() + 1); if (d.getDay() !== 0 && d.getDay() !== 6) days++; } }
-                if (days <= 0) return "border-red-500 bg-red-50";
-                if (days <= 2) return "border-red-300 bg-red-50/50";
-                if (days <= 5) return "border-yellow-300 bg-yellow-50";
-                return "border-purple-100";
-              })()}>
-                <CardHeader>
-                  <CardTitle className="text-sm font-semibold text-purple-700 flex items-center gap-2 uppercase tracking-wide">
-                    <AlertTriangle className="h-3.5 w-3.5" />
-                    SLA Reclame Aqui
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {(() => {
-                    const dl = new Date(ticket.raSlaDeadline!);
-                    const now = new Date();
-                    const target = new Date(dl); target.setHours(0,0,0,0);
-                    const cursor = new Date(now); cursor.setHours(0,0,0,0);
-                    let days = 0;
-                    if (cursor >= target) { const d = new Date(target); while (d < cursor) { d.setDate(d.getDate() + 1); if (d.getDay() !== 0 && d.getDay() !== 6) days--; } }
-                    else { const d = new Date(cursor); while (d < target) { d.setDate(d.getDate() + 1); if (d.getDay() !== 0 && d.getDay() !== 6) days++; } }
-                    let badgeColor = "bg-emerald-100 text-emerald-800";
-                    let text = `${days} dias úteis restantes`;
-                    if (days <= 0) { badgeColor = "bg-black text-white"; text = days === 0 ? "Vence hoje!" : `Expirado há ${Math.abs(days)} dia(s)`; }
-                    else if (days <= 2) { badgeColor = "bg-red-100 text-red-800"; text = `${days} dia(s) restante(s) ⚠️`; }
-                    else if (days <= 5) { badgeColor = "bg-yellow-100 text-yellow-800"; text = `${days} dias restantes`; }
-                    return (
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs">Prazo (10 dias úteis)</span>
-                          <span className={`px-2 py-1 rounded text-xs font-bold ${badgeColor}`}>{text}</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground">Vencimento: {dl.toLocaleDateString("pt-BR")}</p>
-                      </div>
-                    );
-                  })()}
-                </CardContent>
-              </Card>
-            )}
+
 
             {/* 4. Responsável */}
             <Card>
