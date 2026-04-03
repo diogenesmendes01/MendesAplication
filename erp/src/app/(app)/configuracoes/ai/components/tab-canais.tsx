@@ -14,6 +14,8 @@ import {
   Loader2,
   Send,
   Play,
+  CheckCircle2,
+  Info,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -306,7 +308,7 @@ function ChannelSimulatorCard({
         </div>
         <p className="text-xs text-muted-foreground">
           Enter para enviar · Shift+Enter para nova linha ·{" "}
-          <span className="text-green-700 font-medium">✅ Simulações não consomem o limite diário real</span>
+          <span className="text-green-700 font-medium inline-flex items-center gap-1"><CheckCircle2 className="h-4 w-4 shrink-0 text-green-600" />Simulações não consomem o limite diário real</span>
         </p>
 
         {simResult && (
@@ -326,7 +328,7 @@ function ChannelSimulatorCard({
               )}
               {simResult.simulationWarning && (
                 <p className="text-xs text-muted-foreground mt-2 border border-green-200 bg-green-50 rounded px-2 py-1">
-                  ℹ️ {simResult.simulationWarning}
+                  <span className="inline-flex items-center gap-1"><Info className="h-4 w-4 shrink-0" />{simResult.simulationWarning}</span>
                 </p>
               )}
             </div>
@@ -644,8 +646,8 @@ function SectionReclameAqui({ companyId, config, setConfig }: TabCanaisProps) {
             placeholder="Ex: Você é um especialista em resolução de reclamações. Seja empático, direto e sempre ofereça uma solução concreta. Lembre-se que a conversa é pública e afeta a reputação da empresa."
             rows={6}
           />
-          <p className="mt-2 text-xs text-muted-foreground">
-            ℹ️ Campo compartilhado com persona Email enquanto campo dedicado RA não está disponível.
+          <p className="mt-2 text-xs text-muted-foreground flex items-center gap-1">
+            <Info className="h-4 w-4 shrink-0" />Campo compartilhado com persona Email enquanto campo dedicado RA não está disponível.
           </p>
         </CardContent>
       </Card>
