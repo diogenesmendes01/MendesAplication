@@ -586,10 +586,12 @@ export async function runAgent(
   }
 
   const _aiConfigAny = aiConfig as Record<string, unknown>;
-  const _enabledTools: string[] =
-    channel === "RECLAMEAQUI" ? (_aiConfigAny.raEnabledTools as string[] ?? [])
-    : channel === "EMAIL"     ? (_aiConfigAny.emailEnabledTools as string[] ?? [])
-    :                           (_aiConfigAny.whatsappEnabledTools as string[] ?? []);
+  const _getEnabledTools = (key: string): string[] =>
+    ((_aiConfigAny[key] as string[] | undefined) ?? []);
+  const _enabledTools =
+    channel === "RECLAMEAQUI" ? _getEnabledTools("raEnabledTools")
+    : channel === "EMAIL"     ? _getEnabledTools("emailEnabledTools")
+    :                           _getEnabledTools("whatsappEnabledTools");
   const tools = getToolsForChannel(channel, _enabledTools);
 
   const loopResult = await runAgentLoop({
@@ -790,10 +792,12 @@ export async function runAgentDryRun(
   }
 
   const _aiConfigAny = aiConfig as Record<string, unknown>;
-  const _enabledTools: string[] =
-    channel === "RECLAMEAQUI" ? (_aiConfigAny.raEnabledTools as string[] ?? [])
-    : channel === "EMAIL"     ? (_aiConfigAny.emailEnabledTools as string[] ?? [])
-    :                           (_aiConfigAny.whatsappEnabledTools as string[] ?? []);
+  const _getEnabledTools = (key: string): string[] =>
+    ((_aiConfigAny[key] as string[] | undefined) ?? []);
+  const _enabledTools =
+    channel === "RECLAMEAQUI" ? _getEnabledTools("raEnabledTools")
+    : channel === "EMAIL"     ? _getEnabledTools("emailEnabledTools")
+    :                           _getEnabledTools("whatsappEnabledTools");
   const tools = getToolsForChannel(channel, _enabledTools);
 
   const loopResult = await runAgentLoop({

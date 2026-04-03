@@ -110,6 +110,10 @@ function toggleTool(
   allTools: ToolDef[],
 ): string[] {
   const allIds = allTools.map((t) => t.id);
+  if (!allIds.includes(toolId)) {
+    console.warn(`[toggleTool] Invalid toolId: ${toolId}. Ignoring.`);
+    return enabledTools;
+  }
   if (enabled) {
     const newList = Array.from(new Set(enabledTools.concat([toolId])));
     // Collapse back to empty when all are enabled

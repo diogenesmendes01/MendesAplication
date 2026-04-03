@@ -24,6 +24,10 @@ function toggleTool(
   allTools: ToolDef[],
 ): string[] {
   const allIds = allTools.map((t) => t.id);
+  if (!allIds.includes(toolId)) {
+    console.warn(`[toggleTool] Invalid toolId: ${toolId}. Ignoring.`);
+    return enabledTools;
+  }
   if (enabled) {
     const newList = Array.from(new Set(enabledTools.concat([toolId])));
     return allIds.every((id) => newList.includes(id)) ? [] : newList;
@@ -124,6 +128,22 @@ describe("toggleTool — disabling a tool", () => {
     const before = ["GET_CLIENT_INFO", "CREATE_NOTE"];
     const result = toggleTool(before, "SEARCH_DOCUMENTS", false, SAMPLE_TOOLS);
     expect(result).toEqual(["GET_CLIENT_INFO", "CREATE_NOTE"]);
+  });
+});
+
+// ─── Input validation ────────────────────────────────────────────────────────
+
+describe("toggleTool — input validation", () => {
+  it("returns enabledTools unchanged when toolId is not in allTools", () => {
+    const before = ["SEARCH_DOCUMENTS"];
+    const result = toggleTool(before, "NONEXISTENT_TOOL", true, SAMPLE_TOOLS);
+    expect(result).toEqual(before);
+  });
+
+  it("returns enabledTools unchanged when disabling a nonexistent toolId", () => {
+    const before = ["GET_CLIENT_INFO"];
+    const result = toggleTool(before, "GHOST_TOOL", false, SAMPLE_TOOLS);
+    expect(result).toEqual(before);
   });
 });
 
