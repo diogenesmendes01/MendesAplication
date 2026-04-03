@@ -308,7 +308,7 @@ function TimelineItem({ event, channelType, companyId, ticketId, onActionComplet
   // AI-generated suggestion pending approval → render SuggestionCard
   if (event.isAiGenerated && event.deliveryStatus === "PENDING_APPROVAL") {
     return (
-      <div className="flex gap-3">
+      <div className="flex gap-3 rounded-lg p-1 -mx-1 hover:bg-muted/40 transition-colors duration-150">
         <EventIcon event={event} />
         <div className="flex-1 min-w-0">
           <RaSuggestionCard
@@ -572,6 +572,7 @@ function EmailThreadItem({ event, ticketSubject }: EmailThreadItemProps) {
 // ---------------------------------------------------------------------------
 
 function WhatsAppBubble({ event }: { event: TimelineEvent }) {
+  // micro-interaction: bubble appear
   const isOutbound = event.direction === "OUTBOUND";
   const origin = originLabel(event);
   const senderName = isOutbound
@@ -581,7 +582,7 @@ function WhatsAppBubble({ event }: { event: TimelineEvent }) {
 
   return (
     <div
-      className={`flex ${isOutbound ? "justify-end" : "justify-start"}`}
+      className={`flex animate-in fade-in slide-in-from-bottom-1 duration-200 ${isOutbound ? "justify-end" : "justify-start"}`}
     >
       <div
         className={`max-w-[75%] rounded-2xl px-4 py-2.5 ${
@@ -691,7 +692,7 @@ function StickerPicker({ onSelect }: { onSelect: (sticker: string) => void }) {
             <button
               key={s}
               type="button"
-              className="flex h-10 w-full items-center justify-center rounded hover:bg-accent text-2xl"
+              className="flex h-10 w-full items-center justify-center rounded hover:bg-accent text-2xl hover:scale-125 transition-transform duration-150 active:scale-110"
               onClick={() => onSelect(s)}
             >
               {s}
@@ -717,7 +718,7 @@ function EmojiPicker({ onSelect }: { onSelect: (emoji: string) => void }) {
             <button
               key={emoji}
               type="button"
-              className="flex h-8 w-8 items-center justify-center rounded hover:bg-accent text-lg"
+              className="flex h-8 w-8 items-center justify-center rounded hover:bg-accent text-lg hover:scale-125 transition-transform duration-150"
               onClick={() => onSelect(emoji)}
             >
               {emoji}
@@ -1472,29 +1473,29 @@ export default function TicketTimeline({
 
               {/* Rich text toolbar */}
               <div className="flex items-center gap-0.5 flex-wrap border rounded-t-md p-1.5 bg-muted/30 border-b-0">
-                <Button type="button" variant="ghost" size="icon" className="h-7 w-7" title="Negrito" onClick={() => insertWrap(emailTextareaRef, "<b>", "</b>", setEmailContent)}>
+                <Button type="button" variant="ghost" size="icon" className="h-7 w-7 active:scale-75 transition-transform duration-75" title="Negrito" onClick={() => insertWrap(emailTextareaRef, "<b>", "</b>", setEmailContent)}>
                   <Bold className="h-3.5 w-3.5" />
                 </Button>
-                <Button type="button" variant="ghost" size="icon" className="h-7 w-7" title="Itálico" onClick={() => insertWrap(emailTextareaRef, "<i>", "</i>", setEmailContent)}>
+                <Button type="button" variant="ghost" size="icon" className="h-7 w-7 active:scale-75 transition-transform duration-75" title="Itálico" onClick={() => insertWrap(emailTextareaRef, "<i>", "</i>", setEmailContent)}>
                   <Italic className="h-3.5 w-3.5" />
                 </Button>
-                <Button type="button" variant="ghost" size="icon" className="h-7 w-7" title="Sublinhado" onClick={() => insertWrap(emailTextareaRef, "<u>", "</u>", setEmailContent)}>
+                <Button type="button" variant="ghost" size="icon" className="h-7 w-7 active:scale-75 transition-transform duration-75" title="Sublinhado" onClick={() => insertWrap(emailTextareaRef, "<u>", "</u>", setEmailContent)}>
                   <Underline className="h-3.5 w-3.5" />
                 </Button>
-                <Button type="button" variant="ghost" size="icon" className="h-7 w-7" title="Tachado" onClick={() => insertWrap(emailTextareaRef, "<s>", "</s>", setEmailContent)}>
+                <Button type="button" variant="ghost" size="icon" className="h-7 w-7 active:scale-75 transition-transform duration-75" title="Tachado" onClick={() => insertWrap(emailTextareaRef, "<s>", "</s>", setEmailContent)}>
                   <Strikethrough className="h-3.5 w-3.5" />
                 </Button>
                 <div className="w-px h-5 bg-border mx-0.5" />
-                <Button type="button" variant="ghost" size="icon" className="h-7 w-7" title="Lista" onClick={() => { setEmailContent((v) => v + "\n• "); }}>
+                <Button type="button" variant="ghost" size="icon" className="h-7 w-7 active:scale-75 transition-transform duration-75" title="Lista" onClick={() => { setEmailContent((v) => v + "\n• "); }}>
                   <List className="h-3.5 w-3.5" />
                 </Button>
-                <Button type="button" variant="ghost" size="icon" className="h-7 w-7" title="Lista numerada" onClick={() => { setEmailContent((v) => v + "\n1. "); }}>
+                <Button type="button" variant="ghost" size="icon" className="h-7 w-7 active:scale-75 transition-transform duration-75" title="Lista numerada" onClick={() => { setEmailContent((v) => v + "\n1. "); }}>
                   <ListOrdered className="h-3.5 w-3.5" />
                 </Button>
-                <Button type="button" variant="ghost" size="icon" className="h-7 w-7" title="Link" onClick={() => insertWrap(emailTextareaRef, '<a href="URL">', "</a>", setEmailContent)}>
+                <Button type="button" variant="ghost" size="icon" className="h-7 w-7 active:scale-75 transition-transform duration-75" title="Link" onClick={() => insertWrap(emailTextareaRef, '<a href="URL">', "</a>", setEmailContent)}>
                   <Link2 className="h-3.5 w-3.5" />
                 </Button>
-                <Button type="button" variant="ghost" size="icon" className="h-7 w-7" title="Imagem" onClick={() => insertWrap(emailTextareaRef, '<img src="', '" alt="" />', setEmailContent)}>
+                <Button type="button" variant="ghost" size="icon" className="h-7 w-7 active:scale-75 transition-transform duration-75" title="Imagem" onClick={() => insertWrap(emailTextareaRef, '<img src="', '" alt="" />', setEmailContent)}>
                   <ImageIcon className="h-3.5 w-3.5" />
                 </Button>
                 <div className="ml-auto">
@@ -1521,7 +1522,7 @@ export default function TicketTimeline({
               />
               {showEmailPreview && emailContent && (
                 <div
-                  className="min-h-[60px] rounded-md border bg-white p-3 text-sm prose prose-sm max-w-none"
+                  className="min-h-[60px] rounded-md border bg-white p-3 text-sm prose prose-sm max-w-none animate-in fade-in slide-in-from-top-2 duration-200"
                   dangerouslySetInnerHTML={{ __html: emailContent }}
                 />
               )}
@@ -1646,13 +1647,13 @@ export default function TicketTimeline({
 
               {/* WA formatting bar */}
               <div className="flex items-center gap-0.5 border rounded-t-md p-1.5 bg-muted/30 border-b-0">
-                <Button type="button" variant="ghost" size="icon" className="h-7 w-7" title="Negrito (*texto*)" onClick={() => insertWrap(waTextareaRef, "*", "*", setWaContent)}>
+                <Button type="button" variant="ghost" size="icon" className="h-7 w-7 active:scale-75 transition-transform duration-75" title="Negrito (*texto*)" onClick={() => insertWrap(waTextareaRef, "*", "*", setWaContent)}>
                   <Bold className="h-3.5 w-3.5" />
                 </Button>
-                <Button type="button" variant="ghost" size="icon" className="h-7 w-7" title="Itálico (_texto_)" onClick={() => insertWrap(waTextareaRef, "_", "_", setWaContent)}>
+                <Button type="button" variant="ghost" size="icon" className="h-7 w-7 active:scale-75 transition-transform duration-75" title="Itálico (_texto_)" onClick={() => insertWrap(waTextareaRef, "_", "_", setWaContent)}>
                   <Italic className="h-3.5 w-3.5" />
                 </Button>
-                <Button type="button" variant="ghost" size="icon" className="h-7 w-7" title="Tachado (~texto~)" onClick={() => insertWrap(waTextareaRef, "~", "~", setWaContent)}>
+                <Button type="button" variant="ghost" size="icon" className="h-7 w-7 active:scale-75 transition-transform duration-75" title="Tachado (~texto~)" onClick={() => insertWrap(waTextareaRef, "~", "~", setWaContent)}>
                   <Strikethrough className="h-3.5 w-3.5" />
                 </Button>
                 <Button type="button" variant="ghost" size="icon" className="h-7 w-7" title="Código (`texto`)" onClick={() => insertWrap(waTextareaRef, "\`", "\`", setWaContent)}>

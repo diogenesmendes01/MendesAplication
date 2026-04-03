@@ -795,7 +795,7 @@ export default function TicketDetailPage() {
               {transitions.length > 0 ? (
                 <div className="flex items-center gap-1.5 flex-wrap">
                   {transitions.map((t) => (
-                    <Button key={t.value} size="sm" variant="outline" disabled={updatingStatus} onClick={() => handleStatusChange(t.value)}>
+                    <Button key={t.value} size="sm" variant="outline" disabled={updatingStatus} onClick={() => handleStatusChange(t.value)} className="transition-all duration-150 active:scale-95 hover:shadow-sm">
                       {updatingStatus && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
                       {t.label}
                     </Button>
@@ -841,7 +841,7 @@ export default function TicketDetailPage() {
             {transitions.length > 0 ? (
               <div className="flex items-center gap-1.5 flex-wrap">
                 {transitions.map((t) => (
-                  <Button key={t.value} size="sm" variant="outline" disabled={updatingStatus} onClick={() => handleStatusChange(t.value)}>
+                  <Button key={t.value} size="sm" variant="outline" disabled={updatingStatus} onClick={() => handleStatusChange(t.value)} className="transition-all duration-150 active:scale-95 hover:shadow-sm">
                     {updatingStatus && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
                     {t.label}
                   </Button>
@@ -911,7 +911,7 @@ export default function TicketDetailPage() {
             {/* Mini-cards: Consumidor | Dados da Reclamação | Informações Gerais */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {/* Consumidor */}
-              <Card className="border-purple-100">
+              <Card className="border-purple-100 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
                 <CardHeader className="pb-2 pt-3 px-4">
                   <CardTitle className="text-xs font-semibold uppercase tracking-wide text-purple-700 flex items-center gap-1.5">
                     <User className="h-3 w-3" />Consumidor
@@ -929,7 +929,7 @@ export default function TicketDetailPage() {
               </Card>
 
               {/* Dados da Reclamação */}
-              <Card className="border-purple-100">
+              <Card className="border-purple-100 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
                 <CardHeader className="pb-2 pt-3 px-4">
                   <CardTitle className="text-xs font-semibold uppercase tracking-wide text-purple-700 flex items-center gap-1.5">
                     <FileText className="h-3 w-3" />Dados da Reclamação
@@ -950,7 +950,7 @@ export default function TicketDetailPage() {
               </Card>
 
               {/* Informações Gerais */}
-              <Card className="border-purple-100">
+              <Card className="border-purple-100 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
                 <CardHeader className="pb-2 pt-3 px-4">
                   <CardTitle className="text-xs font-semibold uppercase tracking-wide text-purple-700 flex items-center gap-1.5">
                     <Info className="h-3 w-3" />Informações Gerais
@@ -1033,7 +1033,7 @@ export default function TicketDetailPage() {
                   <Button
                     size="sm"
                     variant="outline"
-                    className="border-purple-200 text-purple-700 hover:bg-purple-50"
+                    className="border-purple-200 text-purple-700 hover:bg-purple-50 transition-all duration-150 active:scale-95"
                     disabled={requestingEval || !ticket.raCanEvaluate}
                     onClick={handleRequestRaEvaluation}
                   >
@@ -1043,7 +1043,7 @@ export default function TicketDetailPage() {
                   <Button
                     size="sm"
                     variant="outline"
-                    className="border-purple-200 text-purple-700 hover:bg-purple-50"
+                    className="border-purple-200 text-purple-700 hover:bg-purple-50 transition-all duration-150 active:scale-95"
                     disabled={!ticket.raCanModerate}
                     onClick={() => setRaModerationOpen(true)}
                   >
@@ -1053,7 +1053,7 @@ export default function TicketDetailPage() {
                   <Button
                     size="sm"
                     variant="outline"
-                    className="border-purple-200 text-purple-700 hover:bg-purple-50"
+                    className="border-purple-200 text-purple-700 hover:bg-purple-50 transition-all duration-150 active:scale-95"
                     disabled={finishingPrivate}
                     onClick={handleFinishPrivate}
                   >
@@ -1365,7 +1365,7 @@ export default function TicketDetailPage() {
             {/* Mini-cards: Consumidor | Dados | Informações Gerais */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {/* Consumidor */}
-              <Card>
+              <Card className="transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
                 <CardHeader className="pb-2 pt-3 px-4">
                   <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
                     <User className="h-3 w-3" />Cliente
@@ -1386,7 +1386,7 @@ export default function TicketDetailPage() {
               </Card>
 
               {/* Dados */}
-              <Card>
+              <Card className="transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
                 <CardHeader className="pb-2 pt-3 px-4">
                   <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
                     <FileText className="h-3 w-3" />Dados
@@ -1405,7 +1405,7 @@ export default function TicketDetailPage() {
               </Card>
 
               {/* Informações Gerais */}
-              <Card>
+              <Card className="transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
                 <CardHeader className="pb-2 pt-3 px-4">
                   <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
                     <Info className="h-3 w-3" />Informações
