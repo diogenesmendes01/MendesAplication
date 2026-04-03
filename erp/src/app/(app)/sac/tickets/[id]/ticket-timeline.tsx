@@ -17,6 +17,17 @@ import {
   Wifi,
   RefreshCw,
   AlertTriangle,
+  Bold,
+  Italic,
+  Underline,
+  Strikethrough,
+  List,
+  ListOrdered,
+  Link2,
+  ImageIcon,
+  Eye,
+  EyeOff,
+  StickerIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -641,6 +652,57 @@ const COMMON_EMOJIS = [
   "\u{1F4CB}", "\u{1F4B0}", "\u{23F0}", "\u{1F504}", "\u{1F4AC}", "\u{270F}\u{FE0F}", "\u{1F50D}", "\u{1F6A8}",
 ];
 
+// ---------------------------------------------------------------------------
+// Helpers for rich text formatting
+// ---------------------------------------------------------------------------
+
+function insertWrap(
+  ref: React.RefObject<HTMLTextAreaElement>,
+  before: string,
+  after: string,
+  setter: (v: string) => void
+) {
+  const el = ref.current;
+  if (!el) return;
+  const start = el.selectionStart ?? 0;
+  const end = el.selectionEnd ?? 0;
+  const selected = el.value.substring(start, end) || "texto";
+  const newValue = el.value.substring(0, start) + before + selected + after + el.value.substring(end);
+  setter(newValue);
+  setTimeout(() => {
+    el.focus();
+    el.setSelectionRange(start + before.length, start + before.length + selected.length);
+  }, 0);
+}
+
+const STICKERS = ["👍", "😊", "❤️", "✅", "🎉", "🙏"];
+
+function StickerPicker({ onSelect }: { onSelect: (sticker: string) => void }) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button variant="outline" size="sm" type="button" title="Stickers">
+          <StickerIcon className="h-4 w-4" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-48 p-2" align="start">
+        <div className="grid grid-cols-3 gap-1">
+          {STICKERS.map((s) => (
+            <button
+              key={s}
+              type="button"
+              className="flex h-10 w-full items-center justify-center rounded hover:bg-accent text-2xl"
+              onClick={() => onSelect(s)}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function EmojiPicker({ onSelect }: { onSelect: (emoji: string) => void }) {
   return (
     <Popover>
@@ -712,6 +774,8 @@ export default function TicketTimeline({
   >([]);
   const emailFileInputRef = useRef<HTMLInputElement>(null);
   const emailEndRef = useRef<HTMLDivElement>(null);
+  const emailTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const [showEmailPreview, setShowEmailPreview] = useState(false);
 
   // WhatsApp tab state
   const [waRecipients, setWaRecipients] = useState<WhatsAppRecipient[]>([]);
@@ -724,6 +788,7 @@ export default function TicketTimeline({
   >([]);
   const waFileInputRef = useRef<HTMLInputElement>(null);
   const waEndRef = useRef<HTMLDivElement>(null);
+  const waTextareaRef = useRef<HTMLTextAreaElement>(null);
 
   // WhatsApp connection status
   const [waConnected, setWaConnected] = useState<boolean | null>(null);
@@ -1405,13 +1470,61 @@ export default function TicketTimeline({
                 </div>
               </div>
 
+              {/* Rich text toolbar */}
+              <div className="flex items-center gap-0.5 flex-wrap border rounded-t-md p-1.5 bg-muted/30 border-b-0">
+                <Button type="button" variant="ghost" size="icon" className="h-7 w-7" title="Negrito" onClick={() => insertWrap(emailTextareaRef, "<b>", "</b>", setEmailContent)}>
+                  <Bold className="h-3.5 w-3.5" />
+                </Button>
+                <Button type="button" variant="ghost" size="icon" className="h-7 w-7" title="Itálico" onClick={() => insertWrap(emailTextareaRef, "<i>", "</i>", setEmailContent)}>
+                  <Italic className="h-3.5 w-3.5" />
+                </Button>
+                <Button type="button" variant="ghost" size="icon" className="h-7 w-7" title="Sublinhado" onClick={() => insertWrap(emailTextareaRef, "<u>", "</u>", setEmailContent)}>
+                  <Underline className="h-3.5 w-3.5" />
+                </Button>
+                <Button type="button" variant="ghost" size="icon" className="h-7 w-7" title="Tachado" onClick={() => insertWrap(emailTextareaRef, "<s>", "</s>", setEmailContent)}>
+                  <Strikethrough className="h-3.5 w-3.5" />
+                </Button>
+                <div className="w-px h-5 bg-border mx-0.5" />
+                <Button type="button" variant="ghost" size="icon" className="h-7 w-7" title="Lista" onClick={() => { setEmailContent((v) => v + "\n• "); }}>
+                  <List className="h-3.5 w-3.5" />
+                </Button>
+                <Button type="button" variant="ghost" size="icon" className="h-7 w-7" title="Lista numerada" onClick={() => { setEmailContent((v) => v + "\n1. "); }}>
+                  <ListOrdered className="h-3.5 w-3.5" />
+                </Button>
+                <Button type="button" variant="ghost" size="icon" className="h-7 w-7" title="Link" onClick={() => insertWrap(emailTextareaRef, '<a href="URL">', "</a>", setEmailContent)}>
+                  <Link2 className="h-3.5 w-3.5" />
+                </Button>
+                <Button type="button" variant="ghost" size="icon" className="h-7 w-7" title="Imagem" onClick={() => insertWrap(emailTextareaRef, '<img src="', '" alt="" />', setEmailContent)}>
+                  <ImageIcon className="h-3.5 w-3.5" />
+                </Button>
+                <div className="ml-auto">
+                  <Button
+                    type="button"
+                    variant={showEmailPreview ? "secondary" : "ghost"}
+                    size="sm"
+                    className="h-7 text-xs gap-1"
+                    onClick={() => setShowEmailPreview((v) => !v)}
+                  >
+                    {showEmailPreview ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                    {showEmailPreview ? "Fechar prévia" : "Prévia HTML"}
+                  </Button>
+                </div>
+              </div>
               <Textarea
+                ref={emailTextareaRef}
                 placeholder="Escreva sua resposta por email..."
                 value={emailContent}
                 onChange={(e) => setEmailContent(e.target.value)}
                 rows={4}
                 disabled={sendingEmail}
+                className="rounded-t-none"
               />
+              {showEmailPreview && emailContent && (
+                <div
+                  className="min-h-[60px] rounded-md border bg-white p-3 text-sm prose prose-sm max-w-none"
+                  dangerouslySetInnerHTML={{ __html: emailContent }}
+                />
+              )}
 
               {/* Attachment list */}
               {emailAttachments.length > 0 && (
@@ -1531,12 +1644,29 @@ export default function TicketTimeline({
                 </div>
               ) : null}
 
+              {/* WA formatting bar */}
+              <div className="flex items-center gap-0.5 border rounded-t-md p-1.5 bg-muted/30 border-b-0">
+                <Button type="button" variant="ghost" size="icon" className="h-7 w-7" title="Negrito (*texto*)" onClick={() => insertWrap(waTextareaRef, "*", "*", setWaContent)}>
+                  <Bold className="h-3.5 w-3.5" />
+                </Button>
+                <Button type="button" variant="ghost" size="icon" className="h-7 w-7" title="Itálico (_texto_)" onClick={() => insertWrap(waTextareaRef, "_", "_", setWaContent)}>
+                  <Italic className="h-3.5 w-3.5" />
+                </Button>
+                <Button type="button" variant="ghost" size="icon" className="h-7 w-7" title="Tachado (~texto~)" onClick={() => insertWrap(waTextareaRef, "~", "~", setWaContent)}>
+                  <Strikethrough className="h-3.5 w-3.5" />
+                </Button>
+                <Button type="button" variant="ghost" size="icon" className="h-7 w-7" title="Código (`texto`)" onClick={() => insertWrap(waTextareaRef, "\`", "\`", setWaContent)}>
+                  <span className="font-mono text-xs font-bold">{"<>"}</span>
+                </Button>
+              </div>
               <Textarea
+                ref={waTextareaRef}
                 placeholder="Digite sua mensagem..."
                 value={waContent}
                 onChange={(e) => setWaContent(e.target.value)}
                 rows={3}
                 disabled={sendingWa}
+                className="rounded-t-none"
               />
 
               {/* Attachment list */}
@@ -1581,6 +1711,7 @@ export default function TicketTimeline({
                     {waUploading ? "Enviando..." : "Anexar"}
                   </Button>
                   <EmojiPicker onSelect={(emoji) => setWaContent((prev) => prev + emoji)} />
+                  <StickerPicker onSelect={(s) => setWaContent((prev) => prev + s)} />
                 </div>
                 <Button
                   onClick={handleSendWhatsApp}
