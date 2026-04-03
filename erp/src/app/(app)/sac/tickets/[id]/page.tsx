@@ -36,7 +36,6 @@ import {
   ThumbsUp,
   ChevronRight,
   Info,
-  ShieldCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -96,6 +95,7 @@ import {
 } from "../ra-actions";
 import LinkedTicketsBanner from "./linked-tickets-banner";
 import MergedTicketBanner from "./merged-ticket-banner";
+import RaActionBar from "./ra-action-bar";
 import RaResponsePanel from "./ra-response-panel";
 import RaSuggestionCard from "./ra-suggestion-card";
 
@@ -219,6 +219,196 @@ function SlaCard({ label, deadline, breached }: { label: string; deadline: strin
   );
 }
 
+function RaSlaInline({ deadline }: { deadline: string }) {
+  const dl = new Date(deadline);
+  const now = new Date();
+  const target = new Date(dl); target.setHours(0, 0, 0, 0);
+  const cursor = new Date(now); cursor.setHours(0, 0, 0, 0);
+  let days = 0;
+  if (cursor >= target) {
+    const d = new Date(target);
+    while (d < cursor) { d.setDate(d.getDate() + 1); if (d.getDay() !== 0 && d.getDay() !== 6) days--; }
+  } else {
+    const d = new Date(cursor);
+    while (d < target) { d.setDate(d.getDate() + 1); if (d.getDay() !== 0 && d.getDay() !== 6) days++; }
+  }
+  let cls = "bg-emerald-100 text-emerald-800";
+  let txt = `${days}d úteis`;
+  if (days <= 0) { cls = "bg-black text-white"; txt = days === 0 ? "Vence hoje" : `${Math.abs(days)}d expirado`; }
+  else if (days <= 2) { cls = "bg-red-100 text-red-800"; txt = `⚠️ ${days}d`; }
+  else if (days <= 5) { cls = "bg-yellow-100 text-yellow-800"; txt = `${days}d úteis`; }
+  return <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold ${cls}`}><Clock className="h-3 w-3" />{txt}</span>;
+}
+
+// ---------------------------------------------------------------------------
+// RaFormField type guard
+// ---------------------------------------------------------------------------
+
+type RaFormField = { name: string; value: string };
+
+function isRaFormFields(val: unknown): val is RaFormField[] {
+  return (
+    Array.isArray(val) &&
+    val.every(
+      (f) =>
+        typeof f === "object" &&
+        f !== null &&
+        "name" in f &&
+        "value" in f
+    )
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Mini-card sub-components
+// ---------------------------------------------------------------------------
+
+type RaMiniCardsProps = {
+  ticket: Pick<
+    TicketDetail,
+    "raFormFields" | "client" | "company" | "createdAt" | "updatedAt"
+  >;
+  raContext: {
+    client?: { name?: string; email?: string; phone?: string } | null;
+  } | null;
+};
+
+function RaMiniCards({ ticket, raContext }: RaMiniCardsProps) {
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      {/* Consumidor */}
+      <Card className="border-purple-100 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
+        <CardHeader className="pb-2 pt-3 px-4">
+          <CardTitle className="text-xs font-semibold uppercase tracking-wide text-purple-700 flex items-center gap-1.5">
+            <User className="h-3 w-3" />Consumidor
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0 px-4 pb-3 space-y-0.5">
+          <p className="text-sm font-semibold">{raContext?.client?.name ?? ticket.client.name}</p>
+          {(raContext?.client?.email ?? ticket.client.email) && (
+            <p className="text-xs text-muted-foreground">{raContext?.client?.email ?? ticket.client.email}</p>
+          )}
+          {raContext?.client?.phone && (
+            <p className="text-xs text-muted-foreground">{raContext.client.phone}</p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Dados da Reclamação */}
+      <Card className="border-purple-100 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
+        <CardHeader className="pb-2 pt-3 px-4">
+          <CardTitle className="text-xs font-semibold uppercase tracking-wide text-purple-700 flex items-center gap-1.5">
+            <FileText className="h-3 w-3" />Dados da Reclamação
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0 px-4 pb-3 space-y-1.5">
+          {isRaFormFields(ticket.raFormFields) && ticket.raFormFields.length > 0 ? (
+            ticket.raFormFields.slice(0, 3).map((f, i) => (
+              <div key={i}>
+                <p className="text-xs text-muted-foreground">{f.name}</p>
+                <p className="text-xs font-medium">{f.value}</p>
+              </div>
+            ))
+          ) : (
+            <p className="text-xs text-muted-foreground">Sem dados adicionais</p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Informações Gerais */}
+      <Card className="border-purple-100 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
+        <CardHeader className="pb-2 pt-3 px-4">
+          <CardTitle className="text-xs font-semibold uppercase tracking-wide text-purple-700 flex items-center gap-1.5">
+            <Info className="h-3 w-3" />Informações Gerais
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0 px-4 pb-3 space-y-1">
+          <div className="flex justify-between text-xs"><span className="text-muted-foreground">Empresa</span><span className="font-medium truncate ml-2">{ticket.company.nomeFantasia}</span></div>
+          <div className="flex justify-between text-xs"><span className="text-muted-foreground">Canal</span><span className="font-medium text-purple-700">Reclame Aqui</span></div>
+          <div className="flex justify-between text-xs"><span className="text-muted-foreground">Criado</span><span className="font-medium">{dateFmt.format(new Date(ticket.createdAt))}</span></div>
+          <div className="flex justify-between text-xs"><span className="text-muted-foreground">Atualizado</span><span className="font-medium">{dateFmt.format(new Date(ticket.updatedAt))}</span></div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+type GenericMiniCardsProps = {
+  ticket: Pick<
+    TicketDetail,
+    | "client"
+    | "contact"
+    | "company"
+    | "priority"
+    | "status"
+    | "proposalId"
+    | "boletoId"
+    | "channelType"
+    | "createdAt"
+    | "updatedAt"
+  >;
+};
+
+function GenericMiniCards({ ticket }: GenericMiniCardsProps) {
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      {/* Cliente */}
+      <Card className="transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
+        <CardHeader className="pb-2 pt-3 px-4">
+          <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+            <User className="h-3 w-3" />Cliente
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0 px-4 pb-3 space-y-0.5">
+          <p className="text-sm font-semibold">{ticket.client.name}</p>
+          {ticket.contact && (
+            <>
+              <p className="text-xs text-muted-foreground">{ticket.contact.name}</p>
+              {ticket.contact.role && <p className="text-xs text-muted-foreground">{ticket.contact.role}</p>}
+            </>
+          )}
+          {ticket.client.email && (
+            <p className="text-xs text-muted-foreground truncate">{ticket.client.email}</p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Dados */}
+      <Card className="transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
+        <CardHeader className="pb-2 pt-3 px-4">
+          <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+            <FileText className="h-3 w-3" />Dados
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0 px-4 pb-3 space-y-1">
+          <div className="flex justify-between text-xs"><span className="text-muted-foreground">Prioridade</span><span className={`font-medium px-1.5 py-0.5 rounded-full ${priorityColor(ticket.priority)}`}>{priorityLabel(ticket.priority)}</span></div>
+          <div className="flex justify-between text-xs"><span className="text-muted-foreground">Status</span><span className={`font-medium px-1.5 py-0.5 rounded-full ${statusColor(ticket.status)}`}>{statusLabel(ticket.status)}</span></div>
+          {ticket.proposalId && (
+            <div className="flex justify-between text-xs"><span className="text-muted-foreground">Proposta</span><span className="font-medium text-primary">#{ticket.proposalId.slice(-8)}</span></div>
+          )}
+          {ticket.boletoId && (
+            <div className="flex justify-between text-xs"><span className="text-muted-foreground">Boleto</span><span className="font-medium text-primary">#{ticket.boletoId.slice(-8)}</span></div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Informações */}
+      <Card className="transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
+        <CardHeader className="pb-2 pt-3 px-4">
+          <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+            <Info className="h-3 w-3" />Informações
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0 px-4 pb-3 space-y-1">
+          <div className="flex justify-between text-xs"><span className="text-muted-foreground">Empresa</span><span className="font-medium truncate ml-2">{ticket.company.nomeFantasia}</span></div>
+          <div className="flex justify-between text-xs"><span className="text-muted-foreground">Canal</span><span className="font-medium">{ticket.channelType === "EMAIL" ? "Email" : "WhatsApp"}</span></div>
+          <div className="flex justify-between text-xs"><span className="text-muted-foreground">Criado</span><span className="font-medium">{dateFmt.format(new Date(ticket.createdAt))}</span></div>
+          <div className="flex justify-between text-xs"><span className="text-muted-foreground">Atualizado</span><span className="font-medium">{dateFmt.format(new Date(ticket.updatedAt))}</span></div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Status transitions
@@ -749,7 +939,9 @@ export default function TicketDetailPage() {
                       {ticket.raStatusName}
                     </span>
                   )}
-
+                  {ticket.raSlaDeadline && !["RESOLVED", "CLOSED"].includes(ticket.status) && (
+                    <RaSlaInline deadline={ticket.raSlaDeadline} />
+                  )}
                 </div>
                 <h1 className="text-xl font-bold tracking-tight text-purple-900">
                   {ticket.subject}
@@ -771,20 +963,9 @@ export default function TicketDetailPage() {
               <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold ${priorityColor(ticket.priority)}`}>
                 {priorityLabel(ticket.priority)}
               </span>
-              {transitions.length > 0 ? (
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  {transitions.map((t) => (
-                    <Button key={t.value} size="sm" variant="outline" disabled={updatingStatus} onClick={() => handleStatusChange(t.value)} className="transition-all duration-150 active:scale-95 hover:shadow-sm">
-                      {updatingStatus && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
-                      {t.label}
-                    </Button>
-                  ))}
-                </div>
-              ) : (
-                <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold ${statusColor(ticket.status)}`}>
-                  {statusLabel(ticket.status)}
-                </span>
-              )}
+              <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold ${statusColor(ticket.status)}`}>
+                {statusLabel(ticket.status)}
+              </span>
               {ticket.raExternalId && (
                 <a
                   href={`https://www.reclameaqui.com.br/empresa/trustcloud/lista-reclamacoes/?problema=${ticket.raExternalId}`}
@@ -817,20 +998,9 @@ export default function TicketDetailPage() {
             <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold ${priorityColor(ticket.priority)}`}>
               {priorityLabel(ticket.priority)}
             </span>
-            {transitions.length > 0 ? (
-              <div className="flex items-center gap-1.5 flex-wrap">
-                {transitions.map((t) => (
-                  <Button key={t.value} size="sm" variant="outline" disabled={updatingStatus} onClick={() => handleStatusChange(t.value)} className="transition-all duration-150 active:scale-95 hover:shadow-sm">
-                    {updatingStatus && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
-                    {t.label}
-                  </Button>
-                ))}
-              </div>
-            ) : (
-              <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold ${statusColor(ticket.status)}`}>
-                {statusLabel(ticket.status)}
-              </span>
-            )}
+            <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold ${statusColor(ticket.status)}`}>
+              {statusLabel(ticket.status)}
+            </span>
           </div>
         </div>
       )}
@@ -887,63 +1057,7 @@ export default function TicketDetailPage() {
         <div className="grid gap-6 lg:grid-cols-3">
           {/* ─── Main Content ─────────────────────────────────────── */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Mini-cards: Consumidor | Dados da Reclamação | Informações Gerais */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {/* Consumidor */}
-              <Card className="border-purple-100 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
-                <CardHeader className="pb-2 pt-3 px-4">
-                  <CardTitle className="text-xs font-semibold uppercase tracking-wide text-purple-700 flex items-center gap-1.5">
-                    <User className="h-3 w-3" />Consumidor
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="pt-0 px-4 pb-3 space-y-0.5">
-                  <p className="text-sm font-semibold">{raContext?.client?.name ?? ticket.client.name}</p>
-                  {(raContext?.client?.email ?? ticket.client.email) && (
-                    <p className="text-xs text-muted-foreground">{raContext?.client?.email ?? ticket.client.email}</p>
-                  )}
-                  {raContext?.client?.phone && (
-                    <p className="text-xs text-muted-foreground">{raContext.client.phone}</p>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Dados da Reclamação */}
-              <Card className="border-purple-100 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
-                <CardHeader className="pb-2 pt-3 px-4">
-                  <CardTitle className="text-xs font-semibold uppercase tracking-wide text-purple-700 flex items-center gap-1.5">
-                    <FileText className="h-3 w-3" />Dados da Reclamação
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="pt-0 px-4 pb-3 space-y-1.5">
-                  {ticket.raFormFields && (ticket.raFormFields as { name: string; value: string }[]).length > 0 ? (
-                    (ticket.raFormFields as { name: string; value: string }[]).slice(0, 3).map((f, i) => (
-                      <div key={i}>
-                        <p className="text-xs text-muted-foreground">{f.name}</p>
-                        <p className="text-xs font-medium">{f.value}</p>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-xs text-muted-foreground">Sem dados adicionais</p>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Informações Gerais */}
-              <Card className="border-purple-100 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
-                <CardHeader className="pb-2 pt-3 px-4">
-                  <CardTitle className="text-xs font-semibold uppercase tracking-wide text-purple-700 flex items-center gap-1.5">
-                    <Info className="h-3 w-3" />Informações Gerais
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="pt-0 px-4 pb-3 space-y-1">
-                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Empresa</span><span className="font-medium truncate ml-2">{ticket.company.nomeFantasia}</span></div>
-                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Canal</span><span className="font-medium text-purple-700">Reclame Aqui</span></div>
-                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Criado</span><span className="font-medium">{dateFmt.format(new Date(ticket.createdAt))}</span></div>
-                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Atualizado</span><span className="font-medium">{dateFmt.format(new Date(ticket.updatedAt))}</span></div>
-                </CardContent>
-              </Card>
-            </div>
-
+            <RaMiniCards ticket={ticket} raContext={raContext} />
             {/* Description */}
             <Card>
               <CardHeader>
@@ -953,6 +1067,39 @@ export default function TicketDetailPage() {
                 <p className="whitespace-pre-wrap text-sm leading-relaxed">{ticket.description}</p>
               </CardContent>
             </Card>
+
+            {/* Status transitions */}
+            {transitions.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Alterar Status</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-wrap gap-2">
+                    {transitions.map((t) => (
+                      <Button key={t.value} variant="outline" disabled={updatingStatus} onClick={() => handleStatusChange(t.value)}>
+                        {updatingStatus ? "Atualizando..." : t.label}
+                      </Button>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* US-RA-R04: RA Action Bar */}
+            <RaActionBar
+              ticketId={ticketId}
+              companyId={selectedCompanyId}
+              raExternalId={ticket.raExternalId ?? null}
+              raHugmeId={ticket.raHugmeId ?? null}
+              raCanEvaluate={ticket.raCanEvaluate === true}
+              raCanModerate={ticket.raCanModerate === true}
+              onRequestEvaluation={handleRequestRaEvaluation}
+              onRequestModeration={() => setRaModerationOpen(true)}
+              onFinishPrivate={handleFinishPrivate}
+              requestingEval={requestingEval}
+              finishingPrivate={finishingPrivate}
+            />
 
             {/* US-RA-R03: AI Suggestion Card in prominence */}
             {raSuggestion && (
@@ -1007,39 +1154,6 @@ export default function TicketDetailPage() {
                   sendingPublic={sendingRaPublic}
                   sendingPrivate={sendingRaPrivate}
                 />
-                {/* RA action buttons inline — Solicitar Avaliação / Moderação / Encerrar Msg Privada */}
-                <div className="flex items-center gap-2 flex-wrap mt-3 pt-3 border-t border-purple-100">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="border-purple-200 text-purple-700 hover:bg-purple-50 transition-all duration-150 active:scale-95"
-                    disabled={requestingEval || !ticket.raCanEvaluate}
-                    onClick={handleRequestRaEvaluation}
-                  >
-                    {requestingEval ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <ThumbsUp className="mr-1.5 h-3.5 w-3.5" />}
-                    Solicitar Avaliação
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="border-purple-200 text-purple-700 hover:bg-purple-50 transition-all duration-150 active:scale-95"
-                    disabled={!ticket.raCanModerate}
-                    onClick={() => setRaModerationOpen(true)}
-                  >
-                    <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />
-                    Solicitar Moderação
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="border-purple-200 text-purple-700 hover:bg-purple-50 transition-all duration-150 active:scale-95"
-                    disabled={finishingPrivate}
-                    onClick={handleFinishPrivate}
-                  >
-                    {finishingPrivate ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <MessageSquare className="mr-1.5 h-3.5 w-3.5" />}
-                    Encerrar Msg Privada
-                  </Button>
-                </div>
               </CardContent>
             </Card>
 
@@ -1147,7 +1261,7 @@ export default function TicketDetailPage() {
             </Card>
 
             {/* 3. Dados da Reclamação (form fields) */}
-            {ticket.raFormFields && (ticket.raFormFields as { name: string; value: string }[]).length > 0 && (
+            {isRaFormFields(ticket.raFormFields) && ticket.raFormFields.length > 0 && (
               <Card className="border-purple-200">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -1156,7 +1270,7 @@ export default function TicketDetailPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-2">
-                  {(ticket.raFormFields as { name: string; value: string }[]).map((field, i) => (
+                  {ticket.raFormFields!.map((field, i) => (
                     <div key={i}>
                       <p className="text-xs font-medium text-muted-foreground">{field.name}</p>
                       <p className="text-sm">{field.value}</p>
@@ -1341,64 +1455,7 @@ export default function TicketDetailPage() {
         <div className="grid gap-6 lg:grid-cols-3">
           {/* Main content */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Mini-cards: Consumidor | Dados | Informações Gerais */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {/* Consumidor */}
-              <Card className="transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
-                <CardHeader className="pb-2 pt-3 px-4">
-                  <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
-                    <User className="h-3 w-3" />Cliente
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="pt-0 px-4 pb-3 space-y-0.5">
-                  <p className="text-sm font-semibold">{ticket.client.name}</p>
-                  {ticket.contact && (
-                    <>
-                      <p className="text-xs text-muted-foreground">{ticket.contact.name}</p>
-                      {ticket.contact.role && <p className="text-xs text-muted-foreground">{ticket.contact.role}</p>}
-                    </>
-                  )}
-                  {ticket.client.email && (
-                    <p className="text-xs text-muted-foreground truncate">{ticket.client.email}</p>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Dados */}
-              <Card className="transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
-                <CardHeader className="pb-2 pt-3 px-4">
-                  <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
-                    <FileText className="h-3 w-3" />Dados
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="pt-0 px-4 pb-3 space-y-1">
-                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Prioridade</span><span className={`font-medium px-1.5 py-0.5 rounded-full ${priorityColor(ticket.priority)}`}>{priorityLabel(ticket.priority)}</span></div>
-                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Status</span><span className={`font-medium px-1.5 py-0.5 rounded-full ${statusColor(ticket.status)}`}>{statusLabel(ticket.status)}</span></div>
-                  {ticket.proposalId && (
-                    <div className="flex justify-between text-xs"><span className="text-muted-foreground">Proposta</span><span className="font-medium text-primary">#{ticket.proposalId.slice(-8)}</span></div>
-                  )}
-                  {ticket.boletoId && (
-                    <div className="flex justify-between text-xs"><span className="text-muted-foreground">Boleto</span><span className="font-medium text-primary">#{ticket.boletoId.slice(-8)}</span></div>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Informações Gerais */}
-              <Card className="transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
-                <CardHeader className="pb-2 pt-3 px-4">
-                  <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
-                    <Info className="h-3 w-3" />Informações
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="pt-0 px-4 pb-3 space-y-1">
-                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Empresa</span><span className="font-medium truncate ml-2">{ticket.company.nomeFantasia}</span></div>
-                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Canal</span><span className="font-medium">{ticket.channelType === "EMAIL" ? "Email" : "WhatsApp"}</span></div>
-                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Criado</span><span className="font-medium">{dateFmt.format(new Date(ticket.createdAt))}</span></div>
-                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Atualizado</span><span className="font-medium">{dateFmt.format(new Date(ticket.updatedAt))}</span></div>
-                </CardContent>
-              </Card>
-            </div>
-
+            <GenericMiniCards ticket={ticket} />
             {/* Description */}
             <Card>
               <CardHeader>
@@ -1408,6 +1465,24 @@ export default function TicketDetailPage() {
                 <p className="whitespace-pre-wrap text-sm leading-relaxed">{ticket.description}</p>
               </CardContent>
             </Card>
+
+            {/* Status transitions */}
+            {transitions.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Alterar Status</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-wrap gap-2">
+                    {transitions.map((t) => (
+                      <Button key={t.value} variant="outline" disabled={updatingStatus} onClick={() => handleStatusChange(t.value)}>
+                        {updatingStatus ? "Atualizando..." : t.label}
+                      </Button>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Timeline */}
             <TicketTimeline
