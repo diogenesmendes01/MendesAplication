@@ -1,6 +1,4 @@
 import { describe, it, expect } from "vitest";
-import React from "react";
-import { render, screen } from "@testing-library/react";
 
 /**
  * Type guard and helper functions extracted from [id]/page.tsx
@@ -146,33 +144,33 @@ describe("Type Guard: isRaFormFields", () => {
 
   it("should reject array with null element", () => {
     const invalid = [null];
-    expect(isRaFormFields(invalid as any)).toBe(false);
+    expect(isRaFormFields(invalid as unknown)).toBe(false);
   });
 
   it("should reject field missing 'name'", () => {
     const invalid = [{ value: "test" }];
-    expect(isRaFormFields(invalid as any)).toBe(false);
+    expect(isRaFormFields(invalid as unknown)).toBe(false);
   });
 
   it("should reject field missing 'value'", () => {
     const invalid = [{ name: "test" }];
-    expect(isRaFormFields(invalid as any)).toBe(false);
+    expect(isRaFormFields(invalid as unknown)).toBe(false);
   });
 
   it("should reject field with non-string 'name'", () => {
     const invalid = [{ name: 123, value: "test" }];
-    expect(isRaFormFields(invalid as any)).toBe(false);
+    expect(isRaFormFields(invalid as unknown)).toBe(false);
   });
 
   it("should reject field with non-string 'value'", () => {
     const invalid = [{ name: "test", value: 123 }];
-    expect(isRaFormFields(invalid as any)).toBe(false);
+    expect(isRaFormFields(invalid as unknown)).toBe(false);
   });
 
   it("should reject field with extra properties (but valid name/value)", () => {
     // NOTE: Should actually accept this, as long as name and value are present and strings
     const data = [{ name: "test", value: "ok", extra: "field" }];
-    expect(isRaFormFields(data as any)).toBe(true);
+    expect(isRaFormFields(data as unknown)).toBe(true);
   });
 
   it("should reject array with mixed valid/invalid", () => {
@@ -180,7 +178,7 @@ describe("Type Guard: isRaFormFields", () => {
       { name: "valid", value: "ok" },
       { name: "invalid" }, // missing value
     ];
-    expect(isRaFormFields(invalid as any)).toBe(false);
+    expect(isRaFormFields(invalid as unknown)).toBe(false);
   });
 });
 
@@ -296,7 +294,7 @@ describe("Edge Cases: Optional chaining in UI", () => {
 
   it("should fallback to '---' for null boletoId", () => {
     const boletoId: string | null = null;
-    const result = (boletoId as any)?.slice(-8) || "---";
+    const result = (boletoId as unknown as string | null)?.slice(-8) || "---";
     expect(result).toBe("---");
   });
 
