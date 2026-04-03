@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   XCircle,
   Lightbulb,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -46,6 +47,7 @@ interface TabGeralProps {
   companyId: string;
   config: AiConfigData;
   setConfig: React.Dispatch<React.SetStateAction<AiConfigData>>;
+  savedConfig: AiConfigData;
   hasUnsavedChanges: boolean;
   loading: boolean;
 }
@@ -54,6 +56,7 @@ export function TabGeral({
   companyId,
   config,
   setConfig,
+  savedConfig,
   hasUnsavedChanges,
   loading,
 }: TabGeralProps) {
@@ -157,6 +160,85 @@ export function TabGeral({
 
   return (
     <div className="space-y-4">
+      {/* Readiness Indicator */}
+      {(() => {
+        const hasApiKey = !!(config.apiKey && config.apiKey.length > 0);
+        const hasPersona = !!(savedConfig.persona && savedConfig.persona.trim().length > 0);
+        const isActive = savedConfig.enabled;
+
+        const allOk = hasApiKey && hasPersona && isActive;
+        
+
+        // Determine banner color
+        let bannerClass = "border-amber-200 bg-amber-50";
+        let titleClass = "text-amber-800";
+        let descClass = "text-amber-700";
+        let Icon = AlertTriangle;
+        let iconClass = "text-amber-600";
+
+        if (allOk) {
+          bannerClass = "border-green-200 bg-green-50";
+          titleClass = "text-green-800";
+          descClass = "text-green-700";
+          Icon = CheckCircle2;
+          iconClass = "text-green-600";
+        } else if (isActive && (!hasApiKey || !hasPersona)) {
+          // Agent is active but missing required config — danger
+          bannerClass = "border-red-200 bg-red-50";
+          titleClass = "text-red-800";
+          descClass = "text-red-700";
+          Icon = XCircle;
+          iconClass = "text-red-600";
+        }
+
+        return (
+          <div className={`rounded-lg border p-4 ${bannerClass}`}>
+            <div className="flex items-center gap-2 mb-3">
+              <Icon className={`h-4 w-4 shrink-0 ${iconClass}`} />
+              <span className={`text-sm font-semibold ${titleClass}`}>Status de configuração</span>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="flex items-center gap-2">
+                {hasApiKey ? (
+                  <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
+                ) : (
+                  <XCircle className="h-4 w-4 text-red-400 shrink-0" />
+                )}
+                <span className={`text-xs ${descClass}`}>API Key</span>
+              </div>
+              <div className="flex items-center gap-2">
+                {hasPersona ? (
+                  <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
+                ) : (
+                  <XCircle className="h-4 w-4 text-red-400 shrink-0" />
+                )}
+                <span className={`text-xs ${descClass}`}>
+                  Persona
+                  {!hasPersona && (
+                    <span className="ml-1 text-muted-foreground">(salvo)</span>
+                  )}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                {isActive ? (
+                  <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
+                ) : (
+                  <XCircle className="h-4 w-4 text-red-400 shrink-0" />
+                )}
+                <span className={`text-xs ${descClass}`}>Agente Ativo</span>
+              </div>
+            </div>
+            {!hasApiKey || !hasPersona ? (
+              <p className={`mt-2 text-xs ${descClass}`}>
+                {isActive
+                  ? "⚠️ Agente ativo sem configuração mínima — pode falhar ao responder."
+                  : "Configure API Key e Persona para ativar o agente."}
+              </p>
+            ) : null}
+          </div>
+        );
+      })()}
+
       {/* Provider + API Key */}
       <Card>
         <CardHeader>

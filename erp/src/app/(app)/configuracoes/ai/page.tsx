@@ -66,6 +66,7 @@ export default function AiConfigPage() {
   const {
     config,
     setConfig,
+    savedConfig,
     loading,
     saving,
     hasUnsavedChanges,
@@ -195,6 +196,7 @@ export default function AiConfigPage() {
             companyId={selectedCompanyId}
             config={config}
             setConfig={setConfig}
+            savedConfig={savedConfig}
             hasUnsavedChanges={hasUnsavedChanges}
             loading={loading}
           />
