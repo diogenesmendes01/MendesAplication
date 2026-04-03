@@ -298,21 +298,21 @@ export function TabGeral({
             </div>
             {config.apiKey && /^\*{4}/.test(config.apiKey) && (
               <p className="text-sm text-muted-foreground flex items-center gap-1">
-                <KeyRound className="h-3 w-3" />
+                <KeyRound className="h-4 w-4 shrink-0" />
                 Chave configurada. Para alterar, digite uma nova chave.
               </p>
             )}
 
             {connectionStatus === "success" && (
               <p className="text-sm text-green-600 flex items-center gap-1">
-                <CheckCircle2 className="h-4 w-4" />
+                <CheckCircle2 className="h-4 w-4 shrink-0" />
                 {/^\*{4}/.test(config.apiKey ?? "")
                   ? "Conexão estabelecida com sucesso"
                   : "Chave válida — salve para confirmar"}
               </p>
             )}
             {connectionStatus === "error" && connectionError && (
-              <p className="text-sm text-red-600 flex items-center gap-1"><XCircle className="h-4 w-4" /> {connectionError}</p>
+              <p className="text-sm text-red-600 flex items-center gap-1"><XCircle className="h-4 w-4 shrink-0" /> {connectionError}</p>
             )}
           </div>
 

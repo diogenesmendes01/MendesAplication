@@ -308,7 +308,7 @@ function ChannelSimulatorCard({
         </div>
         <p className="text-xs text-muted-foreground">
           Enter para enviar · Shift+Enter para nova linha ·{" "}
-          <span className="text-green-700 font-medium inline-flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-green-600" />Simulações não consomem o limite diário real</span>
+          <span className="text-green-700 font-medium inline-flex items-center gap-1"><CheckCircle2 className="h-4 w-4 shrink-0 text-green-600" />Simulações não consomem o limite diário real</span>
         </p>
 
         {simResult && (
@@ -328,7 +328,7 @@ function ChannelSimulatorCard({
               )}
               {simResult.simulationWarning && (
                 <p className="text-xs text-muted-foreground mt-2 border border-green-200 bg-green-50 rounded px-2 py-1">
-                  <span className="inline-flex items-center gap-1"><Info className="h-3 w-3 shrink-0" />{simResult.simulationWarning}</span>
+                  <span className="inline-flex items-center gap-1"><Info className="h-4 w-4 shrink-0" />{simResult.simulationWarning}</span>
                 </p>
               )}
             </div>
@@ -647,7 +647,7 @@ function SectionReclameAqui({ companyId, config, setConfig }: TabCanaisProps) {
             rows={6}
           />
           <p className="mt-2 text-xs text-muted-foreground flex items-center gap-1">
-            <Info className="h-3 w-3 shrink-0" />Campo compartilhado com persona Email enquanto campo dedicado RA não está disponível.
+            <Info className="h-4 w-4 shrink-0" />Campo compartilhado com persona Email enquanto campo dedicado RA não está disponível.
           </p>
         </CardContent>
       </Card>
