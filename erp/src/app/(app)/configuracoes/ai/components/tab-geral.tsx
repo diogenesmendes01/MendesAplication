@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/tooltip";
 import {
   testAiConnection,
+  testAiKeyDirect,
   listAvailableModels,
 } from "../actions";
 import { PROVIDERS, type AiConfigData } from "./types";
@@ -101,7 +102,17 @@ export function TabGeral({
     setConnectionStatus("idle");
     setConnectionError("");
     try {
-      const result = await testAiConnection(companyId);
+      const isMasked = config.apiKey ? /^\*{4}/.test(config.apiKey) : false;
+      let result: { ok: boolean; error?: string };
+
+      if (isMasked) {
+        // Key is the saved/masked one — test via DB
+        result = await testAiConnection(companyId);
+      } else {
+        // Key is plaintext (new or edited) — test directly without saving
+        result = await testAiKeyDirect(companyId, config.provider, config.apiKey ?? "");
+      }
+
       if (result.ok) {
         setConnectionStatus("success");
         toast.success("Conexão com o provider estabelecida!");
@@ -284,6 +295,7 @@ export function TabGeral({
                 🔑 Chave configurada. Para alterar, digite uma nova chave.
               </p>
             )}
+
             {connectionStatus === "success" && (
               <p className="text-sm text-green-600">
                 {/^\*{4}/.test(config.apiKey ?? "")
