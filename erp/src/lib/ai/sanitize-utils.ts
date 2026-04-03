@@ -20,12 +20,17 @@ import sanitizeHtml from "sanitize-html";
  * - Prevents: XSS, tracking pixels, phishing links via img/script/iframe, etc.
  */
 const EMAIL_SANITIZE_CONFIG: sanitizeHtml.IOptions = {
-  allowedTags: ["p", "br", "strong", "em", "b", "i", "ul", "ol", "li", "a"],
+  allowedTags: ["p", "br", "strong", "em", "b", "i", "u", "s", "ul", "ol", "li", "a", "img", "span", "div", "h1", "h2", "h3"],
   allowedAttributes: {
     a: ["href"],
+    img: ["src", "alt", "width", "height"],
+    "*": ["style"],
   },
   allowedSchemes: ["https", "mailto"],
-  // Disallow javascript: and data: URIs
+  allowedSchemesByTag: {
+    img: ["https", "data"],
+  },
+  // Disallow javascript: and data: URIs (except img src data:)
   disallowedTagsMode: "discard",
 };
 
