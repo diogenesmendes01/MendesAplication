@@ -238,7 +238,7 @@ function ChannelSimulatorCard({
   channel,
 }: {
   companyId: string;
-  channel: "WHATSAPP" | "EMAIL";
+  channel: "WHATSAPP" | "EMAIL" | "RECLAMEAQUI";
 }) {
   const [simMessage, setSimMessage] = useState("");
   const [simRunning, setSimRunning] = useState(false);
@@ -459,7 +459,7 @@ function SectionWhatsApp({ companyId, config, setConfig }: TabCanaisProps) {
       />
 
       {/* Card 6: Simulador */}
-      <ChannelSimulatorCard companyId={companyId} channel="WHATSAPP" />
+      <ChannelSimulatorCard companyId={companyId} channel="RECLAMEAQUI" />
     </div>
   );
 }
@@ -773,8 +773,8 @@ function SectionReclameAqui({ companyId, config, setConfig }: TabCanaisProps) {
         setToolState={setRaTools}
       />
 
-      {/* Card 6: Simulador — RA não tem canal separado, usar WHATSAPP como fallback */}
-      <ChannelSimulatorCard companyId={companyId} channel="WHATSAPP" />
+      {/* Card 6: Simulador RA */}
+      <ChannelSimulatorCard companyId={companyId} channel="RECLAMEAQUI" />
     </div>
   );
 }
