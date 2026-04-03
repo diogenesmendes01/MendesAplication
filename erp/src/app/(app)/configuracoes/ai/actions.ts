@@ -446,6 +446,11 @@ async function _testAiConnection(
     return { ok: false, error: "Falha ao descriptografar a API key" };
   }
 
+  const supportedProviders = ["openai", "anthropic", "deepseek", "grok", "qwen"];
+  if (!config.provider || !supportedProviders.includes(config.provider)) {
+    return { ok: false, error: "Provider não suportado. Selecione OpenAI, Anthropic, DeepSeek, Grok ou Qwen." };
+  }
+
   try {
     await chatCompletion(
       [{ role: "user", content: "Hi" }],
@@ -481,6 +486,16 @@ async function _testAiConnection(
       message = "Erro interno no servidor do provider. Tente novamente mais tarde.";
     } else if (/timeout|timed out|ETIMEDOUT/i.test(raw)) {
       message = "Timeout ao conectar ao provider. Verifique a conexão.";
+    } else if (/403|forbidden/i.test(raw)) {
+      message = "Acesso negado pelo provider. Verifique as permissões da API key.";
+    } else if (/404|not.?found/i.test(raw)) {
+      message = "Endpoint não encontrado — verifique o provider selecionado.";
+    } else if (/422|unprocessable/i.test(raw)) {
+      message = "Dados inválidos enviados ao provider — salve as configurações antes de testar.";
+    } else if (/400|bad.?request/i.test(raw)) {
+      message = "Requisição inválida — verifique o modelo e o provider configurados.";
+    } else if (/Provedor AI nao suportado|not supported/i.test(raw)) {
+      message = "Provider não suportado. Selecione OpenAI, Anthropic, DeepSeek, Grok ou Qwen.";
     } else {
       message = "Erro ao testar conexão com o provider. Verifique as configurações.";
     }
@@ -635,6 +650,7 @@ async function _simulateAiResponse(
       "api_key_decrypt_failed": "Erro ao acessar a configuração de API key.",
       "email_channel_disabled": "Canal Email está desabilitado nas configurações.",
       "whatsapp_channel_disabled": "Canal WhatsApp está desabilitado nas configurações.",
+      "reclameaqui_channel_disabled": "Canal Reclame Aqui está desabilitado nas configurações.",
       "AI not enabled": "A IA está desabilitada. Habilite nas configurações gerais.",
       "daily_spend_limit_reached": "Limite de gasto diário atingido.",
       "max iterations reached": "Limite de iterações atingido sem resposta.",
@@ -719,6 +735,16 @@ async function _testAiKeyDirect(
       message = "Erro interno no servidor do provider. Tente novamente mais tarde.";
     } else if (/timeout|timed out|ETIMEDOUT/i.test(raw)) {
       message = "Timeout ao conectar ao provider. Verifique a conexão.";
+    } else if (/403|forbidden/i.test(raw)) {
+      message = "Acesso negado pelo provider. Verifique as permissões da API key.";
+    } else if (/404|not.?found/i.test(raw)) {
+      message = "Endpoint não encontrado — verifique o provider selecionado.";
+    } else if (/422|unprocessable/i.test(raw)) {
+      message = "Dados inválidos enviados ao provider — verifique o modelo selecionado.";
+    } else if (/400|bad.?request/i.test(raw)) {
+      message = "Requisição inválida — verifique o modelo e o provider configurados.";
+    } else if (/Provedor AI nao suportado|not supported/i.test(raw)) {
+      message = "Provider não suportado. Selecione OpenAI, Anthropic, DeepSeek, Grok ou Qwen.";
     } else {
       message = "Erro ao testar conexão com o provider. Verifique as configurações.";
     }

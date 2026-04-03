@@ -485,7 +485,7 @@ function SectionWhatsApp({ companyId, config, setConfig }: TabCanaisProps) {
       />
 
       {/* Card 6: Simulador */}
-      <ChannelSimulatorCard companyId={companyId} channel="WHATSAPP" />
+      <ChannelSimulatorCard companyId={companyId} channel="RECLAMEAQUI" />
     </div>
   );
 }
@@ -801,7 +801,7 @@ function SectionReclameAqui({ companyId, config, setConfig }: TabCanaisProps) {
         }
       />
 
-      {/* Card 6: Simulador — RA não tem canal separado, usar WHATSAPP como fallback */}
+      {/* Card 6: Simulador RA */}
       <ChannelSimulatorCard companyId={companyId} channel="RECLAMEAQUI" />
     </div>
   );

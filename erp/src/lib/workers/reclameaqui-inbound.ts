@@ -701,6 +701,25 @@ async function updateExistingTicket(
           rating: raTicket.rating ?? null,
           interactionsCount: raTicket.interactions?.length ?? 0,
           isReplica: [7, 20].includes(raTicket.ra_status?.id ?? 0),
+          formFields: (() => {
+            const mani = raTicket.interactions?.find(
+              (i: { ticket_interaction_type_id: number }) => i.ticket_interaction_type_id === RA_INTERACTION_TYPES.MANIFESTACAO
+            );
+            // Validate that details is an array before processing
+            if (!Array.isArray(mani?.details)) {
+              return [];
+            }
+            return (mani.details ?? [])
+              .filter((d: { ticket_detail_type_id: number; name: string; value: string }) => 
+                d.ticket_detail_type_id === RA_DETAIL_TYPES.SPECIAL_FIELDS && 
+                d.name?.trim() &&  // Validate non-empty after trimming whitespace
+                d.value?.trim()    // Validate non-empty after trimming whitespace
+              )
+              .map((d: { name: string; value: string }) => ({ 
+                name: d.name.trim(), 
+                value: d.value.trim() 
+              }));
+          })(),
         },
       });
       logger.info(
