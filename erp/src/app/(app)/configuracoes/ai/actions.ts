@@ -43,6 +43,9 @@ export interface AiConfigData {
   raPrivateBeforePublic: boolean;
   raAutoRequestEvaluation: boolean;
   raEscalationKeywords: string[];
+  whatsappEnabledTools: string[];
+  emailEnabledTools: string[];
+  raEnabledTools: string[];
   // Temperature
   temperature: number;
   // Suggestion Mode
@@ -144,6 +147,9 @@ function configToData(config: {
     raPrivateBeforePublic: config.raPrivateBeforePublic,
     raAutoRequestEvaluation: config.raAutoRequestEvaluation,
     raEscalationKeywords: config.raEscalationKeywords,
+    whatsappEnabledTools: (config as Record<string, unknown>).whatsappEnabledTools as string[] ?? [],
+    emailEnabledTools: (config as Record<string, unknown>).emailEnabledTools as string[] ?? [],
+    raEnabledTools: (config as Record<string, unknown>).raEnabledTools as string[] ?? [],
     temperature: config.temperature,
     operationMode: config.operationMode,
     hybridThreshold: config.hybridThreshold,
@@ -171,6 +177,9 @@ const DEFAULT_AI_CONFIG: AiConfigData = {
   raPrivateBeforePublic: true,
   raAutoRequestEvaluation: false,
   raEscalationKeywords: ["processo", "advogado", "procon", "judicial", "indenização"],
+  whatsappEnabledTools: [],
+  emailEnabledTools: [],
+  raEnabledTools: [],
   operationMode: "auto",
   hybridThreshold: 0.8,
   alwaysRequireApproval: [],
@@ -357,6 +366,9 @@ async function _updateAiConfig(
     raPrivateBeforePublic: data.raPrivateBeforePublic,
     raAutoRequestEvaluation: data.raAutoRequestEvaluation,
     raEscalationKeywords: data.raEscalationKeywords,
+    whatsappEnabledTools: data.whatsappEnabledTools ?? [],
+    emailEnabledTools: data.emailEnabledTools ?? [],
+    raEnabledTools: data.raEnabledTools ?? [],
   };
 
   const createData = {
@@ -559,7 +571,7 @@ async function _getSuggestedModel(
 async function _simulateAiResponse(
   companyId: string,
   message: string,
-  channel: "WHATSAPP" | "EMAIL",
+  channel: "WHATSAPP" | "EMAIL" | "RECLAMEAQUI",
 ): Promise<SimulationResult> {
   await requireAdmin();
   await requireCompanyAccess(companyId);
@@ -586,7 +598,7 @@ async function _simulateAiResponse(
   }
 
   // Runtime validation for channel (TypeScript-only types aren't enforced at HTTP boundaries)
-  const VALID_CHANNELS = ["WHATSAPP", "EMAIL"] as const;
+  const VALID_CHANNELS = ["WHATSAPP", "EMAIL", "RECLAMEAQUI"] as const;
   if (!VALID_CHANNELS.includes(channel as (typeof VALID_CHANNELS)[number])) {
     return {
       response: "",

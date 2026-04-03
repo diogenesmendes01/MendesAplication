@@ -1,0 +1,4 @@
+-- AlterTable
+ALTER TABLE "AiConfig" ADD COLUMN "whatsappEnabledTools" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];
+ALTER TABLE "AiConfig" ADD COLUMN "emailEnabledTools" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];
+ALTER TABLE "AiConfig" ADD COLUMN "raEnabledTools" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];

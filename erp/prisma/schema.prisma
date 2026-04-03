@@ -909,6 +909,11 @@ model AiConfig {
   raAutoRequestEvaluation Boolean  @default(false)
   raEscalationKeywords    String[] @default(["processo", "advogado", "procon", "judicial", "indenização"])
 
+  // Tool toggles per channel — empty array means all tools enabled (default)
+  whatsappEnabledTools  String[]
+  emailEnabledTools     String[]
+  raEnabledTools        String[]
+
   // --- Modo de Operação (suggestion mode) ---
   operationMode         String   @default("auto") // "auto" | "suggest" | "hybrid"
   hybridThreshold       Float    @default(0.8) // Confidence threshold for hybrid mode (0.0-1.0)

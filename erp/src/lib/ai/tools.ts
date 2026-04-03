@@ -390,7 +390,25 @@ export const WORKFLOW_TOOLS: AnyAiToolDefinition[] = [
   ADVANCE_WORKFLOW,
 ];
 
-export function getToolsForChannel(channel: "WHATSAPP" | "EMAIL" | "RECLAMEAQUI"): AnyAiToolDefinition[] {
+// Tools that cannot be disabled — required for basic agent operation
+const ALWAYS_ON_TOOL_NAMES = new Set([
+  "GET_HISTORY",
+  "ESCALATE",
+  "RESPOND",
+  "RESPOND_EMAIL",
+  "RESPOND_RECLAMEAQUI",
+]);
+
+/**
+ * Returns the tool set for a channel, optionally filtered by enabled tools.
+ * @param channel - The channel type
+ * @param enabledTools - If non-empty, only return tools in this list (plus always-on tools).
+ *                       If empty/undefined, return all tools for the channel (default behaviour).
+ */
+export function getToolsForChannel(
+  channel: "WHATSAPP" | "EMAIL" | "RECLAMEAQUI",
+  enabledTools?: string[]
+): AnyAiToolDefinition[] {
   let base: AnyAiToolDefinition[];
   switch (channel) {
     case "EMAIL":
@@ -401,7 +419,11 @@ export function getToolsForChannel(channel: "WHATSAPP" | "EMAIL" | "RECLAMEAQUI"
       break;
     default:
       base = WHATSAPP_TOOLS;
-      break;
   }
-  return [...base, EXECUTE_WORKFLOW, GET_WORKFLOW_STATE, ADVANCE_WORKFLOW];
+
+  // No filter → return all tools
+  if (!enabledTools || enabledTools.length === 0) return base;
+
+  const allowed = new Set(enabledTools.concat(Array.from(ALWAYS_ON_TOOL_NAMES)));
+  return base.filter((t) => allowed.has(t.name));
 }

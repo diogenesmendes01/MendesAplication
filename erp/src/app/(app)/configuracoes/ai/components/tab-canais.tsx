@@ -68,26 +68,58 @@ const OPERATION_MODES = [
   },
 ] as const;
 
-// ── Tool lists (UI only — no backend yet) ────────────────────────────────────
+// ── Tool definitions per channel (id = real tool name in tools.ts) ───────────
 
-const WHATSAPP_TOOLS = [
-  "Consultar histórico do cliente",
-  "Verificar status de boletos",
-  "Emitir 2ª via de boleto automaticamente",
-  "Acessar base de conhecimento (RAG)",
-  "Criar ticket automaticamente",
+interface ToolDef { id: string; label: string }
+
+const WA_TOOLS_DEF: ToolDef[] = [
+  { id: "SEARCH_DOCUMENTS",     label: "Acessar base de conhecimento (RAG)" },
+  { id: "GET_CLIENT_INFO",      label: "Consultar dados do cliente" },
+  { id: "LOOKUP_CLIENT_BY_CNPJ", label: "Buscar cliente por CNPJ/CPF" },
+  { id: "LINK_TICKET_TO_CLIENT", label: "Vincular ticket ao cliente" },
+  { id: "READ_ATTACHMENT",      label: "Ler anexos da conversa" },
+  { id: "CREATE_NOTE",          label: "Criar nota interna no ticket" },
 ];
 
-const EMAIL_TOOLS = [
-  "Consultar histórico do cliente",
-  "Acessar base de conhecimento (RAG)",
-  "Responder com anexos",
+const EMAIL_TOOLS_DEF: ToolDef[] = [
+  { id: "SEARCH_DOCUMENTS",     label: "Acessar base de conhecimento (RAG)" },
+  { id: "GET_CLIENT_INFO",      label: "Consultar dados do cliente" },
+  { id: "LOOKUP_CLIENT_BY_CNPJ", label: "Buscar cliente por CNPJ/CPF" },
+  { id: "READ_ATTACHMENT",      label: "Ler anexos do email" },
+  { id: "CREATE_NOTE",          label: "Criar nota interna no ticket" },
 ];
 
-const RA_TOOLS = [
-  "Acessar base de conhecimento (RAG)",
-  "Buscar dados do cliente por CNPJ/CPF",
+const RA_TOOLS_DEF: ToolDef[] = [
+  { id: "SEARCH_DOCUMENTS",     label: "Acessar base de conhecimento (RAG)" },
+  { id: "GET_CLIENT_INFO",      label: "Consultar dados do cliente" },
+  { id: "LOOKUP_CLIENT_BY_CNPJ", label: "Buscar cliente por CNPJ/CPF" },
+  { id: "LINK_TICKET_TO_CLIENT", label: "Vincular ticket ao cliente" },
+  { id: "READ_ATTACHMENT",      label: "Ler anexos da reclamação" },
+  { id: "CREATE_NOTE",          label: "Criar nota interna no ticket" },
 ];
+
+// Helpers: empty array = all enabled (backward-compatible default)
+function isToolEnabled(enabledTools: string[], toolId: string): boolean {
+  return enabledTools.length === 0 || enabledTools.includes(toolId);
+}
+
+function toggleTool(
+  enabledTools: string[],
+  toolId: string,
+  enabled: boolean,
+  allTools: ToolDef[],
+): string[] {
+  const allIds = allTools.map((t) => t.id);
+  if (enabled) {
+    const newList = Array.from(new Set(enabledTools.concat([toolId])));
+    // Collapse back to empty when all are enabled
+    return allIds.every((id) => newList.includes(id)) ? [] : newList;
+  } else {
+    // If currently "all enabled" (empty), expand to all-except-this
+    const currentList = enabledTools.length === 0 ? allIds : enabledTools;
+    return currentList.filter((id) => id !== toolId);
+  }
+}
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -185,42 +217,35 @@ function OperationModeCard({ config, setConfig }: { config: AiConfigData; setCon
 }
 
 /**
- * Tool toggle list — UI only, no backend yet.
- * TODO: conectar ao backend quando feature de ferramentas for implementada
+ * Tool toggle card — fully functional, persisted per channel.
  */
 function ToolsCard({
   tools,
-  toolState,
-  setToolState,
+  enabledTools,
+  onToggle,
 }: {
-  tools: string[];
-  toolState: Record<string, boolean>;
-  setToolState: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+  tools: ToolDef[];
+  enabledTools: string[];
+  onToggle: (toolId: string, enabled: boolean) => void;
 }) {
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Ferramentas do Agente</CardTitle>
         <CardDescription>
-          Habilite as ferramentas que o agente pode usar neste canal.{" "}
-          <span className="text-muted-foreground/70 italic">
-            {/* TODO: conectar ao backend quando feature de ferramentas for implementada */}
-            (Interface apenas — configuração persistida em breve.)
-          </span>
+          Controle quais ferramentas o agente pode usar neste canal. Ferramentas desativadas não estarão disponíveis ao processar tickets.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         {tools.map((tool) => (
-          <div key={tool} className="flex items-center justify-between rounded-lg border p-3">
-            <Label htmlFor={`tool-${tool}`} className="text-sm cursor-pointer">
-              {tool}
+          <div key={tool.id} className="flex items-center justify-between rounded-lg border p-3">
+            <Label htmlFor={`tool-${tool.id}`} className="text-sm cursor-pointer">
+              {tool.label}
             </Label>
             <Switch
-              id={`tool-${tool}`}
-              checked={toolState[tool] ?? false}
-              onCheckedChange={(checked) =>
-                setToolState((prev) => ({ ...prev, [tool]: checked }))
-              }
+              id={`tool-${tool.id}`}
+              checked={isToolEnabled(enabledTools, tool.id)}
+              onCheckedChange={(checked) => onToggle(tool.id, checked)}
             />
           </div>
         ))}
@@ -238,7 +263,7 @@ function ChannelSimulatorCard({
   channel,
 }: {
   companyId: string;
-  channel: "WHATSAPP" | "EMAIL";
+  channel: "WHATSAPP" | "EMAIL" | "RECLAMEAQUI";
 }) {
   const [simMessage, setSimMessage] = useState("");
   const [simRunning, setSimRunning] = useState(false);
@@ -370,10 +395,6 @@ function ChannelSimulatorCard({
 // ── WhatsApp section ──────────────────────────────────────────────────────────
 
 function SectionWhatsApp({ companyId, config, setConfig }: TabCanaisProps) {
-  // TODO: conectar ao backend quando feature de ferramentas for implementada
-  const [whatsappTools, setWhatsappTools] = useState<Record<string, boolean>>(
-    Object.fromEntries(WHATSAPP_TOOLS.map((t) => [t, false])),
-  );
 
   return (
     <div className="space-y-4">
@@ -453,9 +474,14 @@ function SectionWhatsApp({ companyId, config, setConfig }: TabCanaisProps) {
 
       {/* Card 5: Ferramentas do Agente */}
       <ToolsCard
-        tools={WHATSAPP_TOOLS}
-        toolState={whatsappTools}
-        setToolState={setWhatsappTools}
+        tools={WA_TOOLS_DEF}
+        enabledTools={config.whatsappEnabledTools}
+        onToggle={(toolId, enabled) =>
+          setConfig((prev) => ({
+            ...prev,
+            whatsappEnabledTools: toggleTool(prev.whatsappEnabledTools, toolId, enabled, WA_TOOLS_DEF),
+          }))
+        }
       />
 
       {/* Card 6: Simulador */}
@@ -467,10 +493,6 @@ function SectionWhatsApp({ companyId, config, setConfig }: TabCanaisProps) {
 // ── Email section ─────────────────────────────────────────────────────────────
 
 function SectionEmail({ companyId, config, setConfig }: TabCanaisProps) {
-  // TODO: conectar ao backend quando feature de ferramentas for implementada
-  const [emailTools, setEmailTools] = useState<Record<string, boolean>>(
-    Object.fromEntries(EMAIL_TOOLS.map((t) => [t, false])),
-  );
 
   return (
     <div className="space-y-4">
@@ -549,11 +571,16 @@ function SectionEmail({ companyId, config, setConfig }: TabCanaisProps) {
       {/* Email usa config.operationMode (global por ora) */}
       <OperationModeCard config={config} setConfig={setConfig} />
 
-      {/* Card 5: Ferramentas */}
+            {/* Card: Ferramentas do Agente */}
       <ToolsCard
-        tools={EMAIL_TOOLS}
-        toolState={emailTools}
-        setToolState={setEmailTools}
+        tools={EMAIL_TOOLS_DEF}
+        enabledTools={config.emailEnabledTools}
+        onToggle={(toolId, enabled) =>
+          setConfig((prev) => ({
+            ...prev,
+            emailEnabledTools: toggleTool(prev.emailEnabledTools, toolId, enabled, EMAIL_TOOLS_DEF),
+          }))
+        }
       />
 
       {/* Card 6: Simulador */}
@@ -566,10 +593,6 @@ function SectionEmail({ companyId, config, setConfig }: TabCanaisProps) {
 
 function SectionReclameAqui({ companyId, config, setConfig }: TabCanaisProps) {
   const [keywordInput, setKeywordInput] = useState("");
-  // TODO: conectar ao backend quando feature de ferramentas for implementada
-  const [raTools, setRaTools] = useState<Record<string, boolean>>(
-    Object.fromEntries(RA_TOOLS.map((t) => [t, false])),
-  );
 
   function addKeyword() {
     const keyword = keywordInput.trim().toLowerCase();
@@ -766,15 +789,20 @@ function SectionReclameAqui({ companyId, config, setConfig }: TabCanaisProps) {
         </CardContent>
       </Card>
 
-      {/* Card 5: Ferramentas */}
+            {/* Card: Ferramentas do Agente */}
       <ToolsCard
-        tools={RA_TOOLS}
-        toolState={raTools}
-        setToolState={setRaTools}
+        tools={RA_TOOLS_DEF}
+        enabledTools={config.raEnabledTools}
+        onToggle={(toolId, enabled) =>
+          setConfig((prev) => ({
+            ...prev,
+            raEnabledTools: toggleTool(prev.raEnabledTools, toolId, enabled, RA_TOOLS_DEF),
+          }))
+        }
       />
 
       {/* Card 6: Simulador — RA não tem canal separado, usar WHATSAPP como fallback */}
-      <ChannelSimulatorCard companyId={companyId} channel="WHATSAPP" />
+      <ChannelSimulatorCard companyId={companyId} channel="RECLAMEAQUI" />
     </div>
   );
 }
