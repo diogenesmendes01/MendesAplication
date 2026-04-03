@@ -390,7 +390,16 @@ export const WORKFLOW_TOOLS: AnyAiToolDefinition[] = [
   ADVANCE_WORKFLOW,
 ];
 
-// Tools that cannot be disabled — required for basic agent operation
+/**
+ * Tools that are ALWAYS available to the agent, regardless of per-company configuration.
+ *
+ * Rationale:
+ * - GET_HISTORY   : agent must read conversation history to have any context
+ * - ESCALATE      : every agent must be able to escalate to a human — safety valve
+ * - RESPOND*      : terminal tools; without them the agent cannot produce output
+ *
+ * These are never filtered by getToolsForChannel(), even when enabledTools is set.
+ */
 const ALWAYS_ON_TOOL_NAMES = new Set([
   "GET_HISTORY",
   "ESCALATE",
@@ -400,10 +409,21 @@ const ALWAYS_ON_TOOL_NAMES = new Set([
 ]);
 
 /**
- * Returns the tool set for a channel, optionally filtered by enabled tools.
- * @param channel - The channel type
- * @param enabledTools - If non-empty, only return tools in this list (plus always-on tools).
- *                       If empty/undefined, return all tools for the channel (default behaviour).
+ * Returns the tool set for a given channel, with optional per-company filtering.
+ *
+ * ## Backward-compatibility contract
+ * - `enabledTools` is **empty or undefined** → return ALL tools for the channel (default).
+ *   Existing configs that predate this field get full access, no migration needed.
+ * - `enabledTools` is **non-empty** → return only the listed tools + ALWAYS_ON_TOOL_NAMES.
+ *   Tools outside the channel's base set are silently dropped (cross-channel safety).
+ *
+ * ## Always-on tools
+ * GET_HISTORY, ESCALATE, RESPOND, RESPOND_EMAIL, RESPOND_RECLAMEAQUI are preserved
+ * regardless of `enabledTools` — see ALWAYS_ON_TOOL_NAMES.
+ *
+ * @param channel     - The channel context ("WHATSAPP" | "EMAIL" | "RECLAMEAQUI")
+ * @param enabledTools - Optional list of tool IDs to expose; empty/undefined = all
+ * @returns Filtered subset of the channel's full tool set
  */
 export function getToolsForChannel(
   channel: "WHATSAPP" | "EMAIL" | "RECLAMEAQUI",

@@ -68,8 +68,18 @@ const OPERATION_MODES = [
   },
 ] as const;
 
-// ── Tool definitions per channel (id = real tool name in tools.ts) ───────────
+// ── Tool definitions per channel ─────────────────────────────────────────────
+//
+// Design notes:
+// - ToolDef.id must match the tool name in tools.ts (e.g. "SEARCH_DOCUMENTS")
+// - The UI only exposes toggleable tools; always-on tools (GET_HISTORY, ESCALATE,
+//   RESPOND*) are never shown — users cannot inadvertently disable them.
+// - Saving an empty enabledTools[] means "all tools enabled" (backward-compatible):
+//   the agent (getToolsForChannel) returns the full set when the array is empty.
+// - Schema consistency: whatsappEnabledTools / emailEnabledTools / raEnabledTools
+//   in AiConfig (Prisma) ↔ AiConfigData (actions.ts) ↔ config state (tab-canais.tsx)
 
+/** Maps a real tool ID (tools.ts name) to a human-readable label for the UI. */
 interface ToolDef { id: string; label: string }
 
 const WA_TOOLS_DEF: ToolDef[] = [
@@ -98,11 +108,27 @@ const RA_TOOLS_DEF: ToolDef[] = [
   { id: "CREATE_NOTE",          label: "Criar nota interna no ticket" },
 ];
 
-// Helpers: empty array = all enabled (backward-compatible default)
+// ── Helpers ──────────────────────────────────────────────────────────────────
+//
+// Invariant: an empty enabledTools array means ALL tools are enabled.
+// This matches the backend contract in getToolsForChannel() and allows
+// existing configs (pre-feature) to work without any data migration.
+
+/**
+ * Returns true if the tool should be shown as ON in the UI.
+ * An empty enabledTools list means "all tools enabled" (default/unset state).
+ */
 function isToolEnabled(enabledTools: string[], toolId: string): boolean {
   return enabledTools.length === 0 || enabledTools.includes(toolId);
 }
 
+/**
+ * Toggles a tool on/off in the enabledTools array, preserving the
+ * "empty = all enabled" invariant:
+ * - Enabling the last disabled tool → collapses back to [] (all enabled)
+ * - Disabling any tool from [] (all enabled) → expands to all-except-disabled
+ * - Invalid toolId → returns enabledTools unchanged (safe no-op)
+ */
 function toggleTool(
   enabledTools: string[],
   toolId: string,
