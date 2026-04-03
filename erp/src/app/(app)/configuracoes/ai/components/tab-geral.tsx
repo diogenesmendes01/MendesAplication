@@ -57,7 +57,7 @@ export function TabGeral({
   config,
   setConfig,
   savedConfig,
-  hasUnsavedChanges,
+  hasUnsavedChanges: _hasUnsavedChanges,
   loading,
 }: TabGeralProps) {
   const [models, setModels] = useState<string[]>([]);

@@ -11,7 +11,7 @@ interface TabFerramentasProps {
   config: AiConfigData;
 }
 
-export function TabFerramentas({ companyId, config }: TabFerramentasProps) {
+export function TabFerramentas({ companyId, config: _config }: TabFerramentasProps) {
   return (
     <Tabs defaultValue="simulador">
       <TabsList>
