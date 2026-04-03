@@ -177,6 +177,48 @@ const DEFAULT_AI_CONFIG: AiConfigData = {
 };
 
 // ---------------------------------------------------------------------------
+// Error message mapping — unified across all test functions
+// ---------------------------------------------------------------------------
+
+/**
+ * Maps HTTP status codes and error messages to user-friendly messages.
+ * Used by both _testAiConnection and _testAiKeyDirect to ensure consistency.
+ */
+function mapProviderErrorToMessage(errorMessage: string): string {
+  const raw = errorMessage;
+  
+  if (/401|unauthorized|incorrect api key|invalid.*(key|token)/i.test(raw)) {
+    return "API key inválida ou sem permissão. Verifique a chave configurada.";
+  }
+  if (/429|rate.?limit|quota/i.test(raw)) {
+    return "Limite de requisições atingido no provider. Tente novamente em instantes.";
+  }
+  if (/5\d{2}|server error|internal error|service unavailable/i.test(raw)) {
+    return "Erro interno no servidor do provider. Tente novamente mais tarde.";
+  }
+  if (/timeout|timed out|ETIMEDOUT/i.test(raw)) {
+    return "Timeout ao conectar ao provider. Verifique a conexão.";
+  }
+  if (/403|forbidden/i.test(raw)) {
+    return "Acesso negado pelo provider. Verifique as permissões da API key.";
+  }
+  if (/404|not.?found/i.test(raw)) {
+    return "Endpoint não encontrado — verifique o provider selecionado.";
+  }
+  if (/422|unprocessable/i.test(raw)) {
+    return "Dados inválidos enviados ao provider — verifique as configurações e o modelo selecionado.";
+  }
+  if (/400|bad.?request/i.test(raw)) {
+    return "Requisição inválida — verifique o modelo e o provider configurados.";
+  }
+  if (/Provedor AI nao suportado|not supported/i.test(raw)) {
+    return "Provider não suportado. Selecione OpenAI, Anthropic, DeepSeek, Grok ou Qwen.";
+  }
+  
+  return "Erro ao testar conexão com o provider. Verifique as configurações.";
+}
+
+// ---------------------------------------------------------------------------
 // Rate limiters — Redis-backed with in-memory fallback.
 // Keys: rate:simulate:{companyId}, rate:testconn:{companyId} (TTL 60s)
 // See: https://github.com/diogenesmendes01/MendesAplication/issues/310
@@ -410,6 +452,7 @@ async function _updateAiConfig(
 /**
  * Test the AI connection for a company by making a minimal API call.
  * Uses the global config (channel=null) for connection testing.
+ * Provider validation is delegated to chatCompletion() — no early validation here.
  */
 async function _testAiConnection(
   companyId: string,
@@ -432,11 +475,6 @@ async function _testAiConnection(
     apiKey = decrypt(config.apiKey);
   } catch {
     return { ok: false, error: "Falha ao descriptografar a API key" };
-  }
-
-  const supportedProviders = ["openai", "anthropic", "deepseek", "grok", "qwen"];
-  if (!config.provider || !supportedProviders.includes(config.provider)) {
-    return { ok: false, error: "Provider não suportado. Selecione OpenAI, Anthropic, DeepSeek, Grok ou Qwen." };
   }
 
   try {
@@ -462,31 +500,9 @@ async function _testAiConnection(
         : String(err);
     logger.error({ err: safeErr }, "[testAiConnection] provider error:");
 
-    // Map common provider error patterns to safe, generic messages for the frontend.
-    // Raw provider messages can expose partial API keys ("sk-proj-xxx...") or internal details.
-    const raw = err instanceof Error ? err.message : String(err);
-    let message: string;
-    if (/401|unauthorized|incorrect api key|invalid.*(key|token)/i.test(raw)) {
-      message = "API key inválida ou sem permissão. Verifique a chave configurada.";
-    } else if (/429|rate.?limit|quota/i.test(raw)) {
-      message = "Limite de requisições atingido no provider. Tente novamente em instantes.";
-    } else if (/5\d{2}|server error|internal error|service unavailable/i.test(raw)) {
-      message = "Erro interno no servidor do provider. Tente novamente mais tarde.";
-    } else if (/timeout|timed out|ETIMEDOUT/i.test(raw)) {
-      message = "Timeout ao conectar ao provider. Verifique a conexão.";
-    } else if (/403|forbidden/i.test(raw)) {
-      message = "Acesso negado pelo provider. Verifique as permissões da API key.";
-    } else if (/404|not.?found/i.test(raw)) {
-      message = "Endpoint não encontrado — verifique o provider selecionado.";
-    } else if (/422|unprocessable/i.test(raw)) {
-      message = "Dados inválidos enviados ao provider — salve as configurações antes de testar.";
-    } else if (/400|bad.?request/i.test(raw)) {
-      message = "Requisição inválida — verifique o modelo e o provider configurados.";
-    } else if (/Provedor AI nao suportado|not supported/i.test(raw)) {
-      message = "Provider não suportado. Selecione OpenAI, Anthropic, DeepSeek, Grok ou Qwen.";
-    } else {
-      message = "Erro ao testar conexão com o provider. Verifique as configurações.";
-    }
+    // Use unified error mapping function
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    const message = mapProviderErrorToMessage(errorMessage);
     return { ok: false, error: message };
   }
 }
@@ -672,6 +688,7 @@ async function _simulateAiResponse(
  * Test an AI API key directly (without saving).
  * Accepts a plaintext API key and provider — does NOT read from DB.
  * Used to validate a key before saving it.
+ * Uses unified error mapping to ensure consistency with _testAiConnection.
  */
 async function _testAiKeyDirect(
   companyId: string,
@@ -713,29 +730,9 @@ async function _testAiKeyDirect(
         : String(err);
     logger.error({ err: safeErr }, "[testAiKeyDirect] provider error:");
 
-    const raw = err instanceof Error ? err.message : String(err);
-    let message: string;
-    if (/401|unauthorized|incorrect api key|invalid.*(key|token)/i.test(raw)) {
-      message = "API key inválida ou sem permissão. Verifique a chave configurada.";
-    } else if (/429|rate.?limit|quota/i.test(raw)) {
-      message = "Limite de requisições atingido no provider. Tente novamente em instantes.";
-    } else if (/5\d{2}|server error|internal error|service unavailable/i.test(raw)) {
-      message = "Erro interno no servidor do provider. Tente novamente mais tarde.";
-    } else if (/timeout|timed out|ETIMEDOUT/i.test(raw)) {
-      message = "Timeout ao conectar ao provider. Verifique a conexão.";
-    } else if (/403|forbidden/i.test(raw)) {
-      message = "Acesso negado pelo provider. Verifique as permissões da API key.";
-    } else if (/404|not.?found/i.test(raw)) {
-      message = "Endpoint não encontrado — verifique o provider selecionado.";
-    } else if (/422|unprocessable/i.test(raw)) {
-      message = "Dados inválidos enviados ao provider — verifique o modelo selecionado.";
-    } else if (/400|bad.?request/i.test(raw)) {
-      message = "Requisição inválida — verifique o modelo e o provider configurados.";
-    } else if (/Provedor AI nao suportado|not supported/i.test(raw)) {
-      message = "Provider não suportado. Selecione OpenAI, Anthropic, DeepSeek, Grok ou Qwen.";
-    } else {
-      message = "Erro ao testar conexão com o provider. Verifique as configurações.";
-    }
+    // Use unified error mapping function
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    const message = mapProviderErrorToMessage(errorMessage);
     return { ok: false, error: message };
   }
 }
