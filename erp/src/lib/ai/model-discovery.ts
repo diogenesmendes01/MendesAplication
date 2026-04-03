@@ -18,9 +18,14 @@ interface CacheEntry {
 export const STATIC_MODELS: Record<string, string[]> = {
   openai: ["gpt-4o", "gpt-4o-mini"],
   anthropic: [
+    "claude-opus-4-5",
     "claude-opus-4-20250514",
+    "claude-sonnet-4-5",
     "claude-sonnet-4-20250514",
-    "claude-haiku-4-20250414",
+    "claude-haiku-4-5",
+    "claude-3-5-sonnet-20241022",
+    "claude-3-5-haiku-20241022",
+    "claude-3-haiku-20240307",
   ],
   grok: ["grok-2", "grok-2-mini"],
   qwen: ["qwen-max", "qwen-plus", "qwen-turbo"],
