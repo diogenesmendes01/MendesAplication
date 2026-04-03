@@ -394,9 +394,11 @@ export const WORKFLOW_TOOLS: AnyAiToolDefinition[] = [
  * Tools that are ALWAYS available to the agent, regardless of per-company configuration.
  *
  * Rationale:
- * - GET_HISTORY   : agent must read conversation history to have any context
- * - ESCALATE      : every agent must be able to escalate to a human — safety valve
- * - RESPOND*      : terminal tools; without them the agent cannot produce output
+ * - GET_HISTORY      : agent must read conversation history to have any context
+ * - ESCALATE         : every agent must be able to escalate to a human — safety valve
+ * - RESPOND*         : terminal tools; without them the agent cannot produce output
+ * - WORKFLOW_TOOLS   : infrastructure tools (EXECUTE_WORKFLOW, GET_WORKFLOW_STATE,
+ *                      ADVANCE_WORKFLOW) — always appended, not channel features
  *
  * These are never filtered by getToolsForChannel(), even when enabledTools is set.
  */
@@ -406,6 +408,9 @@ const ALWAYS_ON_TOOL_NAMES = new Set([
   "RESPOND",
   "RESPOND_EMAIL",
   "RESPOND_RECLAMEAQUI",
+  "EXECUTE_WORKFLOW",
+  "GET_WORKFLOW_STATE",
+  "ADVANCE_WORKFLOW",
 ]);
 
 /**
@@ -441,9 +446,12 @@ export function getToolsForChannel(
       base = WHATSAPP_TOOLS;
   }
 
-  // No filter → return all tools
-  if (!enabledTools || enabledTools.length === 0) return base;
+  // WORKFLOW_TOOLS are always included — infrastructure, not channel-specific features
+  const fullSet = [...base, ...WORKFLOW_TOOLS];
+
+  // No filter → return full set
+  if (!enabledTools || enabledTools.length === 0) return fullSet;
 
   const allowed = new Set(enabledTools.concat(Array.from(ALWAYS_ON_TOOL_NAMES)));
-  return base.filter((t) => allowed.has(t.name));
+  return fullSet.filter((t) => allowed.has(t.name));
 }

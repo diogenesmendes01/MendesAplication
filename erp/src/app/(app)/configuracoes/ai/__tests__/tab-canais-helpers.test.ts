@@ -11,7 +11,10 @@ import { describe, it, expect } from "vitest";
 // (tab-canais.tsx is a client component — importing it in vitest would require
 //  full React/Next.js setup. Testing the pure logic in isolation is simpler.)
 
-interface ToolDef { id: string; label: string }
+interface ToolDef {
+  id: string;
+  label: string;
+}
 
 function isToolEnabled(enabledTools: string[], toolId: string): boolean {
   return enabledTools.length === 0 || enabledTools.includes(toolId);
@@ -38,8 +41,8 @@ function toggleTool(
 
 const SAMPLE_TOOLS: ToolDef[] = [
   { id: "SEARCH_DOCUMENTS", label: "RAG" },
-  { id: "GET_CLIENT_INFO",  label: "Client info" },
-  { id: "CREATE_NOTE",      label: "Note" },
+  { id: "GET_CLIENT_INFO", label: "Client info" },
+  { id: "CREATE_NOTE", label: "Note" },
 ];
 
 // ─── isToolEnabled ────────────────────────────────────────────────────────────
@@ -52,7 +55,9 @@ describe("isToolEnabled", () => {
   });
 
   it("returns true when tool is in the list", () => {
-    expect(isToolEnabled(["SEARCH_DOCUMENTS", "CREATE_NOTE"], "SEARCH_DOCUMENTS")).toBe(true);
+    expect(
+      isToolEnabled(["SEARCH_DOCUMENTS", "CREATE_NOTE"], "SEARCH_DOCUMENTS"),
+    ).toBe(true);
   });
 
   it("returns false when tool is NOT in the non-empty list", () => {
@@ -68,7 +73,12 @@ describe("isToolEnabled", () => {
 
 describe("toggleTool — enabling a tool", () => {
   it("adds the tool to a partial list", () => {
-    const result = toggleTool(["SEARCH_DOCUMENTS"], "GET_CLIENT_INFO", true, SAMPLE_TOOLS);
+    const result = toggleTool(
+      ["SEARCH_DOCUMENTS"],
+      "GET_CLIENT_INFO",
+      true,
+      SAMPLE_TOOLS,
+    );
     expect(result).toContain("SEARCH_DOCUMENTS");
     expect(result).toContain("GET_CLIENT_INFO");
   });
@@ -85,7 +95,12 @@ describe("toggleTool — enabling a tool", () => {
   });
 
   it("does not duplicate tools when enabling an already-enabled tool", () => {
-    const result = toggleTool(["SEARCH_DOCUMENTS"], "SEARCH_DOCUMENTS", true, SAMPLE_TOOLS);
+    const result = toggleTool(
+      ["SEARCH_DOCUMENTS"],
+      "SEARCH_DOCUMENTS",
+      true,
+      SAMPLE_TOOLS,
+    );
     const count = result.filter((id) => id === "SEARCH_DOCUMENTS").length;
     expect(count).toBe(1);
   });
@@ -104,7 +119,12 @@ describe("toggleTool — enabling a tool", () => {
 
 describe("toggleTool — disabling a tool", () => {
   it("removes the tool from the list", () => {
-    const result = toggleTool(["SEARCH_DOCUMENTS", "GET_CLIENT_INFO"], "SEARCH_DOCUMENTS", false, SAMPLE_TOOLS);
+    const result = toggleTool(
+      ["SEARCH_DOCUMENTS", "GET_CLIENT_INFO"],
+      "SEARCH_DOCUMENTS",
+      false,
+      SAMPLE_TOOLS,
+    );
     expect(result).not.toContain("SEARCH_DOCUMENTS");
     expect(result).toContain("GET_CLIENT_INFO");
   });
@@ -119,7 +139,12 @@ describe("toggleTool — disabling a tool", () => {
   });
 
   it("returns empty array when the last tool is also disabled... wait, leaves other tools intact", () => {
-    const result = toggleTool(["SEARCH_DOCUMENTS"], "SEARCH_DOCUMENTS", false, SAMPLE_TOOLS);
+    const result = toggleTool(
+      ["SEARCH_DOCUMENTS"],
+      "SEARCH_DOCUMENTS",
+      false,
+      SAMPLE_TOOLS,
+    );
     expect(result).toEqual([]);
   });
 
@@ -151,10 +176,20 @@ describe("toggleTool — input validation", () => {
 describe("toggleTool — round-trip enable/disable", () => {
   it("disable then enable returns to empty (all-enabled)", () => {
     // Start: all enabled (empty)
-    const afterDisable = toggleTool([], "SEARCH_DOCUMENTS", false, SAMPLE_TOOLS);
+    const afterDisable = toggleTool(
+      [],
+      "SEARCH_DOCUMENTS",
+      false,
+      SAMPLE_TOOLS,
+    );
     expect(afterDisable).toHaveLength(2); // GET_CLIENT_INFO, CREATE_NOTE
 
-    const afterReEnable = toggleTool(afterDisable, "SEARCH_DOCUMENTS", true, SAMPLE_TOOLS);
+    const afterReEnable = toggleTool(
+      afterDisable,
+      "SEARCH_DOCUMENTS",
+      true,
+      SAMPLE_TOOLS,
+    );
     expect(afterReEnable).toEqual([]); // back to all-enabled (empty)
   });
 });

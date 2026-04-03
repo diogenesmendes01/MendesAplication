@@ -227,15 +227,32 @@ describe("ALL_TOOLS", () => {
 // ─── getToolsForChannel — enabledTools filter (feat/ai-config-enabled-tools) ──
 
 describe("getToolsForChannel — enabledTools filter", () => {
-  it("returns all channel tools when enabledTools is empty (default)", () => {
-    expect(getToolsForChannel("WHATSAPP", [])).toEqual(WHATSAPP_TOOLS);
-    expect(getToolsForChannel("EMAIL", [])).toEqual(EMAIL_TOOLS);
-    expect(getToolsForChannel("RECLAMEAQUI", [])).toEqual(RECLAMEAQUI_TOOLS);
+  it("returns channel tools + WORKFLOW_TOOLS when enabledTools is empty (default)", () => {
+    const wa = getToolsForChannel("WHATSAPP", []);
+    const waNames = wa.map((t) => t.name);
+    // Channel tools are included
+    for (const t of WHATSAPP_TOOLS) expect(waNames).toContain(t.name);
+    // WORKFLOW_TOOLS are also included
+    expect(waNames).toContain("EXECUTE_WORKFLOW");
+    expect(waNames).toContain("GET_WORKFLOW_STATE");
+    expect(waNames).toContain("ADVANCE_WORKFLOW");
+
+    const ra = getToolsForChannel("RECLAMEAQUI", []);
+    const raNames = ra.map((t) => t.name);
+    for (const t of RECLAMEAQUI_TOOLS) expect(raNames).toContain(t.name);
+    expect(raNames).toContain("EXECUTE_WORKFLOW");
   });
 
-  it("returns all channel tools when enabledTools is undefined", () => {
-    expect(getToolsForChannel("WHATSAPP", undefined)).toEqual(WHATSAPP_TOOLS);
-    expect(getToolsForChannel("RECLAMEAQUI", undefined)).toEqual(RECLAMEAQUI_TOOLS);
+  it("returns channel tools + WORKFLOW_TOOLS when enabledTools is undefined", () => {
+    const wa = getToolsForChannel("WHATSAPP", undefined);
+    const waNames = wa.map((t) => t.name);
+    for (const t of WHATSAPP_TOOLS) expect(waNames).toContain(t.name);
+    expect(waNames).toContain("EXECUTE_WORKFLOW");
+
+    const ra = getToolsForChannel("RECLAMEAQUI", undefined);
+    const raNames = ra.map((t) => t.name);
+    for (const t of RECLAMEAQUI_TOOLS) expect(raNames).toContain(t.name);
+    expect(raNames).toContain("ADVANCE_WORKFLOW");
   });
 
   it("filters to only the specified tools plus always-on tools", () => {
@@ -258,13 +275,21 @@ describe("getToolsForChannel — enabledTools filter", () => {
   });
 
   it("always-on tools are preserved even when not in enabledTools list", () => {
-    // Pass an empty tool ID — only always-on should survive
+    // Pass a nonexistent tool ID — only always-on + WORKFLOW_TOOLS should survive
     const result = getToolsForChannel("RECLAMEAQUI", ["NONEXISTENT_TOOL"]);
     const names = result.map((t) => t.name);
 
+    // Core always-on
     expect(names).toContain("GET_HISTORY");
     expect(names).toContain("ESCALATE");
     expect(names).toContain("RESPOND_RECLAMEAQUI");
+
+    // WORKFLOW_TOOLS are also always-on (infrastructure)
+    expect(names).toContain("EXECUTE_WORKFLOW");
+    expect(names).toContain("GET_WORKFLOW_STATE");
+    expect(names).toContain("ADVANCE_WORKFLOW");
+
+    // Non-requested tools absent
     expect(names).not.toContain("SEARCH_DOCUMENTS");
     expect(names).not.toContain("GET_CLIENT_INFO");
   });
@@ -300,5 +325,22 @@ describe("getToolsForChannel — enabledTools filter", () => {
     const result = getToolsForChannel("WHATSAPP", ["RESPOND_EMAIL", "SEARCH_DOCUMENTS"]);
     const names = result.map((t) => t.name);
     expect(names).not.toContain("RESPOND_EMAIL");
+  });
+
+  it("WORKFLOW_TOOLS are always present even when enabledTools is set", () => {
+    // Workflow tools are infrastructure — never filtered out
+    const result = getToolsForChannel("WHATSAPP", ["SEARCH_DOCUMENTS"]);
+    const names = result.map((t) => t.name);
+    expect(names).toContain("EXECUTE_WORKFLOW");
+    expect(names).toContain("GET_WORKFLOW_STATE");
+    expect(names).toContain("ADVANCE_WORKFLOW");
+  });
+
+  it("WORKFLOW_TOOLS are present in unfiltered results too", () => {
+    const result = getToolsForChannel("RECLAMEAQUI");
+    const names = result.map((t) => t.name);
+    expect(names).toContain("EXECUTE_WORKFLOW");
+    expect(names).toContain("GET_WORKFLOW_STATE");
+    expect(names).toContain("ADVANCE_WORKFLOW");
   });
 });

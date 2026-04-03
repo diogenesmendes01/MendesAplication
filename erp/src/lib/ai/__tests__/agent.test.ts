@@ -358,11 +358,8 @@ describe("runAgent — enabledTools filter passed to getToolsForChannel", () => 
       emailEnabledTools: [],
       raEnabledTools: [],
     });
-    mockPrismaTicketFindUnique.mockResolvedValue({
-      ...baseTicket,
-      channel: { type: "WHATSAPP" },
-    });
-    await runAgent("ticket-1", "oi");
+    mockPrismaTicketFindUnique.mockResolvedValue({ ...baseTicket });
+    await runAgent("t1", "c1", "oi", "WHATSAPP");
     expect(mockGetToolsForChannel).toHaveBeenCalledWith("WHATSAPP", enabledTools);
   });
 
@@ -375,26 +372,19 @@ describe("runAgent — enabledTools filter passed to getToolsForChannel", () => 
       emailEnabledTools: [],
       raEnabledTools: enabledTools,
     });
-    mockPrismaTicketFindUnique.mockResolvedValue({
-      ...baseTicket,
-      channel: { type: "RECLAMEAQUI" },
-    });
-    await runAgent("ticket-1", "reclamação");
+    mockPrismaTicketFindUnique.mockResolvedValue({ ...baseTicket });
+    await runAgent("t1", "c1", "reclamação", "RECLAMEAQUI");
     expect(mockGetToolsForChannel).toHaveBeenCalledWith("RECLAMEAQUI", enabledTools);
   });
 
   it("passes empty array when enabledTools fields are absent (backward compat)", async () => {
-    // Config without the new fields (old record)
     mockPrismaAiConfigFindUnique.mockResolvedValue({
       ...baseAiConfig,
       whatsappEnabled: true,
-      // no whatsappEnabledTools field
+      // no whatsappEnabledTools field (old record)
     });
-    mockPrismaTicketFindUnique.mockResolvedValue({
-      ...baseTicket,
-      channel: { type: "WHATSAPP" },
-    });
-    await runAgent("ticket-1", "oi");
+    mockPrismaTicketFindUnique.mockResolvedValue({ ...baseTicket });
+    await runAgent("t1", "c1", "oi", "WHATSAPP");
     expect(mockGetToolsForChannel).toHaveBeenCalledWith("WHATSAPP", []);
   });
 });
