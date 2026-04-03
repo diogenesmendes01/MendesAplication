@@ -554,7 +554,7 @@ export async function runAgent(
   const persona =
     channel === "EMAIL" && aiConfig.emailPersona
       ? aiConfig.emailPersona
-      : aiConfig.persona;
+      : (aiConfig.persona ?? "");
 
   const clientName = ticket.contact?.name || ticket.client?.name;
 
@@ -753,7 +753,7 @@ export async function runAgentDryRun(
   const persona =
     channel === "EMAIL" && aiConfig.emailPersona
       ? aiConfig.emailPersona
-      : aiConfig.persona;
+      : (aiConfig.persona ?? "");
 
   const mockClientName = "Cliente Simulação";
 

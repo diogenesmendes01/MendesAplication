@@ -60,6 +60,7 @@ export function useAiConfig(companyId: string | null, channel?: ChannelType | nu
   return {
     config,
     setConfig,
+    savedConfig,
     loading,
     saving,
     hasUnsavedChanges,

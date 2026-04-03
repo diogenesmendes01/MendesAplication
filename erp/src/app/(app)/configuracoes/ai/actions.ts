@@ -100,7 +100,7 @@ function maskApiKey(key: string | null | undefined, hint?: string | null): strin
 
 function configToData(config: {
   enabled: boolean;
-  persona: string;
+  persona: string | null;
   welcomeMessage: string | null;
   escalationKeywords: string[];
   maxIterations: number;
@@ -125,7 +125,7 @@ function configToData(config: {
 }): AiConfigData {
   return {
     enabled: config.enabled,
-    persona: config.persona,
+    persona: config.persona ?? "",
     welcomeMessage: config.welcomeMessage ?? "",
     escalationKeywords: config.escalationKeywords,
     maxIterations: config.maxIterations,
@@ -282,10 +282,7 @@ async function _updateAiConfig(
 
   // Validate free-text fields to prevent oversized system prompts
   // that could exceed provider token limits (~4 000–8 000 token system prompt ceiling)
-  if (!data.persona || data.persona.trim().length === 0) {
-    throw new Error("persona cannot be empty");
-  }
-  if (data.persona.length > 5000) {
+  if (data.persona && data.persona.length > 5000) {
     throw new Error("persona too long (max 5000 characters)");
   }
   if (data.welcomeMessage && data.welcomeMessage.length > 1000) {
@@ -319,9 +316,28 @@ async function _updateAiConfig(
 
   const resolvedChannel = channel ?? null;
 
+  // Validate activation requirements: cannot enable agent without API key + persona
+  if (data.enabled === true) {
+    const hasApiKeyInPayload = !!(data.apiKey && !MASKED_API_KEY_PATTERN.test(data.apiKey) && data.apiKey.trim().length >= 8);
+    if (!hasApiKeyInPayload) {
+      // Check if there's already a key in DB
+      const existingConfig = await prisma.aiConfig.findFirst({
+        where: { companyId, channel: resolvedChannel },
+        select: { apiKey: true },
+      });
+      const hasApiKeyInDb = !!(existingConfig?.apiKey);
+      if (!hasApiKeyInDb) {
+        throw new Error("Para ativar o agente, configure a persona e a API key primeiro");
+      }
+    }
+    if (!data.persona || data.persona.trim().length === 0) {
+      throw new Error("Para ativar o agente, configure a persona e a API key primeiro");
+    }
+  }
+
   const baseData = {
     enabled: data.enabled,
-    persona: data.persona,
+    persona: data.persona || null,
     welcomeMessage: data.welcomeMessage || null,
     escalationKeywords: data.escalationKeywords,
     maxIterations: data.maxIterations,

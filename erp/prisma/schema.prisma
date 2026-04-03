@@ -885,7 +885,7 @@ model AiConfig {
 
   // --- Existentes ---
   enabled            Boolean  @default(false)
-  persona            String   @db.Text
+  persona            String?  @db.Text
   welcomeMessage     String?  @db.Text
   escalationKeywords String[]
   maxIterations      Int      @default(5)

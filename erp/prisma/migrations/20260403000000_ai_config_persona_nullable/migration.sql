@@ -1,0 +1,1 @@
+ALTER TABLE "ai_config" ALTER COLUMN "persona" DROP NOT NULL;
