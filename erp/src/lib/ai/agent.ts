@@ -1062,10 +1062,22 @@ ${CNPJ_INSTRUCTIONS}${ATTACHMENT_INSTRUCTIONS}
     }
 
     // Structured form fields from complaint opening form (CNPJ, relationship, preferred channel, etc.)
+    // Sanitize function to prevent prompt injection
+    const sanitizePromptValue = (str: string): string => {
+      if (!str) return '';
+      return str
+        .replace(/[\n\r]/g, ' ')      // Remove line breaks
+        .replace(/`/g, '')             // Remove backticks
+        .replace(/\\/g, '')            // Remove backslashes
+        .trim();
+    };
+
     if (raContext.formFields && raContext.formFields.length > 0) {
       prompt += `\n\n## DADOS DO FORMULÁRIO DE ABERTURA:`;
       for (const field of raContext.formFields) {
-        prompt += `\n- ${field.name}: ${field.value}`;
+        const safeName = sanitizePromptValue(field.name);
+        const safeValue = sanitizePromptValue(field.value);
+        prompt += `\n- ${safeName}: ${safeValue}`;
       }
 
       const cnpjField = raContext.formFields.find(f =>
@@ -1081,13 +1093,17 @@ ${CNPJ_INSTRUCTIONS}${ATTACHMENT_INSTRUCTIONS}
       if (cnpjField || channelField || relationField) {
         prompt += `\n\n## INSTRUÇÕES BASEADAS NO FORMULÁRIO:`;
         if (cnpjField) {
-          prompt += `\n- O consumidor informou ${cnpjField.name.trim()}: ${cnpjField.value.trim()}. Use LOOKUP_CLIENT_BY_CNPJ com este valor como PRIMEIRA ação — não pergunte o CNPJ novamente.`;
+          const safeCnpjName = sanitizePromptValue(cnpjField.name);
+          const safeCnpjValue = sanitizePromptValue(cnpjField.value);
+          prompt += `\n- O consumidor informou ${safeCnpjName}: ${safeCnpjValue}. Use LOOKUP_CLIENT_BY_CNPJ com este valor como PRIMEIRA ação — não pergunte o CNPJ novamente.`;
         }
         if (channelField) {
-          prompt += `\n- Canal de atendimento preferencial do consumidor: ${channelField.value.trim()}. Considere isso ao orientar o próximo passo.`;
+          const safeChannelValue = sanitizePromptValue(channelField.value);
+          prompt += `\n- Canal de atendimento preferencial do consumidor: ${safeChannelValue}. Considere isso ao orientar o próximo passo.`;
         }
         if (relationField) {
-          prompt += `\n- Relação do reclamante com a empresa: ${relationField.value.trim()}.`;
+          const safeRelationValue = sanitizePromptValue(relationField.value);
+          prompt += `\n- Relação do reclamante com a empresa: ${safeRelationValue}.`;
         }
       }
     }

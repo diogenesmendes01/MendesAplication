@@ -705,9 +705,20 @@ async function updateExistingTicket(
             const mani = raTicket.interactions?.find(
               (i: { ticket_interaction_type_id: number }) => i.ticket_interaction_type_id === RA_INTERACTION_TYPES.MANIFESTACAO
             );
-            return (mani?.details ?? [])
-              .filter((d: { ticket_detail_type_id: number; name: string; value: string }) => d.ticket_detail_type_id === RA_DETAIL_TYPES.SPECIAL_FIELDS && d.name && d.value)
-              .map((d: { name: string; value: string }) => ({ name: d.name, value: d.value }));
+            // Validate that details is an array before processing
+            if (!Array.isArray(mani?.details)) {
+              return [];
+            }
+            return (mani.details ?? [])
+              .filter((d: { ticket_detail_type_id: number; name: string; value: string }) => 
+                d.ticket_detail_type_id === RA_DETAIL_TYPES.SPECIAL_FIELDS && 
+                d.name?.trim() &&  // Validate non-empty after trimming whitespace
+                d.value?.trim()    // Validate non-empty after trimming whitespace
+              )
+              .map((d: { name: string; value: string }) => ({ 
+                name: d.name.trim(), 
+                value: d.value.trim() 
+              }));
           })(),
         },
       });
