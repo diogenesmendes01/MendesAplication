@@ -390,7 +390,50 @@ export const WORKFLOW_TOOLS: AnyAiToolDefinition[] = [
   ADVANCE_WORKFLOW,
 ];
 
-export function getToolsForChannel(channel: "WHATSAPP" | "EMAIL" | "RECLAMEAQUI"): AnyAiToolDefinition[] {
+/**
+ * Tools that are ALWAYS available to the agent, regardless of per-company configuration.
+ *
+ * Rationale:
+ * - GET_HISTORY      : agent must read conversation history to have any context
+ * - ESCALATE         : every agent must be able to escalate to a human — safety valve
+ * - RESPOND*         : terminal tools; without them the agent cannot produce output
+ * - WORKFLOW_TOOLS   : infrastructure tools (EXECUTE_WORKFLOW, GET_WORKFLOW_STATE,
+ *                      ADVANCE_WORKFLOW) — always appended, not channel features
+ *
+ * These are never filtered by getToolsForChannel(), even when enabledTools is set.
+ */
+const ALWAYS_ON_TOOL_NAMES = new Set([
+  "GET_HISTORY",
+  "ESCALATE",
+  "RESPOND",
+  "RESPOND_EMAIL",
+  "RESPOND_RECLAMEAQUI",
+  "EXECUTE_WORKFLOW",
+  "GET_WORKFLOW_STATE",
+  "ADVANCE_WORKFLOW",
+]);
+
+/**
+ * Returns the tool set for a given channel, with optional per-company filtering.
+ *
+ * ## Backward-compatibility contract
+ * - `enabledTools` is **empty or undefined** → return ALL tools for the channel (default).
+ *   Existing configs that predate this field get full access, no migration needed.
+ * - `enabledTools` is **non-empty** → return only the listed tools + ALWAYS_ON_TOOL_NAMES.
+ *   Tools outside the channel's base set are silently dropped (cross-channel safety).
+ *
+ * ## Always-on tools
+ * GET_HISTORY, ESCALATE, RESPOND, RESPOND_EMAIL, RESPOND_RECLAMEAQUI are preserved
+ * regardless of `enabledTools` — see ALWAYS_ON_TOOL_NAMES.
+ *
+ * @param channel     - The channel context ("WHATSAPP" | "EMAIL" | "RECLAMEAQUI")
+ * @param enabledTools - Optional list of tool IDs to expose; empty/undefined = all
+ * @returns Filtered subset of the channel's full tool set
+ */
+export function getToolsForChannel(
+  channel: "WHATSAPP" | "EMAIL" | "RECLAMEAQUI",
+  enabledTools?: string[]
+): AnyAiToolDefinition[] {
   let base: AnyAiToolDefinition[];
   switch (channel) {
     case "EMAIL":
@@ -401,7 +444,14 @@ export function getToolsForChannel(channel: "WHATSAPP" | "EMAIL" | "RECLAMEAQUI"
       break;
     default:
       base = WHATSAPP_TOOLS;
-      break;
   }
-  return [...base, EXECUTE_WORKFLOW, GET_WORKFLOW_STATE, ADVANCE_WORKFLOW];
+
+  // WORKFLOW_TOOLS are always included — infrastructure, not channel-specific features
+  const fullSet = [...base, ...WORKFLOW_TOOLS];
+
+  // No filter → return full set
+  if (!enabledTools || enabledTools.length === 0) return fullSet;
+
+  const allowed = new Set(enabledTools.concat(Array.from(ALWAYS_ON_TOOL_NAMES)));
+  return fullSet.filter((t) => allowed.has(t.name));
 }

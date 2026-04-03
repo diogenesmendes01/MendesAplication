@@ -38,4 +38,7 @@ export const DEFAULT_CONFIG: AiConfigData = {
   operationMode: "auto",
   hybridThreshold: 0.8,
   alwaysRequireApproval: [] as string[],
+  whatsappEnabledTools: [] as string[],
+  emailEnabledTools: [] as string[],
+  raEnabledTools: [] as string[],
 };
