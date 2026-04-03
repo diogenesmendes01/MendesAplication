@@ -374,10 +374,10 @@ function GenericMiniCards({ ticket }: { ticket: GenericMiniCardsTicket }) {
           <div className="flex justify-between text-xs"><span className="text-muted-foreground">Prioridade</span><span className={`font-medium px-1.5 py-0.5 rounded-full ${priorityColor(ticket.priority)}`}>{priorityLabel(ticket.priority)}</span></div>
           <div className="flex justify-between text-xs"><span className="text-muted-foreground">Status</span><span className={`font-medium px-1.5 py-0.5 rounded-full ${statusColor(ticket.status)}`}>{statusLabel(ticket.status)}</span></div>
           {ticket.proposalId && (
-            <div className="flex justify-between text-xs"><span className="text-muted-foreground">Proposta</span><span className="font-medium text-primary">#{ticket.proposalId.slice(-8)}</span></div>
+            <div className="flex justify-between text-xs"><span className="text-muted-foreground">Proposta</span><span className="font-medium text-primary">#{ticket.proposalId?.slice(-8) || "---"}</span></div>
           )}
           {ticket.boletoId && (
-            <div className="flex justify-between text-xs"><span className="text-muted-foreground">Boleto</span><span className="font-medium text-primary">#{ticket.boletoId.slice(-8)}</span></div>
+            <div className="flex justify-between text-xs"><span className="text-muted-foreground">Boleto</span><span className="font-medium text-primary">#{ticket.boletoId?.slice(-8) || "---"}</span></div>
           )}
         </CardContent>
       </Card>
