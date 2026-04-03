@@ -221,6 +221,185 @@ function SlaCard({ label, deadline, breached }: { label: string; deadline: strin
 
 
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Mini-cards helpers
+// ---------------------------------------------------------------------------
+
+type RaFormField = { name: string; value: string };
+
+function isRaFormFields(val: unknown): val is RaFormField[] {
+  return (
+    Array.isArray(val) &&
+    val.every(
+      (f) =>
+        typeof f === "object" &&
+        f !== null &&
+        "name" in f &&
+        "value" in f &&
+        typeof (f as Record<string, unknown>).name === "string" &&
+        typeof (f as Record<string, unknown>).value === "string"
+    )
+  );
+}
+
+
+// ---------------------------------------------------------------------------
+// Reusable Mini-card grid components
+// ---------------------------------------------------------------------------
+
+type RaMiniCardsTicket = {
+  client: { name: string; email?: string | null };
+  company: { nomeFantasia: string };
+  raFormFields: unknown;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+};
+
+type RaMiniCardsContext = {
+  client?: { name?: string; email?: string; phone?: string } | null;
+} | null;
+
+function RaMiniCards({
+  ticket,
+  raContext,
+}: {
+  ticket: RaMiniCardsTicket;
+  raContext: RaMiniCardsContext;
+}) {
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      {/* Consumidor */}
+      <Card className="border-purple-100 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
+        <CardHeader className="pb-2 pt-3 px-4">
+          <CardTitle className="text-xs font-semibold uppercase tracking-wide text-purple-700 flex items-center gap-1.5">
+            <User className="h-3 w-3" />Consumidor
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0 px-4 pb-3 space-y-0.5">
+          <p className="text-sm font-semibold">{raContext?.client?.name ?? ticket.client.name}</p>
+          {(raContext?.client?.email ?? ticket.client.email) && (
+            <p className="text-xs text-muted-foreground">{raContext?.client?.email ?? ticket.client.email}</p>
+          )}
+          {raContext?.client?.phone && (
+            <p className="text-xs text-muted-foreground">{raContext.client.phone}</p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Dados da Reclamação */}
+      <Card className="border-purple-100 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
+        <CardHeader className="pb-2 pt-3 px-4">
+          <CardTitle className="text-xs font-semibold uppercase tracking-wide text-purple-700 flex items-center gap-1.5">
+            <FileText className="h-3 w-3" />Dados da Reclamação
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0 px-4 pb-3 space-y-1.5">
+          {isRaFormFields(ticket.raFormFields) && ticket.raFormFields.length > 0 ? (
+            ticket.raFormFields.slice(0, 3).map((f, i) => (
+              <div key={i}>
+                <p className="text-xs text-muted-foreground">{f.name}</p>
+                <p className="text-xs font-medium">{f.value}</p>
+              </div>
+            ))
+          ) : (
+            <p className="text-xs text-muted-foreground">Sem dados adicionais</p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Informações Gerais */}
+      <Card className="border-purple-100 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
+        <CardHeader className="pb-2 pt-3 px-4">
+          <CardTitle className="text-xs font-semibold uppercase tracking-wide text-purple-700 flex items-center gap-1.5">
+            <Info className="h-3 w-3" />Informações Gerais
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0 px-4 pb-3 space-y-1">
+          <div className="flex justify-between text-xs"><span className="text-muted-foreground">Empresa</span><span className="font-medium truncate ml-2">{ticket.company.nomeFantasia}</span></div>
+          <div className="flex justify-between text-xs"><span className="text-muted-foreground">Canal</span><span className="font-medium text-purple-700">Reclame Aqui</span></div>
+          <div className="flex justify-between text-xs"><span className="text-muted-foreground">Criado</span><span className="font-medium">{dateFmt.format(new Date(ticket.createdAt))}</span></div>
+          <div className="flex justify-between text-xs"><span className="text-muted-foreground">Atualizado</span><span className="font-medium">{dateFmt.format(new Date(ticket.updatedAt))}</span></div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+type GenericMiniCardsTicket = {
+  client: { name: string; email?: string | null };
+  contact?: { name: string; role?: string | null } | null;
+  company: { nomeFantasia: string };
+  channelType?: string | null;
+  priority: string;
+  status: string;
+  proposalId?: string | null;
+  boletoId?: string | null;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+};
+
+function GenericMiniCards({ ticket }: { ticket: GenericMiniCardsTicket }) {
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      {/* Cliente */}
+      <Card className="transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
+        <CardHeader className="pb-2 pt-3 px-4">
+          <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+            <User className="h-3 w-3" />Cliente
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0 px-4 pb-3 space-y-0.5">
+          <p className="text-sm font-semibold">{ticket.client.name}</p>
+          {ticket.contact && (
+            <>
+              <p className="text-xs text-muted-foreground">{ticket.contact.name}</p>
+              {ticket.contact.role && <p className="text-xs text-muted-foreground">{ticket.contact.role}</p>}
+            </>
+          )}
+          {ticket.client.email && (
+            <p className="text-xs text-muted-foreground truncate">{ticket.client.email}</p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Dados */}
+      <Card className="transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
+        <CardHeader className="pb-2 pt-3 px-4">
+          <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+            <FileText className="h-3 w-3" />Dados
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0 px-4 pb-3 space-y-1">
+          <div className="flex justify-between text-xs"><span className="text-muted-foreground">Prioridade</span><span className={`font-medium px-1.5 py-0.5 rounded-full ${priorityColor(ticket.priority)}`}>{priorityLabel(ticket.priority)}</span></div>
+          <div className="flex justify-between text-xs"><span className="text-muted-foreground">Status</span><span className={`font-medium px-1.5 py-0.5 rounded-full ${statusColor(ticket.status)}`}>{statusLabel(ticket.status)}</span></div>
+          {ticket.proposalId && (
+            <div className="flex justify-between text-xs"><span className="text-muted-foreground">Proposta</span><span className="font-medium text-primary">#{ticket.proposalId?.slice(-8) || "---"}</span></div>
+          )}
+          {ticket.boletoId && (
+            <div className="flex justify-between text-xs"><span className="text-muted-foreground">Boleto</span><span className="font-medium text-primary">#{ticket.boletoId?.slice(-8) || "---"}</span></div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Informações */}
+      <Card className="transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
+        <CardHeader className="pb-2 pt-3 px-4">
+          <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+            <Info className="h-3 w-3" />Informações
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0 px-4 pb-3 space-y-1">
+          <div className="flex justify-between text-xs"><span className="text-muted-foreground">Empresa</span><span className="font-medium truncate ml-2">{ticket.company.nomeFantasia}</span></div>
+          <div className="flex justify-between text-xs"><span className="text-muted-foreground">Canal</span><span className="font-medium">{ticket.channelType === "EMAIL" ? "Email" : "WhatsApp"}</span></div>
+          <div className="flex justify-between text-xs"><span className="text-muted-foreground">Criado</span><span className="font-medium">{dateFmt.format(new Date(ticket.createdAt))}</span></div>
+          <div className="flex justify-between text-xs"><span className="text-muted-foreground">Atualizado</span><span className="font-medium">{dateFmt.format(new Date(ticket.updatedAt))}</span></div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 // Status transitions
 // ---------------------------------------------------------------------------
 
@@ -888,61 +1067,7 @@ export default function TicketDetailPage() {
           {/* ─── Main Content ─────────────────────────────────────── */}
           <div className="lg:col-span-2 space-y-6">
             {/* Mini-cards: Consumidor | Dados da Reclamação | Informações Gerais */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {/* Consumidor */}
-              <Card className="border-purple-100 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
-                <CardHeader className="pb-2 pt-3 px-4">
-                  <CardTitle className="text-xs font-semibold uppercase tracking-wide text-purple-700 flex items-center gap-1.5">
-                    <User className="h-3 w-3" />Consumidor
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="pt-0 px-4 pb-3 space-y-0.5">
-                  <p className="text-sm font-semibold">{raContext?.client?.name ?? ticket.client.name}</p>
-                  {(raContext?.client?.email ?? ticket.client.email) && (
-                    <p className="text-xs text-muted-foreground">{raContext?.client?.email ?? ticket.client.email}</p>
-                  )}
-                  {raContext?.client?.phone && (
-                    <p className="text-xs text-muted-foreground">{raContext.client.phone}</p>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Dados da Reclamação */}
-              <Card className="border-purple-100 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
-                <CardHeader className="pb-2 pt-3 px-4">
-                  <CardTitle className="text-xs font-semibold uppercase tracking-wide text-purple-700 flex items-center gap-1.5">
-                    <FileText className="h-3 w-3" />Dados da Reclamação
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="pt-0 px-4 pb-3 space-y-1.5">
-                  {ticket.raFormFields && (ticket.raFormFields as { name: string; value: string }[]).length > 0 ? (
-                    (ticket.raFormFields as { name: string; value: string }[]).slice(0, 3).map((f, i) => (
-                      <div key={i}>
-                        <p className="text-xs text-muted-foreground">{f.name}</p>
-                        <p className="text-xs font-medium">{f.value}</p>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-xs text-muted-foreground">Sem dados adicionais</p>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Informações Gerais */}
-              <Card className="border-purple-100 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
-                <CardHeader className="pb-2 pt-3 px-4">
-                  <CardTitle className="text-xs font-semibold uppercase tracking-wide text-purple-700 flex items-center gap-1.5">
-                    <Info className="h-3 w-3" />Informações Gerais
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="pt-0 px-4 pb-3 space-y-1">
-                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Empresa</span><span className="font-medium truncate ml-2">{ticket.company.nomeFantasia}</span></div>
-                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Canal</span><span className="font-medium text-purple-700">Reclame Aqui</span></div>
-                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Criado</span><span className="font-medium">{dateFmt.format(new Date(ticket.createdAt))}</span></div>
-                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Atualizado</span><span className="font-medium">{dateFmt.format(new Date(ticket.updatedAt))}</span></div>
-                </CardContent>
-              </Card>
-            </div>
+            <RaMiniCards ticket={ticket} raContext={raContext} />
 
             {/* Description */}
             <Card>
@@ -1147,7 +1272,7 @@ export default function TicketDetailPage() {
             </Card>
 
             {/* 3. Dados da Reclamação (form fields) */}
-            {ticket.raFormFields && (ticket.raFormFields as { name: string; value: string }[]).length > 0 && (
+            {isRaFormFields(ticket.raFormFields) && ticket.raFormFields.length > 0 && (
               <Card className="border-purple-200">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -1156,7 +1281,7 @@ export default function TicketDetailPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-2">
-                  {(ticket.raFormFields as { name: string; value: string }[]).map((field, i) => (
+                  {ticket.raFormFields.map((field, i) => (
                     <div key={i}>
                       <p className="text-xs font-medium text-muted-foreground">{field.name}</p>
                       <p className="text-sm">{field.value}</p>
@@ -1341,63 +1466,8 @@ export default function TicketDetailPage() {
         <div className="grid gap-6 lg:grid-cols-3">
           {/* Main content */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Mini-cards: Consumidor | Dados | Informações Gerais */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {/* Consumidor */}
-              <Card className="transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
-                <CardHeader className="pb-2 pt-3 px-4">
-                  <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
-                    <User className="h-3 w-3" />Cliente
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="pt-0 px-4 pb-3 space-y-0.5">
-                  <p className="text-sm font-semibold">{ticket.client.name}</p>
-                  {ticket.contact && (
-                    <>
-                      <p className="text-xs text-muted-foreground">{ticket.contact.name}</p>
-                      {ticket.contact.role && <p className="text-xs text-muted-foreground">{ticket.contact.role}</p>}
-                    </>
-                  )}
-                  {ticket.client.email && (
-                    <p className="text-xs text-muted-foreground truncate">{ticket.client.email}</p>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Dados */}
-              <Card className="transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
-                <CardHeader className="pb-2 pt-3 px-4">
-                  <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
-                    <FileText className="h-3 w-3" />Dados
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="pt-0 px-4 pb-3 space-y-1">
-                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Prioridade</span><span className={`font-medium px-1.5 py-0.5 rounded-full ${priorityColor(ticket.priority)}`}>{priorityLabel(ticket.priority)}</span></div>
-                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Status</span><span className={`font-medium px-1.5 py-0.5 rounded-full ${statusColor(ticket.status)}`}>{statusLabel(ticket.status)}</span></div>
-                  {ticket.proposalId && (
-                    <div className="flex justify-between text-xs"><span className="text-muted-foreground">Proposta</span><span className="font-medium text-primary">#{ticket.proposalId.slice(-8)}</span></div>
-                  )}
-                  {ticket.boletoId && (
-                    <div className="flex justify-between text-xs"><span className="text-muted-foreground">Boleto</span><span className="font-medium text-primary">#{ticket.boletoId.slice(-8)}</span></div>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Informações Gerais */}
-              <Card className="transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
-                <CardHeader className="pb-2 pt-3 px-4">
-                  <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
-                    <Info className="h-3 w-3" />Informações
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="pt-0 px-4 pb-3 space-y-1">
-                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Empresa</span><span className="font-medium truncate ml-2">{ticket.company.nomeFantasia}</span></div>
-                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Canal</span><span className="font-medium">{ticket.channelType === "EMAIL" ? "Email" : "WhatsApp"}</span></div>
-                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Criado</span><span className="font-medium">{dateFmt.format(new Date(ticket.createdAt))}</span></div>
-                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Atualizado</span><span className="font-medium">{dateFmt.format(new Date(ticket.updatedAt))}</span></div>
-                </CardContent>
-              </Card>
-            </div>
+            {/* Mini-cards: Cliente | Dados | Informações */}
+            <GenericMiniCards ticket={ticket} />
 
             {/* Description */}
             <Card>
