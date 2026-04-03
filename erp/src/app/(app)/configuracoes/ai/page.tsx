@@ -1,31 +1,12 @@
 "use client";
 
-
-import {
-  Save,
-  Shield,
-  BarChart3,
-  Loader2,
-  FlaskConical,
-  Lightbulb,
-  Settings2,
-  Bot,
-  Layers,
-} from "lucide-react";
+import { Save, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCompany } from "@/contexts/company-context";
-import {
-  TabGeral,
-  TabPersona,
-  TabCanais,
-  TabFerramentas,
-  TabConsumo,
-  TabSuggestionMode,
-  TabRateLimiting,
-} from "./components";
+import { TabGeral, TabPersona, TabCanais, TabGestao } from "./components";
 import { useAiConfig } from "./hooks";
 
 export default function AiConfigPage() {
@@ -94,37 +75,13 @@ export default function AiConfigPage() {
         </div>
       </div>
 
-      {/* Single flat tab bar — 7 sections */}
+      {/* 4-tab structure: Configuração · Persona · Canais · Gestão */}
       <Tabs defaultValue="configuracao" className="space-y-4">
-        <TabsList className="flex w-full overflow-x-auto scrollbar-hide">
-          <TabsTrigger value="configuracao" className="gap-1.5">
-            <Settings2 className="h-4 w-4" />
-            Configuração
-          </TabsTrigger>
-          <TabsTrigger value="persona" className="gap-1.5">
-            <Bot className="h-4 w-4" />
-            Persona
-          </TabsTrigger>
-          <TabsTrigger value="canais" className="gap-1.5">
-            <Layers className="h-4 w-4" />
-            Canais
-          </TabsTrigger>
-          <TabsTrigger value="operacao" className="gap-1.5">
-            <Lightbulb className="h-4 w-4" />
-            Operação
-          </TabsTrigger>
-          <TabsTrigger value="limites" className="gap-1.5">
-            <Shield className="h-4 w-4" />
-            Limites
-          </TabsTrigger>
-          <TabsTrigger value="ferramentas" className="gap-1.5">
-            <FlaskConical className="h-4 w-4" />
-            Simulador & Saúde
-          </TabsTrigger>
-          <TabsTrigger value="consumo" className="gap-1.5">
-            <BarChart3 className="h-4 w-4" />
-            Consumo
-          </TabsTrigger>
+        <TabsList>
+          <TabsTrigger value="configuracao">⚙️ Configuração</TabsTrigger>
+          <TabsTrigger value="persona">🤖 Persona</TabsTrigger>
+          <TabsTrigger value="canais">📡 Canais</TabsTrigger>
+          <TabsTrigger value="gestao">📊 Gestão</TabsTrigger>
         </TabsList>
 
         <TabsContent value="configuracao">
@@ -143,23 +100,19 @@ export default function AiConfigPage() {
         </TabsContent>
 
         <TabsContent value="canais">
-          <TabCanais config={config} setConfig={setConfig} />
+          <TabCanais
+            companyId={selectedCompanyId}
+            config={config}
+            setConfig={setConfig}
+          />
         </TabsContent>
 
-        <TabsContent value="operacao">
-          <TabSuggestionMode config={config} setConfig={setConfig} />
-        </TabsContent>
-
-        <TabsContent value="limites">
-          <TabRateLimiting companyId={selectedCompanyId} />
-        </TabsContent>
-
-        <TabsContent value="ferramentas">
-          <TabFerramentas companyId={selectedCompanyId} config={config} />
-        </TabsContent>
-
-        <TabsContent value="consumo">
-          <TabConsumo companyId={selectedCompanyId} config={config} />
+        <TabsContent value="gestao">
+          <TabGestao
+            companyId={selectedCompanyId}
+            config={config}
+            setConfig={setConfig}
+          />
         </TabsContent>
       </Tabs>
     </div>

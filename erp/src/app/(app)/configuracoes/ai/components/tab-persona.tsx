@@ -16,6 +16,9 @@ import {
 } from "@/components/ui/card";
 import type { AiConfigData } from "./types";
 
+// Mensagem de Boas-vindas foi movida para TabCanais > WhatsApp
+// Limite de Iterações foi movido para TabGestao > Parâmetros
+
 interface TabPersonaProps {
   config: AiConfigData;
   setConfig: React.Dispatch<React.SetStateAction<AiConfigData>>;
@@ -62,7 +65,7 @@ export function TabPersona({ config, setConfig }: TabPersonaProps) {
             Persona (System Prompt)
           </CardTitle>
           <CardDescription>
-            Define a personalidade, tom e instruções do agente. Aplicado em WhatsApp e como padrão para outros canais.
+            Define a personalidade, tom e instruções do agente. Aplicado como padrão para todos os canais — cada canal pode sobrescrever via sua própria persona.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -79,57 +82,6 @@ Diretrizes:
 - Escale para um humano em casos de reclamações graves`}
             rows={10}
           />
-        </CardContent>
-      </Card>
-
-      {/* Mensagem de Boas-vindas */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Mensagem de Boas-vindas</CardTitle>
-          <CardDescription>
-            Enviada automaticamente quando um novo ticket é criado (opcional)
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Textarea
-            value={config.welcomeMessage}
-            onChange={(e) =>
-              setConfig((prev) => ({ ...prev, welcomeMessage: e.target.value }))
-            }
-            placeholder="Ex: Olá! Sou o assistente virtual. Como posso ajudá-lo hoje?"
-            rows={3}
-          />
-        </CardContent>
-      </Card>
-
-      {/* Limite de Iterações */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Limite de Iterações do Agente</CardTitle>
-          <CardDescription>
-            Quantas vezes o agente pode usar ferramentas antes de responder (1-10)
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Input
-            type="number"
-            value={config.maxIterations}
-            onChange={(e) => {
-              const val = parseInt(e.target.value, 10);
-              if (!isNaN(val)) {
-                setConfig((prev) => ({
-                  ...prev,
-                  maxIterations: Math.min(10, Math.max(1, val)),
-                }));
-              }
-            }}
-            min={1}
-            max={10}
-            className="w-24"
-          />
-          <p className="mt-2 text-xs text-muted-foreground">
-            Valores menores = respostas mais rápidas. Valores maiores = agente mais persistente na busca de informações.
-          </p>
         </CardContent>
       </Card>
 

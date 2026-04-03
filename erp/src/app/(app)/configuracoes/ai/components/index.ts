@@ -1,15 +1,17 @@
+// v2 exports — 4-tab structure
 export { TabGeral } from "./tab-geral";
 export { TabPersona } from "./tab-persona";
 export { TabCanais } from "./tab-canais";
-export { TabFerramentas } from "./tab-ferramentas";
-export { TabConsumo } from "./tab-consumo";
-export { TabSimulador } from "./tab-simulador";
-export { TabSuggestionMode } from "./tab-suggestion-mode";
-export { TabRateLimiting } from "./tab-rate-limiting";
-export { TabHealth } from "./tab-health";
-// Legacy — kept for backward compatibility but no longer used directly in page.tsx
-export { TabWhatsApp } from "./tab-whatsapp";
-export { TabEmail } from "./tab-email";
-export { TabReclameAqui } from "./tab-reclameaqui";
+export { TabGestao } from "./tab-gestao";
+
+// Shared types + constants
 export { PROVIDERS, DEFAULT_CONFIG } from "./types";
 export type { AiConfigData } from "./types";
+
+// Internal components — kept as files but NOT exported here.
+// They are imported directly inside the tabs that use them:
+//   TabCanais uses: tab-simulador logic (inlined)
+//   TabGestao uses: tab-rate-limiting, tab-consumo, tab-health, tab-suggestion-mode logic (inlined)
+//
+// Files kept: tab-whatsapp, tab-email, tab-reclameaqui, tab-suggestion-mode,
+//             tab-rate-limiting, tab-consumo, tab-simulador, tab-health, tab-ferramentas
