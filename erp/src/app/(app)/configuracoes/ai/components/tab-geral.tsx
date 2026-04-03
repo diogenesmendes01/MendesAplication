@@ -38,7 +38,6 @@ import {
 } from "@/components/ui/tooltip";
 import {
   testAiConnection,
-  testAiKeyDirect,
   listAvailableModels,
   getSuggestedModel,
 } from "../actions";
@@ -119,15 +118,7 @@ export function TabGeral({
     setConnectionStatus("idle");
     setConnectionError("");
     try {
-      const isMasked = config.apiKey ? /^\*{4}/.test(config.apiKey) : false;
-      let result: { ok: boolean; error?: string };
-
-      if (isMasked) {
-        result = await testAiConnection(companyId);
-      } else {
-        result = await testAiKeyDirect(companyId, config.provider, config.apiKey ?? "");
-      }
-
+      const result = await testAiConnection(companyId);
       if (result.ok) {
         setConnectionStatus("success");
         toast.success("Conexão com o provider estabelecida!");
