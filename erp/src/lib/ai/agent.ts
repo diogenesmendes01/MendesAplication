@@ -1061,6 +1061,53 @@ ${CNPJ_INSTRUCTIONS}${ATTACHMENT_INSTRUCTIONS}
       prompt += `\n- ⚠️ O cliente NÃO foi identificado por CNPJ (cpfCnpj sintético). Priorize a identificação: use LOOKUP_CLIENT_BY_CNPJ se encontrar CNPJ no contexto, ou pergunte o CNPJ ao consumidor na mensagem privada.`;
     }
 
+    // Structured form fields from complaint opening form (CNPJ, relationship, preferred channel, etc.)
+    // Sanitize function to prevent prompt injection
+    const sanitizePromptValue = (str: string): string => {
+      if (!str) return '';
+      return str
+        .replace(/[\n\r]/g, ' ')      // Remove line breaks
+        .replace(/`/g, '')             // Remove backticks
+        .replace(/\\/g, '')            // Remove backslashes
+        .trim();
+    };
+
+    if (raContext.formFields && raContext.formFields.length > 0) {
+      prompt += `\n\n## DADOS DO FORMULÁRIO DE ABERTURA:`;
+      for (const field of raContext.formFields) {
+        const safeName = sanitizePromptValue(field.name);
+        const safeValue = sanitizePromptValue(field.value);
+        prompt += `\n- ${safeName}: ${safeValue}`;
+      }
+
+      const cnpjField = raContext.formFields.find(f =>
+        f.name.toLowerCase().includes("cnpj") || f.name.toLowerCase().includes("cpf")
+      );
+      const channelField = raContext.formFields.find(f =>
+        f.name.toLowerCase().includes("canal") || f.name.toLowerCase().includes("atendimento")
+      );
+      const relationField = raContext.formFields.find(f =>
+        f.name.toLowerCase().includes("relação") || f.name.toLowerCase().includes("relacao")
+      );
+
+      if (cnpjField || channelField || relationField) {
+        prompt += `\n\n## INSTRUÇÕES BASEADAS NO FORMULÁRIO:`;
+        if (cnpjField) {
+          const safeCnpjName = sanitizePromptValue(cnpjField.name);
+          const safeCnpjValue = sanitizePromptValue(cnpjField.value);
+          prompt += `\n- O consumidor informou ${safeCnpjName}: ${safeCnpjValue}. Use LOOKUP_CLIENT_BY_CNPJ com este valor como PRIMEIRA ação — não pergunte o CNPJ novamente.`;
+        }
+        if (channelField) {
+          const safeChannelValue = sanitizePromptValue(channelField.value);
+          prompt += `\n- Canal de atendimento preferencial do consumidor: ${safeChannelValue}. Considere isso ao orientar o próximo passo.`;
+        }
+        if (relationField) {
+          const safeRelationValue = sanitizePromptValue(relationField.value);
+          prompt += `\n- Relação do reclamante com a empresa: ${safeRelationValue}.`;
+        }
+      }
+    }
+
   }
   if (historyContext) {
     prompt += `\n\n## HISTÓRICO DA RECLAMAÇÃO:\n${historyContext}`;
