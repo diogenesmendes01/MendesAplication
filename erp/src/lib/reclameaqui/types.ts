@@ -433,4 +433,7 @@ export interface RaAiContext {
   interactionsCount: number;
   isReplica: boolean;
   needsCnpjIdentification?: boolean;
+  /** Structured form fields from the complaint opening form (SPECIAL_FIELDS detail type).
+   * Examples: CNPJ, relationship to company, preferred contact channel. */
+  formFields?: Array<{ name: string; value: string }>;
 }
