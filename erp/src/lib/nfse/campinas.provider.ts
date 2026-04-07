@@ -4,6 +4,7 @@ import { TipoRps } from "@4success/nfse-campinas/dist/soap/notafiscalsoap/defini
 import { ExigibilidadeISS } from "@4success/nfse-campinas/dist/soap/notafiscalsoap/definitions/Servico";
 import { Binario } from "@4success/nfse-campinas/dist/soap/notafiscalsoap/definitions/Binario";
 import type { CancelNfseInput, CancelNfseResult, EmitNfseInput, EmitNfseResult, NfseProvider } from "../nfse";
+import { getRpsNumero } from "./nfse-helpers";
 
 // Sistema migrado em 17/03/2025 para nova plataforma (novanfse.campinas.sp.gov.br)
 // O antigo domínio issdigital.campinas.sp.gov.br agora retorna página de manutenção HTML.
@@ -67,11 +68,7 @@ export class CampinasNfseProvider implements NfseProvider {
 
   async emitNFSe(input: EmitNfseInput): Promise<EmitNfseResult> {
     const hoje = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
-    // Usar o rpsNumero fornecido (gerado atomicamente via banco) para evitar
-    // colisões em emissões simultâneas. Date.now() como fallback apenas para
-    // compatibilidade com chamadas legadas que não passam o campo.
-    // TODO: remover fallback quando todos os callers passarem rpsNumero.
-    const rpsNumero = input.rpsNumero ?? Date.now().toString();
+    const rpsNumero = getRpsNumero(input);
 
     // Separar CPF e CNPJ do tomador
     const cpfCnpjTomadorRaw = input.clientData.cpfCnpj.replace(/\D/g, "");
