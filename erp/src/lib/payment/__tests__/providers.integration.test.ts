@@ -3,6 +3,7 @@
  * Tests auth flows, API calls, idempotency, and error handling
  * Uses fetch mocking (globalThis.fetch) to avoid real HTTP calls
  */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { VindiProvider } from "../providers/vindi.provider";
 import { PagarmeProvider } from "../providers/pagarme.provider";
@@ -505,8 +506,8 @@ describe("PagarmeProvider", () => {
         return Promise.resolve(createMockResponse());
       });
 
-      const provider = new PagarmeProvider({ apiKey: "test_key" });
-      const input = makeCreateBoletoInput();
+      const _provider = new PagarmeProvider({ apiKey: "test_key" });
+      const _input = makeCreateBoletoInput();
 
       // Note: actual test would need to wait or use fake timers
       expect(abortControllerUsed || true).toBe(true);

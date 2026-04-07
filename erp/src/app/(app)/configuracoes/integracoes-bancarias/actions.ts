@@ -639,7 +639,7 @@ async function _setCobrefacilConfig(
   const session = await requireCompanyAccess(companyId);
 
   const cobrefacilConfig = config
-    ? (config as Prisma.InputJsonValue)
+    ? (config as unknown as Prisma.InputJsonValue)
     : Prisma.JsonNull;
 
   await prisma.company.update({

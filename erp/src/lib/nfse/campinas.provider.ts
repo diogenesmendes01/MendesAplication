@@ -100,7 +100,7 @@ export class CampinasNfseProvider implements NfseProvider {
               IssRetido: Binario.NAO,
               ItemListaServico: this.itemListaServico,
               CodigoTributacaoMunicipio: this.codigoTributacao,
-              ...(this.codigoCnae && { CodigoCnae: this.codigoCnae }),
+              ...(this.codigoCnae && { CodigoCnae: Number(this.codigoCnae) }),
               Discriminacao: input.serviceDescription.substring(0, 2000),
               CodigoMunicipio: CODIGO_MUNICIPIO_CAMPINAS,
               ExigibilidadeISS: ExigibilidadeISS.EXIGIVEL,

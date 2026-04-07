@@ -2,6 +2,7 @@
  * Integration Tests for Worker Processors
  * Tests AI agent worker, email workers, and attachment handling
  */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { Job } from "bullmq";
 

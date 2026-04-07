@@ -139,38 +139,42 @@ const GATEWAY_FACTORIES: Record<string, GatewayFactory> = {
               typeof metadata.discountDays === "number"
                 ? metadata.discountDays
                 : undefined,
-            companyAddress: metadata.companyAddress
-              ? {
-                  zipCode:
-                    typeof metadata.companyAddress.zipCode === "string"
-                      ? metadata.companyAddress.zipCode
-                      : undefined,
-                  street:
-                    typeof metadata.companyAddress.street === "string"
-                      ? metadata.companyAddress.street
-                      : undefined,
-                  number:
-                    typeof metadata.companyAddress.number === "string"
-                      ? metadata.companyAddress.number
-                      : undefined,
-                  complement:
-                    typeof metadata.companyAddress.complement === "string"
-                      ? metadata.companyAddress.complement
-                      : undefined,
-                  neighborhood:
-                    typeof metadata.companyAddress.neighborhood === "string"
-                      ? metadata.companyAddress.neighborhood
-                      : undefined,
-                  city:
-                    typeof metadata.companyAddress.city === "string"
-                      ? metadata.companyAddress.city
-                      : undefined,
-                  state:
-                    typeof metadata.companyAddress.state === "string"
-                      ? metadata.companyAddress.state
-                      : undefined,
-                }
-              : undefined,
+            companyAddress: (() => {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const addr = (metadata as Record<string, any>).companyAddress;
+              return addr
+                ? {
+                    zipCode:
+                      typeof addr.zipCode === "string"
+                        ? addr.zipCode
+                        : undefined,
+                    street:
+                      typeof addr.street === "string"
+                        ? addr.street
+                        : undefined,
+                    number:
+                      typeof addr.number === "string"
+                        ? addr.number
+                        : undefined,
+                    complement:
+                      typeof addr.complement === "string"
+                        ? addr.complement
+                        : undefined,
+                    neighborhood:
+                      typeof addr.neighborhood === "string"
+                        ? addr.neighborhood
+                        : undefined,
+                    city:
+                      typeof addr.city === "string"
+                        ? addr.city
+                        : undefined,
+                    state:
+                      typeof addr.state === "string"
+                        ? addr.state
+                        : undefined,
+                  }
+                : undefined;
+            })(),
           }
         : null,
       webhookSecret,
