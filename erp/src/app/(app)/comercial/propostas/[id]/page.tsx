@@ -539,8 +539,6 @@ export default function ProposalDetailPage() {
   const canGenerateBoletos = proposal.status === "ACCEPTED" && boletos.length === 0;
   const companyName = selectedCompany?.nomeFantasia || "Empresa";
 
-  // BUG 3 fix: Check per-boleto NFS-e status instead of global event flag
-  
   const allBoletosComplete = hasBoletos && boletos.every((b) => b.status === "PAID" && issuedInvoiceMap[b.id]);
 
   // US-011: Provider selector render helper
@@ -711,7 +709,6 @@ export default function ProposalDetailPage() {
           </Button>
         )}
 
-        {/* BUG 4+5 fix: Unified per-boleto actions based on individual status */}
         {proposal.status === "ACCEPTED" && hasBoletos && !allBoletosComplete && (
           <div className="space-y-3">
             {/* Per-boleto action rows */}
