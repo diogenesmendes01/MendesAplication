@@ -39,6 +39,17 @@ interface CobreFacilMetadata {
   interestPercentage?: number;
   discountPercentage?: number;
   discountDays?: number;
+  companyAddress?: CobreFacilAddress;
+}
+
+interface CobreFacilAddress {
+  zipCode: string;
+  street: string;
+  number: string;
+  complement?: string;
+  neighborhood: string;
+  city: string;
+  state: string;
 }
 
 /** Shape returned by POST /invoices and GET /invoices/{id} */
@@ -183,30 +194,28 @@ export class CobreFacilProvider implements PaymentGateway {
     }
 
     // Build address (required by API)
-    // TODO: Placeholder address — tornar configurável via metadata por empresa
-    // Endereço default de SP pode ser incorreto pra empresas de outras regiões
-    const address = customer.address
-      ? {
-          description: "Principal",
-          zipcode: customer.address.zipCode.replace(/\D/g, ""),
-          street: customer.address.street,
-          number: customer.address.number,
-          complement: customer.address.complement ?? "",
-          neighborhood: customer.address.neighborhood,
-          city: customer.address.city,
-          state: customer.address.state,
-        }
-      : {
-          // Placeholder address when none provided (API requires it)
-          description: "Principal",
-          zipcode: "01001000",
-          street: "Praça da Sé",
-          number: "1",
-          complement: "",
-          neighborhood: "Sé",
-          city: "São Paulo",
-          state: "SP",
-        };
+    // Use customer address if available, otherwise fall back to company config or default
+    const fallbackAddress = this.metadata?.companyAddress ?? {
+      zipCode: "01001000",
+      street: "Praça da Sé",
+      number: "1",
+      complement: "",
+      neighborhood: "Sé",
+      city: "São Paulo",
+      state: "SP",
+    };
+
+    const addressData = customer.address ?? fallbackAddress;
+    const address = {
+      description: "Principal",
+      zipcode: addressData.zipCode.replace(/\D/g, ""),
+      street: addressData.street,
+      number: addressData.number,
+      complement: addressData.complement ?? "",
+      neighborhood: addressData.neighborhood,
+      city: addressData.city,
+      state: addressData.state,
+    };
 
     // Build customer payload
     const isCpf = customer.documentType === "cpf";

@@ -174,6 +174,10 @@ const SENSITIVE_KEYS = new Set([
   "certificatepassword",
   "cert",
   "pfx",
+  // TODO: confirm with legal if email/phone should be added based on company LGPD policy
+  // "email",
+  // "telefone",
+  // "phone",
 ]);
 
 /**

@@ -310,6 +310,108 @@ describe("CobreFacilProvider", () => {
       expect((createPayload!.address as Record<string, unknown>).zipcode).toBe("01001000");
       expect((createPayload!.address as Record<string, unknown>).city).toBe("São Paulo");
     });
+
+    it("usa company address config quando fornecido na metadata", async () => {
+      const companyAddress = {
+        zipCode: "09000000",
+        street: "Avenida Getúlio Vargas",
+        number: "1000",
+        complement: "Apto 200",
+        neighborhood: "Centro",
+        city: "Santo André",
+        state: "SP",
+      };
+
+      const provider = new CobreFacilProvider(CREDS, {
+        companyAddress,
+      });
+      let createPayload: Record<string, unknown> | null = null;
+
+      globalThis.fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+        const urlStr = typeof url === "string" ? url : url.toString();
+
+        if (urlStr.includes("/authenticate")) return authResponse();
+
+        if (urlStr.includes("/customers") && (!init?.method || init.method === "GET")) {
+          return mockResponse({ success: true, data: [] });
+        }
+
+        if (urlStr.includes("/customers") && init?.method === "POST") {
+          createPayload = JSON.parse(init.body as string);
+          return mockResponse({ success: true, data: { id: "cust_with_config" } });
+        }
+
+        return mockResponse({ success: true, data: {} });
+      });
+
+      await // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (provider as any).ensureCustomer({
+        name: "Empresa com Config",
+        document: "12345678901",
+        documentType: "cpf",
+      });
+
+      expect(createPayload).not.toBeNull();
+      expect((createPayload!.address as Record<string, unknown>).zipcode).toBe("09000000");
+      expect((createPayload!.address as Record<string, unknown>).street).toBe("Avenida Getúlio Vargas");
+      expect((createPayload!.address as Record<string, unknown>).city).toBe("Santo André");
+      expect((createPayload!.address as Record<string, unknown>).complement).toBe("Apto 200");
+    });
+
+    it("customer address sobrescreve company address config", async () => {
+      const companyAddress = {
+        zipCode: "09000000",
+        street: "Company Street",
+        number: "999",
+        neighborhood: "Company Neighborhood",
+        city: "Company City",
+        state: "SP",
+      };
+
+      const provider = new CobreFacilProvider(CREDS, {
+        companyAddress,
+      });
+      let createPayload: Record<string, unknown> | null = null;
+
+      globalThis.fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+        const urlStr = typeof url === "string" ? url : url.toString();
+
+        if (urlStr.includes("/authenticate")) return authResponse();
+
+        if (urlStr.includes("/customers") && (!init?.method || init.method === "GET")) {
+          return mockResponse({ success: true, data: [] });
+        }
+
+        if (urlStr.includes("/customers") && init?.method === "POST") {
+          createPayload = JSON.parse(init.body as string);
+          return mockResponse({ success: true, data: { id: "cust_override" } });
+        }
+
+        return mockResponse({ success: true, data: {} });
+      });
+
+      await // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (provider as any).ensureCustomer({
+        name: "Override Test",
+        document: "12345678901",
+        documentType: "cpf",
+        address: {
+          street: "Customer Street",
+          number: "100",
+          neighborhood: "Customer Neighborhood",
+          city: "Customer City",
+          state: "RJ",
+          zipCode: "20000000",
+        },
+      });
+
+      expect(createPayload).not.toBeNull();
+      // Customer address should take precedence
+      expect((createPayload!.address as Record<string, unknown>).zipcode).toBe("20000000");
+      expect((createPayload!.address as Record<string, unknown>).street).toBe("Customer Street");
+      expect((createPayload!.address as Record<string, unknown>).city).toBe("Customer City");
+      expect((createPayload!.address as Record<string, unknown>).state).toBe("RJ");
+    });
   });
 
   // ─────────────────────────────────────────────

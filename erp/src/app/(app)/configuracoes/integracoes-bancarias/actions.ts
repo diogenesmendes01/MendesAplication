@@ -619,6 +619,55 @@ async function _setDefaultProvider(
 }
 
 // ---------------------------------------------------------------------------
+// setCobrefacilConfig — set per-company cobrefacil address config
+// ---------------------------------------------------------------------------
+
+interface CobreFacilConfigInput {
+  zipCode: string;
+  street: string;
+  number: string;
+  complement?: string;
+  neighborhood: string;
+  city: string;
+  state: string;
+}
+
+async function _setCobrefacilConfig(
+  companyId: string,
+  config: CobreFacilConfigInput | null,
+): Promise<{ success: boolean }> {
+  const session = await requireCompanyAccess(companyId);
+
+  const cobrefacilConfig = config
+    ? (config as Prisma.InputJsonValue)
+    : Prisma.JsonNull;
+
+  await prisma.company.update({
+    where: { id: companyId },
+    data: { cobrefacilConfig },
+  });
+
+  await logAuditEvent({
+    userId: session.userId,
+    action: "UPDATE",
+    entity: "Company",
+    entityId: companyId,
+    dataAfter: {
+      action: "setCobrefacilConfig",
+      config: config
+        ? {
+            city: config.city,
+            state: config.state,
+          }
+        : null,
+    } as unknown as Prisma.InputJsonValue,
+    companyId,
+  });
+
+  return { success: true };
+}
+
+// ---------------------------------------------------------------------------
 // Wrapped exports with logging
 // ---------------------------------------------------------------------------
 const _wrapped_getPaymentProviders = withLogging('integracoes.getPaymentProviders', _getPaymentProviders);
@@ -637,3 +686,5 @@ const _wrapped_toggleProviderActive = withLogging('integracoes.toggleProviderAct
 export async function toggleProviderActive(...args: Parameters<typeof _toggleProviderActive>) { return _wrapped_toggleProviderActive(...args); }
 const _wrapped_setDefaultProvider = withLogging('integracoes.setDefaultProvider', _setDefaultProvider);
 export async function setDefaultProvider(...args: Parameters<typeof _setDefaultProvider>) { return _wrapped_setDefaultProvider(...args); }
+const _wrapped_setCobrefacilConfig = withLogging('integracoes.setCobrefacilConfig', _setCobrefacilConfig);
+export async function setCobrefacilConfig(...args: Parameters<typeof _setCobrefacilConfig>) { return _wrapped_setCobrefacilConfig(...args); }

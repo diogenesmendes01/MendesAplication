@@ -139,6 +139,38 @@ const GATEWAY_FACTORIES: Record<string, GatewayFactory> = {
               typeof metadata.discountDays === "number"
                 ? metadata.discountDays
                 : undefined,
+            companyAddress: metadata.companyAddress
+              ? {
+                  zipCode:
+                    typeof metadata.companyAddress.zipCode === "string"
+                      ? metadata.companyAddress.zipCode
+                      : undefined,
+                  street:
+                    typeof metadata.companyAddress.street === "string"
+                      ? metadata.companyAddress.street
+                      : undefined,
+                  number:
+                    typeof metadata.companyAddress.number === "string"
+                      ? metadata.companyAddress.number
+                      : undefined,
+                  complement:
+                    typeof metadata.companyAddress.complement === "string"
+                      ? metadata.companyAddress.complement
+                      : undefined,
+                  neighborhood:
+                    typeof metadata.companyAddress.neighborhood === "string"
+                      ? metadata.companyAddress.neighborhood
+                      : undefined,
+                  city:
+                    typeof metadata.companyAddress.city === "string"
+                      ? metadata.companyAddress.city
+                      : undefined,
+                  state:
+                    typeof metadata.companyAddress.state === "string"
+                      ? metadata.companyAddress.state
+                      : undefined,
+                }
+              : undefined,
           }
         : null,
       webhookSecret,
