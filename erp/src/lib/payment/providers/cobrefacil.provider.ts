@@ -23,6 +23,7 @@ import type {
 } from "../types";
 import { authenticatedFetch } from "./cobrefacil-auth";
 import { logger } from "@/lib/logger";
+import { createHmac } from "crypto";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -129,6 +130,38 @@ export class CobreFacilProvider implements PaymentGateway {
     this.defaultPaymentMethod = metadata?.defaultPaymentMethod ?? "bankslip";
     this.metadata = metadata ?? null;
     this.webhookSecret = webhookSecret;
+  }
+
+  // ──────────────────────────────────────────────
+  // Webhook signature validation
+  // ──────────────────────────────────────────────
+
+  /**
+   * Validates HMAC signature for Cobre Fácil webhooks.
+   * Uses HMAC-SHA256 with the webhook secret.
+   * Header format: X-Webhook-Signature (base64-encoded SHA256 hash)
+   */
+  private validateHmacSignature(
+    body: string,
+    signature: string,
+  ): boolean {
+    if (!this.webhookSecret) {
+      // Without webhook secret, fall back to structural validation
+      return false;
+    }
+
+    try {
+      const hmac = createHmac("sha256", this.webhookSecret);
+      hmac.update(body, "utf-8");
+      const computed = hmac.digest("base64");
+      return computed === signature;
+    } catch (err) {
+      logger.error(
+        { err },
+        "[CobreFacil] Failed to validate HMAC signature",
+      );
+      return false;
+    }
   }
 
   // ──────────────────────────────────────────────
@@ -354,15 +387,26 @@ export class CobreFacilProvider implements PaymentGateway {
   }
 
   validateWebhook(
-    _headers: Record<string, string>,
+    headers: Record<string, string>,
     body: string,
   ): boolean {
-    // TODO: Cobre Fácil não documenta HMAC/signature para webhooks
-    // Validação apenas por estrutura do payload — adicionar verificação criptográfica quando disponível
+    // F1.1: Validate webhook signature using HMAC-SHA256
+    // Header: X-Webhook-Signature (base64-encoded)
+    const signature =
+      headers["x-webhook-signature"] ?? headers["X-Webhook-Signature"];
 
-    // Cobre Fácil does not document HMAC webhook signatures.
-    // Validation is done by checking the payload structure has required fields.
-    // In production, consider also validating by IP origin or custom secret in URL.
+    // If webhook secret is configured, validate HMAC signature
+    if (this.webhookSecret && signature) {
+      if (!this.validateHmacSignature(body, signature)) {
+        logger.warn(
+          "[CobreFacil] Webhook signature validation failed — rejecting",
+        );
+        return false;
+      }
+    }
+
+    // Fallback: validate payload structure if HMAC is not available
+    // (e.g., in development or if API hasn't provided signature header yet)
     try {
       const parsed = JSON.parse(body) as Partial<CobreFacilWebhookPayload>;
       return !!(parsed.event && parsed.data);

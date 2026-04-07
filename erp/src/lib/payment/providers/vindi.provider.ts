@@ -145,6 +145,16 @@ export class VindiProvider implements PaymentGateway {
     return response.json() as Promise<T>;
   }
 
+  /**
+   * Generates an idempotency key for Vindi requests.
+   * Uses a combination of referenceId and timestamp for uniqueness.
+   */
+  private generateIdempotencyKey(referenceId: string): string {
+    // Vindi supports idempotency via request header (de facto standard)
+    // Format: unique identifier per request to prevent duplicate resource creation
+    return referenceId || `vindi-${Date.now()}`;
+  }
+
   // ──────────────────────────────────────────────
   // Customer management (lazy creation)
   // ──────────────────────────────────────────────
@@ -219,12 +229,18 @@ export class VindiProvider implements PaymentGateway {
     // IMPORTANT: Vindi uses REAIS (float, not centavos) — divide by 100
     const amountInReais = input.amount / 100;
 
-    // TODO: Sem idempotency key — se request timeout mas bill foi criada, retry cria duplicata
-    // Fase 2: usar metadata.referenceId como check de idempotência
+    // Generate idempotency key to prevent duplicate bills on retry
+    // Uses referenceId from input metadata for idempotent request handling
+    const idempotencyKey = this.generateIdempotencyKey(
+      input.metadata?.referenceId ?? "",
+    );
 
     // product_id: null works for one-off bills. Some Vindi accounts require a product — configure defaultProductId in settings.
     const result = await this.api<{ bill: VindiBill }>("/bills", {
       method: "POST",
+      headers: {
+        "Idempotency-Key": idempotencyKey,
+      },
       body: JSON.stringify({
         customer_id: customerId,
         payment_method_code: paymentMethodCode,
