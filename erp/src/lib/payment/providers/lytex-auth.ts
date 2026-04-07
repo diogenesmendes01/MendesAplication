@@ -46,10 +46,14 @@ export const REQUEST_TIMEOUT_MS = 15_000;
 // Token Cache (module-level, survives across calls within same process)
 // ---------------------------------------------------------------------------
 
-// TODO: Race condition — concurrent requests with expired token may duplicate refresh calls
-// With 5min TTL this is more likely than other providers
-// Fix: implement pending-promise pattern (mutex) for getAuthToken
 const authCache = new Map<string, CachedAuth>();
+
+/**
+ * Pending promise cache to implement singleflight pattern.
+ * With Lytex's 5-minute token TTL, concurrent refresh calls are more likely.
+ * Only one auth operation per cache key is allowed at a time.
+ */
+const pendingAuthRequests = new Map<string, Promise<string>>();
 
 /**
  * Limpa o cache de tokens. Útil para testes.
@@ -165,11 +169,12 @@ async function refreshAuth(
 /**
  * Obtém um accessToken válido para a Lytex.
  * Usa cache em memória com refresh automático.
+ * Implementa singleflight para evitar race condition em refresh/obtain.
  *
  * Fluxo:
  * 1. Token no cache e válido → retorna
- * 2. Access expirou mas refresh válido → refresh
- * 3. Tudo expirou → obtain novo par
+ * 2. Access expirou mas refresh válido → refresh (com singleflight)
+ * 3. Tudo expirou → obtain novo par (com singleflight)
  */
 export async function getAuthToken(
   clientId: string,
@@ -185,13 +190,35 @@ export async function getAuthToken(
     return cached.accessToken;
   }
 
-  // Access expirou mas refresh válido → refresh
-  if (cached && cached.refreshExpiresAt > Date.now()) {
-    return refreshAuth(cached, cacheKey, baseUrl);
+  // F1.2: Singleflight pattern — if auth is already in flight, wait for it
+  const pending = pendingAuthRequests.get(cacheKey);
+  if (pending) {
+    return pending;
   }
 
-  // Nada válido → obtain fresh
-  return obtainNewToken(clientId, clientSecret, cacheKey, baseUrl);
+  // Create a new auth promise and store it so other concurrent requests wait
+  const authPromise = (async () => {
+    try {
+      const refreshedCached = authCache.get(cacheKey);
+
+      // Access expirou mas refresh válido → refresh
+      if (
+        refreshedCached &&
+        refreshedCached.refreshExpiresAt > Date.now()
+      ) {
+        return refreshAuth(refreshedCached, cacheKey, baseUrl);
+      }
+
+      // Nada válido → obtain fresh
+      return obtainNewToken(clientId, clientSecret, cacheKey, baseUrl);
+    } finally {
+      // Always clean up the pending promise
+      pendingAuthRequests.delete(cacheKey);
+    }
+  })();
+
+  pendingAuthRequests.set(cacheKey, authPromise);
+  return authPromise;
 }
 
 // ---------------------------------------------------------------------------
