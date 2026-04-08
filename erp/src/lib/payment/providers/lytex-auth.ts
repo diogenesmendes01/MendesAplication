@@ -206,11 +206,11 @@ export async function getAuthToken(
         refreshedCached &&
         refreshedCached.refreshExpiresAt > Date.now()
       ) {
-        return refreshAuth(refreshedCached, cacheKey, baseUrl);
+        return await refreshAuth(refreshedCached, cacheKey, baseUrl);
       }
 
       // Nada válido → obtain fresh
-      return obtainNewToken(clientId, clientSecret, cacheKey, baseUrl);
+      return await obtainNewToken(clientId, clientSecret, cacheKey, baseUrl);
     } finally {
       // Always clean up the pending promise
       pendingAuthRequests.delete(cacheKey);

@@ -186,6 +186,7 @@ describe("executeStep", () => {
 
 describe("runWorkflow", () => {
   beforeEach(() => vi.clearAllMocks());
+  afterEach(() => vi.restoreAllMocks());
 
   it("runs multi-step workflow to completion", async () => {
     const steps = [
@@ -194,20 +195,30 @@ describe("runWorkflow", () => {
       { id: "s3", nome: "Step 3", tipo: "RESPOND", config: {} },
     ];
 
-    // Simulate advancing through 3 steps
-    const execs = [
-      makeExecution({ currentStepIndex: 0, workflow: makeWorkflow({ steps }) }),
-      makeExecution({ currentStepIndex: 1, workflow: makeWorkflow({ steps }) }),
-      makeExecution({ currentStepIndex: 2, workflow: makeWorkflow({ steps }) }),
-    ];
+    // Simulate advancing through 3 steps with state updates
+    let currentIndex = 0;
+    const baseExecution = makeWorkflow({ steps });
 
-    let callIndex = 0;
     mockExecFindUnique.mockImplementation(() => {
-      return execs[Math.min(callIndex++, execs.length - 1)];
+      return makeExecution({
+        currentStepIndex: currentIndex,
+        workflow: baseExecution,
+        status: currentIndex >= steps.length ? "COMPLETED" : "ACTIVE"
+      });
     });
+
+    mockExecUpdate.mockImplementation((args: any) => {
+      if (args?.data?.currentStepIndex !== undefined) {
+        currentIndex = args.data.currentStepIndex;
+      }
+      if (args?.data?.status === "COMPLETED") {
+        currentIndex = steps.length;
+      }
+      return Promise.resolve({});
+    });
+
     mockTicketFindUnique.mockResolvedValue({ channel: { type: "WHATSAPP" } });
     mockExecuteBlock.mockResolvedValue({ success: true });
-    mockExecUpdate.mockResolvedValue({});
 
     const result = await runWorkflow("exec-1");
 
@@ -429,9 +440,10 @@ describe("Complex Workflow Patterns", () => {
       { id: "process", nome: "Process", tipo: "SET_TAG", config: {} },
     ];
 
-    mockExecFindUnique.mockResolvedValue(
-      makeExecution({ currentStepIndex: 0, workflow: makeWorkflow({ steps }) })
-    );
+    const wf = makeWorkflow({ steps });
+    const exec = makeExecution({ currentStepIndex: 0, workflow: wf });
+
+    mockExecFindUnique.mockResolvedValue(exec);
     mockExecUpdate.mockResolvedValue({});
 
     const result = await advanceWorkflow("exec-1");
@@ -447,9 +459,9 @@ describe("Complex Workflow Patterns", () => {
       { id: "orphan", nome: "Orphan", tipo: "RESPOND", config: {} },
     ];
 
-    mockExecFindUnique.mockResolvedValue(
-      makeExecution({ currentStepIndex: 0, workflow: makeWorkflow({ steps }) })
-    );
+    const wf = makeWorkflow({ steps });
+    const exec = makeExecution({ currentStepIndex: 0, workflow: wf });
+    mockExecFindUnique.mockResolvedValue(exec);
     mockExecUpdate.mockResolvedValue({});
 
     const result = await advanceWorkflow("exec-1");
