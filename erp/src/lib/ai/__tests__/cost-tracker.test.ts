@@ -10,6 +10,12 @@ vi.mock("@/lib/ai/rate-limiter", () => ({
   logInteraction: vi.fn(),
 }));
 
+vi.mock("@/lib/ai/exchange-rate", () => ({
+  getBrlUsdRate: vi.fn().mockResolvedValue(5.8),
+  getBrlUsdRateSync: vi.fn(() => 5.8),
+  _resetCacheForTesting: vi.fn(),
+}));
+
 vi.mock("@/lib/logger", () => {
   const _log = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), child: vi.fn() };
   return {
