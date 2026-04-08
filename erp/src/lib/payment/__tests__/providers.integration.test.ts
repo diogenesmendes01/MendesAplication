@@ -98,17 +98,26 @@ describe("VindiProvider", () => {
 
   describe("Customer Management", () => {
     it("creates customer successfully", async () => {
+      // Mock search - customer not found
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse({
+          status: 200,
+          body: { customers: [] },
+        })
+      );
+      // Mock creation
       mockFetch.mockResolvedValueOnce(
         createMockResponse({
           status: 201,
-          body: { id: 12345, name: "Test Customer", registry_code: "12345678901" },
+          body: { customer: { id: 12345, name: "Test Customer", registry_code: "12345678901" } },
         })
       );
 
       const provider = new VindiProvider({ apiKey: "test_key" });
-      const result = await (provider as any).ensureCustomer("12345678901", "Test Customer", "test@example.com");
+      const input = makeCreateBoletoInput();
+      const result = await (provider as any).ensureCustomer(input.customer);
 
-      expect(result).toBeDefined();
+      expect(result).toBe(12345);
       expect(mockFetch).toHaveBeenCalledWith(
         expect.stringContaining("/customers"),
         expect.objectContaining({ method: "POST" })
@@ -126,12 +135,21 @@ describe("VindiProvider", () => {
       );
 
       const provider = new VindiProvider({ apiKey: "test_key" });
-      const result = await (provider as any).ensureCustomer("12345678901", "Test Customer", "test@example.com");
+      const input = makeCreateBoletoInput();
+      const result = await (provider as any).ensureCustomer(input.customer);
 
       expect(result).toBeDefined();
     });
 
     it("handles customer creation errors", async () => {
+      // Mock search - customer not found
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse({
+          status: 200,
+          body: { customers: [] },
+        })
+      );
+      // Mock creation failure
       mockFetch.mockResolvedValueOnce(
         createMockResponse({
           status: 422,
@@ -140,11 +158,12 @@ describe("VindiProvider", () => {
       );
 
       const provider = new VindiProvider({ apiKey: "test_key" });
+      const input = makeCreateBoletoInput({ customer: { ...makeCreateBoletoInput().customer, document: "invalid" } });
 
       try {
-        await (provider as any).ensureCustomer("invalid", "Test", "test@example.com");
+        await (provider as any).ensureCustomer(input.customer);
       } catch (error) {
-        expect((error as Error).message).toContain("customer");
+        expect((error as Error).message).toContain("422");
       }
     });
   });
@@ -188,7 +207,7 @@ describe("VindiProvider", () => {
       const result = await provider.createBoleto(input);
 
       expect(result).toBeDefined();
-      expect(result.id).toBe("999");
+      expect(result.gatewayId).toBe("999");
       expect(mockFetch).toHaveBeenCalledWith(
         expect.stringContaining("/bills"),
         expect.objectContaining({
@@ -284,8 +303,8 @@ describe("VindiProvider", () => {
       const input = makeCreateBoletoInput();
       const result = await provider.createBoleto(input);
 
-      expect(result.bankSlip).toBeDefined();
-      expect(result.bankSlip?.barcode).toBe("12345678901234567890123456789012345678901234");
+      expect(result).toBeDefined();
+      expect(result.line).toBe("12345678901234567890123456789012345678901234");
     });
   });
 
@@ -345,9 +364,10 @@ describe("VindiProvider", () => {
       );
 
       const provider = new VindiProvider({ apiKey: "bad_key" });
+      const input = makeCreateBoletoInput();
 
       try {
-        await (provider as any).ensureCustomer("123", "Test", "test@example.com");
+        await (provider as any).ensureCustomer(input.customer);
       } catch (error) {
         expect((error as Error).message).toContain("Unauthorized");
       }
@@ -363,11 +383,12 @@ describe("VindiProvider", () => {
       );
 
       const provider = new VindiProvider({ apiKey: "test_key" });
+      const input = makeCreateBoletoInput();
 
       try {
-        await (provider as any).ensureCustomer("123", "Test", "test@example.com");
+        await (provider as any).ensureCustomer(input.customer);
       } catch (error) {
-        expect((error as Error).message).toContain("rate");
+        expect((error as Error).message).toContain("429");
       }
     });
 
@@ -377,11 +398,12 @@ describe("VindiProvider", () => {
       mockFetch.mockRejectedValueOnce(abortError);
 
       const provider = new VindiProvider({ apiKey: "test_key" });
+      const input = makeCreateBoletoInput();
 
       try {
-        await (provider as any).ensureCustomer("123", "Test", "test@example.com");
+        await (provider as any).ensureCustomer(input.customer);
       } catch (error) {
-        expect((error as Error).message).toContain("timeout");
+        expect((error as Error).message).toContain("aborted");
       }
     });
   });
@@ -424,17 +446,37 @@ describe("PagarmeProvider", () => {
 
   describe("Bill Creation", () => {
     it("creates boleto with instructions and expiration", async () => {
+      // Mock findCustomerByDocument - no customer found
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse({
+          status: 200,
+          body: { customers: [] },
+        })
+      );
+      // Mock createCustomer
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse({
+          status: 201,
+          body: { id: 123, name: "Test Customer" },
+        })
+      );
+      // Mock createOrder with proper structure
       mockFetch.mockResolvedValueOnce(
         createMockResponse({
           status: 200,
           body: {
-            id: "charge_123",
+            id: "order_123",
             status: "open",
-            last_transaction: {
-              boleto: {
+            charges: [{
+              id: "charge_123",
+              status: "open",
+              last_transaction: {
+                line: "12345678901234567890123456789012345678901234",
                 barcode: "12345678901234567890123456789012345678901234",
+                url: "https://pagar.me/boleto/123",
+                pdf: "https://pagar.me/boleto/123/pdf",
               },
-            },
+            }],
           },
         })
       );
@@ -448,42 +490,54 @@ describe("PagarmeProvider", () => {
       const result = await provider.createBoleto(input);
 
       expect(result).toBeDefined();
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining("/charges"),
-        expect.objectContaining({
-          method: "POST",
-          headers: expect.objectContaining({
-            Authorization: expect.stringContaining("Basic"),
-          }),
-        })
-      );
+      expect(result.barcode).toBe("12345678901234567890123456789012345678901234");
     });
 
     it("handles payment order parameters correctly", async () => {
+      // Mock findCustomerByDocument - no customer found
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse({
+          status: 200,
+          body: { customers: [] },
+        })
+      );
+      // Mock createCustomer
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse({
+          status: 201,
+          body: { id: 456, name: "Another Customer" },
+        })
+      );
+      // Mock createOrder with proper structure
       mockFetch.mockResolvedValueOnce(
         createMockResponse({
           status: 200,
           body: {
-            id: "charge_123",
+            id: "order_456",
             status: "open",
-            order: { id: "order_123" },
-            last_transaction: {
-              boleto: {
-                barcode: "12345678901234567890123456789012345678901234",
+            charges: [{
+              id: "charge_456",
+              status: "open",
+              last_transaction: {
+                line: "98765432109876543210987654321098765432109876",
+                barcode: "98765432109876543210987654321098765432109876",
+                url: "https://pagar.me/boleto/456",
+                pdf: "https://pagar.me/boleto/456/pdf",
               },
-            },
+            }],
           },
         })
       );
 
       const provider = new PagarmeProvider({ apiKey: "test_key" });
       const input = makeCreateBoletoInput({
-        metadata: { orderId: "order_123" },
+        metadata: { orderId: "order_456" },
       });
 
       const result = await provider.createBoleto(input);
 
       expect(result).toBeDefined();
+      expect(result.barcode).toBe("98765432109876543210987654321098765432109876");
     });
   });
 
@@ -535,7 +589,7 @@ describe("PagarmeProvider", () => {
       try {
         await provider.createBoleto(input);
       } catch (error) {
-        expect((error as Error).message).toContain("validation");
+        expect((error as Error).message).toContain("422");
       }
     });
 
@@ -553,7 +607,7 @@ describe("PagarmeProvider", () => {
       try {
         await provider.createBoleto(input);
       } catch (error) {
-        expect((error as Error).message).toContain("auth");
+        expect((error as Error).message).toContain("401");
       }
     });
 
@@ -572,7 +626,7 @@ describe("PagarmeProvider", () => {
       try {
         await provider.createBoleto(input);
       } catch (error) {
-        expect((error as Error).message).toContain("rate");
+        expect((error as Error).message).toContain("429");
       }
     });
 

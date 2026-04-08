@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { setCobrefacilConfig } from "../actions";
 
@@ -69,7 +70,7 @@ describe("setCobrefacilConfig", () => {
     expect(result.success).toBe(true);
     expect(prisma.company.update).toHaveBeenCalledWith({
       where: { id: companyId },
-      data: { cobrefacilConfig: null },
+      data: { cobrefacilConfig: Prisma.JsonNull },
     });
   });
 
