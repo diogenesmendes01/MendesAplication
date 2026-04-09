@@ -129,7 +129,7 @@ export function channelLabel(channel: string | null): string {
     case "RECLAMEAQUI":
       return "Reclame Aqui";
     default:
-      return "Web/Manual";
+      return "Web";
   }
 }
 
@@ -143,5 +143,21 @@ export function channelColor(channel: string): string {
       return "#8b5cf6";
     default:
       return "#94a3b8";
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Hex colors (for charts / Recharts <Cell fill={...} />)
+// ---------------------------------------------------------------------------
+
+/** Hex color for priority — use in Recharts or inline SVG fills. */
+export function priorityHexColor(p: string): string {
+  switch (p) {
+    case "HIGH":
+      return "#ef4444";
+    case "LOW":
+      return "#3b82f6";
+    default:
+      return "#eab308";
   }
 }

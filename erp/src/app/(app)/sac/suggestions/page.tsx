@@ -42,7 +42,13 @@ import {
 } from "../tickets/[id]/suggestion-actions";
 import { toast } from "sonner";
 import { timeAgo, confidenceColor } from "@/utils/suggestion-helpers";
-import { channelLabel } from "@/lib/sac/ticket-formatters";
+import { channelLabel as _channelLabel } from "@/lib/sac/ticket-formatters";
+
+/** Suggestions page: preserve raw channel name for unknown types. */
+function channelLabel(channel: string): string {
+  const label = _channelLabel(channel);
+  return label === "Web" ? channel : label;
+}
 
 // ---------------------------------------------------------------------------
 // Helpers

@@ -26,7 +26,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getTicketDashboard, type TicketDashboard } from "./dashboard-actions";
 import { RaReputationCard } from "./ra-reputation-card";
-import { channelLabel, channelColor, priorityLabel, priorityColor } from "@/lib/sac/ticket-formatters";
+import { channelLabel, channelColor, priorityLabel, priorityHexColor } from "@/lib/sac/ticket-formatters";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -142,7 +142,7 @@ export function TicketDashboardKpis({
   const priorityData = data.ticketsByPriority.map((item) => ({
     label: priorityLabel(item.priority),
     value: item.count,
-    color: priorityColor(item.priority),
+    color: priorityHexColor(item.priority),
   }));
 
   // When showing a specific channel, omit the RA reputation card and bar chart
