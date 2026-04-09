@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useCompany } from "@/contexts/company-context";
 import { getSlaDashboard, type SlaDashboardResult } from "./actions";
-import { priorityColor } from "@/lib/sac/ticket-formatters";
+import { priorityTextColor } from "@/lib/sac/ticket-formatters";
 
 function minutesToHuman(m: number): string {
   if (m < 60) return `${m}min`;
@@ -109,7 +109,7 @@ export default function SlaDashboardPage() {
                   <TableRow key={t.id}>
                     <TableCell className="font-medium max-w-[250px] truncate">{t.subject}</TableCell>
                     <TableCell><Badge variant="outline">{t.channelType ? CHANNEL_LABELS[t.channelType] ?? t.channelType : "—"}</Badge></TableCell>
-                    <TableCell><span className={priorityColor(t.priority)}>{PRIORITY_LABELS[t.priority] ?? t.priority}</span></TableCell>
+                    <TableCell><span className={priorityTextColor(t.priority)}>{PRIORITY_LABELS[t.priority] ?? t.priority}</span></TableCell>
                     <TableCell>{STAGE_LABELS[t.stage] ?? t.stage}</TableCell>
                     <TableCell><Badge variant="outline" className="border-yellow-500 text-yellow-700">⏱️ {minutesToHuman(t.minutesLeft)}</Badge></TableCell>
                   </TableRow>

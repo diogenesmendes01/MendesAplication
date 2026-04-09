@@ -30,6 +30,18 @@ export function priorityColor(p: string): string {
   }
 }
 
+/** Text-only variant for inline spans (no background). */
+export function priorityTextColor(p: string): string {
+  switch (p) {
+    case "HIGH":
+      return "text-red-600";
+    case "LOW":
+      return "text-blue-600";
+    default:
+      return "text-yellow-600";
+  }
+}
+
 export function priorityVariant(
   priority: string
 ): "destructive" | "secondary" | "outline" {
@@ -97,6 +109,8 @@ export function statusColor(s: string): string {
       return "bg-green-100 text-green-800";
     case "CLOSED":
       return "bg-gray-100 text-gray-800";
+    case "MERGED":
+      return "bg-purple-100 text-purple-800";
     default:
       return "bg-gray-100 text-gray-800";
   }
