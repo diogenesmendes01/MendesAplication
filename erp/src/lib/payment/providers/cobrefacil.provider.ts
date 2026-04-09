@@ -395,8 +395,14 @@ export class CobreFacilProvider implements PaymentGateway {
     const signature =
       headers["x-webhook-signature"] ?? headers["X-Webhook-Signature"];
 
-    // If webhook secret is configured, validate HMAC signature
-    if (this.webhookSecret && signature) {
+    // If webhook secret is configured, HMAC validation is mandatory
+    if (this.webhookSecret) {
+      if (!signature) {
+        logger.warn(
+          "[CobreFacil] Webhook secret configured but no X-Webhook-Signature header — rejecting",
+        );
+        return false;
+      }
       if (!this.validateHmacSignature(body, signature)) {
         logger.warn(
           "[CobreFacil] Webhook signature validation failed — rejecting",
@@ -405,8 +411,7 @@ export class CobreFacilProvider implements PaymentGateway {
       }
     }
 
-    // Fallback: validate payload structure if HMAC is not available
-    // (e.g., in development or if API hasn't provided signature header yet)
+    // Validate payload structure
     try {
       const parsed = JSON.parse(body) as Partial<CobreFacilWebhookPayload>;
       return !!(parsed.event && parsed.data);
