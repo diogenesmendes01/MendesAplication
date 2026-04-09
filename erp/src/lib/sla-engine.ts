@@ -262,7 +262,7 @@ export async function checkSlaViolations(): Promise<{ breached: number; atRisk: 
   });
 
   // Batch-load all SLA configs in a single query instead of N+1
-  const companyIds = [...new Set(tickets.map((t) => t.companyId))];
+  const companyIds = Array.from(new Set(tickets.map((t) => t.companyId)));
   const getConfig = await batchLoadSlaConfigs(companyIds, ["first_reply", "resolution"]);
 
   for (const ticket of tickets) {
