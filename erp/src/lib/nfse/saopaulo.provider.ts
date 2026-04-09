@@ -20,6 +20,7 @@ import axios from "axios";
 import forge from "node-forge";
 import { SignedXml } from "xml-crypto";
 import type { CancelNfseInput, CancelNfseResult, EmitNfseInput, EmitNfseResult, NfseProvider } from "../nfse";
+import { getRpsNumeroWithSlice } from "./nfse-helpers";
 
 // nfews suporta v1 e v2; nfe (legado) só v1
 // Nota: a Prefeitura de SP unificou o endpoint NFS-e em nfews.prefeitura.sp.gov.br
@@ -357,11 +358,7 @@ export class SaoPauloNfseProvider implements NfseProvider {
 
   async emitNFSe(input: EmitNfseInput): Promise<EmitNfseResult> {
     const hoje = new Date();
-    // Usar o rpsNumero fornecido (gerado atomicamente via banco) para evitar
-    // colisões em emissões simultâneas. Date.now() como fallback apenas para
-    // compatibilidade com chamadas legadas que não passam o campo.
-    // TODO: remover fallback quando todos os callers passarem rpsNumero.
-    const rpsNumero = input.rpsNumero ?? String(Date.now()).slice(-12);
+    const rpsNumero = getRpsNumeroWithSlice(input, 12);
     const rpsSerieNumero = "A1";
     const dataEmissaoStr =
       `${hoje.getFullYear()}` +

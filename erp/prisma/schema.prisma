@@ -64,6 +64,7 @@ model Company {
   logoUrl             String?
   status              Status   @default(ACTIVE)
   sharedClientGroupId String?
+  cobrefacilConfig    Json?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 

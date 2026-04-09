@@ -71,6 +71,8 @@ export class SantanderAuthManager {
   private readonly credentials: SantanderCredentials;
   private cachedToken: CachedToken | null = null;
   private httpsAgent: UndiciAgent | null = null;
+  /** Pending promise for token request (singleflight pattern) */
+  private pendingTokenRequest: Promise<string> | null = null;
 
   constructor(credentials: SantanderCredentials) {
     this.credentials = credentials;
@@ -102,20 +104,36 @@ export class SantanderAuthManager {
   /**
    * Obtém um access token OAuth 2.0 válido.
    * Usa cache em memória e renova automaticamente quando faltam <= 60s.
+   * Implementa singleflight para evitar concurrent token requests.
    */
   async getAccessToken(): Promise<string> {
     if (this.cachedToken && !this.isTokenExpired(this.cachedToken)) {
       return this.cachedToken.accessToken;
     }
 
-    const tokenData = await this.requestNewToken();
+    // F1.2: Singleflight pattern — if a token request is already in flight, wait for it
+    if (this.pendingTokenRequest) {
+      return this.pendingTokenRequest;
+    }
 
-    this.cachedToken = {
-      accessToken: tokenData.access_token,
-      expiresAt: Date.now() + tokenData.expires_in * 1000,
-    };
+    // Create a new token request promise and store it
+    this.pendingTokenRequest = (async () => {
+      try {
+        const tokenData = await this.requestNewToken();
 
-    return this.cachedToken.accessToken;
+        this.cachedToken = {
+          accessToken: tokenData.access_token,
+          expiresAt: Date.now() + tokenData.expires_in * 1000,
+        };
+
+        return this.cachedToken.accessToken;
+      } finally {
+        // Always clean up the pending promise
+        this.pendingTokenRequest = null;
+      }
+    })();
+
+    return this.pendingTokenRequest;
   }
 
   /**

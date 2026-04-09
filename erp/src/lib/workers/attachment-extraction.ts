@@ -1,4 +1,6 @@
-/* eslint-disable */
+// File-level disables for worker with dynamic type handling and large-file streaming
+// TODO: Refactor with TypeScript strict mode and streaming-based processing
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return */
 import { Job } from "bullmq";
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";

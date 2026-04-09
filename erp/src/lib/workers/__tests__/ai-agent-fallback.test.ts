@@ -5,6 +5,13 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
+// vi.hoisted ensures prisma mocks are available when vi.mock factory runs
+const { mockFindUnique, mockTicketUpdate, mockTicketMessageCreate } = vi.hoisted(() => ({
+  mockFindUnique: vi.fn(),
+  mockTicketUpdate: vi.fn().mockResolvedValue({}),
+  mockTicketMessageCreate: vi.fn().mockResolvedValue({}),
+}));
+
 const mockRunAgent = vi.fn();
 const mockBuildFallbackChain = vi.fn().mockResolvedValue([]);
 const mockMarkTicketPendingRecovery = vi.fn().mockResolvedValue(undefined);
@@ -21,8 +28,8 @@ const mockResolveAiConfigSelect = vi.fn().mockResolvedValue({
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
-    ticket: { update: vi.fn().mockResolvedValue({}), findUnique: vi.fn().mockResolvedValue(null) },
-    ticketMessage: { create: vi.fn().mockResolvedValue({}) },
+    ticket: { update: mockTicketUpdate, findUnique: mockFindUnique },
+    ticketMessage: { create: mockTicketMessageCreate },
     aiConfig: { findFirst: vi.fn().mockResolvedValue(null) },
   },
 }));
@@ -113,6 +120,9 @@ function createJob(data: Record<string, unknown>): Job {
 describe("processAiAgent — fallback integration", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Re-establish ticket mock after clearAllMocks() wipes implementations.
+    // aiEnabled: true so the ai-agent doesn't bail on the AI-disabled guard.
+    mockFindUnique.mockResolvedValue({ aiEnabled: true, client: null });
   });
 
   it("builds fallback chain and passes to runAgent", async () => {

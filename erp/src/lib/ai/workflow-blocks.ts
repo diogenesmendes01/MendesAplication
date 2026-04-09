@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/prisma";
+import { logger } from "@/lib/logger";
+import { getValidatedModelName } from "./workflow-validation";
 import type {
   StepType,
   StepResult,
@@ -124,13 +126,17 @@ const ENTITY_MODEL_MAP: Record<string, string> = {
   refund: "refund",
 };
 
-/** Whitelist of Prisma model names allowed for dynamic access */
-const ALLOWED_PRISMA_MODELS = new Set(Object.values(ENTITY_MODEL_MAP));
-
 async function executeSearch(config: SearchConfig, ctx: BlockContext): Promise<StepResult> {
   const { entidade, filtro, limiteResultados = 10, ordenacao } = config;
-  const modelName = ENTITY_MODEL_MAP[entidade];
-  if (!modelName || !ALLOWED_PRISMA_MODELS.has(modelName)) return { success: false, error: `Entidade desconhecida ou não permitida: ${entidade}` };
+
+  let modelName: string;
+  try {
+    modelName = getValidatedModelName(entidade, ENTITY_MODEL_MAP);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error({ err, entidade }, `Invalid entity in search: ${message}`);
+    return { success: false, error: `Entidade desconhecida ou não permitida: ${entidade}` };
+  }
 
   const resolvedFilter = interpolateRecord(filtro, ctx.stepData);
   const where: Record<string, unknown> = { companyId: ctx.companyId };
@@ -159,10 +165,13 @@ async function executeSearch(config: SearchConfig, ctx: BlockContext): Promise<S
   }
 
   try {
-    const model = prisma[modelName as keyof typeof prisma] as unknown as { findMany: (args: unknown) => Promise<unknown[]> };
+    // Safe access to Prisma model — modelName is validated above via getValidatedModelName()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const model = prisma[modelName as keyof typeof prisma] as any;
     const results = await model.findMany({ where, take: limiteResultados, ...(orderBy && { orderBy }) });
     return { success: true, data: { total: results.length, results }, message: `Encontrados ${results.length} resultado(s).` };
   } catch (err) {
+    logger.error({ err, entidade, where }, `Error searching entity`);
     return { success: false, error: `Erro ao buscar ${entidade}: ${err instanceof Error ? err.message : String(err)}` };
   }
 }
@@ -171,8 +180,15 @@ async function executeSearch(config: SearchConfig, ctx: BlockContext): Promise<S
 
 async function executeUpdate(config: UpdateConfig, ctx: BlockContext): Promise<StepResult> {
   const { entidade, filtro, campos, requireConfirmation, auditLog = true } = config;
-  const modelName = ENTITY_MODEL_MAP[entidade];
-  if (!modelName || !ALLOWED_PRISMA_MODELS.has(modelName)) return { success: false, error: `Entidade desconhecida ou não permitida: ${entidade}` };
+
+  let modelName: string;
+  try {
+    modelName = getValidatedModelName(entidade, ENTITY_MODEL_MAP);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error({ err, entidade }, `Invalid entity in update: ${message}`);
+    return { success: false, error: `Entidade desconhecida ou não permitida: ${entidade}` };
+  }
 
   // Fix 5: requireConfirmation — pause for human confirmation before writing
   if (requireConfirmation && !ctx.stepData._updateConfirmed) {
@@ -194,7 +210,9 @@ async function executeUpdate(config: UpdateConfig, ctx: BlockContext): Promise<S
   for (const [k, v] of Object.entries(resolvedFilter)) where[k] = v;
 
   try {
-    const model = prisma[modelName as keyof typeof prisma] as unknown as { findMany: (args: unknown) => Promise<unknown[]>; update: (args: unknown) => Promise<unknown> };
+    // Safe access to Prisma model — modelName is validated above via getValidatedModelName()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const model = prisma[modelName as keyof typeof prisma] as any;
     const records = await model.findMany({ where, take: 50 });
     if (records.length === 0) return { success: false, error: `Nenhum registro encontrado.` };
 
