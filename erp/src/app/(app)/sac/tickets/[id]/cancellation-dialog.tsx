@@ -34,7 +34,7 @@ import {
 
 const cancellationSchema = z.object({
   cancelType: z.enum(["both", "proposal", "boletos"]),
-  justification: z.string().min(1, "Justificativa é obrigatória"),
+  justification: z.string().trim().min(1, "Justificativa é obrigatória"),
 });
 
 type CancellationFormData = z.infer<typeof cancellationSchema>;

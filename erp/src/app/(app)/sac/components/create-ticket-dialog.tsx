@@ -32,8 +32,8 @@ import { createTicket } from "../tickets/actions";
 
 const createTicketSchema = z.object({
   clientId: z.string().min(1, "Selecione um cliente"),
-  subject: z.string().min(1, "Assunto é obrigatório"),
-  description: z.string().min(1, "Descrição é obrigatória"),
+  subject: z.string().trim().min(1, "Assunto é obrigatório"),
+  description: z.string().trim().min(1, "Descrição é obrigatória"),
   priority: z.enum(["HIGH", "MEDIUM", "LOW"]),
   assigneeId: z.string().optional(),
 });
