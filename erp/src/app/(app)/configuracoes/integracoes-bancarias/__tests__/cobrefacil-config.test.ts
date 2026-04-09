@@ -92,25 +92,30 @@ describe("setCobrefacilConfig", () => {
     });
   });
 
-  it("valida campos obrigatórios", async () => {
+  it("rejeita endereço com campos obrigatórios ausentes", async () => {
     const incompleteAddress = {
       zipCode: "13000000",
       street: "Avenida Teste",
       // missing number, neighborhood, city, state
     };
 
-    // Note: In a real implementation, you might want to add validation.
-    // For now, we test that it passes through.
-    (prisma.company.update as any).mockResolvedValue({
-      id: companyId,
-      cobrefacilConfig: incompleteAddress,
-    });
+    await expect(
+      setCobrefacilConfig(companyId, incompleteAddress as unknown as any),
+    ).rejects.toThrow("Campo obrigatório inválido");
 
-    const result = await setCobrefacilConfig(
-      companyId,
-      incompleteAddress as unknown as any,
-    );
+    expect(prisma.company.update).not.toHaveBeenCalled();
+  });
 
-    expect(result.success).toBe(true);
+  it("rejeita campos obrigatórios vazios", async () => {
+    const addressWithEmptyNumber = {
+      ...testAddress,
+      number: "   ", // whitespace-only
+    };
+
+    await expect(
+      setCobrefacilConfig(companyId, addressWithEmptyNumber),
+    ).rejects.toThrow("Campo obrigatório inválido");
+
+    expect(prisma.company.update).not.toHaveBeenCalled();
   });
 });

@@ -8,6 +8,18 @@ import type { Job } from "bullmq";
 
 // ─── Mock Setup ──────────────────────────────────────────────────────────────
 
+// vi.hoisted ensures these are available when vi.mock factories run (which
+// are hoisted to the top of the file before any variable declarations).
+const {
+  mockPrismaTicket,
+  mockPrismaTicketMessage,
+  mockPrismaAiConfig,
+} = vi.hoisted(() => ({
+  mockPrismaTicket: { findUnique: vi.fn(), update: vi.fn() },
+  mockPrismaTicketMessage: { create: vi.fn() },
+  mockPrismaAiConfig: { findFirst: vi.fn() },
+}));
+
 const mockRunAgent = vi.fn();
 const mockBuildFallbackChain = vi.fn().mockResolvedValue([]);
 const mockMarkTicketPendingRecovery = vi.fn().mockResolvedValue(undefined);
@@ -21,19 +33,6 @@ const mockResolveAiConfigSelect = vi.fn().mockResolvedValue({
   raPrivateBeforePublic: true,
   raAutoRequestEvaluation: false,
 });
-
-const mockPrismaTicket = {
-  findUnique: vi.fn(),
-  update: vi.fn(),
-};
-
-const mockPrismaTicketMessage = {
-  create: vi.fn(),
-};
-
-const mockPrismaAiConfig = {
-  findFirst: vi.fn(),
-};
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
@@ -202,23 +201,17 @@ describe("AI Agent Worker Processor", () => {
       await processAiAgent(job as Job<AiAgentJobData>);
 
       expect(mockRunAgent).toHaveBeenCalledWith(
-        expect.objectContaining({
-          channel: "EMAIL",
-        })
+        "ticket-1",
+        "company-1",
+        "Corporate inquiry",
+        "EMAIL",
+        expect.any(Object),
       );
     });
 
     it("handles ReclameAqui with escalation keywords", async () => {
-      mockRunAgent.mockResolvedValue({
-        responded: true,
-        response: "Escalating to human",
-        raResponse: {
-          confidence: 0.95,
-          action: "escalate",
-        },
-        toolsExecuted: [],
-      });
-
+      // "Processo judicial" contains RA escalation keywords → agent escalates,
+      // runAgent is NOT called, ticket is updated to disable AI.
       const job = makeJob(
         makeJobData({
           channel: "RECLAMEAQUI",
@@ -228,7 +221,15 @@ describe("AI Agent Worker Processor", () => {
 
       await processAiAgent(job as Job<AiAgentJobData>);
 
-      expect(mockRunAgent).toHaveBeenCalled();
+      // Escalation keywords detected → no LLM call
+      expect(mockRunAgent).not.toHaveBeenCalled();
+      // Ticket should be updated to disable AI and set status OPEN
+      expect(mockPrismaTicket.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: "ticket-1" },
+          data: { aiEnabled: false, status: "OPEN" },
+        }),
+      );
     });
   });
 
@@ -275,8 +276,9 @@ describe("AI Agent Worker Processor", () => {
       await processAiAgent(job1 as Job<AiAgentJobData>);
       await processAiAgent(job2 as Job<AiAgentJobData>);
 
-      expect(mockCheckRateLimit).toHaveBeenCalledWith("company-1", expect.any(String));
-      expect(mockCheckRateLimit).toHaveBeenCalledWith("company-2", expect.any(String));
+      // checkRateLimit is called with (ticketId, companyId, channel)
+      expect(mockCheckRateLimit).toHaveBeenCalledWith(expect.any(String), "company-1", expect.any(String));
+      expect(mockCheckRateLimit).toHaveBeenCalledWith(expect.any(String), "company-2", expect.any(String));
     });
   });
 
@@ -306,8 +308,8 @@ describe("AI Agent Worker Processor", () => {
 
       await processAiAgent(job as Job<AiAgentJobData>);
 
-      // Should not attempt fallback chain
-      expect(mockBuildFallbackChain).not.toHaveBeenCalled();
+      // buildFallbackChain is always called (recovery only affects logging)
+      expect(mockBuildFallbackChain).toHaveBeenCalled();
     });
 
     it("handles missing ticket gracefully", async () => {
@@ -404,9 +406,11 @@ describe("AI Agent Worker Processor", () => {
       await processAiAgent(job as Job<AiAgentJobData>);
 
       expect(mockRunAgent).toHaveBeenCalledWith(
-        expect.objectContaining({
-          channel: "WHATSAPP",
-        })
+        "ticket-1",
+        "company-1",
+        "Short message",
+        "WHATSAPP",
+        expect.any(Object),
       );
     });
 
@@ -424,6 +428,7 @@ describe("AI Agent Worker Processor", () => {
         toolsExecuted: [],
       });
 
+      // Default message ("Hello, I need help") contains no RA escalation keywords
       const job = makeJob(
         makeJobData({
           channel: "RECLAMEAQUI",
@@ -433,12 +438,17 @@ describe("AI Agent Worker Processor", () => {
 
       await processAiAgent(job as Job<AiAgentJobData>);
 
+      // runAgent called with enriched raContext (includes needsCnpjIdentification)
       expect(mockRunAgent).toHaveBeenCalledWith(
+        "ticket-1",
+        "company-1",
+        "Hello, I need help",
+        "RECLAMEAQUI",
         expect.objectContaining({
           raContext: expect.objectContaining({
             complaintId: "complaint-123",
           }),
-        })
+        }),
       );
     });
   });
@@ -597,10 +607,11 @@ describe("Complex Integration Scenarios", () => {
     await processAiAgent(job as Job<AiAgentJobData>);
 
     expect(mockRunAgent).toHaveBeenCalledWith(
-      expect.objectContaining({
-        messageContent: "What is my account status?",
-        channel: "EMAIL",
-      })
+      "ticket-1",
+      "company-1",
+      "What is my account status?",
+      "EMAIL",
+      expect.any(Object),
     );
   });
 
