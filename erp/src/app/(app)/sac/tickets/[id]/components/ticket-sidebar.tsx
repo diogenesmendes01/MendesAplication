@@ -42,7 +42,6 @@ import {
   addTag,
   removeTag,
   approveRefund,
-  rejectRefund,
   getTicketRefunds,
   approveCancellation,
   getCancellationInfo,
