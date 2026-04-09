@@ -1,8 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect } from "react";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
+import { useForm, Controller } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -26,6 +29,28 @@ import {
   RaModerationReason,
   MODERATION_REASON_LABELS,
 } from "@/lib/reclameaqui/types";
+
+// ---------------------------------------------------------------------------
+// Zod schema with conditional validation
+// ---------------------------------------------------------------------------
+
+const moderationSchema = z
+  .object({
+    reason: z.string().min(1, "Selecione um motivo"),
+    justification: z.string().trim().min(1, "Justificativa é obrigatória"),
+    companySearch: z.string(),
+  })
+  .refine(
+    (data) =>
+      Number(data.reason) !== RaModerationReason.OUTRA_EMPRESA ||
+      data.companySearch.trim().length > 0,
+    {
+      message: "ID da empresa destino é obrigatório para este motivo",
+      path: ["companySearch"],
+    }
+  );
+
+type ModerationFormData = z.infer<typeof moderationSchema>;
 
 // ---------------------------------------------------------------------------
 // Props
@@ -64,31 +89,47 @@ export default function RaModerationDialog({
   companyId,
   onSuccess,
 }: RaModerationDialogProps) {
-  const [reason, setReason] = useState<string>("");
-  const [justification, setJustification] = useState("");
-  const [companySearch, setCompanySearch] = useState("");
-  const [submitting, setSubmitting] = useState(false);
+  const form = useForm<ModerationFormData>({
+    resolver: zodResolver(moderationSchema),
+    defaultValues: {
+      reason: "",
+      justification: "",
+      companySearch: "",
+    },
+  });
 
-  const reasonNum = reason ? Number(reason) : null;
+  const {
+    register,
+    control,
+    handleSubmit,
+    watch,
+    reset,
+    formState: { errors, isSubmitting },
+  } = form;
+
+  // Reset form when dialog opens
+  useEffect(() => {
+    if (open) {
+      reset({ reason: "", justification: "", companySearch: "" });
+    }
+  }, [open, reset]);
+
+  const reasonValue = watch("reason");
+  const reasonNum = reasonValue ? Number(reasonValue) : null;
   const isOutraEmpresa = reasonNum === RaModerationReason.OUTRA_EMPRESA;
 
-  const canSubmit =
-    reasonNum != null &&
-    justification.trim().length > 0 &&
-    (!isOutraEmpresa || companySearch.trim().length > 0);
+  async function onSubmit(data: ModerationFormData) {
+    const num = Number(data.reason);
+    const isOE = num === RaModerationReason.OUTRA_EMPRESA;
 
-  async function handleSubmit() {
-    if (!canSubmit || reasonNum == null) return;
-
-    setSubmitting(true);
     try {
       const result = await requestRaModeration(
         ticketId,
         companyId,
-        reasonNum,
-        justification.trim(),
-        isOutraEmpresa && companySearch.trim()
-          ? Number(companySearch.trim()) || undefined
+        num,
+        data.justification.trim(),
+        isOE && data.companySearch.trim()
+          ? Number(data.companySearch.trim()) || undefined
           : undefined
       );
 
@@ -98,18 +139,13 @@ export default function RaModerationDialog({
       }
 
       toast.success("Solicitação de moderação enviada ao Reclame Aqui");
-      // Reset form
-      setReason("");
-      setJustification("");
-      setCompanySearch("");
+      reset();
       onOpenChange(false);
       onSuccess?.();
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : "Erro inesperado"
       );
-    } finally {
-      setSubmitting(false);
     }
   }
 
@@ -120,22 +156,31 @@ export default function RaModerationDialog({
           <DialogTitle>⚖️ Solicitar Moderação — Reclame Aqui</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           {/* Reason select */}
           <div>
             <Label htmlFor="ra-mod-reason">Motivo *</Label>
-            <Select value={reason} onValueChange={setReason}>
-              <SelectTrigger id="ra-mod-reason">
-                <SelectValue placeholder="Selecione o motivo" />
-              </SelectTrigger>
-              <SelectContent>
-                {REASON_OPTIONS.map((opt) => (
-                  <SelectItem key={opt.value} value={String(opt.value)}>
-                    {opt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Controller
+              control={control}
+              name="reason"
+              render={({ field }) => (
+                <Select value={field.value} onValueChange={field.onChange}>
+                  <SelectTrigger id="ra-mod-reason">
+                    <SelectValue placeholder="Selecione o motivo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {REASON_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={String(opt.value)}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            />
+            {errors.reason && (
+              <p className="text-xs text-destructive mt-1">{errors.reason.message}</p>
+            )}
           </div>
 
           {/* Company search (only for reason = OUTRA_EMPRESA) */}
@@ -146,10 +191,12 @@ export default function RaModerationDialog({
               </Label>
               <Input
                 id="ra-mod-company"
-                value={companySearch}
-                onChange={(e) => setCompanySearch(e.target.value)}
+                {...register("companySearch")}
                 placeholder="ID numérico da empresa no Reclame Aqui"
               />
+              {errors.companySearch && (
+                <p className="text-xs text-destructive mt-1">{errors.companySearch.message}</p>
+              )}
               <p className="text-xs text-muted-foreground mt-1">
                 Informe o ID da empresa correta no Reclame Aqui para migração
               </p>
@@ -161,29 +208,32 @@ export default function RaModerationDialog({
             <Label htmlFor="ra-mod-justification">Justificativa *</Label>
             <Textarea
               id="ra-mod-justification"
-              value={justification}
-              onChange={(e) => setJustification(e.target.value)}
+              {...register("justification")}
               placeholder="Descreva o motivo da solicitação de moderação..."
               rows={4}
             />
+            {errors.justification && (
+              <p className="text-xs text-destructive mt-1">{errors.justification.message}</p>
+            )}
           </div>
-        </div>
 
-        <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={submitting}
-          >
-            Cancelar
-          </Button>
-          <Button onClick={handleSubmit} disabled={!canSubmit || submitting}>
-            {submitting ? (
-              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-            ) : null}
-            {submitting ? "Enviando..." : "📤 Enviar Moderação"}
-          </Button>
-        </DialogFooter>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={isSubmitting}
+            >
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? (
+                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+              ) : null}
+              {isSubmitting ? "Enviando..." : "📤 Enviar Moderação"}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );
