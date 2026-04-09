@@ -74,6 +74,7 @@ import type { AiSuggestionData } from "./components/ai-suggestion-card";
 import { getSuggestions } from "./suggestion-actions";
 import type { SuggestionRecord } from "./suggestion-actions";
 import AiAuditPanel from "./components/ai-audit-panel";
+import { channelLabel, statusLabel } from "@/lib/sac/ticket-formatters";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -167,33 +168,6 @@ function originLabel(event: TimelineEvent): string | null {
   return null;
 }
 
-function channelLabel(channel: string | null): string {
-  switch (channel) {
-    case "EMAIL":
-      return "Email";
-    case "WHATSAPP":
-      return "WhatsApp";
-    default:
-      return "Web";
-  }
-}
-
-function statusLabel(s: string): string {
-  switch (s) {
-    case "OPEN":
-      return "Aberto";
-    case "IN_PROGRESS":
-      return "Em Andamento";
-    case "WAITING_CLIENT":
-      return "Aguardando Cliente";
-    case "RESOLVED":
-      return "Resolvido";
-    case "CLOSED":
-      return "Fechado";
-    default:
-      return s;
-  }
-}
 
 function refundStatusLabel(s: string): string {
   switch (s) {

@@ -7,11 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from "@/components/ui/alert-dialog";
 import { getLinkedTickets, confirmLink, rejectLink, mergeTickets, type TicketLinkRow } from "../dedup-actions";
+import { channelLabel } from "@/lib/sac/ticket-formatters";
+
+/** In linked tickets context, null channel means unknown — show "—" instead of "Web/Manual" */
+function linkedChannelLabel(type: string | null): string {
+  return type ? channelLabel(type) : "\u2014";
+}
 
 interface LinkedTicketsBannerProps { ticketId: string; companyId: string; }
-
-const channelLabels: Record<string, string> = { EMAIL: "Email", WHATSAPP: "WhatsApp", RECLAMEAQUI: "Reclame Aqui" };
-function channelLabel(type: string | null): string { return type ? channelLabels[type] ?? type : "\u2014"; }
 
 export default function LinkedTicketsBanner({ ticketId, companyId }: LinkedTicketsBannerProps) {
   const [links, setLinks] = useState<TicketLinkRow[]>([]);
@@ -61,7 +64,7 @@ export default function LinkedTicketsBanner({ ticketId, companyId }: LinkedTicke
             {suggested.map((link) => (
               <div key={link.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
                 <div className="flex items-center gap-2 min-w-0">
-                  <Badge variant="outline" className="text-xs shrink-0">{channelLabel(link.linkedTicket.channelType)}</Badge>
+                  <Badge variant="outline" className="text-xs shrink-0">{linkedChannelLabel(link.linkedTicket.channelType)}</Badge>
                   <span className="truncate text-amber-900 dark:text-amber-100">{link.linkedTicket.subject}</span>
                   <span className="text-xs text-amber-600 dark:text-amber-400 shrink-0">{Math.round(link.confidence * 100)}% match</span>
                 </div>
@@ -86,7 +89,7 @@ export default function LinkedTicketsBanner({ ticketId, companyId }: LinkedTicke
             {confirmed.map((link) => (
               <div key={link.id} className="flex items-center gap-2 text-sm">
                 <Badge variant="outline" className="text-xs">{link.type}</Badge>
-                <Badge variant="outline" className="text-xs">{channelLabel(link.linkedTicket.channelType)}</Badge>
+                <Badge variant="outline" className="text-xs">{linkedChannelLabel(link.linkedTicket.channelType)}</Badge>
                 <span className="truncate text-blue-900 dark:text-blue-100">{link.linkedTicket.subject}</span>
                 <Button size="sm" variant="ghost" className="h-6 px-2 text-xs ml-auto" onClick={() => window.open(`/sac/tickets/${link.linkedTicket.id}`, "_blank")}><ExternalLink className="h-3 w-3" /></Button>
               </div>
@@ -100,7 +103,7 @@ export default function LinkedTicketsBanner({ ticketId, companyId }: LinkedTicke
             <AlertDialogTitle className="flex items-center gap-2"><GitMerge className="h-5 w-5" />Merge de Tickets</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-3 text-sm">
-                <p><strong>Ticket principal (mantém):</strong> {mergeTarget?.linkedTicket.subject} ({channelLabel(mergeTarget?.linkedTicket.channelType ?? null)})</p>
+                <p><strong>Ticket principal (mantém):</strong> {mergeTarget?.linkedTicket.subject} ({linkedChannelLabel(mergeTarget?.linkedTicket.channelType ?? null)})</p>
                 <p><strong>Ticket duplicado (merge):</strong> Este ticket</p>
                 <div className="rounded bg-muted p-2 text-xs space-y-1">
                   <p>O que vai acontecer:</p>

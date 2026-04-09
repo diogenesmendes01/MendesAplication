@@ -87,6 +87,7 @@ import TicketTimeline from "./ticket-timeline";
 import RaModerationDialog from "./ra-moderation-dialog";
 import { ChannelBreadcrumb } from "@/components/sac/channel-breadcrumb";
 import { ChannelBadge } from "@/components/sac/channel-badge";
+import { priorityLabel, priorityColor, statusLabel, statusColor } from "@/lib/sac/ticket-formatters";
 import {
   getRaTicketContext,
   requestRaEvaluation,
@@ -124,45 +125,6 @@ const dateFmt = new Intl.DateTimeFormat("pt-BR", {
   minute: "2-digit",
 });
 
-function priorityLabel(p: string) {
-  switch (p) {
-    case "HIGH": return "Alta";
-    case "LOW": return "Baixa";
-    default: return "Média";
-  }
-}
-
-function priorityColor(p: string) {
-  switch (p) {
-    case "HIGH": return "bg-red-100 text-red-800";
-    case "LOW": return "bg-blue-100 text-blue-800";
-    default: return "bg-yellow-100 text-yellow-800";
-  }
-}
-
-function statusLabel(s: string) {
-  switch (s) {
-    case "OPEN": return "Aberto";
-    case "IN_PROGRESS": return "Em Andamento";
-    case "WAITING_CLIENT": return "Aguardando Cliente";
-    case "RESOLVED": return "Resolvido";
-    case "CLOSED": return "Fechado";
-    case "MERGED": return "Mergeado";
-    default: return s;
-  }
-}
-
-function statusColor(s: string) {
-  switch (s) {
-    case "OPEN": return "bg-blue-100 text-blue-800";
-    case "IN_PROGRESS": return "bg-yellow-100 text-yellow-800";
-    case "WAITING_CLIENT": return "bg-orange-100 text-orange-800";
-    case "RESOLVED": return "bg-green-100 text-green-800";
-    case "CLOSED": return "bg-gray-100 text-gray-800";
-    case "MERGED": return "bg-purple-100 text-purple-800";
-    default: return "bg-gray-100 text-gray-800";
-  }
-}
 
 function getFeelingEmoji(feeling: string | null): string {
   if (!feeling) return "";

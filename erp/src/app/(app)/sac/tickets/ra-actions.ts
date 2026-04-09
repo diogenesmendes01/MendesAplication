@@ -13,6 +13,7 @@ import { Prisma } from "@prisma/client";
 import { logger } from "@/lib/logger";
 import { promises as fs } from "fs";
 import crypto from "crypto";
+import { z } from "zod";
 import { decryptConfig } from "@/lib/encryption";
 
 import type { RaActionResult, RaReputationData, RaReputationResult, RaAvailableAction, RaTicketContext } from "./ra-actions.types";
@@ -278,10 +279,14 @@ export async function approveSuggestion(
       return { success: false, error: "Esta sugestão já foi processada" };
     }
 
-    // Parse content JSON to get suggestion messages
-    let parsed: { privateMessage?: string; publicMessage?: string };
+    // Parse and validate content JSON to get suggestion messages
+    const suggestionSchema = z.object({
+      privateMessage: z.string().optional(),
+      publicMessage: z.string().optional(),
+    });
+    let parsed: z.infer<typeof suggestionSchema>;
     try {
-      parsed = JSON.parse(message.content);
+      parsed = suggestionSchema.parse(JSON.parse(message.content));
     } catch {
       return { success: false, error: "Conteúdo da sugestão em formato inválido" };
     }
