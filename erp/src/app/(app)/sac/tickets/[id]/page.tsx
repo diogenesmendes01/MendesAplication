@@ -33,7 +33,7 @@ import {
 import type { TicketStatus } from "@prisma/client";
 import TicketTimeline from "./ticket-timeline";
 import { ChannelBreadcrumb } from "@/components/sac/channel-breadcrumb";
-import { priorityLabel, priorityColor, statusLabel, statusColor } from "@/lib/sac/ticket-formatters";
+import { priorityLabel, priorityColor, statusLabel, statusColor, channelLabel } from "@/lib/sac/ticket-formatters";
 import {
   getRaTicketContext,
   requestRaEvaluation,
@@ -232,7 +232,9 @@ function GenericMiniCards({ ticket }: { ticket: GenericMiniCardsTicket }) {
         </CardHeader>
         <CardContent className="pt-0 px-4 pb-3 space-y-1">
           <div className="flex justify-between text-xs"><span className="text-muted-foreground">Empresa</span><span className="font-medium truncate ml-2">{ticket.company.nomeFantasia}</span></div>
-          <div className="flex justify-between text-xs"><span className="text-muted-foreground">Canal</span><span className="font-medium">{ticket.channelType === "EMAIL" ? "Email" : "WhatsApp"}</span></div>
+          {ticket.channelType && (
+            <div className="flex justify-between text-xs"><span className="text-muted-foreground">Canal</span><span className="font-medium">{channelLabel(ticket.channelType)}</span></div>
+          )}
           <div className="flex justify-between text-xs"><span className="text-muted-foreground">Criado</span><span className="font-medium">{dateFmt.format(new Date(ticket.createdAt))}</span></div>
           <div className="flex justify-between text-xs"><span className="text-muted-foreground">Atualizado</span><span className="font-medium">{dateFmt.format(new Date(ticket.updatedAt))}</span></div>
         </CardContent>
