@@ -1,6 +1,9 @@
 "use client";
 
-import { useState, useEffect, type FormEvent } from "react";
+import { useEffect } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,7 +25,20 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { createTicket } from "../tickets/actions";
-import type { TicketPriority } from "@prisma/client";
+
+// ---------------------------------------------------------------------------
+// Validation schema
+// ---------------------------------------------------------------------------
+
+const createTicketSchema = z.object({
+  clientId: z.string().min(1, "Selecione um cliente"),
+  subject: z.string().min(1, "Assunto é obrigatório"),
+  description: z.string().min(1, "Descrição é obrigatória"),
+  priority: z.enum(["HIGH", "MEDIUM", "LOW"]),
+  assigneeId: z.string().optional(),
+});
+
+type CreateTicketFormData = z.infer<typeof createTicketSchema>;
 
 // ---------------------------------------------------------------------------
 // Props
@@ -49,52 +65,54 @@ export function CreateTicketDialog({
   users,
   onCreated,
 }: CreateTicketDialogProps) {
-  const [saving, setSaving] = useState(false);
-  const [formError, setFormError] = useState("");
-  const [formClientId, setFormClientId] = useState("");
-  const [formSubject, setFormSubject] = useState("");
-  const [formDescription, setFormDescription] = useState("");
-  const [formPriority, setFormPriority] = useState<TicketPriority>("MEDIUM");
-  const [formAssigneeId, setFormAssigneeId] = useState("");
+  const form = useForm<CreateTicketFormData>({
+    resolver: zodResolver(createTicketSchema),
+    defaultValues: {
+      clientId: "",
+      subject: "",
+      description: "",
+      priority: "MEDIUM",
+      assigneeId: "",
+    },
+  });
 
-  function resetForm() {
-    setFormClientId("");
-    setFormSubject("");
-    setFormDescription("");
-    setFormPriority("MEDIUM");
-    setFormAssigneeId("");
-    setFormError("");
-  }
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    watch,
+    reset,
+    setError,
+    formState: { errors, isSubmitting },
+  } = form;
 
-  // Reset form whenever the dialog opens (parent controls `open` directly)
+  // Reset form whenever the dialog opens
   useEffect(() => {
-    if (open) resetForm();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+    if (open) reset();
+  }, [open, reset]);
 
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    setFormError("");
-    setSaving(true);
+  const clientId = watch("clientId");
+  const priority = watch("priority");
+  const assigneeId = watch("assigneeId");
 
+  async function onSubmit(data: CreateTicketFormData) {
     try {
       await createTicket({
         companyId,
-        clientId: formClientId,
-        subject: formSubject,
-        description: formDescription,
-        priority: formPriority,
-        assigneeId: formAssigneeId || undefined,
+        clientId: data.clientId,
+        subject: data.subject,
+        description: data.description,
+        priority: data.priority,
+        assigneeId: data.assigneeId || undefined,
       });
       toast.success("Ticket criado com sucesso");
       onOpenChange(false);
       onCreated();
     } catch (err) {
-      setFormError(
-        err instanceof Error ? err.message : "Erro ao criar ticket"
-      );
-    } finally {
-      setSaving(false);
+      setError("root", {
+        message:
+          err instanceof Error ? err.message : "Erro ao criar ticket",
+      });
     }
   }
 
@@ -108,13 +126,15 @@ export function CreateTicketDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="clientId">Cliente *</Label>
             <Select
-              value={formClientId || "__none__"}
+              value={clientId || "__none__"}
               onValueChange={(v) =>
-                setFormClientId(v === "__none__" ? "" : v)
+                setValue("clientId", v === "__none__" ? "" : v, {
+                  shouldValidate: true,
+                })
               }
             >
               <SelectTrigger>
@@ -131,36 +151,51 @@ export function CreateTicketDialog({
                 ))}
               </SelectContent>
             </Select>
+            {errors.clientId && (
+              <p className="text-sm text-destructive">
+                {errors.clientId.message}
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="subject">Assunto *</Label>
             <Input
               id="subject"
-              value={formSubject}
-              onChange={(e) => setFormSubject(e.target.value)}
-              required
-              disabled={saving}
+              {...register("subject")}
+              disabled={isSubmitting}
             />
+            {errors.subject && (
+              <p className="text-sm text-destructive">
+                {errors.subject.message}
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="description">Descrição *</Label>
             <Textarea
               id="description"
-              value={formDescription}
-              onChange={(e) => setFormDescription(e.target.value)}
+              {...register("description")}
               rows={4}
-              required
-              disabled={saving}
+              disabled={isSubmitting}
             />
+            {errors.description && (
+              <p className="text-sm text-destructive">
+                {errors.description.message}
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="priority">Prioridade</Label>
             <Select
-              value={formPriority}
-              onValueChange={(v) => setFormPriority(v as TicketPriority)}
+              value={priority}
+              onValueChange={(v) =>
+                setValue("priority", v as CreateTicketFormData["priority"], {
+                  shouldValidate: true,
+                })
+              }
             >
               <SelectTrigger>
                 <SelectValue />
@@ -176,13 +211,15 @@ export function CreateTicketDialog({
           <div className="space-y-2">
             <Label htmlFor="assigneeId">Responsável</Label>
             <Select
-              value={formAssigneeId || "__none__"}
+              value={assigneeId || "__none__"}
               onValueChange={(v) =>
-                setFormAssigneeId(v === "__none__" ? "" : v)
+                setValue("assigneeId", v === "__none__" ? "" : v, {
+                  shouldValidate: true,
+                })
               }
             >
               <SelectTrigger>
-                <SelectValue placeholder="Selecione um respons\u00e1vel" />
+                <SelectValue placeholder="Selecione um responsável" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="__none__">Nenhum</SelectItem>
@@ -195,8 +232,8 @@ export function CreateTicketDialog({
             </Select>
           </div>
 
-          {formError && (
-            <p className="text-sm text-destructive">{formError}</p>
+          {errors.root && (
+            <p className="text-sm text-destructive">{errors.root.message}</p>
           )}
 
           <DialogFooter>
@@ -204,12 +241,12 @@ export function CreateTicketDialog({
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
-              disabled={saving}
+              disabled={isSubmitting}
             >
               Cancelar
             </Button>
-            <Button type="submit" disabled={saving}>
-              {saving ? "Salvando..." : "Criar Ticket"}
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? "Salvando..." : "Criar Ticket"}
             </Button>
           </DialogFooter>
         </form>
