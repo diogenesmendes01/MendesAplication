@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useCompany } from "@/contexts/company-context";
 import { getSlaDashboard, type SlaDashboardResult } from "./actions";
+import { priorityColor } from "@/lib/sac/ticket-formatters";
 
 function minutesToHuman(m: number): string {
   if (m < 60) return `${m}min`;
@@ -19,10 +20,6 @@ function minutesToHuman(m: number): string {
 const PRIORITY_LABELS: Record<string, string> = { HIGH: "Alta", MEDIUM: "Média", LOW: "Baixa" };
 const STAGE_LABELS: Record<string, string> = { first_reply: "1ª Resposta", resolution: "Resolução" };
 const CHANNEL_LABELS: Record<string, string> = { EMAIL: "Email", WHATSAPP: "WhatsApp", RECLAMEAQUI: "Reclame Aqui" };
-
-function priorityColor(p: string): string {
-  return p === "HIGH" ? "text-red-600" : p === "MEDIUM" ? "text-yellow-600" : "text-gray-600";
-}
 
 export default function SlaDashboardPage() {
   const { selectedCompanyId } = useCompany();

@@ -7,11 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from "@/components/ui/alert-dialog";
 import { getLinkedTickets, confirmLink, rejectLink, mergeTickets, type TicketLinkRow } from "../dedup-actions";
+import { channelLabel } from "@/lib/sac/ticket-formatters";
 
 interface LinkedTicketsBannerProps { ticketId: string; companyId: string; }
-
-const channelLabels: Record<string, string> = { EMAIL: "Email", WHATSAPP: "WhatsApp", RECLAMEAQUI: "Reclame Aqui" };
-function channelLabel(type: string | null): string { return type ? channelLabels[type] ?? type : "\u2014"; }
 
 export default function LinkedTicketsBanner({ ticketId, companyId }: LinkedTicketsBannerProps) {
   const [links, setLinks] = useState<TicketLinkRow[]>([]);

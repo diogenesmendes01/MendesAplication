@@ -78,22 +78,22 @@ export async function linkTickets(ticketAId: string, ticketBId: string, type: "D
 
 export async function confirmLink(linkId: string, companyId: string): Promise<void> {
   const session = await requireCompanyAccess(companyId);
-  const link = await prisma.ticketLink.findUnique({ where: { id: linkId }, include: { ticketA: { select: { companyId: true } } } });
-  if (!link || link.ticketA.companyId !== companyId) throw new Error("Link nao encontrado");
+  const link = await prisma.ticketLink.findFirst({ where: { id: linkId, ticketA: { companyId } } });
+  if (!link) throw new Error("Link nao encontrado");
   await prisma.ticketLink.update({ where: { id: linkId }, data: { status: "confirmed", confirmedBy: session.userId } });
 }
 
 export async function rejectLink(linkId: string, companyId: string): Promise<void> {
   const session = await requireCompanyAccess(companyId);
-  const link = await prisma.ticketLink.findUnique({ where: { id: linkId }, include: { ticketA: { select: { companyId: true } } } });
-  if (!link || link.ticketA.companyId !== companyId) throw new Error("Link nao encontrado");
+  const link = await prisma.ticketLink.findFirst({ where: { id: linkId, ticketA: { companyId } } });
+  if (!link) throw new Error("Link nao encontrado");
   await prisma.ticketLink.update({ where: { id: linkId }, data: { status: "rejected", confirmedBy: session.userId } });
 }
 
 export async function unlinkTickets(linkId: string, companyId: string): Promise<void> {
   const session = await requireCompanyAccess(companyId);
-  const link = await prisma.ticketLink.findUnique({ where: { id: linkId }, include: { ticketA: { select: { companyId: true } } } });
-  if (!link || link.ticketA.companyId !== companyId) throw new Error("Link nao encontrado");
+  const link = await prisma.ticketLink.findFirst({ where: { id: linkId, ticketA: { companyId } }, select: { id: true, ticketAId: true, ticketBId: true, type: true } });
+  if (!link) throw new Error("Link nao encontrado");
   await prisma.ticketLink.delete({ where: { id: linkId } });
   await logAuditEvent({ userId: session.userId, action: "DELETE", entity: "TicketLink", entityId: linkId, companyId, dataBefore: { ticketAId: link.ticketAId, ticketBId: link.ticketBId, type: link.type } });
 }
