@@ -638,6 +638,26 @@ async function _setCobrefacilConfig(
 ): Promise<{ success: boolean }> {
   const session = await requireCompanyAccess(companyId);
 
+  // Server-side validation: required address fields must be non-empty strings
+  if (config !== null) {
+    const requiredFields: (keyof CobreFacilConfigInput)[] = [
+      "zipCode",
+      "street",
+      "number",
+      "neighborhood",
+      "city",
+      "state",
+    ];
+    for (const field of requiredFields) {
+      const value = config[field];
+      if (!value || typeof value !== "string" || value.trim() === "") {
+        throw new Error(
+          `Campo obrigatório inválido: ${field} não pode ser vazio`,
+        );
+      }
+    }
+  }
+
   const cobrefacilConfig = config
     ? (config as unknown as Prisma.InputJsonValue)
     : Prisma.JsonNull;
