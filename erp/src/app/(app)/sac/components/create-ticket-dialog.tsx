@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -66,12 +66,11 @@ export function CreateTicketDialog({
     setFormError("");
   }
 
-  function handleOpenChange(nextOpen: boolean) {
-    if (nextOpen) {
-      resetForm();
-    }
-    onOpenChange(nextOpen);
-  }
+  // Reset form whenever the dialog opens (parent controls `open` directly)
+  useEffect(() => {
+    if (open) resetForm();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -100,7 +99,7 @@ export function CreateTicketDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Novo Ticket</DialogTitle>

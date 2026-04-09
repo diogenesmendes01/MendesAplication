@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import {
   Mail,
@@ -437,6 +437,12 @@ export function TimelineEventList({
   channelType,
   onSuggestionAction,
 }: TimelineEventListProps) {
+  const endRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [events]);
+
   return (
     <div className="space-y-4 max-h-[500px] overflow-y-auto mb-6">
       {loading ? (
@@ -500,6 +506,7 @@ export function TimelineEventList({
           });
         })()
       )}
+      <div ref={endRef} />
     </div>
   );
 }

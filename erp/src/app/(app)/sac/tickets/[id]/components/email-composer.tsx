@@ -302,6 +302,11 @@ export function EmailComposer({
     (e) => e.channel === "EMAIL" && e.type === "message"
   );
 
+  // Auto-scroll to bottom when new email events arrive
+  useEffect(() => {
+    emailEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [emailEvents.length]);
+
   // Load email recipients on mount (lazy — this component only renders when tab is active)
   useEffect(() => {
     if (recipientsLoaded) return;

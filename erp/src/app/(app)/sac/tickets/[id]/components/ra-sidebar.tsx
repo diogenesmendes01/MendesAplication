@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -111,6 +111,11 @@ export function RaSidebar({
   const [updatingAssignee, setUpdatingAssignee] = useState(false);
   const [tags, setTags] = useState<string[]>(ticket.tags);
   const [newTag, setNewTag] = useState("");
+
+  // Sync tags when ticket is reloaded from server
+  useEffect(() => {
+    setTags(ticket.tags);
+  }, [ticket.tags]);
 
   // ---------------------------------------------------
   // Reassign

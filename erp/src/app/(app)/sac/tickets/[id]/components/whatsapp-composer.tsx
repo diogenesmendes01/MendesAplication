@@ -378,6 +378,11 @@ export function WhatsAppComposer({
     (e) => e.channel === "WHATSAPP" && e.type === "message"
   );
 
+  // Auto-scroll to bottom when new WhatsApp events arrive
+  useEffect(() => {
+    waEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [whatsappEvents.length]);
+
   // ---------------------------------------------------
   // WhatsApp reply
   // ---------------------------------------------------

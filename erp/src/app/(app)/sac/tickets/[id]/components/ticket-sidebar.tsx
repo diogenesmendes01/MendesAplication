@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -50,6 +50,7 @@ import {
   type RefundSummary,
   type CancellationInfo,
 } from "../../actions";
+import { channelLabel } from "@/lib/sac/ticket-formatters";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -157,6 +158,11 @@ export function TicketSidebar({
   const [tags, setTags] = useState<string[]>(ticket.tags);
   const [newTag, setNewTag] = useState("");
   const [updatingAssignee, setUpdatingAssignee] = useState(false);
+
+  // Sync tags when ticket is reloaded from server
+  useEffect(() => {
+    setTags(ticket.tags);
+  }, [ticket.tags]);
   const [approvingRefundId, setApprovingRefundId] = useState<string | null>(null);
   const [approvingCancel, setApprovingCancel] = useState(false);
 
@@ -291,7 +297,7 @@ export function TicketSidebar({
               )}
               <div>
                 <p className="text-xs font-medium text-muted-foreground">Canal de Origem</p>
-                <p className="text-sm">{ticket.channelType === "EMAIL" ? "Email" : "WhatsApp"}</p>
+                <p className="text-sm">{channelLabel(ticket.channelType!)}</p>
               </div>
             </div>
           )}

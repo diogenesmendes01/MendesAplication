@@ -51,8 +51,6 @@ export default function TicketTimeline({
   const [suggestions, setSuggestions] = useState<AiSuggestionData[]>([]);
   const [aiEnabled, setAiEnabled] = useState(initialAiEnabled);
   const [togglingAi, setTogglingAi] = useState(false);
-  const timelineEndRef = useRef<HTMLDivElement>(null);
-
   // Track latest event timestamp for incremental polling
   const lastEventTimeRef = useRef<string | null>(null);
 
@@ -169,10 +167,6 @@ export default function TicketTimeline({
 
     return () => clearInterval(interval);
   }, [ticketId, companyId, channelType, pollNewEvents]);
-
-  useEffect(() => {
-    timelineEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [events]);
 
   // Manual refresh — exposed via button in the UI
   const [refreshing, setRefreshing] = useState(false);
