@@ -210,8 +210,7 @@ export async function emitInvoiceForBoleto(
   const rpsNumero = String(fiscalConfigUpdated.nfseNextNumber);
 
   // Guard de idempotência com lock: evita emissão duplicada em requisições concorrentes.
-  // BUG 9 fix: Only block if an ISSUED invoice already exists. PENDING or CANCELLED
-  // invoices (from failed auto-emit) should not block manual re-emission.
+  // Tracked in GitHub issue #461: Only block if an ISSUED invoice already exists
   const existingInvoice = await prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`nfse:${boletoId}`}))`;
     return tx.invoice.findFirst({
