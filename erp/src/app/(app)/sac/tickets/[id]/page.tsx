@@ -1,38 +1,18 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
-import dynamic from "next/dynamic";
 import { toast } from "sonner";
 import {
   ArrowLeft,
   User,
-  Calendar,
-  Building2,
   FileText,
-  CreditCard,
-  Mail,
   MessageSquare,
-  Globe,
-  X,
-  Plus,
-  UserCircle,
-  Clock,
-  DollarSign,
-  ExternalLink,
   AlertTriangle,
   Link as LinkIcon,
   UserPlus,
-  Search,
   Loader2,
-  Coins,
-  CheckCircle,
-  XCircle,
-  Banknote,
-  Ban,
-  FileDown,
   Sparkles,
-  ThumbsDown,
   ThumbsUp,
   ChevronRight,
   Info,
@@ -40,53 +20,19 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { useCompany } from "@/contexts/company-context";
-import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   getTicketDetailBootstrap,
   updateTicketStatus,
-  reassignTicket,
-  addTag,
-  removeTag,
-  getTicketRefunds,
-  approveRefund,
-  rejectRefund,
-  searchClientsForLink,
-  linkContactToClient,
-  createClientAndLink,
   type TicketDetail,
   type ClientFinancialSummary,
-  type ClientForLink,
   type RefundSummary,
-  approveCancellation,
-  getCancellationInfo,
   type CancellationInfo,
-  listTimelineEvents,
 } from "../actions";
 import type { TicketStatus } from "@prisma/client";
-import { generateTicketPdf } from "@/lib/ticket-pdf";
 import TicketTimeline from "./ticket-timeline";
-import RaModerationDialog from "./ra-moderation-dialog";
 import { ChannelBreadcrumb } from "@/components/sac/channel-breadcrumb";
-import { ChannelBadge } from "@/components/sac/channel-badge";
 import { priorityLabel, priorityColor, statusLabel, statusColor } from "@/lib/sac/ticket-formatters";
 import {
   getRaTicketContext,
@@ -98,20 +44,11 @@ import {
 import LinkedTicketsBanner from "./linked-tickets-banner";
 import MergedTicketBanner from "./merged-ticket-banner";
 import RaResponsePanel from "./ra-response-panel";
+import { TicketHeader } from "./components/ticket-header";
+import { TicketSidebar } from "./components/ticket-sidebar";
+import { TicketDialogs, type TicketDialogsHandle } from "./components/ticket-dialogs";
+import { RaSidebar } from "./components/ra-sidebar";
 import RaSuggestionCard from "./ra-suggestion-card";
-
-const RequestRefundDialog = dynamic(() =>
-  import("./refund-dialogs").then((m) => ({ default: m.RequestRefundDialog })),
-  { ssr: false }
-);
-const ExecuteRefundDialog = dynamic(() =>
-  import("./refund-dialogs").then((m) => ({ default: m.ExecuteRefundDialog })),
-  { ssr: false }
-);
-const CancellationDialog = dynamic(() =>
-  import("./cancellation-dialog").then((m) => ({ default: m.CancellationDialog })),
-  { ssr: false }
-);
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -125,64 +62,6 @@ const dateFmt = new Intl.DateTimeFormat("pt-BR", {
   minute: "2-digit",
 });
 
-
-function getFeelingEmoji(feeling: string | null): string {
-  if (!feeling) return "";
-  const f = feeling.toLowerCase();
-  if (f.includes("irritado") || f.includes("raiva")) return "😡";
-  if (f.includes("triste") || f.includes("decepcionado")) return "😢";
-  if (f.includes("neutro")) return "😐";
-  if (f.includes("satisfeito")) return "😊";
-  return "💬";
-}
-
-function SlaCard({ label, deadline, breached }: { label: string; deadline: string; breached: boolean }) {
-  const deadlineDate = new Date(deadline);
-  const now = Date.now();
-  const diffMs = deadlineDate.getTime() - now;
-
-  const isBreached = breached || diffMs <= 0;
-  const progressPct = isBreached ? 100 : Math.min(100, Math.max(0, 100 - (diffMs / (60 * 60_000)) * 10));
-
-  let barColor = "bg-green-500";
-  if (progressPct >= 90 || isBreached) barColor = "bg-red-500";
-  else if (progressPct >= 70) barColor = "bg-yellow-500";
-
-  let sl = "OK";
-  let sc = "text-green-600";
-  if (isBreached) { sl = "Estourado"; sc = "text-red-600"; }
-  else if (progressPct >= 70) { sl = "Em Risco"; sc = "text-yellow-600"; }
-
-  let timeText: string;
-  if (diffMs <= 0) {
-    const overMs = Math.abs(diffMs);
-    const h = Math.floor(overMs / 3_600_000);
-    const m = Math.floor((overMs % 3_600_000) / 60_000);
-    timeText = `-${h}h${String(m).padStart(2, "0")}m`;
-  } else {
-    const h = Math.floor(diffMs / 3_600_000);
-    const m = Math.floor((diffMs % 3_600_000) / 60_000);
-    timeText = `${h}h${String(m).padStart(2, "0")}m`;
-  }
-
-  return (
-    <div className="space-y-1.5">
-      <div className="flex items-center justify-between">
-        <p className="text-sm font-medium">{label}</p>
-        <span className={`text-xs font-semibold ${sc}`}>{sl}</span>
-      </div>
-      <div className="flex items-center gap-2">
-        <div className="flex-1 h-2 rounded-full bg-gray-100 overflow-hidden">
-          <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${Math.min(100, progressPct)}%` }} />
-        </div>
-        <span className="text-xs font-mono text-muted-foreground w-16 text-right">{timeText}</span>
-      </div>
-    </div>
-  );
-}
-
-
-// ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
 // Mini-cards helpers
@@ -395,10 +274,7 @@ export default function TicketDetailPage() {
   const [ticket, setTicket] = useState<TicketDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [updatingStatus, setUpdatingStatus] = useState(false);
-  const [updatingAssignee, setUpdatingAssignee] = useState(false);
   const [users, setUsers] = useState<{ id: string; name: string }[]>([]);
-  const [tags, setTags] = useState<string[]>([]);
-  const [newTag, setNewTag] = useState("");
   const [financial, setFinancial] = useState<ClientFinancialSummary | null>(null);
   const [aiConfigEnabled, setAiConfigEnabled] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -408,55 +284,18 @@ export default function TicketDetailPage() {
   // AI suggestion pre-populate state (US-RA-R03)
   const [initialPublicMessage, setInitialPublicMessage] = useState<string>("");
 
-  // Contact linking state (US-081)
-  const [linkDialogOpen, setLinkDialogOpen] = useState(false);
-  const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [linkSearch, setLinkSearch] = useState("");
-  const [linkResults, setLinkResults] = useState<ClientForLink[]>([]);
-  const [linkSearching, setLinkSearching] = useState(false);
-  const [linking, setLinking] = useState(false);
-  const [newClientForm, setNewClientForm] = useState({
-    name: "",
-    cpfCnpj: "",
-    type: "PJ" as "PF" | "PJ",
-    email: "",
-    telefone: "",
-    razaoSocial: "",
-    endereco: "",
-  });
-
   // Refund state (US-085)
   const [refunds, setRefunds] = useState<RefundSummary[]>([]);
   const [userRole, setUserRole] = useState<string>("");
-  const [requestRefundOpen, setRequestRefundOpen] = useState(false);
-
-  // Reject dialog
-  const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
-  const [rejectRefundId, setRejectRefundId] = useState<string>("");
-  const [rejectReason, setRejectReason] = useState("");
-  const [submittingReject, setSubmittingReject] = useState(false);
-
-  // Execute dialog
-  const [executeDialogOpen, setExecuteDialogOpen] = useState(false);
-  const [executeRefundId, setExecuteRefundId] = useState<string>("");
-
-  // Approve loading
-  const [approvingRefundId, setApprovingRefundId] = useState<string | null>(null);
 
   // Cancellation state (US-086)
   const [cancellation, setCancellation] = useState<CancellationInfo | null>(null);
-  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
-  const [approvingCancel, setApprovingCancel] = useState(false);
-
-  // Export PDF (US-089)
-  const [exportDialogOpen, setExportDialogOpen] = useState(false);
-  const [exportIncludeNotes, setExportIncludeNotes] = useState(true);
-  const [exportIncludeAttachments, setExportIncludeAttachments] = useState(true);
-  const [exporting, setExporting] = useState(false);
 
   // RA actions state
-  const [raModerationOpen, setRaModerationOpen] = useState(false);
   const [requestingEval, setRequestingEval] = useState(false);
+
+  // Dialogs ref
+  const dialogsRef = useRef<TicketDialogsHandle>(null);
   const [finishingPrivate, setFinishingPrivate] = useState(false);
 
   // RA response states (US-RA-R02)
@@ -478,7 +317,6 @@ export default function TicketDetailPage() {
       const result = await getTicketDetailBootstrap(ticketId, selectedCompanyId);
       if (!result) { setTicket(null); return; }
       setTicket(result.ticket);
-      setTags(result.ticket.tags);
       setFinancial(result.financialSummary);
       setRefunds(result.refunds);
       setCancellation(result.cancellation);
@@ -525,185 +363,10 @@ export default function TicketDetailPage() {
   }
 
   // ---------------------------------------------------
-  // Reassign
-  // ---------------------------------------------------
-
-  async function handleReassign(assigneeId: string) {
-    if (!selectedCompanyId || !ticket) return;
-    setUpdatingAssignee(true);
-    try {
-      const result = await reassignTicket(ticket.id, selectedCompanyId, assigneeId === "__none__" ? null : assigneeId);
-      setTicket((prev) => prev ? { ...prev, assignee: result.assignee } : prev);
-      toast.success(result.assignee ? `Ticket reatribuído para ${result.assignee.name}` : "Responsável removido");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao reatribuir ticket");
-    } finally {
-      setUpdatingAssignee(false);
-    }
-  }
-
-  // ---------------------------------------------------
-  // Tags
-  // ---------------------------------------------------
-
-  async function handleAddTag() {
-    if (!selectedCompanyId || !ticket || !newTag.trim()) return;
-    try {
-      const updatedTags = await addTag(ticket.id, selectedCompanyId, newTag.trim());
-      setTags(updatedTags);
-      setNewTag("");
-      toast.success("Tag adicionada");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao adicionar tag");
-    }
-  }
-
-  async function handleRemoveTag(tag: string) {
-    if (!selectedCompanyId || !ticket) return;
-    try {
-      const updatedTags = await removeTag(ticket.id, selectedCompanyId, tag);
-      setTags(updatedTags);
-      toast.success("Tag removida");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao remover tag");
-    }
-  }
-
-  // ---------------------------------------------------
-  // Contact linking (US-081)
+  // Contact linking (US-081) — helper
   // ---------------------------------------------------
 
   const isUnknownClient = ticket?.client.cpfCnpj === "00000000000";
-
-  async function handleLinkSearch(query: string) {
-    setLinkSearch(query);
-    if (!selectedCompanyId || query.trim().length < 2) { setLinkResults([]); return; }
-    setLinkSearching(true);
-    try {
-      const results = await searchClientsForLink(selectedCompanyId, query);
-      setLinkResults(results);
-    } catch {
-      setLinkResults([]);
-    } finally {
-      setLinkSearching(false);
-    }
-  }
-
-  async function handleLinkToClient(clientId: string) {
-    if (!selectedCompanyId || !ticket) return;
-    setLinking(true);
-    try {
-      const result = await linkContactToClient(ticket.id, selectedCompanyId, clientId);
-      toast.success(`Ticket vinculado ao cliente ${result.clientName}`);
-      setLinkDialogOpen(false);
-      setLinkSearch("");
-      setLinkResults([]);
-      loadTicket();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao vincular cliente");
-    } finally {
-      setLinking(false);
-    }
-  }
-
-  async function handleCreateAndLink() {
-    if (!selectedCompanyId || !ticket) return;
-    setLinking(true);
-    try {
-      const result = await createClientAndLink(ticket.id, selectedCompanyId, {
-        name: newClientForm.name,
-        cpfCnpj: newClientForm.cpfCnpj,
-        type: newClientForm.type,
-        email: newClientForm.email || undefined,
-        telefone: newClientForm.telefone || undefined,
-        razaoSocial: newClientForm.razaoSocial || undefined,
-        endereco: newClientForm.endereco || undefined,
-      });
-      toast.success(`Cliente ${result.clientName} criado e vinculado`);
-      setCreateDialogOpen(false);
-      setNewClientForm({ name: "", cpfCnpj: "", type: "PJ", email: "", telefone: "", razaoSocial: "", endereco: "" });
-      loadTicket();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao criar cliente");
-    } finally {
-      setLinking(false);
-    }
-  }
-
-  // ---------------------------------------------------
-  // Refund handlers (US-085)
-  // ---------------------------------------------------
-
-  const isAdminOrManager = userRole === "ADMIN" || userRole === "MANAGER";
-
-  async function handleApproveRefund(refundId: string) {
-    if (!selectedCompanyId) return;
-    setApprovingRefundId(refundId);
-    try {
-      await approveRefund(refundId, selectedCompanyId);
-      toast.success("Reembolso aprovado");
-      getTicketRefunds(ticketId, selectedCompanyId).then(setRefunds).catch(() => {});
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao aprovar reembolso");
-    } finally {
-      setApprovingRefundId(null);
-    }
-  }
-
-  async function handleRejectRefund() {
-    if (!selectedCompanyId || !rejectRefundId) return;
-    setSubmittingReject(true);
-    try {
-      await rejectRefund(rejectRefundId, selectedCompanyId, rejectReason);
-      toast.success("Reembolso rejeitado");
-      setRejectDialogOpen(false);
-      setRejectRefundId("");
-      setRejectReason("");
-      getTicketRefunds(ticketId, selectedCompanyId).then(setRefunds).catch(() => {});
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao rejeitar reembolso");
-    } finally {
-      setSubmittingReject(false);
-    }
-  }
-
-  // ---------------------------------------------------
-  // Cancellation handlers (US-086)
-  // ---------------------------------------------------
-
-  const hasProposalOrBoleto = !!(ticket?.proposalId || ticket?.boletoId);
-  const hasPendingCancellation = cancellation?.pending ?? false;
-
-  async function handleApproveCancellation() {
-    if (!selectedCompanyId || !ticket) return;
-    setApprovingCancel(true);
-    try {
-      await approveCancellation(ticketId, selectedCompanyId);
-      toast.success("Cancelamento aprovado e executado");
-      getCancellationInfo(ticketId, selectedCompanyId).then(setCancellation).catch(() => {});
-      loadTicket();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao aprovar cancelamento");
-    } finally {
-      setApprovingCancel(false);
-    }
-  }
-
-  // Export PDF (US-089)
-  async function handleExportPdf() {
-    if (!selectedCompanyId || !ticket) return;
-    setExporting(true);
-    try {
-      const events = await listTimelineEvents(ticketId, selectedCompanyId);
-      await generateTicketPdf({ ticket, events, refunds, includeInternalNotes: exportIncludeNotes, includeAttachmentList: exportIncludeAttachments });
-      toast.success("PDF exportado com sucesso");
-      setExportDialogOpen(false);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao exportar PDF");
-    } finally {
-      setExporting(false);
-    }
-  }
 
   // ---------------------------------------------------
   // RA evaluation handler
@@ -858,123 +521,16 @@ export default function TicketDetailPage() {
       {/* Breadcrumb */}
       <ChannelBreadcrumb channelType={ticket.channelType ?? null} ticketId={ticket.id} />
 
-      {/* ─── RA Identity Header (US-RA-R01) ──────────────────────── */}
-      {isRa ? (
-        <div className="rounded-xl border border-purple-200 bg-purple-50 px-5 py-4 space-y-3">
-          {/* Top row: back + title + badges */}
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div className="flex items-start gap-3">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => router.push("/sac/tickets")}
-                className="mt-0.5 shrink-0"
-              >
-                <ArrowLeft className="mr-1.5 h-4 w-4" />
-                Voltar
-              </Button>
-              <div>
-                <div className="flex items-center gap-2 flex-wrap mb-1">
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-purple-600 px-2.5 py-0.5 text-xs font-bold text-white">
-                    <Globe className="h-3 w-3" />
-                    Reclame Aqui
-                  </span>
-                  {ticket.aiEnabled && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2 py-0.5 text-xs font-semibold text-purple-700">
-                      <Sparkles className="h-3 w-3" />
-                      IA ativa
-                    </span>
-                  )}
-                  {ticket.raStatusName && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-white border border-purple-200 px-2 py-0.5 text-xs font-semibold text-purple-800">
-                      {ticket.raStatusName}
-                    </span>
-                  )}
-
-                </div>
-                <h1 className="text-xl font-bold tracking-tight text-purple-900">
-                  {ticket.subject}
-                </h1>
-                <p className="text-xs text-purple-600 mt-0.5">
-                  Ticket #{ticket.id.slice(-8)}
-                </p>
-              </div>
-            </div>
-
-            {/* Right side: feeling + priority + status + RA link */}
-            <div className="flex items-center gap-2 flex-wrap sm:justify-end">
-              {/* Consumer feeling */}
-              {raContext?.raFeeling && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-white border border-purple-200 px-2.5 py-1 text-xs font-medium text-purple-800">
-                  {getFeelingEmoji(raContext?.raFeeling)} {raContext?.raFeeling}
-                </span>
-              )}
-              <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold ${priorityColor(ticket.priority)}`}>
-                {priorityLabel(ticket.priority)}
-              </span>
-              {transitions.length > 0 ? (
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  {transitions.map((t) => (
-                    <Button key={t.value} size="sm" variant="outline" disabled={updatingStatus} onClick={() => handleStatusChange(t.value)} className="transition-all duration-150 active:scale-95 hover:shadow-sm">
-                      {updatingStatus && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
-                      {t.label}
-                    </Button>
-                  ))}
-                </div>
-              ) : (
-                <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold ${statusColor(ticket.status)}`}>
-                  {statusLabel(ticket.status)}
-                </span>
-              )}
-              {ticket.raExternalId && (
-                <a
-                  href={`https://www.reclameaqui.com.br/empresa/trustcloud/lista-reclamacoes/?problema=${ticket.raExternalId}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 text-sm text-purple-700 hover:text-purple-900 font-mono bg-purple-50 border border-purple-200 rounded px-2 py-1"
-                >
-                  <ExternalLink className="h-3.5 w-3.5" />
-                  ID RA: {ticket.raExternalId}
-                </a>
-              )}
-            </div>
-          </div>
-        </div>
-      ) : (
-        /* Generic header for non-RA tickets */
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="sm" onClick={() => router.push("/sac/tickets")}>
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Voltar
-            </Button>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight">{ticket.subject}</h1>
-              <p className="text-sm text-muted-foreground">Ticket #{ticket.id.slice(-8)}</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <ChannelBadge channelType={ticket.channelType ?? null} />
-            <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold ${priorityColor(ticket.priority)}`}>
-              {priorityLabel(ticket.priority)}
-            </span>
-            {transitions.length > 0 ? (
-              <div className="flex items-center gap-1.5 flex-wrap">
-                {transitions.map((t) => (
-                  <Button key={t.value} size="sm" variant="outline" disabled={updatingStatus} onClick={() => handleStatusChange(t.value)} className="transition-all duration-150 active:scale-95 hover:shadow-sm">
-                    {updatingStatus && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
-                    {t.label}
-                  </Button>
-                ))}
-              </div>
-            ) : (
-              <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold ${statusColor(ticket.status)}`}>
-                {statusLabel(ticket.status)}
-              </span>
-            )}
-          </div>
-        </div>
-      )}
+      {/* ─── RA Identity Header (US-RA-R01) / Generic Header ──────── */}
+      <TicketHeader
+        ticket={ticket}
+        isRa={isRa}
+        raContext={raContext}
+        transitions={transitions}
+        updatingStatus={updatingStatus}
+        onStatusChange={handleStatusChange}
+        onBack={() => router.push("/sac/tickets")}
+      />
 
       {/* Cross-channel dedup banners */}
       {ticket.mergedIntoId && ticket.mergedAt && (
@@ -999,7 +555,7 @@ export default function TicketDetailPage() {
             </p>
           </div>
           <div className="flex gap-2">
-            <Button size="sm" variant="outline" className="border-amber-400 text-amber-800 hover:bg-amber-100" onClick={() => setLinkDialogOpen(true)}>
+            <Button size="sm" variant="outline" className="border-amber-400 text-amber-800 hover:bg-amber-100" onClick={() => dialogsRef.current?.openLinkDialog()}>
               <LinkIcon className="mr-1.5 h-3.5 w-3.5" />
               Vincular
             </Button>
@@ -1010,8 +566,10 @@ export default function TicketDetailPage() {
               onClick={() => {
                 const phoneMatch = ticket.description.match(/Número:\s*(\+?[\d]+)/);
                 const emailMatch = ticket.description.match(/Email recebido de\s+([\w.+-]+@[\w.-]+)/);
-                setNewClientForm((prev) => ({ ...prev, email: emailMatch?.[1] ?? "", telefone: phoneMatch?.[1] ?? "" }));
-                setCreateDialogOpen(true);
+                dialogsRef.current?.openCreateClientDialog({
+                  email: emailMatch?.[1] ?? "",
+                  telefone: phoneMatch?.[1] ?? "",
+                });
               }}
             >
               <UserPlus className="mr-1.5 h-3.5 w-3.5" />
@@ -1111,7 +669,7 @@ export default function TicketDetailPage() {
                     variant="outline"
                     className="border-purple-200 text-purple-700 hover:bg-purple-50 transition-all duration-150 active:scale-95"
                     disabled={!ticket.raCanModerate}
-                    onClick={() => setRaModerationOpen(true)}
+                    onClick={() => dialogsRef.current?.openRaModeration()}
                   >
                     <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />
                     Solicitar Moderação
@@ -1142,284 +700,15 @@ export default function TicketDetailPage() {
           </div>
 
           {/* ─── US-RA-R05: RA Sidebar ──────────────────────────── */}
-          <div className="space-y-6">
-            {/* 1. Consumer info */}
-            <Card className="border-purple-100">
-              <CardHeader>
-                <CardTitle className="text-sm font-semibold text-purple-700 flex items-center gap-2 uppercase tracking-wide">
-                  <User className="h-3.5 w-3.5" />
-                  Consumidor
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex items-start gap-3">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-purple-100 text-purple-700 font-bold text-sm">
-                    {(raContext?.client?.name ?? ticket.client.name).charAt(0).toUpperCase()}
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold">{raContext?.client?.name ?? ticket.client.name}</p>
-                    {(raContext?.client?.email ?? ticket.client.email) && (
-                      <p className="text-xs text-muted-foreground">{raContext?.client?.email ?? ticket.client.email}</p>
-                    )}
-                    {raContext?.client?.phone && (
-                      <p className="text-xs text-muted-foreground">{raContext.client.phone}</p>
-                    )}
-                    {raContext?.client?.cpfCnpj && !raContext.client.cpfCnpj.startsWith("RA-") && (
-                      <p className="text-xs text-muted-foreground font-mono">{raContext.client.cpfCnpj}</p>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* 2. RA Status & metrics */}
-            <Card className="border-purple-100">
-              <CardHeader>
-                <CardTitle className="text-sm font-semibold text-purple-700 flex items-center gap-2 uppercase tracking-wide">
-                  <Globe className="h-3.5 w-3.5" />
-                  Status Reclame Aqui
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {ticket.raStatusName && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">Status RA</span>
-                    <span className="text-xs font-semibold text-purple-700">{ticket.raStatusName}</span>
-                  </div>
-                )}
-                {ticket.raRating != null && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">Avaliação</span>
-                    <span className="text-xs font-semibold">⭐ {ticket.raRating}/10</span>
-                  </div>
-                )}
-                {raContext?.raFeeling && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">Sentimento</span>
-                    <span className="text-xs font-medium">{getFeelingEmoji(raContext.raFeeling)} {raContext.raFeeling}</span>
-                  </div>
-                )}
-                {raContext?.raResolvedIssue != null && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">Resolvido</span>
-                    <span className={`inline-flex items-center gap-1 text-xs font-medium ${raContext.raResolvedIssue ? "text-green-700" : "text-red-700"}`}>
-                      {raContext.raResolvedIssue ? <ThumbsUp className="h-3 w-3" /> : <ThumbsDown className="h-3 w-3" />}
-                      {raContext.raResolvedIssue ? "Sim" : "Não"}
-                    </span>
-                  </div>
-                )}
-                {raContext?.raBackDoingBusiness != null && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">Voltaria a comprar</span>
-                    <span className={`inline-flex items-center gap-1 text-xs font-medium ${raContext.raBackDoingBusiness ? "text-green-700" : "text-red-700"}`}>
-                      {raContext.raBackDoingBusiness ? <ThumbsUp className="h-3 w-3" /> : <ThumbsDown className="h-3 w-3" />}
-                      {raContext.raBackDoingBusiness ? "Sim" : "Não"}
-                    </span>
-                  </div>
-                )}
-                {raContext?.raCategories?.length > 0 && (
-                  <div>
-                    <p className="text-xs text-muted-foreground mb-1">Categorias</p>
-                    <div className="flex flex-wrap gap-1">
-                      {raContext.raCategories.map((cat: string, i: number) => (
-                        <Badge key={i} variant="secondary" className="text-xs">{cat}</Badge>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {raContext?.raFrozen && (
-                  <Badge variant="destructive" className="w-full justify-center text-xs">🧊 Ticket congelado</Badge>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* 3. Dados da Reclamação (form fields) */}
-            {isRaFormFields(ticket.raFormFields) && ticket.raFormFields.length > 0 && (
-              <Card className="border-purple-200">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium flex items-center gap-2">
-                    <FileText className="h-4 w-4 text-purple-600" />
-                    Dados da Reclamação
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  {ticket.raFormFields.map((field, i) => (
-                    <div key={i}>
-                      <p className="text-xs font-medium text-muted-foreground">{field.name}</p>
-                      <p className="text-sm">{field.value}</p>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-            )}
-
-
-
-            {/* 4. Responsável */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Responsável</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div>
-                  <Label htmlFor="assignee-ra">Atribuir a</Label>
-                  <Select value={ticket.assignee?.id ?? "__none__"} onValueChange={handleReassign} disabled={updatingAssignee}>
-                    <SelectTrigger id="assignee-ra">
-                      <SelectValue placeholder="Selecione um responsável" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">Nenhum</SelectItem>
-                      {users.map((u) => (
-                        <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* 5. Tags */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Tags</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex flex-wrap gap-1.5">
-                  {tags.length === 0 && <p className="text-xs text-muted-foreground">Nenhuma tag</p>}
-                  {tags.map((tag) => (
-                    <Badge key={tag} variant="secondary" className="gap-1 pr-1">
-                      {tag}
-                      <button type="button" onClick={() => handleRemoveTag(tag)} className="ml-0.5 rounded-full p-0.5 hover:bg-muted">
-                        <X className="h-3 w-3" />
-                      </button>
-                    </Badge>
-                  ))}
-                </div>
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="Nova tag..."
-                    value={newTag}
-                    onChange={(e) => setNewTag(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddTag(); } }}
-                    className="h-8 text-sm"
-                  />
-                  <Button size="sm" variant="outline" onClick={handleAddTag} disabled={!newTag.trim()} className="h-8 px-2">
-                    <Plus className="h-4 w-4" />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* 6. General info (compact) */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Informações Gerais</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex items-start gap-3">
-                  <Building2 className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground">Empresa</p>
-                    <p className="text-sm">{ticket.company.nomeFantasia}</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <Calendar className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground">Criado em</p>
-                    <p className="text-sm">{dateFmt.format(new Date(ticket.createdAt))}</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <Calendar className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground">Atualizado em</p>
-                    <p className="text-sm">{dateFmt.format(new Date(ticket.updatedAt))}</p>
-                  </div>
-                </div>
-                {ticket.proposalId && (
-                  <div className="flex items-start gap-3">
-                    <FileText className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground">Proposta Vinculada</p>
-                      <p className="text-sm text-primary">#{ticket.proposalId.slice(-8)}</p>
-                    </div>
-                  </div>
-                )}
-                {ticket.boletoId && (
-                  <div className="flex items-start gap-3">
-                    <CreditCard className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground">Boleto Vinculado</p>
-                      <p className="text-sm text-primary">#{ticket.boletoId.slice(-8)}</p>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Financial (RA context — kept) */}
-            {financial && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <DollarSign className="h-4 w-4" />
-                    Situação Financeira
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <Badge
-                    variant={financial.status === "adimplente" ? "default" : "destructive"}
-                    className={
-                      financial.status === "adimplente"
-                        ? "bg-green-100 text-green-800 hover:bg-green-100"
-                        : financial.status === "atraso"
-                          ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-100"
-                          : ""
-                    }
-                  >
-                    {financial.status === "adimplente" ? "Adimplente" : financial.status === "atraso" ? "Em Atraso" : "Inadimplente"}
-                  </Badge>
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <p className="text-xs text-muted-foreground">Total Pendente</p>
-                      <p className="font-medium">R$ {financial.pendingTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Total Vencido</p>
-                      <p className="font-medium text-red-600">R$ {financial.overdueTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</p>
-                    </div>
-                  </div>
-                  {financial.lastPayment && (
-                    <div className="text-sm">
-                      <p className="text-xs text-muted-foreground">Último Pagamento</p>
-                      <p>{dateFmt.format(new Date(financial.lastPayment))}</p>
-                    </div>
-                  )}
-                  <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => router.push("/financeiro/receber")}>
-                    <ExternalLink className="mr-1 h-3 w-3" />
-                    Ver financeiro
-                  </Button>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* 7. Export PDF */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <FileDown className="h-4 w-4" />
-                  Exportar
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Button variant="outline" className="w-full" onClick={() => setExportDialogOpen(true)}>
-                  <FileDown className="mr-1.5 h-3.5 w-3.5" />
-                  Exportar PDF
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
+          <RaSidebar
+            ticket={ticket}
+            raContext={raContext}
+            companyId={selectedCompanyId}
+            users={users}
+            financial={financial}
+            onTicketUpdated={loadTicket}
+            onOpenExportDialog={() => dialogsRef.current?.openExportDialog()}
+          />
         </div>
       ) : (
         /* ═══════════════════════════════════════════════════════════
@@ -1453,546 +742,35 @@ export default function TicketDetailPage() {
           </div>
 
           {/* Sidebar info */}
-          <div className="space-y-6">
-            {/* Ticket info */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Informacoes</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-start gap-3">
-                  <User className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground">Cliente</p>
-                    <p className="text-sm font-medium">{ticket.client.name}</p>
-                    <p className="text-xs text-muted-foreground">{ticket.client.cpfCnpj}</p>
-                  </div>
-                </div>
-
-                {ticket.contact && (
-                  <div className="flex items-start gap-3">
-                    <UserCircle className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground">Contato</p>
-                      <p className="text-sm font-medium">{ticket.contact.name}</p>
-                      {ticket.contact.role && <p className="text-xs text-muted-foreground">{ticket.contact.role}</p>}
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex items-start gap-3">
-                  <Building2 className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground">Empresa</p>
-                    <p className="text-sm">{ticket.company.nomeFantasia}</p>
-                  </div>
-                </div>
-
-                {ticket.channelType && (
-                  <div className="flex items-start gap-3">
-                    {ticket.channelType === "EMAIL" ? (
-                      <Mail className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                    ) : (
-                      <MessageSquare className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                    )}
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground">Canal de Origem</p>
-                      <p className="text-sm">{ticket.channelType === "EMAIL" ? "Email" : "WhatsApp"}</p>
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex items-start gap-3">
-                  <Calendar className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground">Criado em</p>
-                    <p className="text-sm">{dateFmt.format(new Date(ticket.createdAt))}</p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3">
-                  <Calendar className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground">Atualizado em</p>
-                    <p className="text-sm">{dateFmt.format(new Date(ticket.updatedAt))}</p>
-                  </div>
-                </div>
-
-                {ticket.proposalId && (
-                  <div className="flex items-start gap-3">
-                    <FileText className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground">Proposta Vinculada</p>
-                      <p className="text-sm text-primary">#{ticket.proposalId.slice(-8)}</p>
-                    </div>
-                  </div>
-                )}
-
-                {ticket.boletoId && (
-                  <div className="flex items-start gap-3">
-                    <CreditCard className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground">Boleto Vinculado</p>
-                      <p className="text-sm text-primary">#{ticket.boletoId.slice(-8)}</p>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Reassign */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Responsavel</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div>
-                  <Label htmlFor="assignee">Atribuir a</Label>
-                  <Select value={ticket.assignee?.id ?? "__none__"} onValueChange={handleReassign} disabled={updatingAssignee}>
-                    <SelectTrigger id="assignee">
-                      <SelectValue placeholder="Selecione um responsavel" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">Nenhum</SelectItem>
-                      {users.map((u) => (
-                        <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Tags */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Tags</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex flex-wrap gap-1.5">
-                  {tags.length === 0 && <p className="text-xs text-muted-foreground">Nenhuma tag</p>}
-                  {tags.map((tag) => (
-                    <Badge key={tag} variant="secondary" className="gap-1 pr-1">
-                      {tag}
-                      <button type="button" onClick={() => handleRemoveTag(tag)} className="ml-0.5 rounded-full p-0.5 hover:bg-muted">
-                        <X className="h-3 w-3" />
-                      </button>
-                    </Badge>
-                  ))}
-                </div>
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="Nova tag..."
-                    value={newTag}
-                    onChange={(e) => setNewTag(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddTag(); } }}
-                    className="h-8 text-sm"
-                  />
-                  <Button size="sm" variant="outline" onClick={handleAddTag} disabled={!newTag.trim()} className="h-8 px-2">
-                    <Plus className="h-4 w-4" />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* SLA */}
-            {(ticket.slaFirstReply || ticket.slaResolution) && !["RESOLVED", "CLOSED"].includes(ticket.status) && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <Clock className="h-4 w-4" />
-                    SLA
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {ticket.slaFirstReply && (
-                    <SlaCard label="1a Resposta" deadline={ticket.slaFirstReply} breached={ticket.slaBreached} />
-                  )}
-                  {ticket.slaResolution && (
-                    <SlaCard label="Resolucao" deadline={ticket.slaResolution} breached={ticket.slaBreached} />
-                  )}
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Financial */}
-            {financial && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <DollarSign className="h-4 w-4" />
-                    Situacao Financeira
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <Badge
-                    variant={financial.status === "adimplente" ? "default" : "destructive"}
-                    className={
-                      financial.status === "adimplente"
-                        ? "bg-green-100 text-green-800 hover:bg-green-100"
-                        : financial.status === "atraso"
-                          ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-100"
-                          : ""
-                    }
-                  >
-                    {financial.status === "adimplente" ? "Adimplente" : financial.status === "atraso" ? "Em Atraso" : "Inadimplente"}
-                  </Badge>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <p className="text-xs text-muted-foreground">Total Pendente</p>
-                      <p className="font-medium">R$ {financial.pendingTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Total Vencido</p>
-                      <p className="font-medium text-red-600">R$ {financial.overdueTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</p>
-                    </div>
-                  </div>
-                  {financial.lastPayment && (
-                    <div className="text-sm">
-                      <p className="text-xs text-muted-foreground">Ultimo Pagamento</p>
-                      <p>{dateFmt.format(new Date(financial.lastPayment))}</p>
-                    </div>
-                  )}
-                  <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => router.push("/financeiro/receber")}>
-                    <ExternalLink className="mr-1 h-3 w-3" />
-                    Ver financeiro
-                  </Button>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Refund Section (US-085) — Only for non-RA tickets */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Coins className="h-4 w-4" />
-                  Reembolso
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {refunds.length === 0 && (
-                  <p className="text-xs text-muted-foreground">Nenhum reembolso solicitado</p>
-                )}
-                {refunds.map((refund) => (
-                  <div key={refund.id} className="rounded-lg border p-3 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Badge
-                        variant={refund.status === "COMPLETED" ? "default" : refund.status === "REJECTED" ? "destructive" : "secondary"}
-                        className={
-                          refund.status === "COMPLETED" ? "bg-green-100 text-green-800 hover:bg-green-100" :
-                          refund.status === "APPROVED" ? "bg-blue-100 text-blue-800 hover:bg-blue-100" :
-                          refund.status === "AWAITING_APPROVAL" ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-100" : ""
-                        }
-                      >
-                        {refund.status === "AWAITING_APPROVAL" ? "Aguardando Aprovacao" :
-                         refund.status === "APPROVED" ? "Aprovado" :
-                         refund.status === "REJECTED" ? "Rejeitado" :
-                         refund.status === "PROCESSING" ? "Processando" : "Concluido"}
-                      </Badge>
-                      <span className="text-sm font-semibold">R$ {refund.amount.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
-                    </div>
-                    <div className="text-xs text-muted-foreground space-y-0.5">
-                      <p>Solicitante: {refund.requestedBy.name}</p>
-                      <p>Data: {dateFmt.format(new Date(refund.requestedAt))}</p>
-                      {refund.approvedBy && (
-                        <p>{refund.status === "REJECTED" ? "Rejeitado" : "Aprovado"} por: {refund.approvedBy.name}</p>
-                      )}
-                      {refund.rejectionReason && <p className="text-red-600">Motivo: {refund.rejectionReason}</p>}
-                      {refund.paymentMethod && <p>Metodo: {refund.paymentMethod}</p>}
-                    </div>
-                    {refund.slaDeadline && !["COMPLETED", "REJECTED"].includes(refund.status) && (
-                      <div className="text-xs">
-                        {(() => {
-                          const dl = new Date(refund.slaDeadline);
-                          const diffMs = dl.getTime() - Date.now();
-                          const isBreached = refund.slaBreached || diffMs <= 0;
-                          const atRisk = !isBreached && diffMs < 60 * 60_000;
-                          return (
-                            <span className={isBreached ? "text-red-600 font-medium" : atRisk ? "text-yellow-600 font-medium" : "text-green-600"}>
-                              SLA: {isBreached ? "Estourado" : atRisk ? "Em Risco" : "OK"}
-                              {" - "}
-                              {isBreached
-                                ? `-${Math.floor(Math.abs(diffMs) / 3_600_000)}h${String(Math.floor((Math.abs(diffMs) % 3_600_000) / 60_000)).padStart(2, "0")}m`
-                                : `${Math.floor(diffMs / 3_600_000)}h${String(Math.floor((diffMs % 3_600_000) / 60_000)).padStart(2, "0")}m`}
-                            </span>
-                          );
-                        })()}
-                      </div>
-                    )}
-                    {refund.status === "AWAITING_APPROVAL" && isAdminOrManager && (
-                      <div className="flex gap-2 pt-1">
-                        <Button size="sm" variant="outline" className="flex-1 border-green-300 text-green-700 hover:bg-green-50" disabled={approvingRefundId === refund.id} onClick={() => handleApproveRefund(refund.id)}>
-                          {approvingRefundId === refund.id ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <CheckCircle className="mr-1 h-3 w-3" />}
-                          Aprovar
-                        </Button>
-                        <Button size="sm" variant="outline" className="flex-1 border-red-300 text-red-700 hover:bg-red-50" onClick={() => { setRejectRefundId(refund.id); setRejectDialogOpen(true); }}>
-                          <XCircle className="mr-1 h-3 w-3" />
-                          Rejeitar
-                        </Button>
-                      </div>
-                    )}
-                    {refund.status === "APPROVED" && isAdminOrManager && (
-                      <Button size="sm" className="w-full" onClick={() => { setExecuteRefundId(refund.id); setExecuteDialogOpen(true); }}>
-                        <Banknote className="mr-1.5 h-3.5 w-3.5" />
-                        Executar Reembolso
-                      </Button>
-                    )}
-                  </div>
-                ))}
-                <Button variant="outline" className="w-full" onClick={() => setRequestRefundOpen(true)}>
-                  <Coins className="mr-1.5 h-3.5 w-3.5" />
-                  Solicitar Reembolso
-                </Button>
-              </CardContent>
-            </Card>
-
-            {/* Cancellation Section (US-086) — Only for non-RA */}
-            {hasProposalOrBoleto && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <Ban className="h-4 w-4" />
-                    Cancelamento
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {hasPendingCancellation && cancellation && (
-                    <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 space-y-2">
-                      <div className="flex items-center gap-2">
-                        <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">Aguardando Aprovação</Badge>
-                      </div>
-                      <div className="text-xs text-muted-foreground space-y-0.5">
-                        {cancellation.type && (
-                          <p>Tipo: {cancellation.type === "proposal" ? "Proposta" : cancellation.type === "boletos" ? "Boletos" : "Proposta e Boletos"}</p>
-                        )}
-                        {cancellation.requestedBy && <p>Solicitante: {cancellation.requestedBy}</p>}
-                        {cancellation.requestedAt && <p>Data: {dateFmt.format(new Date(cancellation.requestedAt))}</p>}
-                        {cancellation.justification && <p>Justificativa: {cancellation.justification}</p>}
-                      </div>
-                      {isAdminOrManager && (
-                        <Button size="sm" variant="outline" className="w-full border-green-300 text-green-700 hover:bg-green-50" disabled={approvingCancel} onClick={handleApproveCancellation}>
-                          {approvingCancel ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <CheckCircle className="mr-1.5 h-3.5 w-3.5" />}
-                          Aprovar Cancelamento
-                        </Button>
-                      )}
-                    </div>
-                  )}
-                  {!hasPendingCancellation && (
-                    <Button variant="outline" className="w-full border-red-200 text-red-700 hover:bg-red-50" onClick={() => setCancelDialogOpen(true)}>
-                      <Ban className="mr-1.5 h-3.5 w-3.5" />
-                      Solicitar Cancelamento
-                    </Button>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Export PDF (US-089) */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <FileDown className="h-4 w-4" />
-                  Exportar
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Button variant="outline" className="w-full" onClick={() => setExportDialogOpen(true)}>
-                  <FileDown className="mr-1.5 h-3.5 w-3.5" />
-                  Exportar PDF
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
+          <TicketSidebar
+            ticket={ticket}
+            companyId={selectedCompanyId}
+            users={users}
+            financial={financial}
+            refunds={refunds}
+            cancellation={cancellation}
+            userRole={userRole}
+            onTicketUpdated={loadTicket}
+            onOpenRequestRefund={() => dialogsRef.current?.openRequestRefund()}
+            onOpenRejectRefund={(refundId) => dialogsRef.current?.openRejectRefund(refundId)}
+            onOpenExecuteRefund={(refundId) => dialogsRef.current?.openExecuteRefund(refundId)}
+            onOpenCancelDialog={() => dialogsRef.current?.openCancelDialog()}
+            onOpenExportDialog={() => dialogsRef.current?.openExportDialog()}
+            onRefundsChange={setRefunds}
+            onCancellationChange={setCancellation}
+          />
         </div>
       )}
 
       {/* ─── Dialogs (always rendered, used by both layouts) ──────── */}
-
-      {/* Export PDF dialog (US-089) */}
-      <Dialog open={exportDialogOpen} onOpenChange={setExportDialogOpen}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Exportar Ticket como PDF</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="flex items-center space-x-2">
-              <Checkbox id="export-notes" checked={exportIncludeNotes} onCheckedChange={(c) => setExportIncludeNotes(c === true)} />
-              <Label htmlFor="export-notes" className="text-sm font-normal cursor-pointer">Incluir notas internas</Label>
-            </div>
-            <div className="flex items-center space-x-2">
-              <Checkbox id="export-attachments" checked={exportIncludeAttachments} onCheckedChange={(c) => setExportIncludeAttachments(c === true)} />
-              <Label htmlFor="export-attachments" className="text-sm font-normal cursor-pointer">Incluir lista de anexos</Label>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setExportDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={handleExportPdf} disabled={exporting}>
-              {exporting ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <FileDown className="mr-1.5 h-3.5 w-3.5" />}
-              {exporting ? "Exportando..." : "Exportar PDF"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Link to existing client dialog (US-081) */}
-      <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Vincular a Cliente Existente</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input placeholder="Buscar por nome ou CNPJ/CPF..." value={linkSearch} onChange={(e) => handleLinkSearch(e.target.value)} className="pl-9" />
-            </div>
-            {linkSearching && (
-              <div className="flex items-center justify-center py-4 text-sm text-muted-foreground">
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Buscando...
-              </div>
-            )}
-            {!linkSearching && linkSearch.length >= 2 && linkResults.length === 0 && (
-              <p className="py-4 text-center text-sm text-muted-foreground">Nenhum cliente encontrado</p>
-            )}
-            {linkResults.length > 0 && (
-              <div className="max-h-64 overflow-y-auto space-y-1">
-                {linkResults.map((client) => (
-                  <button key={client.id} type="button" disabled={linking} onClick={() => handleLinkToClient(client.id)} className="w-full rounded-md border p-3 text-left hover:bg-muted transition-colors">
-                    <p className="text-sm font-medium">{client.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {client.cpfCnpj}{client.email && ` · ${client.email}`}{client.telefone && ` · ${client.telefone}`}
-                    </p>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Create new client dialog (US-081) */}
-      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Criar Novo Cliente e Vincular</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="col-span-2">
-                <Label htmlFor="new-client-name">Nome *</Label>
-                <Input id="new-client-name" value={newClientForm.name} onChange={(e) => setNewClientForm((f) => ({ ...f, name: e.target.value }))} placeholder="Nome do cliente" />
-              </div>
-              <div>
-                <Label htmlFor="new-client-type">Tipo *</Label>
-                <Select value={newClientForm.type} onValueChange={(v) => setNewClientForm((f) => ({ ...f, type: v as "PF" | "PJ" }))}>
-                  <SelectTrigger id="new-client-type"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="PJ">Pessoa Jurídica</SelectItem>
-                    <SelectItem value="PF">Pessoa Física</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="new-client-cpfcnpj">{newClientForm.type === "PF" ? "CPF" : "CNPJ"} *</Label>
-                <Input id="new-client-cpfcnpj" value={newClientForm.cpfCnpj} onChange={(e) => setNewClientForm((f) => ({ ...f, cpfCnpj: e.target.value }))} placeholder={newClientForm.type === "PF" ? "000.000.000-00" : "00.000.000/0000-00"} />
-              </div>
-              <div>
-                <Label htmlFor="new-client-email">Email</Label>
-                <Input id="new-client-email" type="email" value={newClientForm.email} onChange={(e) => setNewClientForm((f) => ({ ...f, email: e.target.value }))} />
-              </div>
-              <div>
-                <Label htmlFor="new-client-telefone">Telefone</Label>
-                <Input id="new-client-telefone" value={newClientForm.telefone} onChange={(e) => setNewClientForm((f) => ({ ...f, telefone: e.target.value }))} />
-              </div>
-              <div className="col-span-2">
-                <Label htmlFor="new-client-razao">Razão Social</Label>
-                <Input id="new-client-razao" value={newClientForm.razaoSocial} onChange={(e) => setNewClientForm((f) => ({ ...f, razaoSocial: e.target.value }))} />
-              </div>
-              <div className="col-span-2">
-                <Label htmlFor="new-client-endereco">Endereço</Label>
-                <Input id="new-client-endereco" value={newClientForm.endereco} onChange={(e) => setNewClientForm((f) => ({ ...f, endereco: e.target.value }))} />
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={handleCreateAndLink} disabled={linking || !newClientForm.name.trim() || !newClientForm.cpfCnpj.trim()}>
-              {linking ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" />Criando...</>) : "Criar e Vincular"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Request Refund Dialog (US-085) */}
-      <RequestRefundDialog
-        open={requestRefundOpen}
-        onOpenChange={setRequestRefundOpen}
-        ticketId={ticketId}
-        companyId={selectedCompanyId!}
-        boletoId={ticket?.boletoId}
-        onSuccess={() => {
-          getTicketRefunds(ticketId, selectedCompanyId!).then(setRefunds).catch(() => {});
-          loadTicket();
-        }}
-      />
-
-      {/* Reject Refund Dialog (US-085) */}
-      <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Rejeitar Reembolso</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="reject-reason">Motivo da Rejeicao *</Label>
-              <Textarea id="reject-reason" value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} placeholder="Descreva o motivo da rejeição..." rows={3} />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setRejectDialogOpen(false)}>Cancelar</Button>
-            <Button variant="destructive" onClick={handleRejectRefund} disabled={submittingReject || !rejectReason.trim()}>
-              {submittingReject ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" />Rejeitando...</>) : "Confirmar Rejeicao"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Execute Refund Dialog (US-085) */}
-      <ExecuteRefundDialog
-        open={executeDialogOpen}
-        onOpenChange={setExecuteDialogOpen}
-        refundId={executeRefundId}
-        ticketId={ticketId}
-        companyId={selectedCompanyId!}
-        onSuccess={() => {
-          getTicketRefunds(ticketId, selectedCompanyId!).then(setRefunds).catch(() => {});
-          loadTicket();
-        }}
-      />
-
-      {/* RA Moderation Dialog */}
-      {ticket.channelType === "RECLAMEAQUI" && (
-        <RaModerationDialog
-          open={raModerationOpen}
-          onOpenChange={setRaModerationOpen}
-          ticketId={ticketId}
-          companyId={selectedCompanyId!}
-          onSuccess={loadTicket}
-        />
-      )}
-
-      {/* Request Cancellation Dialog (US-086) */}
-      <CancellationDialog
-        open={cancelDialogOpen}
-        onOpenChange={setCancelDialogOpen}
-        ticketId={ticketId}
-        companyId={selectedCompanyId!}
-        proposalId={ticket?.proposalId}
-        boletoId={ticket?.boletoId}
-        onSuccess={() => {
-          getCancellationInfo(ticketId, selectedCompanyId!).then(setCancellation).catch(() => {});
-          loadTicket();
-        }}
+      <TicketDialogs
+        ref={dialogsRef}
+        ticket={ticket}
+        companyId={selectedCompanyId}
+        refunds={refunds}
+        onTicketUpdated={loadTicket}
+        onRefundsChange={setRefunds}
+        onCancellationChange={setCancellation}
       />
     </div>
   );

@@ -12,7 +12,6 @@ import {
   MessageSquare,
   Globe,
   Tag,
-  AlertTriangle,
   Bot,
   Star,
   Filter,
@@ -20,7 +19,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -32,14 +30,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -50,7 +40,6 @@ import { Switch } from "@/components/ui/switch";
 import { VirtualTable, VIRTUAL_SCROLL_THRESHOLD } from "@/components/ui/virtual-table";
 import { useCompany } from "@/contexts/company-context";
 import {
-  createTicket,
   listClientsForSelect,
   listUsersForAssign,
   getTicketListBootstrap,
@@ -58,9 +47,11 @@ import {
   type TicketRow,
   type TicketTab,
 } from "../tickets/actions";
-import type { ChannelType, TicketPriority } from "@prisma/client";
+import type { ChannelType } from "@prisma/client";
 import { RA_STATUS } from "@/lib/reclameaqui/types";
 import { priorityLabel, priorityColor, statusLabel, statusColor } from "@/lib/sac/ticket-formatters";
+import { SlaAlertBanner } from "./sla-alert-banner";
+import { CreateTicketDialog } from "./create-ticket-dialog";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -285,13 +276,6 @@ export function TicketTable({ channelType: fixedChannel }: TicketTableProps) {
 
   // Dialog state
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [formError, setFormError] = useState("");
-  const [formClientId, setFormClientId] = useState("");
-  const [formSubject, setFormSubject] = useState("");
-  const [formDescription, setFormDescription] = useState("");
-  const [formPriority, setFormPriority] = useState<TicketPriority>("MEDIUM");
-  const [formAssigneeId, setFormAssigneeId] = useState("");
 
   // Effective channel: fixed prop wins over dropdown
   const effectiveChannel = fixedChannel || channelFilter || undefined;
@@ -356,47 +340,6 @@ export function TicketTable({ channelType: fixedChannel }: TicketTableProps) {
   }
 
   // ---------------------------------------------------
-  // Create dialog
-  // ---------------------------------------------------
-
-  function openCreateDialog() {
-    setFormClientId("");
-    setFormSubject("");
-    setFormDescription("");
-    setFormPriority("MEDIUM");
-    setFormAssigneeId("");
-    setFormError("");
-    setDialogOpen(true);
-  }
-
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    if (!selectedCompanyId) return;
-    setFormError("");
-    setSaving(true);
-
-    try {
-      await createTicket({
-        companyId: selectedCompanyId,
-        clientId: formClientId,
-        subject: formSubject,
-        description: formDescription,
-        priority: formPriority,
-        assigneeId: formAssigneeId || undefined,
-      });
-      toast.success("Ticket criado com sucesso");
-      setDialogOpen(false);
-      await loadTickets();
-    } catch (err) {
-      setFormError(
-        err instanceof Error ? err.message : "Erro ao criar ticket"
-      );
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  // ---------------------------------------------------
   // No company selected
   // ---------------------------------------------------
 
@@ -438,45 +381,21 @@ export function TicketTable({ channelType: fixedChannel }: TicketTableProps) {
     <div className="space-y-6">
       {/* Header row: New Ticket button */}
       <div className="flex items-center justify-end">
-        <Button onClick={openCreateDialog}>
+        <Button onClick={() => setDialogOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
           Novo Ticket
         </Button>
       </div>
 
       {/* SLA Alert Banner */}
-      {(slaAlerts.breached > 0 || slaAlerts.atRisk > 0) && (
-        <div className="flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
-          <AlertTriangle className="h-5 w-5 shrink-0 text-red-600" />
-          <div className="flex flex-1 flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-            {slaAlerts.breached > 0 && (
-              <span className="font-semibold text-red-700">
-                {slaAlerts.breached}{" "}
-                {slaAlerts.breached === 1 ? "estourado" : "estourados"}
-              </span>
-            )}
-            {slaAlerts.breached > 0 && slaAlerts.atRisk > 0 && (
-              <span className="text-red-400">|</span>
-            )}
-            {slaAlerts.atRisk > 0 && (
-              <span className="font-semibold text-yellow-700">
-                {slaAlerts.atRisk} em risco
-              </span>
-            )}
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="shrink-0 border-red-300 text-red-700 hover:bg-red-100"
-            onClick={() => {
-              setActiveTab("sla_critical");
-              setPage(1);
-            }}
-          >
-            Ver SLA Crítico
-          </Button>
-        </div>
-      )}
+      <SlaAlertBanner
+        breached={slaAlerts.breached}
+        atRisk={slaAlerts.atRisk}
+        onViewSlaCritical={() => {
+          setActiveTab("sla_critical");
+          setPage(1);
+        }}
+      />
 
       {/* Tabs + Search */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -665,122 +584,14 @@ export function TicketTable({ channelType: fixedChannel }: TicketTableProps) {
       )}
 
       {/* Create Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Novo Ticket</DialogTitle>
-            <DialogDescription>
-              Abra um novo ticket de atendimento ao cliente.
-            </DialogDescription>
-          </DialogHeader>
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="clientId">Cliente *</Label>
-              <Select
-                value={formClientId || "__none__"}
-                onValueChange={(v) =>
-                  setFormClientId(v === "__none__" ? "" : v)
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione um cliente" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__" disabled>
-                    Selecione um cliente
-                  </SelectItem>
-                  {clients.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="subject">Assunto *</Label>
-              <Input
-                id="subject"
-                value={formSubject}
-                onChange={(e) => setFormSubject(e.target.value)}
-                required
-                disabled={saving}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="description">Descrição *</Label>
-              <Textarea
-                id="description"
-                value={formDescription}
-                onChange={(e) => setFormDescription(e.target.value)}
-                rows={4}
-                required
-                disabled={saving}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="priority">Prioridade</Label>
-              <Select
-                value={formPriority}
-                onValueChange={(v) => setFormPriority(v as TicketPriority)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="HIGH">Alta</SelectItem>
-                  <SelectItem value="MEDIUM">Média</SelectItem>
-                  <SelectItem value="LOW">Baixa</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="assigneeId">Responsável</Label>
-              <Select
-                value={formAssigneeId || "__none__"}
-                onValueChange={(v) =>
-                  setFormAssigneeId(v === "__none__" ? "" : v)
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione um responsável" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">Nenhum</SelectItem>
-                  {users.map((u) => (
-                    <SelectItem key={u.id} value={u.id}>
-                      {u.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {formError && (
-              <p className="text-sm text-destructive">{formError}</p>
-            )}
-
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setDialogOpen(false)}
-                disabled={saving}
-              >
-                Cancelar
-              </Button>
-              <Button type="submit" disabled={saving}>
-                {saving ? "Salvando..." : "Criar Ticket"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <CreateTicketDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        companyId={selectedCompanyId}
+        clients={clients}
+        users={users}
+        onCreated={loadTickets}
+      />
     </div>
   );
 }
