@@ -42,6 +42,13 @@ import {
 } from "../tickets/[id]/suggestion-actions";
 import { toast } from "sonner";
 import { timeAgo, confidenceColor } from "@/utils/suggestion-helpers";
+import { channelLabel as _channelLabel } from "@/lib/sac/ticket-formatters";
+
+/** Suggestions page: preserve raw channel name for unknown types. */
+function channelLabel(channel: string): string {
+  const label = _channelLabel(channel);
+  return label === "Web" ? channel : label;
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -54,15 +61,6 @@ const dateFmt = new Intl.DateTimeFormat("pt-BR", {
   hour: "2-digit",
   minute: "2-digit",
 });
-
-function channelLabel(channel: string): string {
-  switch (channel) {
-    case "WHATSAPP": return "WhatsApp";
-    case "EMAIL": return "Email";
-    case "RECLAMEAQUI": return "Reclame Aqui";
-    default: return channel;
-  }
-}
 
 function channelColor(channel: string): string {
   switch (channel) {

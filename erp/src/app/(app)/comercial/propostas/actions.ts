@@ -620,6 +620,27 @@ async function resolveGatewayForBoleto(
   manualOverride: boolean;
   providerName: string;
 }> {
+  // Fetch company config (includes cobrefacilConfig if set)
+  const company = await prisma.company.findUnique({
+    where: { id: companyId },
+    select: { cobrefacilConfig: true },
+  });
+
+  if (!company) {
+    throw new Error(`Empresa ${companyId} não encontrada`);
+  }
+
+  // Helper to merge company config with metadata
+  const mergeMetadata = (
+    metadata: Record<string, unknown> | null | undefined,
+  ): Record<string, unknown> | null => {
+    const base = (metadata ?? {}) as Record<string, unknown>;
+    if (company.cobrefacilConfig) {
+      base.companyAddress = company.cobrefacilConfig;
+    }
+    return Object.keys(base).length > 0 ? base : null;
+  };
+
   // Manual override: specific provider requested
   if (providerId) {
     // Bug #18: getProviderById already checks isActive=true and throws if not found/inactive
@@ -628,7 +649,7 @@ async function resolveGatewayForBoleto(
       throw new Error(`Provider "${provider.name}" está inativo e não pode ser usado.`);
     }
     const decryptedCredentials = JSON.parse(decrypt(provider.credentials)) as Record<string, unknown>;
-    const metadata = provider.metadata as Record<string, unknown> | null;
+    const metadata = mergeMetadata(provider.metadata as Record<string, unknown> | null);
     if (!isProviderType(provider.provider)) {
       throw new Error(`Provider inválido encontrado no banco: ${provider.provider}`);
     }
@@ -676,7 +697,7 @@ async function resolveGatewayForBoleto(
   // Providers exist — errors should propagate, NOT fall back to mock
   const provider = await resolveProvider(companyId, { clientType, value });
   const decryptedCredentials = JSON.parse(decrypt(provider.credentials)) as Record<string, unknown>;
-  const metadata = provider.metadata as Record<string, unknown> | null;
+  const metadata = mergeMetadata(provider.metadata as Record<string, unknown> | null);
   if (!isProviderType(provider.provider)) {
     throw new Error(`Provider inválido encontrado no banco: ${provider.provider}`);
   }

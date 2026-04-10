@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { Mail, MessageSquare, Globe, Star, AlertTriangle, Bot, DollarSign, Clock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import type { TicketRow } from "../tickets/actions";
+import { channelLabel } from "@/lib/sac/ticket-formatters";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -43,13 +44,6 @@ function ChannelIcon({ type }: { type: string | null }) {
   if (type === "WHATSAPP") return <MessageSquare className="h-3 w-3" />;
   if (type === "RECLAMEAQUI") return <Star className="h-3 w-3" />;
   return <Globe className="h-3 w-3" />;
-}
-
-function channelLabel(type: string | null): string {
-  if (type === "EMAIL") return "Email";
-  if (type === "WHATSAPP") return "WhatsApp";
-  if (type === "RECLAMEAQUI") return "Reclame Aqui";
-  return "Web";
 }
 
 // ---------------------------------------------------------------------------

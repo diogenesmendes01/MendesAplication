@@ -25,50 +25,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useCompany } from "@/contexts/company-context";
 import { getTicketDashboard, type TicketDashboard } from "../tickets/dashboard-actions";
-import { priorityLabel, statusLabel } from "@/lib/sac/ticket-formatters";
+import { channelLabel, channelColor, priorityLabel, priorityVariant, statusLabel } from "@/lib/sac/ticket-formatters";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function channelLabel(channel: string) {
-  switch (channel) {
-    case "EMAIL":
-      return "Email";
-    case "WHATSAPP":
-      return "WhatsApp";
-    case "RECLAMEAQUI":
-      return "Reclame Aqui";
-    default:
-      return "Web/Manual";
-  }
-}
-
-function channelColor(channel: string) {
-  switch (channel) {
-    case "EMAIL":
-      return "#3b82f6";
-    case "WHATSAPP":
-      return "#22c55e";
-    case "RECLAMEAQUI":
-      return "#8b5cf6";
-    default:
-      return "#94a3b8";
-  }
-}
-
-function priorityVariant(
-  priority: string
-): "destructive" | "secondary" | "outline" {
-  switch (priority) {
-    case "HIGH":
-      return "destructive";
-    case "MEDIUM":
-      return "secondary";
-    default:
-      return "outline";
-  }
-}
 
 function timeAgo(date: Date): string {
   const diffMs = Date.now() - new Date(date).getTime();

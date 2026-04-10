@@ -67,6 +67,19 @@ export async function resolveSlaConfig(
     where: { companyId, type: "TICKET", stage },
   });
 
+  return pickBestConfig(configs, channelType, priority, stage);
+}
+
+/**
+ * Pick the best matching config from a pre-loaded array.
+ * Resolution order: exact > channel-only > priority-only > global > default
+ */
+function pickBestConfig(
+  configs: SlaConfig[],
+  channelType: ChannelType | null,
+  priority: TicketPriority,
+  stage: string
+): ResolvedSlaConfig {
   const exact = configs.find((c) => c.channelType === channelType && c.priority === priority);
   if (exact) return toResolved(exact);
 
@@ -85,6 +98,37 @@ export async function resolveSlaConfig(
     alertBeforeMinutes: 30, autoEscalate: true, autoPriorityBump: true,
     escalateToRole: "ADMIN", businessHoursOnly: false,
     businessHoursStart: 8, businessHoursEnd: 18,
+  };
+}
+
+/**
+ * Batch-load SLA configs for multiple companies and stages in a single query.
+ * Returns a lookup function that resolves configs from memory (no DB calls).
+ */
+async function batchLoadSlaConfigs(
+  companyIds: string[],
+  stages: string[]
+): Promise<(companyId: string, channelType: ChannelType | null, priority: TicketPriority, stage: string) => ResolvedSlaConfig> {
+  const allConfigs = await prisma.slaConfig.findMany({
+    where: {
+      companyId: { in: companyIds },
+      type: "TICKET",
+      stage: { in: stages },
+    },
+  });
+
+  // Index configs by companyId+stage for fast lookup
+  const configMap = new Map<string, SlaConfig[]>();
+  for (const config of allConfigs) {
+    const key = `${config.companyId}:${config.stage}`;
+    const arr = configMap.get(key);
+    if (arr) arr.push(config);
+    else configMap.set(key, [config]);
+  }
+
+  return (companyId, channelType, priority, stage) => {
+    const configs = configMap.get(`${companyId}:${stage}`) ?? [];
+    return pickBestConfig(configs, channelType, priority, stage);
   };
 }
 
@@ -217,16 +261,20 @@ export async function checkSlaViolations(): Promise<{ breached: number; atRisk: 
     include: { channel: { select: { type: true } } },
   });
 
+  // Batch-load all SLA configs in a single query instead of N+1
+  const companyIds = Array.from(new Set(tickets.map((t) => t.companyId)));
+  const getConfig = await batchLoadSlaConfigs(companyIds, ["first_reply", "resolution"]);
+
   for (const ticket of tickets) {
     const channelType = ticket.channel?.type ?? null;
 
     if (ticket.slaFirstReply && !ticket.slaFirstReplyAt) {
       if (now >= ticket.slaFirstReply && !ticket.slaBreached) {
-        const config = await resolveSlaConfig(ticket.companyId, channelType, ticket.priority, "first_reply");
+        const config = getConfig(ticket.companyId, channelType, ticket.priority, "first_reply");
         await handleSlaBreach(ticket as TicketWithChannel, "first_reply", config, now);
         breachedCount++;
       } else if (!ticket.slaBreached) {
-        const config = await resolveSlaConfig(ticket.companyId, channelType, ticket.priority, "first_reply");
+        const config = getConfig(ticket.companyId, channelType, ticket.priority, "first_reply");
         const alertTime = new Date(ticket.slaFirstReply.getTime() - config.alertBeforeMinutes * 60000);
         if (now >= alertTime && !ticket.slaAtRisk) {
           await handleSlaAtRisk(ticket as TicketWithChannel, "first_reply");
@@ -237,11 +285,11 @@ export async function checkSlaViolations(): Promise<{ breached: number; atRisk: 
 
     if (ticket.slaResolution && !ticket.slaResolvedAt && !ticket.slaBreached) {
       if (now >= ticket.slaResolution) {
-        const config = await resolveSlaConfig(ticket.companyId, channelType, ticket.priority, "resolution");
+        const config = getConfig(ticket.companyId, channelType, ticket.priority, "resolution");
         await handleSlaBreach(ticket as TicketWithChannel, "resolution", config, now);
         breachedCount++;
       } else {
-        const config = await resolveSlaConfig(ticket.companyId, channelType, ticket.priority, "resolution");
+        const config = getConfig(ticket.companyId, channelType, ticket.priority, "resolution");
         const alertTime = new Date(ticket.slaResolution.getTime() - config.alertBeforeMinutes * 60000);
         if (now >= alertTime && !ticket.slaAtRisk) {
           await handleSlaAtRisk(ticket as TicketWithChannel, "resolution");

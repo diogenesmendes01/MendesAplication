@@ -78,6 +78,16 @@ export async function processAiAgent(job: Job<AiAgentJobData>) {
     select: { aiEnabled: true, client: { select: { cpfCnpj: true } } },
   });
 
+  if (!ticket) {
+    logger.warn(`[ai-agent] Ticket ${ticketId} not found, skipping`);
+    return;
+  }
+
+  if (!ticket.aiEnabled) {
+    logger.info(`[ai-agent] AI disabled for ticket ${ticketId}, skipping`);
+    return;
+  }
+
   // 1. Rate Limit Check (per-ticket): AI toggle, budget, cooldown, interactions/hour
   const rateLimit = await checkRateLimit(ticketId, companyId, channel);
   if (!rateLimit.allowed) {

@@ -26,12 +26,12 @@ function formatCurrency(value: number): string {
   }).format(value);
 }
 
-function getCompanyBranding(company: {
+function getCompanyBranding(company: Readonly<{
   nomeFantasia: string;
   logoUrl: string | null;
   email: string | null;
   telefone: string | null;
-}): CompanyBranding {
+}>): CompanyBranding {
   return {
     name: company.nomeFantasia,
     logoUrl: company.logoUrl,
@@ -40,7 +40,7 @@ function getCompanyBranding(company: {
   };
 }
 
-function buildNfsePdfText(data: {
+function buildNfsePdfText(data: Readonly<{
   nfNumber: string;
   companyName: string;
   companyCnpj: string;
@@ -50,7 +50,7 @@ function buildNfsePdfText(data: {
   value: number;
   issRate: number;
   issValue: number;
-}): string {
+}>): string {
   const lines: string[] = [];
   lines.push("NOTA FISCAL DE SERVIÇO ELETRÔNICA (NFS-e)");
   lines.push(`Número: ${data.nfNumber}`);
@@ -210,8 +210,7 @@ export async function emitInvoiceForBoleto(
   const rpsNumero = String(fiscalConfigUpdated.nfseNextNumber);
 
   // Guard de idempotência com lock: evita emissão duplicada em requisições concorrentes.
-  // BUG 9 fix: Only block if an ISSUED invoice already exists. PENDING or CANCELLED
-  // invoices (from failed auto-emit) should not block manual re-emission.
+  // Tracked in GitHub issue #461: Only block if an ISSUED invoice already exists
   const existingInvoice = await prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`nfse:${boletoId}`}))`;
     return tx.invoice.findFirst({

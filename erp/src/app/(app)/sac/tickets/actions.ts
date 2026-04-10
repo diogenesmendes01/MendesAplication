@@ -15,6 +15,7 @@ import { sseBus } from "@/lib/sse";
 import { getCompanyKpis, invalidateKpiCache, fetchSlaConfigs } from "@/lib/kpi-cache";
 import { logger } from "@/lib/logger";
 import { withLogging } from "@/lib/with-logging";
+import { sanitizeEmailHtml, stripHtmlToText } from "@/lib/ai/sanitize-utils";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -768,11 +769,11 @@ async function _createTicketReply(input: CreateTicketReplyInput) {
         subject: `Re: ${ticket.subject} - ${ticket.company.nomeFantasia}`,
         htmlBody: `
           <div style="font-family: Arial, sans-serif; max-width: 600px;">
-            <h3>Resposta ao ticket: ${ticket.subject}</h3>
-            <p>${input.content.trim().replace(/\n/g, "<br>")}</p>
+            <h3>Resposta ao ticket: ${stripHtmlToText(ticket.subject)}</h3>
+            ${sanitizeEmailHtml(`<p>${input.content.trim().replace(/\n/g, "<br>")}</p>`)}
             <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 16px 0;" />
             <p style="color: #6b7280; font-size: 12px;">
-              ${ticket.company.nomeFantasia} - SAC
+              ${stripHtmlToText(ticket.company.nomeFantasia)} - SAC
             </p>
           </div>
         `,

@@ -43,9 +43,14 @@ export const REQUEST_TIMEOUT_MS = 15_000;
 // Token Cache (module-level, survives across calls within same process)
 // ---------------------------------------------------------------------------
 
-// TODO: Race condition — concurrent requests with expired token will both call /authenticate
-// Same pattern as santander-auth.ts — fix both together with pending-promise pattern
 const tokenCache = new Map<string, CachedToken>();
+
+/**
+ * Pending promise cache to implement singleflight pattern.
+ * When multiple requests need a token simultaneously, only one auth call is made.
+ * All waiters share the same promise result.
+ */
+const pendingAuthRequests = new Map<string, Promise<string>>();
 
 /**
  * Limpa o cache de tokens. Útil para testes.
@@ -68,6 +73,7 @@ export function invalidateToken(appId: string, secret: string): void {
 /**
  * Obtém um token Bearer válido para o Cobre Fácil.
  * Usa cache em memória e renova automaticamente quando necessário.
+ * Implementa singleflight para evitar race condition de autenticação.
  *
  * @param appId - App ID da aplicação no Cobre Fácil
  * @param secret - Secret da aplicação no Cobre Fácil
@@ -85,38 +91,56 @@ export async function getAuthToken(
     return cached.token;
   }
 
-  logger.info("[CobreFacil] Requesting new auth token");
-
-  const response = await fetch(`${BASE_URL}/authenticate`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ app_id: appId, secret }),
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => "");
-    throw new Error(
-      `Cobre Fácil auth failed (HTTP ${response.status}): ${errorText || response.statusText}`,
-    );
+  // F1.2: Singleflight pattern — if auth is already in flight, wait for it
+  // instead of spawning concurrent auth requests
+  const pending = pendingAuthRequests.get(cacheKey);
+  if (pending) {
+    return pending;
   }
 
-  const json = (await response.json()) as AuthResponse;
+  // Create a new auth promise and store it so other concurrent requests wait
+  const authPromise = (async () => {
+    try {
+      logger.info("[CobreFacil] Requesting new auth token");
 
-  if (!json.success || !json.data?.token) {
-    throw new Error(
-      `Cobre Fácil auth error: ${json.message ?? "Resposta inesperada do servidor"}`,
-    );
-  }
+      const response = await fetch(`${BASE_URL}/authenticate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ app_id: appId, secret }),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
 
-  const { token, expiration } = json.data;
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "");
+        throw new Error(
+          `Cobre Fácil auth failed (HTTP ${response.status}): ${errorText || response.statusText}`,
+        );
+      }
 
-  tokenCache.set(cacheKey, {
-    token,
-    expiresAt: Date.now() + expiration * 1000 - TOKEN_REFRESH_MARGIN_MS,
-  });
+      const json = (await response.json()) as AuthResponse;
 
-  return token;
+      if (!json.success || !json.data?.token) {
+        throw new Error(
+          `Cobre Fácil auth error: ${json.message ?? "Resposta inesperada do servidor"}`,
+        );
+      }
+
+      const { token, expiration } = json.data;
+
+      tokenCache.set(cacheKey, {
+        token,
+        expiresAt: Date.now() + expiration * 1000 - TOKEN_REFRESH_MARGIN_MS,
+      });
+
+      return token;
+    } finally {
+      // Always clean up the pending promise, whether success or error
+      pendingAuthRequests.delete(cacheKey);
+    }
+  })();
+
+  pendingAuthRequests.set(cacheKey, authPromise);
+  return authPromise;
 }
 
 // ---------------------------------------------------------------------------

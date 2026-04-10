@@ -91,6 +91,43 @@ export function statusToErrorCode(status: number, message?: string): ErrorCodeVa
 }
 
 /**
+ * Classify payment provider-specific errors.
+ * Handles Vindi, Pagarme, Lytex, and Cobre Fácil API errors.
+ * @internal
+ */
+function classifyPaymentProviderError(message: string): ErrorCodeValue | null {
+  const lower = message.toLowerCase();
+
+  // Vindi errors
+  if (lower.includes("vindi")) {
+    if (lower.includes("unauthorized") || lower.includes("invalid key")) return ErrorCode.AUTH_FAILED;
+    if (lower.includes("rate limit")) return ErrorCode.RATE_LIMIT_EXCEEDED;
+    if (lower.includes("not found")) return ErrorCode.NOT_FOUND;
+  }
+
+  // Pagarme errors
+  if (lower.includes("pagar.me") || lower.includes("pagarme")) {
+    if (lower.includes("unauthorized") || lower.includes("invalid")) return ErrorCode.AUTH_FAILED;
+    if (lower.includes("rate limit") || lower.includes("429")) return ErrorCode.RATE_LIMIT_EXCEEDED;
+    if (lower.includes("not found")) return ErrorCode.NOT_FOUND;
+  }
+
+  // Lytex errors
+  if (lower.includes("lytex")) {
+    if (lower.includes("unauthorized") || lower.includes("401")) return ErrorCode.AUTH_FAILED;
+    if (lower.includes("rate limit")) return ErrorCode.RATE_LIMIT_EXCEEDED;
+  }
+
+  // Cobre Fácil errors
+  if (lower.includes("cobre") || lower.includes("cobrefacil")) {
+    if (lower.includes("unauthorized") || lower.includes("invalid")) return ErrorCode.AUTH_FAILED;
+    if (lower.includes("rate limit")) return ErrorCode.RATE_LIMIT_EXCEEDED;
+  }
+
+  return null;
+}
+
+/**
  * Classify an error into a structured ErrorCode based on its properties.
  * Used by withLogging and withApiLogging for consistent error categorization.
  */
@@ -120,6 +157,12 @@ export function classifyError(err: unknown): ErrorCodeValue {
       return ErrorCode.VALIDATION_ERROR;
     }
 
+    // Payment provider errors (before generic keyword matching)
+    if (message) {
+      const paymentError = classifyPaymentProviderError(message);
+      if (paymentError) return paymentError;
+    }
+
     // Permission keywords in message (no status code)
     if (message) {
       const lower = message.toLowerCase();
@@ -136,8 +179,8 @@ export function classifyError(err: unknown): ErrorCodeValue {
       return ErrorCode.AUTH_TOKEN_EXPIRED;
     }
 
-    // External service
-    if (message?.toLowerCase().includes("econnrefused") || message?.toLowerCase().includes("econnreset") || message?.toLowerCase().includes("etimedout")) {
+    // External service (network/timeout errors)
+    if (message?.toLowerCase().includes("econnrefused") || message?.toLowerCase().includes("econnreset") || message?.toLowerCase().includes("etimedout") || message?.toLowerCase().includes("timeout")) {
       return ErrorCode.EXTERNAL_SERVICE_ERROR;
     }
   }
@@ -174,6 +217,10 @@ const SENSITIVE_KEYS = new Set([
   "certificatepassword",
   "cert",
   "pfx",
+  // TODO: confirm with legal if email/phone should be added based on company LGPD policy
+  // "email",
+  // "telefone",
+  // "phone",
 ]);
 
 /**

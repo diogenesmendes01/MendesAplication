@@ -26,48 +26,11 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getTicketDashboard, type TicketDashboard } from "./dashboard-actions";
 import { RaReputationCard } from "./ra-reputation-card";
-import { priorityLabel } from "@/lib/sac/ticket-formatters";
+import { channelLabel, channelColor, priorityLabel, priorityHexColor } from "@/lib/sac/ticket-formatters";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function channelLabel(channel: string) {
-  switch (channel) {
-    case "EMAIL":
-      return "Email";
-    case "WHATSAPP":
-      return "WhatsApp";
-    case "RECLAMEAQUI":
-      return "Reclame Aqui";
-    default:
-      return "Web/Manual";
-  }
-}
-
-function channelColor(channel: string) {
-  switch (channel) {
-    case "EMAIL":
-      return "#3b82f6";
-    case "WHATSAPP":
-      return "#22c55e";
-    case "RECLAMEAQUI":
-      return "#8b5cf6";
-    default:
-      return "#94a3b8";
-  }
-}
-
-function priorityColor(priority: string) {
-  switch (priority) {
-    case "HIGH":
-      return "#ef4444";
-    case "LOW":
-      return "#3b82f6";
-    default:
-      return "#eab308";
-  }
-}
 
 function formatMinutes(minutes: number): string {
   if (minutes < 60) return `${minutes}min`;
@@ -179,7 +142,7 @@ export function TicketDashboardKpis({
   const priorityData = data.ticketsByPriority.map((item) => ({
     label: priorityLabel(item.priority),
     value: item.count,
-    color: priorityColor(item.priority),
+    color: priorityHexColor(item.priority),
   }));
 
   // When showing a specific channel, omit the RA reputation card and bar chart
