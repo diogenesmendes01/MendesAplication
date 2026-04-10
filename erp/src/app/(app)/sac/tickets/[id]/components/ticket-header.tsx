@@ -50,7 +50,7 @@ interface TicketHeaderProps {
     aiEnabled: boolean;
     raExternalId?: string | null;
     raStatusName?: string | null;
-    raRating?: number | null;
+    raRating?: string | number | null;
     raCanEvaluate?: boolean;
     raCanModerate?: boolean;
   };

@@ -6,60 +6,12 @@ import dynamic from "next/dynamic";
 import { toast } from "sonner";
 import {
   ArrowLeft,
-  User,
-  Calendar,
-  Building2,
-  FileText,
-  CreditCard,
-  Mail,
-  MessageSquare,
-  Globe,
-  X,
-  Plus,
-  UserCircle,
-  Clock,
-  DollarSign,
-  ExternalLink,
   AlertTriangle,
-  Link as LinkIcon,
+  LinkIcon,
   UserPlus,
-  Search,
-  Loader2,
-  Coins,
-  CheckCircle,
-  XCircle,
-  Banknote,
-  Ban,
-  FileDown,
-  Sparkles,
-  ThumbsDown,
-  ThumbsUp,
-  ChevronRight,
-  Info,
-  ShieldCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { useCompany } from "@/contexts/company-context";
-import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   getTicketDetailBootstrap,
   updateTicketStatus,
@@ -83,10 +35,10 @@ import {
 } from "../actions";
 import type { TicketStatus } from "@prisma/client";
 import { generateTicketPdf } from "@/lib/ticket-pdf";
+import { statusLabel } from "@/lib/sac/ticket-formatters";
 import TicketTimeline from "./ticket-timeline";
 import RaModerationDialog from "./ra-moderation-dialog";
 import { ChannelBreadcrumb } from "@/components/sac/channel-breadcrumb";
-import { ChannelBadge } from "@/components/sac/channel-badge";
 import {
   getRaTicketContext,
   requestRaEvaluation,
@@ -96,8 +48,20 @@ import {
 } from "../ra-actions";
 import LinkedTicketsBanner from "./linked-tickets-banner";
 import MergedTicketBanner from "./merged-ticket-banner";
-import RaResponsePanel from "./ra-response-panel";
-import RaSuggestionCard from "./ra-suggestion-card";
+
+// New sub-components (Tasks 1-9)
+import { ChannelThemeProvider } from "./components/channel-theme-provider";
+import TicketHeader from "./components/ticket-header";
+import TicketTabs, { type TabId } from "./components/ticket-tabs";
+import TicketDetailsTab from "./components/ticket-details-tab";
+import TicketSidebar from "./components/ticket-sidebar";
+import TicketComposerTab from "./components/ticket-composer-tab";
+import {
+  ExportPdfDialog,
+  LinkClientDialog,
+  CreateClientDialog,
+  RejectRefundDialog,
+} from "./components/ticket-dialogs";
 
 const RequestRefundDialog = dynamic(() =>
   import("./refund-dialogs").then((m) => ({ default: m.RequestRefundDialog })),
@@ -111,314 +75,6 @@ const CancellationDialog = dynamic(() =>
   import("./cancellation-dialog").then((m) => ({ default: m.CancellationDialog })),
   { ssr: false }
 );
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-const dateFmt = new Intl.DateTimeFormat("pt-BR", {
-  day: "2-digit",
-  month: "2-digit",
-  year: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-});
-
-function priorityLabel(p: string) {
-  switch (p) {
-    case "HIGH": return "Alta";
-    case "LOW": return "Baixa";
-    default: return "Média";
-  }
-}
-
-function priorityColor(p: string) {
-  switch (p) {
-    case "HIGH": return "bg-red-100 text-red-800";
-    case "LOW": return "bg-blue-100 text-blue-800";
-    default: return "bg-yellow-100 text-yellow-800";
-  }
-}
-
-function statusLabel(s: string) {
-  switch (s) {
-    case "OPEN": return "Aberto";
-    case "IN_PROGRESS": return "Em Andamento";
-    case "WAITING_CLIENT": return "Aguardando Cliente";
-    case "RESOLVED": return "Resolvido";
-    case "CLOSED": return "Fechado";
-    case "MERGED": return "Mergeado";
-    default: return s;
-  }
-}
-
-function statusColor(s: string) {
-  switch (s) {
-    case "OPEN": return "bg-blue-100 text-blue-800";
-    case "IN_PROGRESS": return "bg-yellow-100 text-yellow-800";
-    case "WAITING_CLIENT": return "bg-orange-100 text-orange-800";
-    case "RESOLVED": return "bg-green-100 text-green-800";
-    case "CLOSED": return "bg-gray-100 text-gray-800";
-    case "MERGED": return "bg-purple-100 text-purple-800";
-    default: return "bg-gray-100 text-gray-800";
-  }
-}
-
-function getFeelingEmoji(feeling: string | null): string {
-  if (!feeling) return "";
-  const f = feeling.toLowerCase();
-  if (f.includes("irritado") || f.includes("raiva")) return "😡";
-  if (f.includes("triste") || f.includes("decepcionado")) return "😢";
-  if (f.includes("neutro")) return "😐";
-  if (f.includes("satisfeito")) return "😊";
-  return "💬";
-}
-
-function SlaCard({ label, deadline, breached }: { label: string; deadline: string; breached: boolean }) {
-  const deadlineDate = new Date(deadline);
-  const now = Date.now();
-  const diffMs = deadlineDate.getTime() - now;
-
-  const isBreached = breached || diffMs <= 0;
-  const progressPct = isBreached ? 100 : Math.min(100, Math.max(0, 100 - (diffMs / (60 * 60_000)) * 10));
-
-  let barColor = "bg-green-500";
-  if (progressPct >= 90 || isBreached) barColor = "bg-red-500";
-  else if (progressPct >= 70) barColor = "bg-yellow-500";
-
-  let sl = "OK";
-  let sc = "text-green-600";
-  if (isBreached) { sl = "Estourado"; sc = "text-red-600"; }
-  else if (progressPct >= 70) { sl = "Em Risco"; sc = "text-yellow-600"; }
-
-  let timeText: string;
-  if (diffMs <= 0) {
-    const overMs = Math.abs(diffMs);
-    const h = Math.floor(overMs / 3_600_000);
-    const m = Math.floor((overMs % 3_600_000) / 60_000);
-    timeText = `-${h}h${String(m).padStart(2, "0")}m`;
-  } else {
-    const h = Math.floor(diffMs / 3_600_000);
-    const m = Math.floor((diffMs % 3_600_000) / 60_000);
-    timeText = `${h}h${String(m).padStart(2, "0")}m`;
-  }
-
-  return (
-    <div className="space-y-1.5">
-      <div className="flex items-center justify-between">
-        <p className="text-sm font-medium">{label}</p>
-        <span className={`text-xs font-semibold ${sc}`}>{sl}</span>
-      </div>
-      <div className="flex items-center gap-2">
-        <div className="flex-1 h-2 rounded-full bg-gray-100 overflow-hidden">
-          <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${Math.min(100, progressPct)}%` }} />
-        </div>
-        <span className="text-xs font-mono text-muted-foreground w-16 text-right">{timeText}</span>
-      </div>
-    </div>
-  );
-}
-
-
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// Mini-cards helpers
-// ---------------------------------------------------------------------------
-
-type RaFormField = { name: string; value: string };
-
-function isRaFormFields(val: unknown): val is RaFormField[] {
-  return (
-    Array.isArray(val) &&
-    val.every(
-      (f) =>
-        typeof f === "object" &&
-        f !== null &&
-        "name" in f &&
-        "value" in f &&
-        typeof (f as Record<string, unknown>).name === "string" &&
-        typeof (f as Record<string, unknown>).value === "string"
-    )
-  );
-}
-
-
-// ---------------------------------------------------------------------------
-// Reusable Mini-card grid components
-// ---------------------------------------------------------------------------
-
-type RaMiniCardsTicket = {
-  client: { name: string; email?: string | null };
-  company: { nomeFantasia: string };
-  raFormFields: unknown;
-  createdAt: string | Date;
-  updatedAt: string | Date;
-};
-
-type RaMiniCardsContext = {
-  client?: { name?: string; email?: string; phone?: string } | null;
-} | null;
-
-function RaMiniCards({
-  ticket,
-  raContext,
-}: {
-  ticket: RaMiniCardsTicket;
-  raContext: RaMiniCardsContext;
-}) {
-  return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-      {/* Consumidor */}
-      <Card className="border-purple-100 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
-        <CardHeader className="pb-2 pt-3 px-4">
-          <CardTitle className="text-xs font-semibold uppercase tracking-wide text-purple-700 flex items-center gap-1.5">
-            <User className="h-3 w-3" />Consumidor
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="pt-0 px-4 pb-3 space-y-0.5">
-          <p className="text-sm font-semibold">{raContext?.client?.name ?? ticket.client.name}</p>
-          {(raContext?.client?.email ?? ticket.client.email) && (
-            <p className="text-xs text-muted-foreground">{raContext?.client?.email ?? ticket.client.email}</p>
-          )}
-          {raContext?.client?.phone && (
-            <p className="text-xs text-muted-foreground">{raContext.client.phone}</p>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Dados da Reclamação */}
-      <Card className="border-purple-100 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
-        <CardHeader className="pb-2 pt-3 px-4">
-          <CardTitle className="text-xs font-semibold uppercase tracking-wide text-purple-700 flex items-center gap-1.5">
-            <FileText className="h-3 w-3" />Dados da Reclamação
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="pt-0 px-4 pb-3 space-y-1.5">
-          {isRaFormFields(ticket.raFormFields) && ticket.raFormFields.length > 0 ? (
-            ticket.raFormFields.slice(0, 3).map((f, i) => (
-              <div key={i}>
-                <p className="text-xs text-muted-foreground">{f.name}</p>
-                <p className="text-xs font-medium">{f.value}</p>
-              </div>
-            ))
-          ) : (
-            <p className="text-xs text-muted-foreground">Sem dados adicionais</p>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Informações Gerais */}
-      <Card className="border-purple-100 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
-        <CardHeader className="pb-2 pt-3 px-4">
-          <CardTitle className="text-xs font-semibold uppercase tracking-wide text-purple-700 flex items-center gap-1.5">
-            <Info className="h-3 w-3" />Informações Gerais
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="pt-0 px-4 pb-3 space-y-1">
-          <div className="flex justify-between text-xs"><span className="text-muted-foreground">Empresa</span><span className="font-medium truncate ml-2">{ticket.company.nomeFantasia}</span></div>
-          <div className="flex justify-between text-xs"><span className="text-muted-foreground">Canal</span><span className="font-medium text-purple-700">Reclame Aqui</span></div>
-          <div className="flex justify-between text-xs"><span className="text-muted-foreground">Criado</span><span className="font-medium">{dateFmt.format(new Date(ticket.createdAt))}</span></div>
-          <div className="flex justify-between text-xs"><span className="text-muted-foreground">Atualizado</span><span className="font-medium">{dateFmt.format(new Date(ticket.updatedAt))}</span></div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-type GenericMiniCardsTicket = {
-  client: { name: string; email?: string | null };
-  contact?: { name: string; role?: string | null } | null;
-  company: { nomeFantasia: string };
-  channelType?: string | null;
-  priority: string;
-  status: string;
-  proposalId?: string | null;
-  boletoId?: string | null;
-  createdAt: string | Date;
-  updatedAt: string | Date;
-};
-
-function GenericMiniCards({ ticket }: { ticket: GenericMiniCardsTicket }) {
-  return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-      {/* Cliente */}
-      <Card className="transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
-        <CardHeader className="pb-2 pt-3 px-4">
-          <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
-            <User className="h-3 w-3" />Cliente
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="pt-0 px-4 pb-3 space-y-0.5">
-          <p className="text-sm font-semibold">{ticket.client.name}</p>
-          {ticket.contact && (
-            <>
-              <p className="text-xs text-muted-foreground">{ticket.contact.name}</p>
-              {ticket.contact.role && <p className="text-xs text-muted-foreground">{ticket.contact.role}</p>}
-            </>
-          )}
-          {ticket.client.email && (
-            <p className="text-xs text-muted-foreground truncate">{ticket.client.email}</p>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Dados */}
-      <Card className="transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
-        <CardHeader className="pb-2 pt-3 px-4">
-          <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
-            <FileText className="h-3 w-3" />Dados
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="pt-0 px-4 pb-3 space-y-1">
-          <div className="flex justify-between text-xs"><span className="text-muted-foreground">Prioridade</span><span className={`font-medium px-1.5 py-0.5 rounded-full ${priorityColor(ticket.priority)}`}>{priorityLabel(ticket.priority)}</span></div>
-          <div className="flex justify-between text-xs"><span className="text-muted-foreground">Status</span><span className={`font-medium px-1.5 py-0.5 rounded-full ${statusColor(ticket.status)}`}>{statusLabel(ticket.status)}</span></div>
-          {ticket.proposalId && (
-            <div className="flex justify-between text-xs"><span className="text-muted-foreground">Proposta</span><span className="font-medium text-primary">#{ticket.proposalId?.slice(-8) || "---"}</span></div>
-          )}
-          {ticket.boletoId && (
-            <div className="flex justify-between text-xs"><span className="text-muted-foreground">Boleto</span><span className="font-medium text-primary">#{ticket.boletoId?.slice(-8) || "---"}</span></div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Informações */}
-      <Card className="transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
-        <CardHeader className="pb-2 pt-3 px-4">
-          <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
-            <Info className="h-3 w-3" />Informações
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="pt-0 px-4 pb-3 space-y-1">
-          <div className="flex justify-between text-xs"><span className="text-muted-foreground">Empresa</span><span className="font-medium truncate ml-2">{ticket.company.nomeFantasia}</span></div>
-          <div className="flex justify-between text-xs"><span className="text-muted-foreground">Canal</span><span className="font-medium">{ticket.channelType === "EMAIL" ? "Email" : "WhatsApp"}</span></div>
-          <div className="flex justify-between text-xs"><span className="text-muted-foreground">Criado</span><span className="font-medium">{dateFmt.format(new Date(ticket.createdAt))}</span></div>
-          <div className="flex justify-between text-xs"><span className="text-muted-foreground">Atualizado</span><span className="font-medium">{dateFmt.format(new Date(ticket.updatedAt))}</span></div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-// Status transitions
-// ---------------------------------------------------------------------------
-
-const STATUS_TRANSITIONS: Record<string, { value: TicketStatus; label: string }[]> = {
-  OPEN: [{ value: "IN_PROGRESS", label: "Iniciar Atendimento" }],
-  IN_PROGRESS: [
-    { value: "WAITING_CLIENT", label: "Aguardar Cliente" },
-    { value: "RESOLVED", label: "Resolver" },
-  ],
-  WAITING_CLIENT: [
-    { value: "IN_PROGRESS", label: "Retomar Atendimento" },
-    { value: "RESOLVED", label: "Resolver" },
-  ],
-  RESOLVED: [
-    { value: "CLOSED", label: "Fechar" },
-    { value: "IN_PROGRESS", label: "Reabrir" },
-  ],
-  CLOSED: [],
-};
 
 // ---------------------------------------------------------------------------
 // Page
@@ -445,6 +101,9 @@ export default function TicketDetailPage() {
 
   // AI suggestion pre-populate state (US-RA-R03)
   const [initialPublicMessage, setInitialPublicMessage] = useState<string>("");
+
+  // Tab state
+  const [activeTab, setActiveTab] = useState<TabId>("detalhes");
 
   // Contact linking state (US-081)
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
@@ -873,1165 +532,242 @@ export default function TicketDetailPage() {
     );
   }
 
-  const transitions = STATUS_TRANSITIONS[ticket.status] ?? [];
   const isRa = ticket.channelType === "RECLAMEAQUI";
-
-  // ─── RA Suggestion (from raContext.lastSuggestion) ──────────────
-  const raSuggestion = raContext?.lastSuggestion ?? null;
-
-  // Helper: parse suggestion content to extract publicMessage
-  function extractPublicFromSuggestion(content: string): string {
-    try {
-      const parsed = JSON.parse(content);
-      return parsed.publicMessage ?? parsed.suggestedResponse ?? content;
-    } catch {
-      return content;
-    }
-  }
 
   // ─── Render ─────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-6">
-      {/* Breadcrumb */}
-      <ChannelBreadcrumb channelType={ticket.channelType ?? null} ticketId={ticket.id} />
+    <ChannelThemeProvider channelType={ticket.channelType}>
+      <div style={{ background: "#FAFAF8", minHeight: "100vh" }}>
+        {/* Breadcrumb */}
+        <ChannelBreadcrumb channelType={ticket.channelType ?? null} ticketId={ticket.id} />
 
-      {/* ─── RA Identity Header (US-RA-R01) ──────────────────────── */}
-      {isRa ? (
-        <div className="rounded-xl border border-purple-200 bg-purple-50 px-5 py-4 space-y-3">
-          {/* Top row: back + title + badges */}
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div className="flex items-start gap-3">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => router.push("/sac/tickets")}
-                className="mt-0.5 shrink-0"
-              >
-                <ArrowLeft className="mr-1.5 h-4 w-4" />
-                Voltar
+        {/* Cross-channel dedup banners */}
+        {ticket.mergedIntoId && ticket.mergedAt && (
+          <MergedTicketBanner mergedIntoId={ticket.mergedIntoId} mergedAt={ticket.mergedAt} />
+        )}
+        {selectedCompanyId && !ticket.mergedIntoId && (
+          <LinkedTicketsBanner ticketId={ticket.id} companyId={selectedCompanyId} />
+        )}
+
+        {/* Unknown contact banner (US-081) */}
+        {isUnknownClient && (
+          <div className="flex items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4">
+            <AlertTriangle className="h-5 w-5 flex-shrink-0 text-amber-600" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-amber-800">Contato não identificado</p>
+              <p className="text-xs text-amber-700">
+                {ticket.description.includes("Número:")
+                  ? `Número: ${ticket.description.match(/Número:\s*(\+?[\d]+)/)?.[1] ?? "desconhecido"}`
+                  : ticket.description.includes("Email recebido de")
+                    ? `Email: ${ticket.description.match(/Email recebido de\s+([\w.+-]+@[\w.-]+)/)?.[1] ?? "desconhecido"}`
+                    : "Remetente não identificado"}
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" className="border-amber-400 text-amber-800 hover:bg-amber-100" onClick={() => setLinkDialogOpen(true)}>
+                <LinkIcon className="mr-1.5 h-3.5 w-3.5" />
+                Vincular
               </Button>
-              <div>
-                <div className="flex items-center gap-2 flex-wrap mb-1">
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-purple-600 px-2.5 py-0.5 text-xs font-bold text-white">
-                    <Globe className="h-3 w-3" />
-                    Reclame Aqui
-                  </span>
-                  {ticket.aiEnabled && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2 py-0.5 text-xs font-semibold text-purple-700">
-                      <Sparkles className="h-3 w-3" />
-                      IA ativa
-                    </span>
-                  )}
-                  {ticket.raStatusName && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-white border border-purple-200 px-2 py-0.5 text-xs font-semibold text-purple-800">
-                      {ticket.raStatusName}
-                    </span>
-                  )}
-
-                </div>
-                <h1 className="text-xl font-bold tracking-tight text-purple-900">
-                  {ticket.subject}
-                </h1>
-                <p className="text-xs text-purple-600 mt-0.5">
-                  Ticket #{ticket.id.slice(-8)}
-                </p>
-              </div>
-            </div>
-
-            {/* Right side: feeling + priority + status + RA link */}
-            <div className="flex items-center gap-2 flex-wrap sm:justify-end">
-              {/* Consumer feeling */}
-              {raContext?.raFeeling && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-white border border-purple-200 px-2.5 py-1 text-xs font-medium text-purple-800">
-                  {getFeelingEmoji(raContext?.raFeeling)} {raContext?.raFeeling}
-                </span>
-              )}
-              <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold ${priorityColor(ticket.priority)}`}>
-                {priorityLabel(ticket.priority)}
-              </span>
-              {transitions.length > 0 ? (
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  {transitions.map((t) => (
-                    <Button key={t.value} size="sm" variant="outline" disabled={updatingStatus} onClick={() => handleStatusChange(t.value)} className="transition-all duration-150 active:scale-95 hover:shadow-sm">
-                      {updatingStatus && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
-                      {t.label}
-                    </Button>
-                  ))}
-                </div>
-              ) : (
-                <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold ${statusColor(ticket.status)}`}>
-                  {statusLabel(ticket.status)}
-                </span>
-              )}
-              {ticket.raExternalId && (
-                <a
-                  href={`https://www.reclameaqui.com.br/empresa/trustcloud/lista-reclamacoes/?problema=${ticket.raExternalId}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 text-sm text-purple-700 hover:text-purple-900 font-mono bg-purple-50 border border-purple-200 rounded px-2 py-1"
-                >
-                  <ExternalLink className="h-3.5 w-3.5" />
-                  ID RA: {ticket.raExternalId}
-                </a>
-              )}
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-amber-400 text-amber-800 hover:bg-amber-100"
+                onClick={() => {
+                  const phoneMatch = ticket.description.match(/Número:\s*(\+?[\d]+)/);
+                  const emailMatch = ticket.description.match(/Email recebido de\s+([\w.+-]+@[\w.-]+)/);
+                  setNewClientForm((prev) => ({ ...prev, email: emailMatch?.[1] ?? "", telefone: phoneMatch?.[1] ?? "" }));
+                  setCreateDialogOpen(true);
+                }}
+              >
+                <UserPlus className="mr-1.5 h-3.5 w-3.5" />
+                Criar cliente
+              </Button>
             </div>
           </div>
+        )}
+
+        {/* Header */}
+        <TicketHeader
+          ticket={ticket}
+          raContext={raContext}
+          updatingStatus={updatingStatus}
+          onStatusChange={handleStatusChange}
+          onExport={() => setExportDialogOpen(true)}
+          onRequestEvaluation={isRa ? handleRequestRaEvaluation : undefined}
+          requestingEval={requestingEval}
+          onOpenModeration={isRa ? () => setRaModerationOpen(true) : undefined}
+          onCancelDialog={!isRa ? () => setCancelDialogOpen(true) : undefined}
+          hasProposalOrBoleto={hasProposalOrBoleto}
+        />
+
+        {/* Tabs */}
+        <TicketTabs activeTab={activeTab} onTabChange={setActiveTab} />
+
+        {/* Content grid: main + sidebar */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 260px", minHeight: 380 }}>
+          {/* Content area — switches by tab */}
+          <div>
+            {activeTab === "detalhes" && (
+              <TicketDetailsTab
+                ticket={ticket}
+                raContext={raContext}
+                companyId={selectedCompanyId}
+                onUseSuggestion={(msg) => { setInitialPublicMessage(msg); setActiveTab("responder"); }}
+                onSuggestionAction={loadTicket}
+              />
+            )}
+            {activeTab === "timeline" && (
+              <TicketTimeline
+                ticketId={ticketId}
+                companyId={selectedCompanyId}
+                ticketSubject={ticket.subject}
+                aiEnabled={ticket.aiEnabled}
+                aiConfigEnabled={aiConfigEnabled}
+                channelType={ticket.channelType ?? null}
+              />
+            )}
+            {activeTab === "responder" && (
+              <TicketComposerTab
+                ticket={ticket}
+                ticketId={ticketId}
+                companyId={selectedCompanyId}
+                initialPublicMessage={initialPublicMessage}
+                onSendPublic={handleSendRaPublicMessage}
+                onSendPrivate={handleSendRaPrivateMessage}
+                sendingPublic={sendingRaPublic}
+                sendingPrivate={sendingRaPrivate}
+                requestingEval={requestingEval}
+                finishingPrivate={finishingPrivate}
+                onRequestEvaluation={handleRequestRaEvaluation}
+                onOpenModeration={() => setRaModerationOpen(true)}
+                onFinishPrivate={handleFinishPrivate}
+              />
+            )}
+          </div>
+
+          {/* Sidebar — always visible */}
+          <TicketSidebar
+            ticket={ticket}
+            users={users}
+            updatingAssignee={updatingAssignee}
+            onReassign={handleReassign}
+            tags={tags}
+            newTag={newTag}
+            onNewTagChange={setNewTag}
+            onAddTag={handleAddTag}
+            onRemoveTag={handleRemoveTag}
+            financial={financial}
+            refunds={refunds}
+            isAdminOrManager={isAdminOrManager}
+            approvingRefundId={approvingRefundId}
+            onApproveRefund={handleApproveRefund}
+            onOpenRejectRefund={(id) => { setRejectRefundId(id); setRejectDialogOpen(true); }}
+            onOpenExecuteRefund={(id) => { setExecuteRefundId(id); setExecuteDialogOpen(true); }}
+            onRequestRefund={() => setRequestRefundOpen(true)}
+            cancellation={cancellation}
+            hasPendingCancellation={hasPendingCancellation}
+            hasProposalOrBoleto={hasProposalOrBoleto}
+            approvingCancel={approvingCancel}
+            onApproveCancellation={handleApproveCancellation}
+            onOpenCancelDialog={() => setCancelDialogOpen(true)}
+            onExport={() => setExportDialogOpen(true)}
+          />
         </div>
-      ) : (
-        /* Generic header for non-RA tickets */
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="sm" onClick={() => router.push("/sac/tickets")}>
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Voltar
-            </Button>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight">{ticket.subject}</h1>
-              <p className="text-sm text-muted-foreground">Ticket #{ticket.id.slice(-8)}</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <ChannelBadge channelType={ticket.channelType ?? null} />
-            <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold ${priorityColor(ticket.priority)}`}>
-              {priorityLabel(ticket.priority)}
-            </span>
-            {transitions.length > 0 ? (
-              <div className="flex items-center gap-1.5 flex-wrap">
-                {transitions.map((t) => (
-                  <Button key={t.value} size="sm" variant="outline" disabled={updatingStatus} onClick={() => handleStatusChange(t.value)} className="transition-all duration-150 active:scale-95 hover:shadow-sm">
-                    {updatingStatus && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
-                    {t.label}
-                  </Button>
-                ))}
-              </div>
-            ) : (
-              <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold ${statusColor(ticket.status)}`}>
-                {statusLabel(ticket.status)}
-              </span>
-            )}
-          </div>
-        </div>
-      )}
 
-      {/* Cross-channel dedup banners */}
-      {ticket.mergedIntoId && ticket.mergedAt && (
-        <MergedTicketBanner mergedIntoId={ticket.mergedIntoId} mergedAt={ticket.mergedAt} />
-      )}
-      {selectedCompanyId && !ticket.mergedIntoId && (
-        <LinkedTicketsBanner ticketId={ticket.id} companyId={selectedCompanyId} />
-      )}
+        {/* ─── Dialogs ──────────────────────────────────────────── */}
 
-      {/* Unknown contact banner (US-081) */}
-      {isUnknownClient && (
-        <div className="flex items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4">
-          <AlertTriangle className="h-5 w-5 flex-shrink-0 text-amber-600" />
-          <div className="flex-1">
-            <p className="text-sm font-medium text-amber-800">Contato não identificado</p>
-            <p className="text-xs text-amber-700">
-              {ticket.description.includes("Número:")
-                ? `Número: ${ticket.description.match(/Número:\s*(\+?[\d]+)/)?.[1] ?? "desconhecido"}`
-                : ticket.description.includes("Email recebido de")
-                  ? `Email: ${ticket.description.match(/Email recebido de\s+([\w.+-]+@[\w.-]+)/)?.[1] ?? "desconhecido"}`
-                  : "Remetente não identificado"}
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <Button size="sm" variant="outline" className="border-amber-400 text-amber-800 hover:bg-amber-100" onClick={() => setLinkDialogOpen(true)}>
-              <LinkIcon className="mr-1.5 h-3.5 w-3.5" />
-              Vincular
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="border-amber-400 text-amber-800 hover:bg-amber-100"
-              onClick={() => {
-                const phoneMatch = ticket.description.match(/Número:\s*(\+?[\d]+)/);
-                const emailMatch = ticket.description.match(/Email recebido de\s+([\w.+-]+@[\w.-]+)/);
-                setNewClientForm((prev) => ({ ...prev, email: emailMatch?.[1] ?? "", telefone: phoneMatch?.[1] ?? "" }));
-                setCreateDialogOpen(true);
-              }}
-            >
-              <UserPlus className="mr-1.5 h-3.5 w-3.5" />
-              Criar cliente
-            </Button>
-          </div>
-        </div>
-      )}
+        <ExportPdfDialog
+          open={exportDialogOpen}
+          onOpenChange={setExportDialogOpen}
+          includeNotes={exportIncludeNotes}
+          onIncludeNotesChange={setExportIncludeNotes}
+          includeAttachments={exportIncludeAttachments}
+          onIncludeAttachmentsChange={setExportIncludeAttachments}
+          exporting={exporting}
+          onExport={handleExportPdf}
+        />
 
-      {/* ═══════════════════════════════════════════════════════════
-          RECLAME AQUI LAYOUT (US-RA-R01 through R05)
-          ═══════════════════════════════════════════════════════════ */}
-      {isRa ? (
-        <div className="grid gap-6 lg:grid-cols-3">
-          {/* ─── Main Content ─────────────────────────────────────── */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* Mini-cards: Consumidor | Dados da Reclamação | Informações Gerais */}
-            <RaMiniCards ticket={ticket} raContext={raContext} />
+        <LinkClientDialog
+          open={linkDialogOpen}
+          onOpenChange={setLinkDialogOpen}
+          search={linkSearch}
+          onSearch={handleLinkSearch}
+          searching={linkSearching}
+          results={linkResults}
+          linking={linking}
+          onLink={handleLinkToClient}
+        />
 
-            {/* Description */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Descrição da Reclamação</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="whitespace-pre-wrap text-sm leading-relaxed">{ticket.description}</p>
-              </CardContent>
-            </Card>
+        <CreateClientDialog
+          open={createDialogOpen}
+          onOpenChange={setCreateDialogOpen}
+          form={newClientForm}
+          onFormChange={setNewClientForm}
+          linking={linking}
+          onCreateAndLink={handleCreateAndLink}
+        />
 
-            {/* US-RA-R03: AI Suggestion Card in prominence */}
-            {raSuggestion && (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 justify-between">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="h-4 w-4 text-purple-600" />
-                    <span className="text-sm font-semibold text-purple-800">Sugestão da IA</span>
-                    <Badge variant="outline" className="text-xs border-purple-300 text-purple-700 bg-purple-50">
-                      Pendente de aprovação
-                    </Badge>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="border-purple-300 text-purple-700 hover:bg-purple-100 text-xs"
-                    onClick={() => {
-                      const publicMsg = extractPublicFromSuggestion(raSuggestion.content);
-                      setInitialPublicMessage(publicMsg);
-                      toast.info("Sugestão copiada para a aba de Resposta Pública");
-                    }}
-                  >
-                    <ChevronRight className="mr-1 h-3 w-3" />
-                    Usar esta sugestão
-                  </Button>
-                </div>
-                <RaSuggestionCard
-                  messageId={raSuggestion.id}
-                  companyId={selectedCompanyId}
-                  content={raSuggestion.content}
-                  createdAt={raSuggestion.createdAt}
-                  onActionComplete={loadTicket}
-                />
-              </div>
-            )}
+        <RejectRefundDialog
+          open={rejectDialogOpen}
+          onOpenChange={setRejectDialogOpen}
+          reason={rejectReason}
+          onReasonChange={setRejectReason}
+          submitting={submittingReject}
+          onReject={handleRejectRefund}
+        />
 
-            {/* US-RA-R02: Response Panel with tabs */}
-            <Card className="border-purple-100">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <MessageSquare className="h-4 w-4 text-purple-600" />
-                  Responder Reclamação
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <RaResponsePanel
-                  ticketId={ticketId}
-                  companyId={selectedCompanyId}
-                  initialPublicMessage={initialPublicMessage}
-                  onSendPublic={handleSendRaPublicMessage}
-                  onSendPrivate={(msg, files) => handleSendRaPrivateMessage(msg, files)}
-                  sendingPublic={sendingRaPublic}
-                  sendingPrivate={sendingRaPrivate}
-                />
-                {/* RA action buttons inline — Solicitar Avaliação / Moderação / Encerrar Msg Privada */}
-                <div className="flex items-center gap-2 flex-wrap mt-3 pt-3 border-t border-purple-100">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="border-purple-200 text-purple-700 hover:bg-purple-50 transition-all duration-150 active:scale-95"
-                    disabled={requestingEval || !ticket.raCanEvaluate}
-                    onClick={handleRequestRaEvaluation}
-                  >
-                    {requestingEval ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <ThumbsUp className="mr-1.5 h-3.5 w-3.5" />}
-                    Solicitar Avaliação
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="border-purple-200 text-purple-700 hover:bg-purple-50 transition-all duration-150 active:scale-95"
-                    disabled={!ticket.raCanModerate}
-                    onClick={() => setRaModerationOpen(true)}
-                  >
-                    <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />
-                    Solicitar Moderação
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="border-purple-200 text-purple-700 hover:bg-purple-50 transition-all duration-150 active:scale-95"
-                    disabled={finishingPrivate}
-                    onClick={handleFinishPrivate}
-                  >
-                    {finishingPrivate ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <MessageSquare className="mr-1.5 h-3.5 w-3.5" />}
-                    Encerrar Msg Privada
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+        {/* RA Moderation Dialog */}
+        {ticket.channelType === "RECLAMEAQUI" && (
+          <RaModerationDialog
+            open={raModerationOpen}
+            onOpenChange={setRaModerationOpen}
+            ticketId={ticketId}
+            companyId={selectedCompanyId!}
+            onSuccess={loadTicket}
+          />
+        )}
 
-            {/* Timeline (history) */}
-            <TicketTimeline
-              ticketId={ticketId}
-              companyId={selectedCompanyId}
-              ticketSubject={ticket.subject}
-              aiEnabled={ticket.aiEnabled}
-              aiConfigEnabled={aiConfigEnabled}
-              channelType={ticket.channelType ?? null}
-            />
-          </div>
-
-          {/* ─── US-RA-R05: RA Sidebar ──────────────────────────── */}
-          <div className="space-y-6">
-            {/* 1. Consumer info */}
-            <Card className="border-purple-100">
-              <CardHeader>
-                <CardTitle className="text-sm font-semibold text-purple-700 flex items-center gap-2 uppercase tracking-wide">
-                  <User className="h-3.5 w-3.5" />
-                  Consumidor
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex items-start gap-3">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-purple-100 text-purple-700 font-bold text-sm">
-                    {(raContext?.client?.name ?? ticket.client.name).charAt(0).toUpperCase()}
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold">{raContext?.client?.name ?? ticket.client.name}</p>
-                    {(raContext?.client?.email ?? ticket.client.email) && (
-                      <p className="text-xs text-muted-foreground">{raContext?.client?.email ?? ticket.client.email}</p>
-                    )}
-                    {raContext?.client?.phone && (
-                      <p className="text-xs text-muted-foreground">{raContext.client.phone}</p>
-                    )}
-                    {raContext?.client?.cpfCnpj && !raContext.client.cpfCnpj.startsWith("RA-") && (
-                      <p className="text-xs text-muted-foreground font-mono">{raContext.client.cpfCnpj}</p>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* 2. RA Status & metrics */}
-            <Card className="border-purple-100">
-              <CardHeader>
-                <CardTitle className="text-sm font-semibold text-purple-700 flex items-center gap-2 uppercase tracking-wide">
-                  <Globe className="h-3.5 w-3.5" />
-                  Status Reclame Aqui
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {ticket.raStatusName && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">Status RA</span>
-                    <span className="text-xs font-semibold text-purple-700">{ticket.raStatusName}</span>
-                  </div>
-                )}
-                {ticket.raRating != null && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">Avaliação</span>
-                    <span className="text-xs font-semibold">⭐ {ticket.raRating}/10</span>
-                  </div>
-                )}
-                {raContext?.raFeeling && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">Sentimento</span>
-                    <span className="text-xs font-medium">{getFeelingEmoji(raContext.raFeeling)} {raContext.raFeeling}</span>
-                  </div>
-                )}
-                {raContext?.raResolvedIssue != null && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">Resolvido</span>
-                    <span className={`inline-flex items-center gap-1 text-xs font-medium ${raContext.raResolvedIssue ? "text-green-700" : "text-red-700"}`}>
-                      {raContext.raResolvedIssue ? <ThumbsUp className="h-3 w-3" /> : <ThumbsDown className="h-3 w-3" />}
-                      {raContext.raResolvedIssue ? "Sim" : "Não"}
-                    </span>
-                  </div>
-                )}
-                {raContext?.raBackDoingBusiness != null && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">Voltaria a comprar</span>
-                    <span className={`inline-flex items-center gap-1 text-xs font-medium ${raContext.raBackDoingBusiness ? "text-green-700" : "text-red-700"}`}>
-                      {raContext.raBackDoingBusiness ? <ThumbsUp className="h-3 w-3" /> : <ThumbsDown className="h-3 w-3" />}
-                      {raContext.raBackDoingBusiness ? "Sim" : "Não"}
-                    </span>
-                  </div>
-                )}
-                {raContext?.raCategories?.length > 0 && (
-                  <div>
-                    <p className="text-xs text-muted-foreground mb-1">Categorias</p>
-                    <div className="flex flex-wrap gap-1">
-                      {raContext.raCategories.map((cat: string, i: number) => (
-                        <Badge key={i} variant="secondary" className="text-xs">{cat}</Badge>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {raContext?.raFrozen && (
-                  <Badge variant="destructive" className="w-full justify-center text-xs">🧊 Ticket congelado</Badge>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* 3. Dados da Reclamação (form fields) */}
-            {isRaFormFields(ticket.raFormFields) && ticket.raFormFields.length > 0 && (
-              <Card className="border-purple-200">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium flex items-center gap-2">
-                    <FileText className="h-4 w-4 text-purple-600" />
-                    Dados da Reclamação
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  {ticket.raFormFields.map((field, i) => (
-                    <div key={i}>
-                      <p className="text-xs font-medium text-muted-foreground">{field.name}</p>
-                      <p className="text-sm">{field.value}</p>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-            )}
-
-
-
-            {/* 4. Responsável */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Responsável</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div>
-                  <Label htmlFor="assignee-ra">Atribuir a</Label>
-                  <Select value={ticket.assignee?.id ?? "__none__"} onValueChange={handleReassign} disabled={updatingAssignee}>
-                    <SelectTrigger id="assignee-ra">
-                      <SelectValue placeholder="Selecione um responsável" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">Nenhum</SelectItem>
-                      {users.map((u) => (
-                        <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* 5. Tags */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Tags</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex flex-wrap gap-1.5">
-                  {tags.length === 0 && <p className="text-xs text-muted-foreground">Nenhuma tag</p>}
-                  {tags.map((tag) => (
-                    <Badge key={tag} variant="secondary" className="gap-1 pr-1">
-                      {tag}
-                      <button type="button" onClick={() => handleRemoveTag(tag)} className="ml-0.5 rounded-full p-0.5 hover:bg-muted">
-                        <X className="h-3 w-3" />
-                      </button>
-                    </Badge>
-                  ))}
-                </div>
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="Nova tag..."
-                    value={newTag}
-                    onChange={(e) => setNewTag(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddTag(); } }}
-                    className="h-8 text-sm"
-                  />
-                  <Button size="sm" variant="outline" onClick={handleAddTag} disabled={!newTag.trim()} className="h-8 px-2">
-                    <Plus className="h-4 w-4" />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* 6. General info (compact) */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Informações Gerais</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex items-start gap-3">
-                  <Building2 className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground">Empresa</p>
-                    <p className="text-sm">{ticket.company.nomeFantasia}</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <Calendar className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground">Criado em</p>
-                    <p className="text-sm">{dateFmt.format(new Date(ticket.createdAt))}</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <Calendar className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground">Atualizado em</p>
-                    <p className="text-sm">{dateFmt.format(new Date(ticket.updatedAt))}</p>
-                  </div>
-                </div>
-                {ticket.proposalId && (
-                  <div className="flex items-start gap-3">
-                    <FileText className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground">Proposta Vinculada</p>
-                      <p className="text-sm text-primary">#{ticket.proposalId.slice(-8)}</p>
-                    </div>
-                  </div>
-                )}
-                {ticket.boletoId && (
-                  <div className="flex items-start gap-3">
-                    <CreditCard className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground">Boleto Vinculado</p>
-                      <p className="text-sm text-primary">#{ticket.boletoId.slice(-8)}</p>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Financial (RA context — kept) */}
-            {financial && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <DollarSign className="h-4 w-4" />
-                    Situação Financeira
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <Badge
-                    variant={financial.status === "adimplente" ? "default" : "destructive"}
-                    className={
-                      financial.status === "adimplente"
-                        ? "bg-green-100 text-green-800 hover:bg-green-100"
-                        : financial.status === "atraso"
-                          ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-100"
-                          : ""
-                    }
-                  >
-                    {financial.status === "adimplente" ? "Adimplente" : financial.status === "atraso" ? "Em Atraso" : "Inadimplente"}
-                  </Badge>
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <p className="text-xs text-muted-foreground">Total Pendente</p>
-                      <p className="font-medium">R$ {financial.pendingTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Total Vencido</p>
-                      <p className="font-medium text-red-600">R$ {financial.overdueTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</p>
-                    </div>
-                  </div>
-                  {financial.lastPayment && (
-                    <div className="text-sm">
-                      <p className="text-xs text-muted-foreground">Último Pagamento</p>
-                      <p>{dateFmt.format(new Date(financial.lastPayment))}</p>
-                    </div>
-                  )}
-                  <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => router.push("/financeiro/receber")}>
-                    <ExternalLink className="mr-1 h-3 w-3" />
-                    Ver financeiro
-                  </Button>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* 7. Export PDF */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <FileDown className="h-4 w-4" />
-                  Exportar
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Button variant="outline" className="w-full" onClick={() => setExportDialogOpen(true)}>
-                  <FileDown className="mr-1.5 h-3.5 w-3.5" />
-                  Exportar PDF
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      ) : (
-        /* ═══════════════════════════════════════════════════════════
-            GENERIC LAYOUT (EMAIL / WHATSAPP)
-            ═══════════════════════════════════════════════════════════ */
-        <div className="grid gap-6 lg:grid-cols-3">
-          {/* Main content */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* Mini-cards: Cliente | Dados | Informações */}
-            <GenericMiniCards ticket={ticket} />
-
-            {/* Description */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Descricao</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="whitespace-pre-wrap text-sm leading-relaxed">{ticket.description}</p>
-              </CardContent>
-            </Card>
-
-            {/* Timeline */}
-            <TicketTimeline
-              ticketId={ticketId}
-              companyId={selectedCompanyId}
-              ticketSubject={ticket.subject}
-              aiEnabled={ticket.aiEnabled}
-              aiConfigEnabled={aiConfigEnabled}
-              channelType={ticket.channelType ?? null}
-            />
-          </div>
-
-          {/* Sidebar info */}
-          <div className="space-y-6">
-            {/* Ticket info */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Informacoes</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-start gap-3">
-                  <User className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground">Cliente</p>
-                    <p className="text-sm font-medium">{ticket.client.name}</p>
-                    <p className="text-xs text-muted-foreground">{ticket.client.cpfCnpj}</p>
-                  </div>
-                </div>
-
-                {ticket.contact && (
-                  <div className="flex items-start gap-3">
-                    <UserCircle className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground">Contato</p>
-                      <p className="text-sm font-medium">{ticket.contact.name}</p>
-                      {ticket.contact.role && <p className="text-xs text-muted-foreground">{ticket.contact.role}</p>}
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex items-start gap-3">
-                  <Building2 className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground">Empresa</p>
-                    <p className="text-sm">{ticket.company.nomeFantasia}</p>
-                  </div>
-                </div>
-
-                {ticket.channelType && (
-                  <div className="flex items-start gap-3">
-                    {ticket.channelType === "EMAIL" ? (
-                      <Mail className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                    ) : (
-                      <MessageSquare className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                    )}
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground">Canal de Origem</p>
-                      <p className="text-sm">{ticket.channelType === "EMAIL" ? "Email" : "WhatsApp"}</p>
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex items-start gap-3">
-                  <Calendar className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground">Criado em</p>
-                    <p className="text-sm">{dateFmt.format(new Date(ticket.createdAt))}</p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3">
-                  <Calendar className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground">Atualizado em</p>
-                    <p className="text-sm">{dateFmt.format(new Date(ticket.updatedAt))}</p>
-                  </div>
-                </div>
-
-                {ticket.proposalId && (
-                  <div className="flex items-start gap-3">
-                    <FileText className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground">Proposta Vinculada</p>
-                      <p className="text-sm text-primary">#{ticket.proposalId.slice(-8)}</p>
-                    </div>
-                  </div>
-                )}
-
-                {ticket.boletoId && (
-                  <div className="flex items-start gap-3">
-                    <CreditCard className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground">Boleto Vinculado</p>
-                      <p className="text-sm text-primary">#{ticket.boletoId.slice(-8)}</p>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Reassign */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Responsavel</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div>
-                  <Label htmlFor="assignee">Atribuir a</Label>
-                  <Select value={ticket.assignee?.id ?? "__none__"} onValueChange={handleReassign} disabled={updatingAssignee}>
-                    <SelectTrigger id="assignee">
-                      <SelectValue placeholder="Selecione um responsavel" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">Nenhum</SelectItem>
-                      {users.map((u) => (
-                        <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Tags */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Tags</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex flex-wrap gap-1.5">
-                  {tags.length === 0 && <p className="text-xs text-muted-foreground">Nenhuma tag</p>}
-                  {tags.map((tag) => (
-                    <Badge key={tag} variant="secondary" className="gap-1 pr-1">
-                      {tag}
-                      <button type="button" onClick={() => handleRemoveTag(tag)} className="ml-0.5 rounded-full p-0.5 hover:bg-muted">
-                        <X className="h-3 w-3" />
-                      </button>
-                    </Badge>
-                  ))}
-                </div>
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="Nova tag..."
-                    value={newTag}
-                    onChange={(e) => setNewTag(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddTag(); } }}
-                    className="h-8 text-sm"
-                  />
-                  <Button size="sm" variant="outline" onClick={handleAddTag} disabled={!newTag.trim()} className="h-8 px-2">
-                    <Plus className="h-4 w-4" />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* SLA */}
-            {(ticket.slaFirstReply || ticket.slaResolution) && !["RESOLVED", "CLOSED"].includes(ticket.status) && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <Clock className="h-4 w-4" />
-                    SLA
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {ticket.slaFirstReply && (
-                    <SlaCard label="1a Resposta" deadline={ticket.slaFirstReply} breached={ticket.slaBreached} />
-                  )}
-                  {ticket.slaResolution && (
-                    <SlaCard label="Resolucao" deadline={ticket.slaResolution} breached={ticket.slaBreached} />
-                  )}
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Financial */}
-            {financial && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <DollarSign className="h-4 w-4" />
-                    Situacao Financeira
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <Badge
-                    variant={financial.status === "adimplente" ? "default" : "destructive"}
-                    className={
-                      financial.status === "adimplente"
-                        ? "bg-green-100 text-green-800 hover:bg-green-100"
-                        : financial.status === "atraso"
-                          ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-100"
-                          : ""
-                    }
-                  >
-                    {financial.status === "adimplente" ? "Adimplente" : financial.status === "atraso" ? "Em Atraso" : "Inadimplente"}
-                  </Badge>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <p className="text-xs text-muted-foreground">Total Pendente</p>
-                      <p className="font-medium">R$ {financial.pendingTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Total Vencido</p>
-                      <p className="font-medium text-red-600">R$ {financial.overdueTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</p>
-                    </div>
-                  </div>
-                  {financial.lastPayment && (
-                    <div className="text-sm">
-                      <p className="text-xs text-muted-foreground">Ultimo Pagamento</p>
-                      <p>{dateFmt.format(new Date(financial.lastPayment))}</p>
-                    </div>
-                  )}
-                  <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => router.push("/financeiro/receber")}>
-                    <ExternalLink className="mr-1 h-3 w-3" />
-                    Ver financeiro
-                  </Button>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Refund Section (US-085) — Only for non-RA tickets */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Coins className="h-4 w-4" />
-                  Reembolso
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {refunds.length === 0 && (
-                  <p className="text-xs text-muted-foreground">Nenhum reembolso solicitado</p>
-                )}
-                {refunds.map((refund) => (
-                  <div key={refund.id} className="rounded-lg border p-3 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Badge
-                        variant={refund.status === "COMPLETED" ? "default" : refund.status === "REJECTED" ? "destructive" : "secondary"}
-                        className={
-                          refund.status === "COMPLETED" ? "bg-green-100 text-green-800 hover:bg-green-100" :
-                          refund.status === "APPROVED" ? "bg-blue-100 text-blue-800 hover:bg-blue-100" :
-                          refund.status === "AWAITING_APPROVAL" ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-100" : ""
-                        }
-                      >
-                        {refund.status === "AWAITING_APPROVAL" ? "Aguardando Aprovacao" :
-                         refund.status === "APPROVED" ? "Aprovado" :
-                         refund.status === "REJECTED" ? "Rejeitado" :
-                         refund.status === "PROCESSING" ? "Processando" : "Concluido"}
-                      </Badge>
-                      <span className="text-sm font-semibold">R$ {refund.amount.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
-                    </div>
-                    <div className="text-xs text-muted-foreground space-y-0.5">
-                      <p>Solicitante: {refund.requestedBy.name}</p>
-                      <p>Data: {dateFmt.format(new Date(refund.requestedAt))}</p>
-                      {refund.approvedBy && (
-                        <p>{refund.status === "REJECTED" ? "Rejeitado" : "Aprovado"} por: {refund.approvedBy.name}</p>
-                      )}
-                      {refund.rejectionReason && <p className="text-red-600">Motivo: {refund.rejectionReason}</p>}
-                      {refund.paymentMethod && <p>Metodo: {refund.paymentMethod}</p>}
-                    </div>
-                    {refund.slaDeadline && !["COMPLETED", "REJECTED"].includes(refund.status) && (
-                      <div className="text-xs">
-                        {(() => {
-                          const dl = new Date(refund.slaDeadline);
-                          const diffMs = dl.getTime() - Date.now();
-                          const isBreached = refund.slaBreached || diffMs <= 0;
-                          const atRisk = !isBreached && diffMs < 60 * 60_000;
-                          return (
-                            <span className={isBreached ? "text-red-600 font-medium" : atRisk ? "text-yellow-600 font-medium" : "text-green-600"}>
-                              SLA: {isBreached ? "Estourado" : atRisk ? "Em Risco" : "OK"}
-                              {" - "}
-                              {isBreached
-                                ? `-${Math.floor(Math.abs(diffMs) / 3_600_000)}h${String(Math.floor((Math.abs(diffMs) % 3_600_000) / 60_000)).padStart(2, "0")}m`
-                                : `${Math.floor(diffMs / 3_600_000)}h${String(Math.floor((diffMs % 3_600_000) / 60_000)).padStart(2, "0")}m`}
-                            </span>
-                          );
-                        })()}
-                      </div>
-                    )}
-                    {refund.status === "AWAITING_APPROVAL" && isAdminOrManager && (
-                      <div className="flex gap-2 pt-1">
-                        <Button size="sm" variant="outline" className="flex-1 border-green-300 text-green-700 hover:bg-green-50" disabled={approvingRefundId === refund.id} onClick={() => handleApproveRefund(refund.id)}>
-                          {approvingRefundId === refund.id ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <CheckCircle className="mr-1 h-3 w-3" />}
-                          Aprovar
-                        </Button>
-                        <Button size="sm" variant="outline" className="flex-1 border-red-300 text-red-700 hover:bg-red-50" onClick={() => { setRejectRefundId(refund.id); setRejectDialogOpen(true); }}>
-                          <XCircle className="mr-1 h-3 w-3" />
-                          Rejeitar
-                        </Button>
-                      </div>
-                    )}
-                    {refund.status === "APPROVED" && isAdminOrManager && (
-                      <Button size="sm" className="w-full" onClick={() => { setExecuteRefundId(refund.id); setExecuteDialogOpen(true); }}>
-                        <Banknote className="mr-1.5 h-3.5 w-3.5" />
-                        Executar Reembolso
-                      </Button>
-                    )}
-                  </div>
-                ))}
-                <Button variant="outline" className="w-full" onClick={() => setRequestRefundOpen(true)}>
-                  <Coins className="mr-1.5 h-3.5 w-3.5" />
-                  Solicitar Reembolso
-                </Button>
-              </CardContent>
-            </Card>
-
-            {/* Cancellation Section (US-086) — Only for non-RA */}
-            {hasProposalOrBoleto && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <Ban className="h-4 w-4" />
-                    Cancelamento
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {hasPendingCancellation && cancellation && (
-                    <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 space-y-2">
-                      <div className="flex items-center gap-2">
-                        <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">Aguardando Aprovação</Badge>
-                      </div>
-                      <div className="text-xs text-muted-foreground space-y-0.5">
-                        {cancellation.type && (
-                          <p>Tipo: {cancellation.type === "proposal" ? "Proposta" : cancellation.type === "boletos" ? "Boletos" : "Proposta e Boletos"}</p>
-                        )}
-                        {cancellation.requestedBy && <p>Solicitante: {cancellation.requestedBy}</p>}
-                        {cancellation.requestedAt && <p>Data: {dateFmt.format(new Date(cancellation.requestedAt))}</p>}
-                        {cancellation.justification && <p>Justificativa: {cancellation.justification}</p>}
-                      </div>
-                      {isAdminOrManager && (
-                        <Button size="sm" variant="outline" className="w-full border-green-300 text-green-700 hover:bg-green-50" disabled={approvingCancel} onClick={handleApproveCancellation}>
-                          {approvingCancel ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <CheckCircle className="mr-1.5 h-3.5 w-3.5" />}
-                          Aprovar Cancelamento
-                        </Button>
-                      )}
-                    </div>
-                  )}
-                  {!hasPendingCancellation && (
-                    <Button variant="outline" className="w-full border-red-200 text-red-700 hover:bg-red-50" onClick={() => setCancelDialogOpen(true)}>
-                      <Ban className="mr-1.5 h-3.5 w-3.5" />
-                      Solicitar Cancelamento
-                    </Button>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Export PDF (US-089) */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <FileDown className="h-4 w-4" />
-                  Exportar
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Button variant="outline" className="w-full" onClick={() => setExportDialogOpen(true)}>
-                  <FileDown className="mr-1.5 h-3.5 w-3.5" />
-                  Exportar PDF
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      )}
-
-      {/* ─── Dialogs (always rendered, used by both layouts) ──────── */}
-
-      {/* Export PDF dialog (US-089) */}
-      <Dialog open={exportDialogOpen} onOpenChange={setExportDialogOpen}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Exportar Ticket como PDF</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="flex items-center space-x-2">
-              <Checkbox id="export-notes" checked={exportIncludeNotes} onCheckedChange={(c) => setExportIncludeNotes(c === true)} />
-              <Label htmlFor="export-notes" className="text-sm font-normal cursor-pointer">Incluir notas internas</Label>
-            </div>
-            <div className="flex items-center space-x-2">
-              <Checkbox id="export-attachments" checked={exportIncludeAttachments} onCheckedChange={(c) => setExportIncludeAttachments(c === true)} />
-              <Label htmlFor="export-attachments" className="text-sm font-normal cursor-pointer">Incluir lista de anexos</Label>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setExportDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={handleExportPdf} disabled={exporting}>
-              {exporting ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <FileDown className="mr-1.5 h-3.5 w-3.5" />}
-              {exporting ? "Exportando..." : "Exportar PDF"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Link to existing client dialog (US-081) */}
-      <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Vincular a Cliente Existente</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input placeholder="Buscar por nome ou CNPJ/CPF..." value={linkSearch} onChange={(e) => handleLinkSearch(e.target.value)} className="pl-9" />
-            </div>
-            {linkSearching && (
-              <div className="flex items-center justify-center py-4 text-sm text-muted-foreground">
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Buscando...
-              </div>
-            )}
-            {!linkSearching && linkSearch.length >= 2 && linkResults.length === 0 && (
-              <p className="py-4 text-center text-sm text-muted-foreground">Nenhum cliente encontrado</p>
-            )}
-            {linkResults.length > 0 && (
-              <div className="max-h-64 overflow-y-auto space-y-1">
-                {linkResults.map((client) => (
-                  <button key={client.id} type="button" disabled={linking} onClick={() => handleLinkToClient(client.id)} className="w-full rounded-md border p-3 text-left hover:bg-muted transition-colors">
-                    <p className="text-sm font-medium">{client.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {client.cpfCnpj}{client.email && ` · ${client.email}`}{client.telefone && ` · ${client.telefone}`}
-                    </p>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Create new client dialog (US-081) */}
-      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Criar Novo Cliente e Vincular</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="col-span-2">
-                <Label htmlFor="new-client-name">Nome *</Label>
-                <Input id="new-client-name" value={newClientForm.name} onChange={(e) => setNewClientForm((f) => ({ ...f, name: e.target.value }))} placeholder="Nome do cliente" />
-              </div>
-              <div>
-                <Label htmlFor="new-client-type">Tipo *</Label>
-                <Select value={newClientForm.type} onValueChange={(v) => setNewClientForm((f) => ({ ...f, type: v as "PF" | "PJ" }))}>
-                  <SelectTrigger id="new-client-type"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="PJ">Pessoa Jurídica</SelectItem>
-                    <SelectItem value="PF">Pessoa Física</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="new-client-cpfcnpj">{newClientForm.type === "PF" ? "CPF" : "CNPJ"} *</Label>
-                <Input id="new-client-cpfcnpj" value={newClientForm.cpfCnpj} onChange={(e) => setNewClientForm((f) => ({ ...f, cpfCnpj: e.target.value }))} placeholder={newClientForm.type === "PF" ? "000.000.000-00" : "00.000.000/0000-00"} />
-              </div>
-              <div>
-                <Label htmlFor="new-client-email">Email</Label>
-                <Input id="new-client-email" type="email" value={newClientForm.email} onChange={(e) => setNewClientForm((f) => ({ ...f, email: e.target.value }))} />
-              </div>
-              <div>
-                <Label htmlFor="new-client-telefone">Telefone</Label>
-                <Input id="new-client-telefone" value={newClientForm.telefone} onChange={(e) => setNewClientForm((f) => ({ ...f, telefone: e.target.value }))} />
-              </div>
-              <div className="col-span-2">
-                <Label htmlFor="new-client-razao">Razão Social</Label>
-                <Input id="new-client-razao" value={newClientForm.razaoSocial} onChange={(e) => setNewClientForm((f) => ({ ...f, razaoSocial: e.target.value }))} />
-              </div>
-              <div className="col-span-2">
-                <Label htmlFor="new-client-endereco">Endereço</Label>
-                <Input id="new-client-endereco" value={newClientForm.endereco} onChange={(e) => setNewClientForm((f) => ({ ...f, endereco: e.target.value }))} />
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={handleCreateAndLink} disabled={linking || !newClientForm.name.trim() || !newClientForm.cpfCnpj.trim()}>
-              {linking ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" />Criando...</>) : "Criar e Vincular"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Request Refund Dialog (US-085) */}
-      <RequestRefundDialog
-        open={requestRefundOpen}
-        onOpenChange={setRequestRefundOpen}
-        ticketId={ticketId}
-        companyId={selectedCompanyId!}
-        boletoId={ticket?.boletoId}
-        onSuccess={() => {
-          getTicketRefunds(ticketId, selectedCompanyId!).then(setRefunds).catch(() => {});
-          loadTicket();
-        }}
-      />
-
-      {/* Reject Refund Dialog (US-085) */}
-      <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Rejeitar Reembolso</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="reject-reason">Motivo da Rejeicao *</Label>
-              <Textarea id="reject-reason" value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} placeholder="Descreva o motivo da rejeição..." rows={3} />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setRejectDialogOpen(false)}>Cancelar</Button>
-            <Button variant="destructive" onClick={handleRejectRefund} disabled={submittingReject || !rejectReason.trim()}>
-              {submittingReject ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" />Rejeitando...</>) : "Confirmar Rejeicao"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Execute Refund Dialog (US-085) */}
-      <ExecuteRefundDialog
-        open={executeDialogOpen}
-        onOpenChange={setExecuteDialogOpen}
-        refundId={executeRefundId}
-        ticketId={ticketId}
-        companyId={selectedCompanyId!}
-        onSuccess={() => {
-          getTicketRefunds(ticketId, selectedCompanyId!).then(setRefunds).catch(() => {});
-          loadTicket();
-        }}
-      />
-
-      {/* RA Moderation Dialog */}
-      {ticket.channelType === "RECLAMEAQUI" && (
-        <RaModerationDialog
-          open={raModerationOpen}
-          onOpenChange={setRaModerationOpen}
+        {/* Request Refund Dialog (US-085) */}
+        <RequestRefundDialog
+          open={requestRefundOpen}
+          onOpenChange={setRequestRefundOpen}
           ticketId={ticketId}
           companyId={selectedCompanyId!}
-          onSuccess={loadTicket}
+          boletoId={ticket?.boletoId}
+          onSuccess={() => {
+            getTicketRefunds(ticketId, selectedCompanyId!).then(setRefunds).catch(() => {});
+            loadTicket();
+          }}
         />
-      )}
 
-      {/* Request Cancellation Dialog (US-086) */}
-      <CancellationDialog
-        open={cancelDialogOpen}
-        onOpenChange={setCancelDialogOpen}
-        ticketId={ticketId}
-        companyId={selectedCompanyId!}
-        proposalId={ticket?.proposalId}
-        boletoId={ticket?.boletoId}
-        onSuccess={() => {
-          getCancellationInfo(ticketId, selectedCompanyId!).then(setCancellation).catch(() => {});
-          loadTicket();
-        }}
-      />
-    </div>
+        {/* Execute Refund Dialog (US-085) */}
+        <ExecuteRefundDialog
+          open={executeDialogOpen}
+          onOpenChange={setExecuteDialogOpen}
+          refundId={executeRefundId}
+          ticketId={ticketId}
+          companyId={selectedCompanyId!}
+          onSuccess={() => {
+            getTicketRefunds(ticketId, selectedCompanyId!).then(setRefunds).catch(() => {});
+            loadTicket();
+          }}
+        />
+
+        {/* Request Cancellation Dialog (US-086) */}
+        <CancellationDialog
+          open={cancelDialogOpen}
+          onOpenChange={setCancelDialogOpen}
+          ticketId={ticketId}
+          companyId={selectedCompanyId!}
+          proposalId={ticket?.proposalId}
+          boletoId={ticket?.boletoId}
+          onSuccess={() => {
+            getCancellationInfo(ticketId, selectedCompanyId!).then(setCancellation).catch(() => {});
+            loadTicket();
+          }}
+        />
+      </div>
+    </ChannelThemeProvider>
   );
 }
