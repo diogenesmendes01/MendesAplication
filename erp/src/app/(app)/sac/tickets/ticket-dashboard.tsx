@@ -26,6 +26,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getTicketDashboard, type TicketDashboard } from "./dashboard-actions";
 import { RaReputationCard } from "./ra-reputation-card";
+import { priorityLabel } from "@/lib/sac/ticket-formatters";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -54,17 +55,6 @@ function channelColor(channel: string) {
       return "#8b5cf6";
     default:
       return "#94a3b8";
-  }
-}
-
-function priorityLabel(priority: string) {
-  switch (priority) {
-    case "HIGH":
-      return "Alta";
-    case "LOW":
-      return "Baixa";
-    default:
-      return "Média";
   }
 }
 

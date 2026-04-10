@@ -25,6 +25,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useCompany } from "@/contexts/company-context";
 import { getTicketDashboard, type TicketDashboard } from "../tickets/dashboard-actions";
+import { priorityLabel, statusLabel } from "@/lib/sac/ticket-formatters";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -56,17 +57,6 @@ function channelColor(channel: string) {
   }
 }
 
-function priorityLabel(priority: string) {
-  switch (priority) {
-    case "HIGH":
-      return "Alta";
-    case "LOW":
-      return "Baixa";
-    default:
-      return "Média";
-  }
-}
-
 function priorityVariant(
   priority: string
 ): "destructive" | "secondary" | "outline" {
@@ -77,19 +67,6 @@ function priorityVariant(
       return "secondary";
     default:
       return "outline";
-  }
-}
-
-function statusLabel(status: string) {
-  switch (status) {
-    case "OPEN":
-      return "Aberto";
-    case "IN_PROGRESS":
-      return "Em Andamento";
-    case "WAITING_CLIENT":
-      return "Ag. Cliente";
-    default:
-      return status;
   }
 }
 
