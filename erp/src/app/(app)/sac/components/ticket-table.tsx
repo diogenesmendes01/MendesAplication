@@ -316,10 +316,13 @@ export function TicketTable({ channelType: fixedChannel }: TicketTableProps) {
   // Load dropdown data
   useEffect(() => {
     if (!selectedCompanyId) return;
-    Promise.all([
+    Promise.allSettled([
       listClientsForSelect(selectedCompanyId),
       listUsersForAssign(selectedCompanyId),
-    ]).then(([c, u]) => { setClients(c); setUsers(u); }).catch(() => {});
+    ]).then(([c, u]) => {
+      if (c.status === "fulfilled") setClients(c.value);
+      if (u.status === "fulfilled") setUsers(u.value);
+    });
   }, [selectedCompanyId]);
 
   // ---------------------------------------------------
