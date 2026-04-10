@@ -361,7 +361,7 @@ export function WhatsAppComposer({
         }
         setWaRecipientsLoaded(true);
       })
-      .catch(() => {});
+      .catch((err) => { console.warn("SAC: failed to load WhatsApp recipients", err); });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ticketId, companyId, waRecipientsLoaded]);
 
@@ -370,7 +370,7 @@ export function WhatsAppComposer({
     if (!companyId) return;
     getWhatsAppStatus(companyId)
       .then((s: { isConnected: boolean }) => setWaConnected(s.isConnected))
-      .catch(() => setWaConnected(false));
+      .catch((err) => { console.warn("SAC: failed to check WhatsApp connection status", err); setWaConnected(false); });
   }, [companyId]);
 
   // Filter WhatsApp-only events

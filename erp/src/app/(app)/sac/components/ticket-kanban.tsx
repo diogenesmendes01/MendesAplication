@@ -132,8 +132,8 @@ export function TicketKanban({ channelType }: TicketKanbanProps) {
       // Fix 4: single auth check + parallel status queries via getKanbanBootstrap
       const result = await getKanbanBootstrap(selectedCompanyId, channelType);
       setColumnData(result);
-    } catch {
-      // silently fail — table view still works
+    } catch (err) {
+      console.warn("SAC: failed to load kanban data", err);
     } finally {
       setLoading(false);
     }

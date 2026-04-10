@@ -128,7 +128,7 @@ function TicketRowCells({ row }: { row: TicketRow }) {
     <>
       {/* Canal */}
       <TableCell>
-        <div className="flex items-center gap-1.5" title={row.channelType ?? "Web"}>
+        <div className="flex items-center gap-1.5" title={row.channelType ?? "Web"} aria-label={`Canal: ${row.channelType ?? "Web"}`}>
           {row.channelType === "RECLAMEAQUI" ? (
             <Badge className="bg-purple-100 text-purple-800 text-[10px] px-1.5 py-0 font-bold">
               RA
@@ -316,8 +316,10 @@ export function TicketTable({ channelType: fixedChannel }: TicketTableProps) {
   // Load dropdown data
   useEffect(() => {
     if (!selectedCompanyId) return;
-    listClientsForSelect(selectedCompanyId).then(setClients).catch(() => {});
-    listUsersForAssign(selectedCompanyId).then(setUsers).catch(() => {});
+    Promise.all([
+      listClientsForSelect(selectedCompanyId),
+      listUsersForAssign(selectedCompanyId),
+    ]).then(([c, u]) => { setClients(c); setUsers(u); }).catch(() => {});
   }, [selectedCompanyId]);
 
   // ---------------------------------------------------

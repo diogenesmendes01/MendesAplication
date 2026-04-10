@@ -42,6 +42,7 @@ const TruncatedText = ({ text, maxLength = 100 }: { text: string | null; maxLeng
         <button
           onClick={() => setIsExpanded(!isExpanded)}
           className="ml-1 text-blue-600 hover:text-blue-800 underline text-sm"
+          aria-label={isExpanded ? "Recolher texto" : "Expandir texto"}
         >
           {isExpanded ? "mostrar menos" : "mostrar mais"}
         </button>

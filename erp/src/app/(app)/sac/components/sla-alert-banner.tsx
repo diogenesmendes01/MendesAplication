@@ -26,7 +26,7 @@ export function SlaAlertBanner({
 
   return (
     <div className="flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
-      <AlertTriangle className="h-5 w-5 shrink-0 text-red-600" />
+      <AlertTriangle className="h-5 w-5 shrink-0 text-red-600" aria-hidden="true" />
       <div className="flex flex-1 flex-wrap items-center gap-x-3 gap-y-1 text-sm">
         {breached > 0 && (
           <span className="font-semibold text-red-700">
