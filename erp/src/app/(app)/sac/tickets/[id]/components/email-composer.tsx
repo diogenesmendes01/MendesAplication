@@ -319,6 +319,7 @@ export function EmailComposer({
         }
         setRecipientsLoaded(true);
       })
+      // eslint-disable-next-line no-console
       .catch((err) => { console.warn("SAC: failed to load email recipients", err); });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ticketId, companyId, recipientsLoaded]);

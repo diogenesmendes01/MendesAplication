@@ -133,6 +133,7 @@ export function TicketKanban({ channelType }: TicketKanbanProps) {
       const result = await getKanbanBootstrap(selectedCompanyId, channelType);
       setColumnData(result);
     } catch (err) {
+      // eslint-disable-next-line no-console
       console.warn("SAC: failed to load kanban data", err);
     } finally {
       setLoading(false);
