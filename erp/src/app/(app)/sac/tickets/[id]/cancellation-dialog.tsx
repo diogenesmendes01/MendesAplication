@@ -1,6 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
+import { useForm, Controller } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -26,6 +29,17 @@ import {
 } from "../actions";
 
 // ---------------------------------------------------------------------------
+// Zod schema
+// ---------------------------------------------------------------------------
+
+const cancellationSchema = z.object({
+  cancelType: z.enum(["both", "proposal", "boletos"]),
+  justification: z.string().trim().min(1, "Justificativa é obrigatória"),
+});
+
+type CancellationFormData = z.infer<typeof cancellationSchema>;
+
+// ---------------------------------------------------------------------------
 // CancellationDialog
 // ---------------------------------------------------------------------------
 
@@ -48,37 +62,40 @@ export function CancellationDialog({
   boletoId,
   onSuccess,
 }: CancellationDialogProps) {
-  const [cancelType, setCancelType] = useState<CancellationType>("both");
-  const [cancelJustification, setCancelJustification] = useState("");
-  const [submittingCancel, setSubmittingCancel] = useState(false);
+  const form = useForm<CancellationFormData>({
+    resolver: zodResolver(cancellationSchema),
+    defaultValues: {
+      cancelType: "both",
+      justification: "",
+    },
+  });
+
+  const { formState: { isSubmitting, errors } } = form;
 
   // Reset & set default type when dialog opens
   useEffect(() => {
     if (open) {
+      let defaultType: CancellationType = "both";
       if (proposalId && boletoId) {
-        setCancelType("both");
+        defaultType = "both";
       } else if (proposalId) {
-        setCancelType("proposal");
+        defaultType = "proposal";
       } else {
-        setCancelType("boletos");
+        defaultType = "boletos";
       }
-      setCancelJustification("");
+      form.reset({ cancelType: defaultType, justification: "" });
     }
-  }, [open, proposalId, boletoId]);
+  }, [open, proposalId, boletoId, form]);
 
-  async function handleRequestCancellation() {
-    setSubmittingCancel(true);
+  async function onSubmit(data: CancellationFormData) {
     try {
-      await requestCancellation(ticketId, companyId, cancelType, cancelJustification);
+      await requestCancellation(ticketId, companyId, data.cancelType, data.justification);
       toast.success("Solicitação de cancelamento enviada");
       onOpenChange(false);
-      setCancelType("both");
-      setCancelJustification("");
+      form.reset({ cancelType: "both", justification: "" });
       onSuccess();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao solicitar cancelamento");
-    } finally {
-      setSubmittingCancel(false);
     }
   }
 
@@ -88,60 +105,69 @@ export function CancellationDialog({
         <DialogHeader>
           <DialogTitle>Solicitar Cancelamento</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4">
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
           <div>
             <Label>O que deseja cancelar? *</Label>
-            <Select
-              value={cancelType}
-              onValueChange={(v) => setCancelType(v as CancellationType)}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {proposalId && boletoId && (
-                  <SelectItem value="both">Proposta e Boletos</SelectItem>
-                )}
-                {proposalId && (
-                  <SelectItem value="proposal">Apenas Proposta</SelectItem>
-                )}
-                {boletoId && (
-                  <SelectItem value="boletos">Apenas Boletos</SelectItem>
-                )}
-              </SelectContent>
-            </Select>
+            <Controller
+              control={form.control}
+              name="cancelType"
+              render={({ field }) => (
+                <Select value={field.value} onValueChange={field.onChange}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {proposalId && boletoId && (
+                      <SelectItem value="both">Proposta e Boletos</SelectItem>
+                    )}
+                    {proposalId && (
+                      <SelectItem value="proposal">Apenas Proposta</SelectItem>
+                    )}
+                    {boletoId && (
+                      <SelectItem value="boletos">Apenas Boletos</SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+              )}
+            />
+            {errors.cancelType && (
+              <p className="text-sm text-destructive mt-1">{errors.cancelType.message}</p>
+            )}
           </div>
 
           <div>
             <Label htmlFor="cancel-justification">Justificativa *</Label>
             <Textarea
               id="cancel-justification"
-              value={cancelJustification}
-              onChange={(e) => setCancelJustification(e.target.value)}
+              {...form.register("justification")}
               placeholder="Descreva o motivo do cancelamento..."
               rows={3}
             />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Voltar
-          </Button>
-          <Button
-            variant="destructive"
-            onClick={handleRequestCancellation}
-            disabled={submittingCancel || !cancelJustification.trim()}
-          >
-            {submittingCancel ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Solicitando...
-              </>
-            ) : (
-              "Solicitar Cancelamento"
+            {errors.justification && (
+              <p className="text-sm text-destructive mt-1">{errors.justification.message}</p>
             )}
-          </Button>
-        </DialogFooter>
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Voltar
+            </Button>
+            <Button
+              type="submit"
+              variant="destructive"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Solicitando...
+                </>
+              ) : (
+                "Solicitar Cancelamento"
+              )}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );

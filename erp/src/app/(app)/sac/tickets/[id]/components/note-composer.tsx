@@ -1,6 +1,9 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useRef, useState } from "react";
+import { useForm, Controller } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { toast } from "sonner";
 import { Lock, Send, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -10,6 +13,17 @@ import {
   createTicketReply,
   attachFileToTicket,
 } from "../../actions";
+
+// ---------------------------------------------------------------------------
+// Schema
+// ---------------------------------------------------------------------------
+
+const noteSchema = z.object({
+  content: z.string().min(1, "Mensagem é obrigatória"),
+  isInternal: z.boolean(),
+});
+
+type NoteFormData = z.infer<typeof noteSchema>;
 
 // ---------------------------------------------------------------------------
 // Props
@@ -26,40 +40,52 @@ interface NoteComposerProps {
 // ---------------------------------------------------------------------------
 
 export function NoteComposer({ ticketId, companyId, onNoteSent }: NoteComposerProps) {
-  const [noteContent, setNoteContent] = useState("");
-  const [submittingNote, setSubmittingNote] = useState(false);
-  const [isInternalNote, setIsInternalNote] = useState(true);
+  const {
+    register,
+    handleSubmit,
+    control,
+    watch,
+    reset,
+    formState: { isSubmitting },
+  } = useForm<NoteFormData>({
+    resolver: zodResolver(noteSchema),
+    defaultValues: {
+      content: "",
+      isInternal: true,
+    },
+  });
+
+  // File upload state — kept separate from form
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const isInternalNote = watch("isInternal");
+  const content = watch("content");
 
   // ---------------------------------------------------
   // Submit internal note
   // ---------------------------------------------------
 
-  async function handleSubmitNote() {
-    if (!noteContent.trim()) return;
-    setSubmittingNote(true);
+  async function onSubmit(data: NoteFormData) {
     try {
-      if (isInternalNote) {
-        await createInternalNote(ticketId, companyId, noteContent.trim());
+      if (data.isInternal) {
+        await createInternalNote(ticketId, companyId, data.content.trim());
         toast.success("Nota interna adicionada");
       } else {
         await createTicketReply({
           ticketId,
           companyId,
-          content: noteContent.trim(),
+          content: data.content.trim(),
           sendViaEmail: false,
         });
         toast.success("Comentário adicionado");
       }
-      setNoteContent("");
+      reset({ content: "", isInternal: data.isInternal });
       await onNoteSent();
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : "Erro ao adicionar nota"
       );
-    } finally {
-      setSubmittingNote(false);
     }
   }
 
@@ -117,21 +143,27 @@ export function NoteComposer({ ticketId, companyId, onNoteSent }: NoteComposerPr
     <div className="border-t pt-4 space-y-3">
       {/* Internal note toggle */}
       <div className="flex items-center gap-2">
-        <button
-          type="button"
-          role="switch"
-          aria-checked={isInternalNote}
-          onClick={() => setIsInternalNote((v) => !v)}
-          className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:ring-offset-1 ${
-            isInternalNote ? "bg-yellow-400" : "bg-muted"
-          }`}
-        >
-          <span
-            className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-              isInternalNote ? "translate-x-4" : "translate-x-0"
-            }`}
-          />
-        </button>
+        <Controller
+          control={control}
+          name="isInternal"
+          render={({ field }) => (
+            <button
+              type="button"
+              role="switch"
+              aria-checked={field.value}
+              onClick={() => field.onChange(!field.value)}
+              className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:ring-offset-1 ${
+                field.value ? "bg-yellow-400" : "bg-muted"
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                  field.value ? "translate-x-4" : "translate-x-0"
+                }`}
+              />
+            </button>
+          )}
+        />
         <span className="flex items-center gap-1 text-sm text-muted-foreground">
           <Lock className="h-3 w-3" />
           Nota interna
@@ -149,10 +181,9 @@ export function NoteComposer({ ticketId, companyId, onNoteSent }: NoteComposerPr
             ? "Escreva uma nota interna (não visível ao cliente)..."
             : "Escreva um comentário..."
         }
-        value={noteContent}
-        onChange={(e) => setNoteContent(e.target.value)}
+        {...register("content")}
         rows={3}
-        disabled={submittingNote}
+        disabled={isSubmitting}
         className={isInternalNote ? "border-yellow-200 bg-yellow-50/40" : ""}
       />
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -175,8 +206,8 @@ export function NoteComposer({ ticketId, companyId, onNoteSent }: NoteComposerPr
           </Button>
         </div>
         <Button
-          onClick={handleSubmitNote}
-          disabled={submittingNote || !noteContent.trim()}
+          onClick={handleSubmit(onSubmit)}
+          disabled={isSubmitting || !content.trim()}
           size="sm"
           className={
             isInternalNote
@@ -189,7 +220,7 @@ export function NoteComposer({ ticketId, companyId, onNoteSent }: NoteComposerPr
           ) : (
             <Send className="mr-2 h-4 w-4" />
           )}
-          {submittingNote
+          {isSubmitting
             ? "Enviando..."
             : isInternalNote
               ? "Salvar nota interna"
