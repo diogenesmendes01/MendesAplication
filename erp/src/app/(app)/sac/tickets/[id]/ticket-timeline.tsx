@@ -84,8 +84,9 @@ export default function TicketTimeline({
         createdAt: s.createdAt,
         reviewer: s.reviewer ?? null,
       })));
-    } catch {
-      // silent
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn("SAC: failed to load AI suggestions", err);
     }
   }, [ticketId, companyId]);
 
@@ -103,8 +104,9 @@ export default function TicketTimeline({
         );
         lastEventTimeRef.current = latest;
       }
-    } catch {
-      // silent
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn("SAC: failed to load timeline events", err);
     } finally {
       setLoading(false);
     }
@@ -141,8 +143,9 @@ export default function TicketTimeline({
         );
         lastEventTimeRef.current = latest;
       }
-    } catch {
-      // silent
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn("SAC: failed to poll new timeline events", err);
     }
   }, [ticketId, companyId]);
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { toast } from "sonner";
 import {
   Mail,
@@ -443,6 +443,19 @@ export function TimelineEventList({
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [events]);
 
+  // Merge events + pending suggestions sorted chronologically (memoized)
+  type TimelineEntry =
+    | { kind: "event"; data: TimelineEvent; createdAt: string }
+    | { kind: "suggestion"; data: AiSuggestionData; createdAt: string };
+
+  const merged = useMemo<TimelineEntry[]>(() => {
+    const pendingSuggs = suggestions.filter(s => s.status === "PENDING");
+    return [
+      ...events.map((e): TimelineEntry => ({ kind: "event", data: e, createdAt: e.createdAt })),
+      ...pendingSuggs.map((s): TimelineEntry => ({ kind: "suggestion", data: s, createdAt: s.createdAt })),
+    ].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  }, [events, suggestions]);
+
   return (
     <div className="space-y-4 max-h-[500px] overflow-y-auto mb-6">
       {loading ? (
@@ -454,57 +467,44 @@ export function TimelineEventList({
           Nenhum evento ainda.
         </p>
       ) : (
-        (() => {
-          // Merge events + pending suggestions sorted chronologically (Fix 2)
-          const pendingSuggs = suggestions.filter(s => s.status === "PENDING");
-          type TimelineEntry =
-            | { kind: "event"; data: TimelineEvent; createdAt: string }
-            | { kind: "suggestion"; data: AiSuggestionData; createdAt: string };
-
-          const merged: TimelineEntry[] = [
-            ...events.map((e): TimelineEntry => ({ kind: "event", data: e, createdAt: e.createdAt })),
-            ...pendingSuggs.map((s): TimelineEntry => ({ kind: "suggestion", data: s, createdAt: s.createdAt })),
-          ].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-
-          return merged.map((entry, idx) => {
-            if (entry.kind === "suggestion") {
-              return (
-                <AiSuggestionCard
-                  key={`sugg-${entry.data.id}`}
-                  suggestion={entry.data}
-                  onActionComplete={onSuggestionAction}
-                />
-              );
-            }
-
-            const evt = entry.data;
-            const prevEntry = merged[idx - 1];
-            const prev = prevEntry?.kind === "event" ? prevEntry.data : null;
-            const isGrouped =
-              evt.channel === "EMAIL" &&
-              evt.type === "message" &&
-              prev !== null &&
-              prev.channel === "EMAIL" &&
-              prev.type === "message" &&
-              (
-                (evt.direction === "INBOUND" && prev.direction === "INBOUND" &&
-                  evt.contactName === prev.contactName) ||
-                (evt.direction === "OUTBOUND" && prev.direction === "OUTBOUND" &&
-                  evt.sender?.id === prev.sender?.id)
-              );
+        merged.map((entry, idx) => {
+          if (entry.kind === "suggestion") {
             return (
-              <TimelineItem
-                key={evt.id}
-                event={evt}
-                channelType={channelType}
-                companyId={companyId}
-                ticketId={ticketId}
+              <AiSuggestionCard
+                key={`sugg-${entry.data.id}`}
+                suggestion={entry.data}
                 onActionComplete={onSuggestionAction}
-                isGrouped={isGrouped}
               />
             );
-          });
-        })()
+          }
+
+          const evt = entry.data;
+          const prevEntry = merged[idx - 1];
+          const prev = prevEntry?.kind === "event" ? prevEntry.data : null;
+          const isGrouped =
+            evt.channel === "EMAIL" &&
+            evt.type === "message" &&
+            prev !== null &&
+            prev.channel === "EMAIL" &&
+            prev.type === "message" &&
+            (
+              (evt.direction === "INBOUND" && prev.direction === "INBOUND" &&
+                evt.contactName === prev.contactName) ||
+              (evt.direction === "OUTBOUND" && prev.direction === "OUTBOUND" &&
+                evt.sender?.id === prev.sender?.id)
+            );
+          return (
+            <TimelineItem
+              key={evt.id}
+              event={evt}
+              channelType={channelType}
+              companyId={companyId}
+              ticketId={ticketId}
+              onActionComplete={onSuggestionAction}
+              isGrouped={isGrouped}
+            />
+          );
+        })
       )}
       <div ref={endRef} />
     </div>
