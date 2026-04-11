@@ -8,6 +8,8 @@ export type TabId = "detalhes" | "timeline" | "responder";
 interface TicketTabsProps {
   activeTab: TabId;
   onTabChange: (tab: TabId) => void;
+  /** When true, shows the "Responder" tab (RA channels only) */
+  showResponder?: boolean;
 }
 
 const TABS: { id: TabId; label: string; icon: typeof LayoutGrid }[] = [
@@ -16,12 +18,12 @@ const TABS: { id: TabId; label: string; icon: typeof LayoutGrid }[] = [
   { id: "responder", label: "Responder", icon: Edit3 },
 ];
 
-export default function TicketTabs({ activeTab, onTabChange }: TicketTabsProps) {
+export default function TicketTabs({ activeTab, onTabChange, showResponder = true }: TicketTabsProps) {
   const theme = useChannelTheme();
 
   return (
     <div className="flex border-b border-[#f1f5f9]">
-      {TABS.map((tab) => {
+      {TABS.filter((tab) => tab.id !== "responder" || showResponder).map((tab) => {
         const isActive = activeTab === tab.id;
         const Icon = tab.icon;
         return (

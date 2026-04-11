@@ -9,6 +9,7 @@ import {
   priorityColor,
   statusLabel,
   statusColor,
+  channelLabel,
   dateFmt,
 } from "@/lib/sac/ticket-formatters";
 
@@ -263,7 +264,7 @@ export default function TicketDetailsTab({
               <span className="text-[9px] uppercase tracking-[0.05em] font-bold" style={{ color: theme.primary }}>Informacoes</span>
             </div>
             <div className="flex justify-between text-[12px]"><span className="text-[#94a3b8]">Empresa</span><span className="font-medium truncate ml-2">{ticket.company.nomeFantasia}</span></div>
-            <div className="flex justify-between text-[12px]"><span className="text-[#94a3b8]">Canal</span><span className="font-medium">{ticket.channelType === "EMAIL" ? "Email" : "WhatsApp"}</span></div>
+            <div className="flex justify-between text-[12px]"><span className="text-[#94a3b8]">Canal</span><span className="font-medium">{channelLabel(ticket.channelType)}</span></div>
             <div className="flex justify-between text-[12px]"><span className="text-[#94a3b8]">Criado</span><span className="font-medium">{dateFmt.format(new Date(ticket.createdAt))}</span></div>
             <div className="flex justify-between text-[12px]"><span className="text-[#94a3b8]">Atualizado</span><span className="font-medium">{dateFmt.format(new Date(ticket.updatedAt))}</span></div>
           </div>

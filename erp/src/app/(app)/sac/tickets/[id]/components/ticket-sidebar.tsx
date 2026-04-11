@@ -91,7 +91,6 @@ export default function TicketSidebar({
   onExport,
 }: TicketSidebarProps) {
   const router = useRouter();
-  const isWa = ticket.channelType === "WHATSAPP";
 
   return (
     <div className="space-y-4 border-l border-[#f1f5f9] p-4 bg-[#FCFCFA]">
@@ -182,9 +181,8 @@ export default function TicketSidebar({
         </div>
       )}
 
-      {/* Reembolso (WA-only) */}
-      {isWa && (
-        <div className="space-y-2">
+      {/* Reembolso */}
+      <div className="space-y-2">
           <h3 className="text-[9px] uppercase tracking-[0.05em] font-bold text-[#94a3b8]">Reembolso</h3>
           {refunds.length === 0 && <p className="text-[10px] text-[#94a3b8]">Nenhum reembolso</p>}
           {refunds.map((refund) => (
@@ -253,8 +251,7 @@ export default function TicketSidebar({
             <Coins className="mr-1.5 h-3.5 w-3.5" />
             Solicitar Reembolso
           </Button>
-        </div>
-      )}
+      </div>
 
       {/* Cancelamento (all channels) */}
       {hasProposalOrBoleto && (

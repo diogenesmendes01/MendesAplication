@@ -602,7 +602,7 @@ export default function TicketDetailPage() {
         />
 
         {/* Tabs */}
-        <TicketTabs activeTab={activeTab} onTabChange={setActiveTab} />
+        <TicketTabs activeTab={activeTab} onTabChange={setActiveTab} showResponder={isRa} />
 
         {/* Content grid: main + sidebar */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 260px", minHeight: 380 }}>

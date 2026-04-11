@@ -2,6 +2,7 @@
 
 import { Loader2, ThumbsUp, ShieldCheck, MessageSquare } from "lucide-react";
 import { useChannelTheme } from "./channel-theme-provider";
+import { channelLabel } from "@/lib/sac/ticket-formatters";
 import RaResponsePanel from "../ra-response-panel";
 
 interface TicketComposerTabProps {
@@ -46,7 +47,7 @@ export default function TicketComposerTab({
   if (!isRa) {
     return (
       <div className="px-5 py-8 text-center text-[12px] text-[#94a3b8]">
-        Use a aba <strong>Timeline</strong> para enviar mensagens por {ticket.channelType === "EMAIL" ? "Email" : "WhatsApp"}.
+        Use a aba <strong>Timeline</strong> para enviar mensagens por {channelLabel(ticket.channelType)}.
       </div>
     );
   }
