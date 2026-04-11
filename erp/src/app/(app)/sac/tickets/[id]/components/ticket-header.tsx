@@ -1,211 +1,319 @@
+// erp/src/app/(app)/sac/tickets/[id]/components/ticket-header.tsx
 "use client";
 
 import {
   ArrowLeft,
-  Globe,
-  Sparkles,
   ExternalLink,
+  FileDown,
   Loader2,
+  ShieldCheck,
+  Sparkles,
+  ThumbsUp,
+  Ban,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { ChannelBadge } from "@/components/sac/channel-badge";
+import { useRouter } from "next/navigation";
+import { useChannelTheme } from "./channel-theme-provider";
 import {
   priorityLabel,
   priorityColor,
   statusLabel,
   statusColor,
+  getFeelingEmoji,
 } from "@/lib/sac/ticket-formatters";
-import type { TicketDetail } from "../../actions";
-import type { RaTicketContext } from "../../ra-actions.types";
 import type { TicketStatus } from "@prisma/client";
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+// Status transitions map — source of truth
+export const STATUS_TRANSITIONS: Record<string, { value: TicketStatus; label: string }[]> = {
+  OPEN: [{ value: "IN_PROGRESS", label: "Iniciar Atendimento" }],
+  IN_PROGRESS: [
+    { value: "WAITING_CLIENT", label: "Aguardar Cliente" },
+    { value: "RESOLVED", label: "Resolver" },
+  ],
+  WAITING_CLIENT: [
+    { value: "IN_PROGRESS", label: "Retomar Atendimento" },
+    { value: "RESOLVED", label: "Resolver" },
+  ],
+  RESOLVED: [
+    { value: "CLOSED", label: "Fechar" },
+    { value: "IN_PROGRESS", label: "Reabrir" },
+  ],
+  CLOSED: [],
+};
 
-function getFeelingEmoji(feeling: string | null): string {
-  if (!feeling) return "";
-  const f = feeling.toLowerCase();
-  if (f.includes("irritado") || f.includes("raiva")) return "😡";
-  if (f.includes("triste") || f.includes("decepcionado")) return "😢";
-  if (f.includes("neutro")) return "😐";
-  if (f.includes("satisfeito")) return "😊";
-  return "💬";
-}
-
-// ---------------------------------------------------------------------------
-// Props
-// ---------------------------------------------------------------------------
-
-export interface TicketHeaderProps {
-  ticket: TicketDetail;
-  isRa: boolean;
-  raContext: RaTicketContext | null;
-  transitions: { value: TicketStatus; label: string }[];
+interface TicketHeaderProps {
+  ticket: {
+    id: string;
+    subject: string;
+    status: string;
+    priority: string;
+    channelType: string | null;
+    aiEnabled: boolean;
+    raExternalId?: string | null;
+    raStatusName?: string | null;
+    raRating?: string | number | null;
+    raCanEvaluate?: boolean;
+    raCanModerate?: boolean;
+  };
+  raContext: {
+    raFeeling?: string | null;
+    raResolvedIssue?: boolean | null;
+    raBackDoingBusiness?: boolean | null;
+    raCategories?: string[];
+    raFrozen?: boolean;
+  } | null;
   updatingStatus: boolean;
   onStatusChange: (status: TicketStatus) => void;
-  onBack: () => void;
+  onExport: () => void;
+  onRequestEvaluation?: () => void;
+  requestingEval?: boolean;
+  onOpenModeration?: () => void;
+  onCancelDialog?: () => void;
+  hasProposalOrBoleto?: boolean;
 }
 
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
-
-export function TicketHeader({
+export default function TicketHeader({
   ticket,
-  isRa,
   raContext,
-  transitions,
   updatingStatus,
   onStatusChange,
-  onBack,
+  onExport,
+  onRequestEvaluation,
+  requestingEval,
+  onOpenModeration,
+  onCancelDialog,
+  hasProposalOrBoleto,
 }: TicketHeaderProps) {
-  if (isRa) {
-    return (
-      <div className="rounded-xl border border-purple-200 bg-purple-50 px-5 py-4 space-y-3">
-        {/* Top row: back + title + badges */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex items-start gap-3">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onBack}
-              className="mt-0.5 shrink-0"
+  const router = useRouter();
+  const theme = useChannelTheme();
+  const isRa = ticket.channelType === "RECLAMEAQUI";
+  const transitions = STATUS_TRANSITIONS[ticket.status] ?? [];
+
+  return (
+    <div
+      className="rounded-xl border px-5 py-[14px] pb-[10px]"
+      style={{
+        background: theme.headerBg,
+        borderColor: theme.headerBorder,
+      }}
+    >
+      <div className="flex items-start justify-between gap-3">
+        {/* Left: back + title */}
+        <div className="flex items-start gap-5">
+          <button
+            onClick={() => router.push("/sac/tickets")}
+            className="mt-1 flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[7px] border bg-white/70 hover:bg-white/90 transition-all"
+            style={{ borderColor: "rgba(0,0,0,0.08)" }}
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </button>
+
+          <div>
+            {/* Title row */}
+            <h1
+              className="text-[20px] font-bold leading-[1.3]"
+              style={{ color: theme.titleColor }}
             >
-              <ArrowLeft className="mr-1.5 h-4 w-4" />
-              Voltar
-            </Button>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap mb-1">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-purple-600 px-2.5 py-0.5 text-xs font-bold text-white">
-                  <Globe className="h-3 w-3" />
-                  Reclame Aqui
-                </span>
+              {ticket.subject}
+              <span className="ml-2 text-[10px] font-normal font-mono text-[#94a3b8]">
+                #{ticket.id.slice(-8)}
+              </span>
+              <span className={`ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${priorityColor(ticket.priority)}`}>
+                {priorityLabel(ticket.priority)}
+              </span>
+            </h1>
+
+            {/* RA extras: badges row */}
+            {isRa && (
+              <div className="mt-1 flex items-center gap-1.5 flex-wrap">
                 {ticket.aiEnabled && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2 py-0.5 text-xs font-semibold text-purple-700">
-                    <Sparkles className="h-3 w-3" />
+                  <span
+                    className="inline-flex items-center gap-1 rounded-full px-[7px] py-[2px] text-[9px]"
+                    style={{ background: "#F3E8FF", color: "#7C3AED" }}
+                  >
+                    <Sparkles className="h-[10px] w-[10px]" />
                     IA ativa
                   </span>
                 )}
-                {ticket.raStatusName && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-white border border-purple-200 px-2 py-0.5 text-xs font-semibold text-purple-800">
-                    {ticket.raStatusName}
+                {ticket.raExternalId && (
+                  <a
+                    href={`https://www.reclameaqui.com.br/empresa/trustcloud/lista-reclamacoes/?problema=${ticket.raExternalId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 font-mono rounded px-[7px] py-[2px] text-[9px]"
+                    style={{ background: "#F5F0FF", border: "1px solid #E8DAFF", color: "#7C3AED" }}
+                  >
+                    <ExternalLink className="h-[10px] w-[10px]" />
+                    ID RA: {ticket.raExternalId}
+                  </a>
+                )}
+                {raContext?.raFeeling && (
+                  <span
+                    className="inline-flex items-center gap-1 rounded-full px-[7px] py-[2px] text-[9px]"
+                    style={{ background: "white", border: "1px solid #E8DAFF", color: "#6D28D9" }}
+                  >
+                    {getFeelingEmoji(raContext.raFeeling)} {raContext.raFeeling}
                   </span>
                 )}
               </div>
-              <h1 className="text-xl font-bold tracking-tight text-purple-900">
-                {ticket.subject}
-              </h1>
-              <p className="text-xs text-purple-600 mt-0.5">
-                Ticket #{ticket.id.slice(-8)}
-              </p>
-            </div>
-          </div>
-
-          {/* Right side: feeling + priority + status + RA link */}
-          <div className="flex items-center gap-2 flex-wrap sm:justify-end">
-            {/* Consumer feeling */}
-            {raContext?.raFeeling && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-white border border-purple-200 px-2.5 py-1 text-xs font-medium text-purple-800">
-                {getFeelingEmoji(raContext?.raFeeling)} {raContext?.raFeeling}
-              </span>
             )}
-            <span
-              className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold ${priorityColor(ticket.priority)}`}
-            >
-              {priorityLabel(ticket.priority)}
-            </span>
-            {transitions.length > 0 ? (
-              <div className="flex items-center gap-1.5 flex-wrap">
-                {transitions.map((t) => (
-                  <Button
-                    key={t.value}
-                    size="sm"
-                    variant="outline"
-                    disabled={updatingStatus}
-                    onClick={() => onStatusChange(t.value)}
-                    className="transition-all duration-150 active:scale-95 hover:shadow-sm"
+
+            {/* RA Status Pills */}
+            {isRa && (
+              <div className="mt-[15px] flex items-center gap-1 flex-wrap">
+                {ticket.raStatusName && (
+                  <span className="inline-flex items-center gap-1 rounded px-[7px] py-[2px] text-[10px]"
+                    style={{ background: "#F5F0FF", border: "1px solid #E8DAFF" }}
                   >
-                    {updatingStatus && (
-                      <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                    )}
-                    {t.label}
-                  </Button>
+                    <span style={{ color: "#A78BFA" }}>Status RA:</span>
+                    <span className="font-semibold">{ticket.raStatusName}</span>
+                  </span>
+                )}
+                {ticket.raRating != null && (
+                  <span className="inline-flex items-center gap-1 rounded px-[7px] py-[2px] text-[10px]"
+                    style={{ background: "#F5F0FF", border: "1px solid #E8DAFF" }}
+                  >
+                    <span style={{ color: "#A78BFA" }}>Avaliacao:</span>
+                    <span className="font-semibold">{ticket.raRating}/10</span>
+                  </span>
+                )}
+                {raContext?.raResolvedIssue != null && (
+                  <span className="inline-flex items-center gap-1 rounded px-[7px] py-[2px] text-[10px]"
+                    style={{ background: "#F5F0FF", border: "1px solid #E8DAFF" }}
+                  >
+                    <span style={{ color: "#A78BFA" }}>Resolvido:</span>
+                    <span className="font-semibold" style={{ color: raContext.raResolvedIssue ? "#059669" : "#DC2626" }}>
+                      {raContext.raResolvedIssue ? "Sim" : "Nao"}
+                    </span>
+                  </span>
+                )}
+                {raContext?.raBackDoingBusiness != null && (
+                  <span className="inline-flex items-center gap-1 rounded px-[7px] py-[2px] text-[10px]"
+                    style={{ background: "#F5F0FF", border: "1px solid #E8DAFF" }}
+                  >
+                    <span style={{ color: "#A78BFA" }}>Voltaria:</span>
+                    <span className="font-semibold" style={{ color: raContext.raBackDoingBusiness ? "#059669" : "#DC2626" }}>
+                      {raContext.raBackDoingBusiness ? "Sim" : "Nao"}
+                    </span>
+                  </span>
+                )}
+                {raContext?.raFrozen && (
+                  <span className="inline-flex items-center rounded px-[7px] py-[2px] text-[10px] font-semibold"
+                    style={{ background: "#FEE2E2", border: "1px solid #FECACA", color: "#991B1B" }}
+                  >
+                    Congelado
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* RA Categories */}
+            {isRa && raContext?.raCategories && raContext.raCategories.length > 0 && (
+              <div className="mt-1 flex items-center gap-[3px] flex-wrap">
+                {raContext.raCategories.map((cat: string, i: number) => (
+                  <span key={i} className="rounded-[3px] px-[6px] py-[1px] text-[9px]"
+                    style={{ background: "#F3E8FF", color: "#7C3AED" }}
+                  >
+                    {cat}
+                  </span>
                 ))}
               </div>
-            ) : (
-              <span
-                className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold ${statusColor(ticket.status)}`}
-              >
-                {statusLabel(ticket.status)}
-              </span>
             )}
-            {ticket.raExternalId && (
-              <a
-                href={`https://www.reclameaqui.com.br/empresa/trustcloud/lista-reclamacoes/?problema=${ticket.raExternalId}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-sm text-purple-700 hover:text-purple-900 font-mono bg-purple-50 border border-purple-200 rounded px-2 py-1"
-              >
-                <ExternalLink className="h-3.5 w-3.5" />
-                ID RA: {ticket.raExternalId}
-              </a>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  }
 
-  // Generic header for non-RA tickets
-  return (
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="sm" onClick={onBack}>
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Voltar
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">
-            {ticket.subject}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Ticket #{ticket.id.slice(-8)}
-          </p>
-        </div>
-      </div>
-      <div className="flex items-center gap-2 flex-wrap">
-        <ChannelBadge channelType={ticket.channelType ?? null} />
-        <span
-          className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold ${priorityColor(ticket.priority)}`}
-        >
-          {priorityLabel(ticket.priority)}
-        </span>
-        {transitions.length > 0 ? (
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {transitions.map((t) => (
-              <Button
-                key={t.value}
-                size="sm"
-                variant="outline"
-                disabled={updatingStatus}
-                onClick={() => onStatusChange(t.value)}
-                className="transition-all duration-150 active:scale-95 hover:shadow-sm"
-              >
-                {updatingStatus && (
-                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+            {/* Non-RA: status badge row */}
+            {!isRa && (
+              <div className="mt-[15px] flex items-center gap-2">
+                {transitions.length > 0 ? (
+                  transitions.map((t) => (
+                    <button
+                      key={t.value}
+                      onClick={() => onStatusChange(t.value)}
+                      disabled={updatingStatus}
+                      className="rounded-[5px] px-2 py-1 text-[10px] border bg-white hover:-translate-y-[0.5px] hover:shadow-sm transition-all"
+                      style={{ borderColor: theme.btnOutlineBorder, color: theme.btnOutlineColor }}
+                    >
+                      {updatingStatus && <Loader2 className="mr-1 inline h-[11px] w-[11px] animate-spin" />}
+                      {t.label}
+                    </button>
+                  ))
+                ) : (
+                  <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${statusColor(ticket.status)}`}>
+                    {statusLabel(ticket.status)}
+                  </span>
                 )}
-                {t.label}
-              </Button>
-            ))}
+              </div>
+            )}
           </div>
-        ) : (
-          <span
-            className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold ${statusColor(ticket.status)}`}
+        </div>
+
+        {/* Right: action buttons */}
+        <div className="flex items-start gap-[3px] flex-wrap">
+          {/* Status transitions (RA only — shown in header) */}
+          {isRa && transitions.length > 0 && transitions.map((t) => (
+            <button
+              key={t.value}
+              onClick={() => onStatusChange(t.value)}
+              disabled={updatingStatus}
+              className="rounded-[5px] px-2 py-1 text-[10px] border bg-white hover:-translate-y-[0.5px] hover:shadow-sm transition-all"
+              style={{ borderColor: theme.btnOutlineBorder, color: theme.btnOutlineColor }}
+            >
+              {updatingStatus && <Loader2 className="mr-1 inline h-[11px] w-[11px] animate-spin" />}
+              {t.label}
+            </button>
+          ))}
+
+          {isRa && transitions.length === 0 && (
+            <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${statusColor(ticket.status)}`}>
+              {statusLabel(ticket.status)}
+            </span>
+          )}
+
+          {/* Export */}
+          <button
+            onClick={onExport}
+            className="rounded-[5px] px-2 py-1 text-[10px] border bg-white hover:-translate-y-[0.5px] hover:shadow-sm transition-all"
+            style={{ borderColor: theme.btnOutlineBorder, color: theme.btnOutlineColor }}
           >
-            {statusLabel(ticket.status)}
-          </span>
-        )}
+            <FileDown className="mr-1 inline h-[11px] w-[11px]" />
+            Exportar
+          </button>
+
+          {/* RA-specific: Avaliacao + Moderacao */}
+          {isRa && onRequestEvaluation && (
+            <button
+              onClick={onRequestEvaluation}
+              disabled={requestingEval || !ticket.raCanEvaluate}
+              className="rounded-[5px] px-2 py-1 text-[10px] border bg-white hover:-translate-y-[0.5px] hover:shadow-sm transition-all disabled:opacity-50"
+              style={{ borderColor: theme.btnOutlineBorder, color: theme.btnOutlineColor }}
+            >
+              {requestingEval ? <Loader2 className="mr-1 inline h-[11px] w-[11px] animate-spin" /> : <ThumbsUp className="mr-1 inline h-[11px] w-[11px]" />}
+              Avaliacao
+            </button>
+          )}
+
+          {isRa && onOpenModeration && (
+            <button
+              onClick={onOpenModeration}
+              disabled={!ticket.raCanModerate}
+              className="rounded-[5px] px-2 py-1 text-[10px] border bg-white hover:-translate-y-[0.5px] hover:shadow-sm transition-all disabled:opacity-50"
+              style={{ borderColor: theme.btnOutlineBorder, color: theme.btnOutlineColor }}
+            >
+              <ShieldCheck className="mr-1 inline h-[11px] w-[11px]" />
+              Moderacao
+            </button>
+          )}
+
+          {/* Non-RA: Cancel button */}
+          {!isRa && hasProposalOrBoleto && onCancelDialog && (
+            <button
+              onClick={onCancelDialog}
+              className="rounded-[5px] px-2 py-1 text-[10px] border bg-white hover:-translate-y-[0.5px] hover:shadow-sm transition-all"
+              style={{ borderColor: "#FECACA", color: "#DC2626" }}
+            >
+              <Ban className="mr-1 inline h-[11px] w-[11px]" />
+              Cancelar
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

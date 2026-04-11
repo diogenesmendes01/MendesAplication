@@ -5,6 +5,18 @@
  */
 
 // ---------------------------------------------------------------------------
+// Date formatter (shared)
+// ---------------------------------------------------------------------------
+
+export const dateFmt = new Intl.DateTimeFormat("pt-BR", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+// ---------------------------------------------------------------------------
 // Priority
 // ---------------------------------------------------------------------------
 
@@ -160,4 +172,28 @@ export function priorityHexColor(p: string): string {
     default:
       return "#eab308";
   }
+}
+
+// ---------------------------------------------------------------------------
+// Feeling emoji (RA)
+// ---------------------------------------------------------------------------
+
+export function getFeelingEmoji(feeling: string | null): string {
+  if (!feeling) return "";
+  const f = feeling.toLowerCase();
+  if (f.includes("irritado") || f.includes("raiva")) return "😡";
+  if (f.includes("triste") || f.includes("decepcionado")) return "😢";
+  if (f.includes("neutro")) return "😐";
+  if (f.includes("satisfeito")) return "😊";
+  return "💬";
+}
+
+// ---------------------------------------------------------------------------
+// Currency
+// ---------------------------------------------------------------------------
+
+export function formatCurrency(value: number): string {
+  const [int, dec = ""] = value.toFixed(2).split(".");
+  const formatted = int.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  return `${formatted},${dec}`;
 }
