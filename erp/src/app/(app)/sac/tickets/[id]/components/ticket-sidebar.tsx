@@ -181,7 +181,8 @@ export default function TicketSidebar({
         </div>
       )}
 
-      {/* Reembolso */}
+      {/* Reembolso (non-RA only — RA uses RaSidebar which has no refund flow) */}
+      {ticket.channelType !== "RECLAMEAQUI" && (
       <div className="space-y-2">
           <h3 className="text-[9px] uppercase tracking-[0.05em] font-bold text-[#94a3b8]">Reembolso</h3>
           {refunds.length === 0 && <p className="text-[10px] text-[#94a3b8]">Nenhum reembolso</p>}
@@ -252,6 +253,7 @@ export default function TicketSidebar({
             Solicitar Reembolso
           </Button>
       </div>
+      )}
 
       {/* Cancelamento (all channels) */}
       {hasProposalOrBoleto && (
