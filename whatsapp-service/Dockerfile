@@ -26,4 +26,7 @@ RUN mkdir -p /app/uploads
 
 EXPOSE 3001
 
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD node -e "const p=process.env.WHATSAPP_SERVICE_PORT||3001;require('http').get('http://127.0.0.1:'+p+'/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
+
 CMD ["node", "dist/index.js"]
