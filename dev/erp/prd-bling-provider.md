@@ -238,7 +238,7 @@ GET    /nfces                                ← Listar NFC-e
 GET    /nfses                                ← Listar NFS-e
 ```
 
-#### Contas a Receber / Pagar
+#### Contas a Receber / Boletos
 ```
 GET    /contas/receber                       ← Listar
 GET    /contas/receber/{id}                 ← Detalhe
@@ -246,9 +246,40 @@ POST   /contas/receber                       ← Criar
 PUT    /contas/receber/{id}                 ← Atualizar
 PATCH  /contas/receber/{id}/baixa           ← Baixar (marcar como pago)
 DELETE /contas/receber/{id}                ← Deletar
+GET    /contas/receber/boletos              ← Listar boletos vinculados a contas
+GET    /contas/receber/boletos/{id}        ← Detalhe de boleto específico
+```
 
-GET    /contas/pagar                         ← Listar
-POST   /contas/pagar                        ← Criar
+**Importante:** O endpoint `/contas/receber/boletos` retorna os dados do boleto (linha digitável, código de barras, PDF, nosso número) associado à conta. Útil para recuperar infos de boleto quando a conta foi criada/gerida via Bling e não via integração direta.
+
+**Exemplo GET /contas/receber/boletos:**
+```json
+{
+  "data": [
+    {
+      "id": 123456,
+      "contaReceberId": 999888,
+      "numeroDocumento": "FAT-2026-001",
+      "nossoNumero": "1234567-8",
+      "codigoBarras": "12345678901234567890123456789012345678901234",
+      "linhaDigitavel": "12345678901234567890123456789012345678901234567890123",
+      "urlBoleto": "https://www.bling.com.br/boleto/...",
+      "dataEmissao": "2026-04-22",
+      "dataVencimento": "2026-05-22",
+      "valor": "350.00",
+      "situacao": "aberto",
+      "banco": {
+        "id": 1,
+        "nome": "Banco do Brasil"
+      }
+    }
+  ],
+  "meta": {
+    "total": 1,
+    "page": 1,
+    "pageSize": 50
+  }
+}
 ```
 
 **Exemplo GET /contas/receber:**
@@ -431,6 +462,8 @@ export interface BlingClient {
   getAccountReceivable(id: string): Promise<AccountReceivable>;
   createAccountReceivable(data: CreateAccountReceivableInput): Promise<AccountReceivable>;
   receiveAccountReceivable(id: string, data: ReceiveAccountInput): Promise<AccountReceivable>;
+  getAccountReceivableBoletos(contaReceberId: string): Promise<BlingResponse<Boleto>>;
+  getAccountReceivableBoleto(contaReceberId: string, boletoId: string): Promise<Boleto>;
 }
 
 // ─── ERP Sync Engine ──────────────────────────────────────────────────────
@@ -623,6 +656,24 @@ export interface AccountReceivable {
     descricao: string;
   };
   idTransacao?: string;
+}
+
+export interface Boleto {
+  id: string;
+  contaReceberId: string;
+  numeroDocumento: string;
+  nossoNumero: string;
+  codigoBarras: string;
+  linhaDigitavel: string;
+  urlBoleto?: string;
+  dataEmissao: string;
+  dataVencimento: string;
+  valor: string;
+  situacao: 'aberto' | 'quitado' | 'vencido' | 'cancelado';
+  banco?: {
+    id: number;
+    nome: string;
+  };
 }
 
 // ─── Input Types (criação/atualização) ────────────────────────────────────
@@ -987,6 +1038,24 @@ export class BlingApiClient implements BlingClient {
       'PATCH',
       `/contas/receber/${id}/baixa`,
       data
+    );
+    return response.data;
+  }
+
+  // ─── Boletos (Contas a Receber) ──────────────────────────────────────────
+
+  async getAccountReceivableBoletos(contaReceberId: string): Promise<BlingResponse<Boleto>> {
+    const response = await this.request<{ data: Boleto[] }>(
+      'GET',
+      `/contas/receber/${contaReceberId}/boletos`
+    );
+    return { data: response.data, meta: { total: response.data.length, page: 1, pageSize: 50 } };
+  }
+
+  async getAccountReceivableBoleto(contaReceberId: string, boletoId: string): Promise<Boleto> {
+    const response = await this.request<{ data: Boleto }>(
+      'GET',
+      `/contas/receber/${contaReceberId}/boletos/${boletoId}`
     );
     return response.data;
   }

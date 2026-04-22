@@ -1,0 +1,32 @@
+{
+  "metadata": {
+    "version": "1.0.0",
+    "created_at": "2026-04-17T14:44:20.129307",
+    "last_updated": "2026-04-18T14:27:22.085858"
+  },
+  "jobs": {
+    "JOB-73EB": {
+      "id": "JOB-73EB",
+      "title": "Site Health Monitor",
+      "status": "paused",
+      "schedule_type": "interval",
+      "interval": 60,
+      "time_of_day": null,
+      "days_of_week": [],
+      "day_of_month": null,
+      "timezone": "America/Sao_Paulo",
+      "start_date": null,
+      "end_date": null,
+      "last_run_at": null,
+      "next_run_at": "2026-04-18T14:08:19.476771",
+      "missed_runs": 0,
+      "notes": "Checks HTTP status of 6 sites and sends Telegram alert if any are down",
+      "tags": [
+        "monitoring",
+        "sites"
+      ],
+      "created_at": "2026-04-17T14:44:45.536204",
+      "updated_at": "2026-04-18T14:27:22.085853"
+    }
+  }
+}

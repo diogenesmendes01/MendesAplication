@@ -1,0 +1,114 @@
+[
+  {
+    "id": "F-001",
+    "description": "Project scaffold and base structure: Set up the foundational project structure with all necessary configuration files, entry points, and folder organization so that all subsequent features have a stable base to build on.",
+    "acceptance_criteria": [
+      "Project directory structure exists with clearly separated concerns (markup, styles, logic, assets)",
+      "A local development environment can be started and serves a blank page without errors",
+      "A README.md exists describing how to run the project locally"
+    ],
+    "dependencies": [],
+    "status": "pending",
+    "phase": 1
+  },
+  {
+    "id": "F-002",
+    "description": "City search input: Provide a text input field where the user can type a city name and submit it to trigger a weather lookup.",
+    "acceptance_criteria": [
+      "A visible text input is present on the page with a placeholder indicating 'Enter city name'",
+      "A submit mechanism (button or Enter key) is available to trigger the search",
+      "Submitting with an empty input does not trigger a lookup and shows a validation message",
+      "The input is accessible (proper label, keyboard navigable)"
+    ],
+    "dependencies": ["F-001"],
+    "status": "pending",
+    "phase": 1
+  },
+  {
+    "id": "F-003",
+    "description": "Weather API integration: Connect to a public weather API to retrieve current weather data for a given city name, returning temperature, weather description, and icon identifier.",
+    "acceptance_criteria": [
+      "A request to the weather API with a valid city name returns structured data containing temperature, description, and icon info",
+      "The API key or access method is configurable and not hardcoded in source",
+      "Network errors are caught and do not crash the application"
+    ],
+    "dependencies": ["F-001"],
+    "status": "pending",
+    "phase": 2
+  },
+  {
+    "id": "F-004",
+    "description": "Temperature display: Show the current temperature for the searched city in a clear, prominent format after a successful API response.",
+    "acceptance_criteria": [
+      "Temperature value is displayed on screen after a successful city search",
+      "Temperature includes a unit indicator (e.g., °C or °F)",
+      "Temperature is not displayed before the first search or during loading"
+    ],
+    "dependencies": ["F-002", "F-003"],
+    "status": "pending",
+    "phase": 2
+  },
+  {
+    "id": "F-005",
+    "description": "Weather description display: Show a human-readable weather description (e.g., 'clear sky', 'partly cloudy') for the searched city.",
+    "acceptance_criteria": [
+      "A textual weather description is shown alongside the temperature after a successful search",
+      "The description comes from the API response, not from a static mapping",
+      "The description is hidden before any search is performed"
+    ],
+    "dependencies": ["F-002", "F-003"],
+    "status": "pending",
+    "phase": 2
+  },
+  {
+    "id": "F-006",
+    "description": "Weather condition icon: Display a visual icon representing the current weather condition (e.g., sun, clouds, rain) alongside the weather data.",
+    "acceptance_criteria": [
+      "An icon or image is displayed that visually represents the current weather condition",
+      "The icon changes appropriately for different weather conditions (e.g., sunny vs rainy)",
+      "The icon has an alt text or accessible label describing the condition",
+      "No broken image is shown if the icon fails to load"
+    ],
+    "dependencies": ["F-002", "F-003"],
+    "status": "pending",
+    "phase": 2
+  },
+  {
+    "id": "F-007",
+    "description": "Error handling for invalid city: Provide clear user feedback when a city name is not found or the API returns an error.",
+    "acceptance_criteria": [
+      "Searching for a non-existent city displays a user-friendly error message (e.g., 'City not found')",
+      "The error message is visually distinct from normal weather results",
+      "Previous weather results are cleared or replaced when an error occurs",
+      "The user can immediately try a new search after an error"
+    ],
+    "dependencies": ["F-003"],
+    "status": "pending",
+    "phase": 3
+  },
+  {
+    "id": "F-008",
+    "description": "Loading state indicator: Show a visual loading indicator while the weather data is being fetched so the user knows the request is in progress.",
+    "acceptance_criteria": [
+      "A loading indicator (spinner, text, or animation) is visible while the API request is in flight",
+      "The loading indicator disappears once data is received or an error occurs",
+      "The submit button or input is disabled or visually indicates 'busy' during loading"
+    ],
+    "dependencies": ["F-003"],
+    "status": "pending",
+    "phase": 3
+  },
+  {
+    "id": "F-009",
+    "description": "Responsive and polished UI layout: Ensure the application looks clean and usable on both desktop and mobile screen sizes.",
+    "acceptance_criteria": [
+      "The layout adapts gracefully to screen widths from 320px to 1440px",
+      "Text is legible, inputs are tappable on mobile, and spacing is consistent",
+      "The weather result area is visually grouped and easy to scan",
+      "The overall appearance is clean and professional (no unstyled HTML)"
+    ],
+    "dependencies": ["F-002", "F-004", "F-005", "F-006"],
+    "status": "pending",
+    "phase": 3
+  }
+]
