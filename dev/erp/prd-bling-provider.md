@@ -99,6 +99,10 @@ API: https://www.bling.com.br/api/v3
 - **120.000 requisições por dia**
 - Bloqueio por IP
 
+**Regras de Filtro:**
+- Requests GET com filtros por período com intervalo superior a um ano retornam **status code 400**
+- Filtros por período possuem sufixos `"Inicial"` ou `"Final"` (ex: `dataInicial`, `dataFinal`, `dataAlteracaoInicial`, `dataAlteracaoFinal`)
+
 ### 3.2 Principais Endpoints
 
 A API v3 do Bling segue padrão REST. Principais recursos:
@@ -1500,22 +1504,138 @@ async function exchangeCodeForTokens(code: string, credentials: BlingCredentials
 
 ---
 
-## 9. Configuração de Webhook (Opcional)
+## 9. Webhooks (Event-Driven)
 
-O Bling pode enviar webhooks para notificar sobre mudanças. Configurar no Bling Dashboard:
+O Bling soporta webhooks para notificações em tempo real. Webhooks são mais eficientes que polling, pois notificam immediately quando um evento ocorre.
 
-**Eventos disponíveis:**
-- `pedido.created` — novo pedido
-- `pedido.updated` — pedido alterado
-- `pedido.situationChanged` — mudança de situação
-- `contato.created` — novo contato
-- `produto.created` — novo produto
-- `nfe.emitted` — NF-e emitida
+### 9.1 Recursos Disponíveis
 
-**Rota do webhook:**
+| Recurso | Escopo | Descrição |
+|---------|--------|----------|
+| `order` | Pedido de Venda | Criação, atualização, exclusão de pedidos |
+| `product` | Produto | Mudanças em produtos |
+| `stock` | Estoque | Movimentações físicas de estoque |
+| `virtual_stock` | Estoque Virtual | Reservas de vendas e atualizações de saldo em produtos com composição |
+| `product_supplier` | Produto Fornecedor | Links entre produtos e fornecedores |
+| `invoice` | Nota Fiscal | NF-e emitida |
+| `consumer_invoice` | NFC-e | Nota Fiscal de Consumidor Eletrônica |
+
+### 9.2 Ações (Event Types)
+
+| Ação | Descrição |
+|------|----------|
+| `created` | Ocorre quando um recurso é criado |
+| `updated` | Ocorre quando um recurso é atualizado |
+| `deleted` | Ocorre quando um recurso é deletado definitivamente |
+
+> ⚠️ **Nota:** Alterar a situação de um recurso para "excluído" gera um evento `updated`, não `deleted`.
+
+### 9.3 Autenticação — HMAC Signature
+
+O Bling autentica as mensagens via header `X-Bling-Signature-256`, que contém um hash HMAC-SHA256 do payload JSON + `client_secret` do aplicativo.
+
+**Validação do hash:**
+```typescript
+import crypto from 'crypto';
+
+function verifyBlingWebhook(signature: string | null, payload: string, clientSecret: string): boolean {
+  if (!signature) return false;
+  
+  const expectedHash = crypto
+    .createHmac('sha256', clientSecret)
+    .update(payload)
+    .digest('hex');
+  
+  const expectedSignature = `sha256=${expectedHash}`;
+  return crypto.timingSafeEqual(
+    Buffer.from(expectedSignature),
+    Buffer.from(signature)
+  );
+}
 ```
-POST /api/webhooks/erp/bling
+
+### 9.4 Entrega Não Ordenada
+
+> ⚠️ **Não há garantia de ordem** na entrega dos eventos. Um webhook de atualização pode ser recebido antes do de criação. É recomendado processar webhooks de forma **assíncrona usando filas**.
+
+### 9.5 Formato do Payload
+
+```json
+{
+  "eventId": "01945027-150e-72b4-e7cf-4943a042cd9c",
+  "date": "2025-01-10T12:18:46Z",
+  "version": "v1",
+  "event": "product.updated",
+  "companyId": "d4475854366a36c86a37e792f9634a51",
+  "data": {
+    "id": 12345678,
+    "nome": "Nome do Produto",
+    ...
+  }
+}
 ```
+
+### 9.6 Exemplo de Payload por Recurso
+
+**Order (Pedido de Venda):**
+```json
+{
+  "id": 12345678,
+  "data": "2024-09-25",
+  "numero": 123,
+  "numeroLoja": "Loja_123",
+  "total": 123.45,
+  "contato": { "id": 12345678 },
+  "vendedor": { "id": 12345678 },
+  "loja": { "id": 12345678 }
+}
+```
+
+**Product (Produto):**
+```json
+{
+  "id": 12345678,
+  "nome": "Copo do Bling",
+  "codigo": "COD-4587",
+  "tipo": "P",
+  "situacao": "A",
+  "preco": 4.99,
+  "unidade": "UN",
+  "formato": "S",
+  "idProdutoPai": 12345678
+}
+```
+
+**Stock (Estoque):**
+```json
+{
+  "produto": { "id": 12345678 },
+  "deposito": {
+    "id": 12345678,
+    "saldoFisico": 1250.75,
+    "saldoVirtual": 1250.75
+  },
+  "operacao": "E",
+  "quantidade": 25,
+  "saldoFisicoTotal": 1500.75
+}
+```
+
+**Invoice (Nota Fiscal):**
+```json
+{
+  "id": 12345678,
+  "tipo": 1,
+  "situacao": 1,
+  "numero": "1234",
+  "dataEmissao": "2024-09-27 11:24:56",
+  "dataOperacao": "2024-09-27 11:00:00",
+  "contato": { "id": 12345678 },
+  "naturezaOperacao": "..."
+}
+```
+
+### 9.7 Rota do Webhook
 
 ```typescript
 //erp/src/app/api/webhooks/erp/bling/route.ts
@@ -1524,10 +1644,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyBlingWebhook } from '@/lib/erp/providers/bling/webhook';
 
 export async function POST(req: NextRequest) {
-  const signature = req.headers.get('x-bling-signature');
+  const signature = req.headers.get('x-bling-signature-256');
   const body = await req.text();
 
-  if (!verifyBlingWebhook(signature, body)) {
+  // Obter clientSecret do banco de dados pelo companyId do payload
+  const clientSecret = await getBlingClientSecret(req.headers.get('x-bling-company-id'));
+
+  if (!verifyBlingWebhook(signature, body, clientSecret)) {
     return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
   }
 
@@ -1541,6 +1664,15 @@ export async function POST(req: NextRequest) {
 ---
 
 ## 10. Rate Limit Handling
+
+```typescript
+//erp/src/lib/erp/providers/bling/rate-limiter.ts
+
+const RATE_LIMIT = {
+  maxRequests: 3,
+  windowMs: 1000, // 1 second
+  dailyLimit: 120000,
+};
 
 ```typescript
 //erp/src/lib/erp/providers/bling/rate-limiter.ts
@@ -1600,7 +1732,122 @@ export class BlingRateLimiter {
 
 ---
 
-## 11. Cron Job — Sincronização Periódica
+## 11. Migração para JWT
+
+O Bling está migrando de tokens opacos para **JSON Web Tokens (JWT)**. Tokens JWT são auto-contidos e validados criptograficamente, sem necessidade de consulta a banco de dados.
+
+### 11.1 Por Que Migrar?
+
+- **Redução de I/O:** Validação é feita via CPU (criptografia), não precisa de consultas a banco/cache
+- **Menor latência:** Menos operações de rede/disco por requisição
+- **Tokens auto-contidos:** Não precisa de servidor de sessão para validar
+
+### 11.2 Tamanho do Token
+
+> ⚠️ JWTs são significativamente maiores que tokens opacos:
+> - **1.500 a 3.000 caracteres** (vs ~50 caracteres de tokens opacos)
+> 
+> A aplicação **deve estar preparada** para armazenar e trafegar strings desse tamanho nos headers de autorização.
+
+### 11.3 Como Obter JWT
+
+Adicione o header `enable-jwt: 1` na requisição ao endpoint `POST /oauth/token`:
+
+```bash
+curl -X POST "https://api.bling.com.br/oauth/token" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -H "Authorization: Basic [base64_das_credenciais_do_client_app]" \
+  -H "enable-jwt: 1" \
+  -d "grant_type=authorization_code&code=[authorization_code]"
+```
+
+```http
+POST /Api/v3/oauth/token? HTTP/1.1
+Host: https://api.bling.com.br
+Content-Type: application/x-www-form-urlencoded
+Accept: 1.0
+Authorization: Basic [base64_das_credenciais_do_client_app]
+enable-jwt: 1
+
+grant_type=authorization_code&code=[authorization_code]
+```
+
+### 11.4 Renovação de Token JWT
+
+Mesma mecânica de refresh token, mas incluindo o header `enable-jwt: 1`:
+
+```bash
+curl -X POST "https://api.bling.com.br/oauth/token" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -H "Authorization: Basic [base64_das_credenciais_do_client_app]" \
+  -H "enable-jwt: 1" \
+  -d "grant_type=refresh_token&refresh_token=[refresh_token]"
+```
+
+### 11.5 Usando o JWT nas Requisições
+
+> ⚠️ O header `enable-jwt: 1` **deve ser mantido em todas as requisições** subsequentes para garantir compatibilidade e processamento correto.
+
+```typescript
+const response = await fetch('https://api.bling.com.br/Api/v3/produtos', {
+  headers: {
+    'Authorization': `Bearer ${accessToken}`,
+    'enable-jwt': '1',  // IMPORTANTE: manter em todas as requisições
+  },
+});
+```
+
+### 11.6 Tratamento de Erros
+
+| Código | Significado | Solução |
+|--------|-------------|---------|
+| `401 Unauthorized` | Token expirou ou inválido | Renovar usando refresh_token ou refazer OAuth |
+| `400 Bad Request` | Token malformado ou erro na sintaxe do header | Verificar formato: `Authorization: Bearer {token}` |
+
+### 11.7 Implementação Sugerida
+
+```typescript
+class BlingAuth {
+  private accessToken: string;
+  private refreshToken: string;
+  private expiresAt: Date;
+
+  async getAccessToken(): Promise<string> {
+    if (this.isExpired()) {
+      await this.refresh();
+    }
+    return this.accessToken;
+  }
+
+  private isExpired(): boolean {
+    return new Date() >= this.expiresAt;
+  }
+
+  private async refresh(): Promise<void> {
+    const response = await fetch('https://api.bling.com.br/oauth/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Authorization': `Basic ${this.getBasicAuth()}`,
+        'enable-jwt': '1',
+      },
+      body: new URLSearchParams({
+        grant_type: 'refresh_token',
+        refresh_token: this.refreshToken,
+      }),
+    });
+
+    const data = await response.json();
+    this.accessToken = data.access_token;
+    this.refreshToken = data.refresh_token;
+    this.expiresAt = new Date(Date.now() + (data.expires_in || 3600) * 1000);
+  }
+}
+```
+
+---
+
+## 12. Cron Job — Sincronização Periódica
 
 ```typescript
 //erp/src/lib/erp/scheduler.ts
@@ -1646,7 +1893,7 @@ export async function runBlingSync(companyId: string) {
 
 ---
 
-## 12. Testes
+## 13. Testes
 
 ```typescript
 //erp/src/lib/erp/providers/bling/__tests__/client.test.ts
@@ -1687,7 +1934,7 @@ describe('BlingApiClient', () => {
 
 ---
 
-## 13. Variáveis de Ambiente
+## 14. Variáveis de Ambiente
 
 ```bash
 #erp/.env
@@ -1696,7 +1943,7 @@ BLING_REDIRECT_URI=https://seu-dominio.com/api/auth/bling/callback
 
 ---
 
-## 14. Checklist de Implementação
+## 15. Checklist de Implementação
 
 ### Fase 1 — Core (MVP)
 - [ ] `erp/src/lib/erp/types.ts` — interfaces ErpProvider
@@ -1736,7 +1983,7 @@ BLING_REDIRECT_URI=https://seu-dominio.com/api/auth/bling/callback
 
 ---
 
-## 15. Glossário
+## 16. Glossário
 
 | Termo | Significado |
 |-------|-------------|
@@ -1753,10 +2000,13 @@ BLING_REDIRECT_URI=https://seu-dominio.com/api/auth/bling/callback
 
 ---
 
-## 16. Referências
+## 17. Referências
 
 - **Bling Developer Portal:** https://developer.bling.com.br
 - **Bling API Reference:** https://developer.bling.com.br/referencia
 - **Bling Authentication:** https://developer.bling.com.br/bling-api
 - **Bling Changelog:** https://developer.bling.com.br/changelogs
+- **Bling Webhooks:** https://developer.bling.com.br/webhooks
+- **Bling Rate Limits:** https://developer.bling.com.br/limites
+- **Bling JWT Migration:** https://developer.bling.com.br/migracao-jwt
 - **Bling npm package (referência):** https://github.com/AlexandreBellas/bling-erp-api-js
