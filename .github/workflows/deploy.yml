@@ -1,0 +1,144 @@
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+
+jobs:
+  deploy:
+    name: Deploy to Coolify
+    runs-on: self-hosted
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+
+    steps:
+      - name: Deploy ERP
+        run: |
+          curl -s -X GET "${{ secrets.COOLIFY_WEBHOOK_URL }}" \
+            -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}" \
+            --fail-with-body
+
+      - name: Deploy WhatsApp Service
+        run: |
+          curl -s -X GET "https://coolify.boletoapi.com/api/v1/deploy?uuid=zskog8c8gkw0sk4s04gs4goc&force=false" \
+            -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}" \
+            --fail-with-body
+
+      - name: Wait for containers to be ready
+        run: |
+          echo "Waiting for ERP container to be healthy..."
+          for i in $(seq 1 30); do
+            STATUS=$(docker ps --format '{{.Status}}' --filter "name=ygs0kks0sw8w048wcgw8wos0" | head -1)
+            if echo "$STATUS" | grep -q "healthy"; then
+              echo "ERP healthy after ${i}0s"
+              break
+            fi
+            echo "Attempt $i: $STATUS"
+            sleep 10
+          done
+          echo "Waiting for WhatsApp container..."
+          for i in $(seq 1 15); do
+            if docker ps --format '{{.Names}}' | grep -q "zskog8c8gkw0sk4s04gs4goc"; then
+              echo "WhatsApp running after ${i}0s"
+              break
+            fi
+            sleep 10
+          done
+
+      - name: Cleanup duplicate containers
+        run: |
+          for PREFIX in ygs0kks0sw8w048wcgw8wos0 zskog8c8gkw0sk4s04gs4goc; do
+            CONTAINERS=$(docker ps --format '{{.Names}}' | grep "^${PREFIX}" | sort -t- -k2 -n)
+            NEWEST=$(echo "$CONTAINERS" | tail -1)
+            for c in $CONTAINERS; do
+              if [ "$c" != "$NEWEST" ]; then
+                echo "Removing old: $c"
+                docker rm -f "$c" 2>/dev/null || true
+              fi
+            done
+          done
+
+      - name: Fix network aliases and update Traefik config
+        run: |
+          ERP=$(docker ps --format '{{.Names}}' | grep "^ygs0kks0sw8w048wcgw8wos0" | head -1)
+          WA=$(docker ps --format '{{.Names}}' | grep "^zskog8c8gkw0sk4s04gs4goc" | head -1)
+
+          # Reconnect with aliases
+          docker network disconnect coolify "$ERP" 2>/dev/null || true
+          docker network connect --alias mendeserp coolify "$ERP"
+          echo "mendeserp -> $ERP"
+
+          if [ -n "$WA" ]; then
+            docker network disconnect coolify "$WA" 2>/dev/null || true
+            docker network connect --alias whatsapp-service coolify "$WA"
+            echo "whatsapp-service -> $WA"
+          fi
+
+          # Get ERP container IP
+          sleep 2
+          ERP_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$ERP" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+          echo "ERP IP: $ERP_IP"
+
+          TRAEFIK_YAML="/data/coolify/proxy/dynamic/mendeserp.yaml"
+
+          # Write complete YAML if file doesn't exist or is empty
+          if [ ! -s "$TRAEFIK_YAML" ]; then
+            echo "Creating Traefik config from scratch..."
+            mkdir -p /data/coolify/proxy/dynamic
+            cat > "$TRAEFIK_YAML" <<YAMLEOF
+          http:
+            routers:
+              http-mendeserp:
+                entryPoints:
+                  - http
+                middlewares:
+                  - redirect-to-https
+                rule: "Host(\`boletoapi.com\`)"
+                service: mendeserp-svc
+                priority: 999
+              https-mendeserp:
+                entryPoints:
+                  - https
+                middlewares:
+                  - gzip
+                rule: "Host(\`boletoapi.com\`)"
+                service: mendeserp-svc
+                priority: 999
+                tls:
+                  certResolver: letsencrypt
+            services:
+              mendeserp-svc:
+                loadBalancer:
+                  servers:
+                    - url: "http://${ERP_IP}:3000"
+            middlewares:
+              redirect-to-https:
+                redirectScheme:
+                  scheme: https
+                  permanent: true
+              gzip:
+                compress: true
+          YAMLEOF
+          else
+            # File exists — update the service URL (matches IP, hostname, or any url pattern)
+            sed -i "s|url: \"http://[^\"]*:3000\"|url: \"http://${ERP_IP}:3000\"|g" "$TRAEFIK_YAML"
+            # Fallback: if sed didn't match (unquoted url), try without quotes
+            sed -i "s|url: http://[^ ]*:3000|url: http://${ERP_IP}:3000|g" "$TRAEFIK_YAML"
+          fi
+
+          echo "Traefik config:"
+          cat "$TRAEFIK_YAML"
+
+      - name: Verify deployment
+        run: |
+          sleep 10
+          ERP=$(docker ps --format '{{.Names}}' | grep "^ygs0kks0sw8w048wcgw8wos0" | head -1)
+          ERP_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$ERP" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "http://${ERP_IP}:3000/login")
+          echo "ERP direct ($ERP_IP): $HTTP_CODE"
+          if [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "307" ]; then
+            echo "❌ ERP not responding on $ERP_IP:3000"
+            exit 1
+          fi
+          echo "✅ Deploy complete! ERP accessible at https://boletoapi.com"

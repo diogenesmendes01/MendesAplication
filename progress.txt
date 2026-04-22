@@ -1,0 +1,367 @@
+# Progress — AI Personalization
+
+> Feature: Personalização da IA — resposta automática multi-provider para WhatsApp e Email
+> Branch: feat/ai-personalization
+> Spec: dev/specs/ai-personalization.md
+
+## Contexto Inicial
+
+### O que já existe no código
+- `src/lib/ai/provider.ts` — suporta OpenAI, DeepSeek, Anthropic. Lê config de env vars globais (AI_PROVIDER, AI_API_KEY, AI_MODEL)
+- `src/lib/ai/agent.ts` — agent loop com tools, funciona só para WhatsApp
+- `src/lib/ai/tools.ts` — 6 tools: SEARCH_DOCUMENTS, GET_CLIENT_INFO, GET_HISTORY, RESPOND, ESCALATE, CREATE_NOTE
+- `src/lib/ai/tool-executor.ts` — executa as tools, RESPOND envia via WhatsApp
+- `src/lib/ai/embeddings.ts` — RAG com embeddings OpenAI (provider separado via AI_EMBEDDING_*)
+- `src/lib/workers/ai-agent.ts` — BullMQ worker que checa AiConfig e roda o agent
+- `src/lib/workers/whatsapp-inbound.ts` — enfileira no aiAgentQueue após criar TicketMessage
+- `src/lib/workers/email-inbound.ts` — NÃO enfileira no aiAgentQueue (precisa adicionar)
+- `src/app/(app)/configuracoes/ai/` — página de config com: toggle, persona, welcome message, keywords, max iterations
+- `src/lib/encryption.ts` — encrypt/decrypt AES já existente (usado por canais de email e payment providers)
+
+### Schema atual (AiConfig)
+```prisma
+model AiConfig {
+  id                 String   @id @default(cuid())
+  companyId          String   @unique
+  enabled            Boolean  @default(false)
+  persona            String   @db.Text
+  welcomeMessage     String?  @db.Text
+  escalationKeywords String[]
+  maxIterations      Int      @default(5)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  company Company @relation(...)
+}
+```
+
+### Padrões a seguir
+- encrypt/decrypt: mesmo de `src/lib/encryption.ts` (AES-256-GCM)
+- Server actions: requireCompanyAccess + requireAdmin + logAuditEvent
+- Mascarar segredos: últimos 4 chars visíveis (padrão de payment-providers US-008)
+- Migration: manual SQL se shadow DB não for acessível (padrão do projeto)
+- DB via SSH tunnel: `ssh -f -N -L 15432:10.0.1.10:5432 root@coolify.boletoapi.com`
+
+## US-001 — Schema Prisma AI Personalization (2026-03-15)
+
+### O que foi feito
+- Adicionados 9 campos novos ao AiConfig: provider, apiKey, model, whatsappEnabled, emailEnabled, emailPersona, emailSignature, dailySpendLimitBrl, temperature
+- Criada tabela AiUsageLog com indexes em (companyId, createdAt) e (aiConfigId, createdAt)
+- Relation usageLogs AiUsageLog[] adicionada ao AiConfig
+- Migration manual SQL aplicada no banco de produção via SSH tunnel
+- prisma validate, prisma generate e npm run lint passaram sem erros
+
+### Lições
+- ⏳ O item do 1Password "MendesERP Database" usa campo "connection_string", não "DATABASE_URL"
+- ⏳ Para aplicar migration manual: ssh tunnel (porta 15432) + psql + INSERT em _prisma_migrations
+- ⏳ Float no Prisma mapeia para DOUBLE PRECISION no PostgreSQL (usado para temperature)
+
+## US-002 — Refatorar provider.ts multi-provider (2026-03-15)
+
+### O que foi feito
+- chatCompletion() agora recebe ProviderConfig como 3º parâmetro obrigatório (não lê mais process.env)
+- Retorno AiResponse inclui usage: { inputTokens, outputTokens } extraído da resposta da API (OpenAI-compat e Anthropic)
+- 5 providers suportados: openai, anthropic, deepseek, grok, qwen
+- Grok usa base URL https://api.x.ai (OpenAI-compatible)
+- Qwen usa base URL https://dashscope.aliyuncs.com/compatible-mode (OpenAI-compatible)
+- Default models adicionados: grok='grok-2', qwen='qwen-max'
+- Helper getEnvProviderConfig() criado para backward compat (lê AI_PROVIDER/AI_API_KEY/AI_MODEL)
+- agent.ts atualizado: usa apiKey do AiConfig se disponível, senão faz fallback para getEnvProviderConfig()
+- npm run lint passa sem erros
+
+### Lições
+- ⏳ Anthropic retorna usage em data.usage.input_tokens/output_tokens; OpenAI-compat usa data.usage.prompt_tokens/completion_tokens
+- ⏳ O ChatCompletionOptions interno foi eliminado — ProviderConfig cobre tudo (provider, apiKey, model, temperature, maxTokens)
+- ⏳ embeddings.ts não foi tocado (usa AI_EMBEDDING_* separadamente, conforme spec)
+
+## US-003 — Cost tracker + model suggester (2026-03-15)
+
+### O que foi feito
+- Criado src/lib/ai/cost-tracker.ts com: logUsage(), getTodaySpend(), getUsageSummary()
+- Criado src/lib/ai/model-suggester.ts com: suggestModel()
+- Tabela MODEL_PRICING cobre 10 modelos: gpt-4o, gpt-4o-mini, claude-opus-4-20250514, claude-sonnet-4-20250514, claude-haiku-4-20250414, grok-2, grok-2-mini, qwen-max, qwen-plus, qwen-turbo
+- BRL_USD_RATE = 5.80 como constante nomeada exportada
+- getUsageSummary retorna breakdown por canal e por modelo usando groupBy do Prisma
+- suggestModel retorna ModelSuggestion { model, estimatedDailyCostBrl } — o modelo mais potente que cabe no orçamento
+- FALLBACK_PRICING para modelos desconhecidos (input: 1.0, output: 3.0 por 1M tokens)
+- npm run lint passa sem erros
+
+### Lições
+- ⏳ Prisma Decimal precisa ser instanciado com `new Decimal(value.toFixed(N))` para controlar precision
+- ⏳ groupBy do Prisma retorna _sum como Decimal | null — sempre usar Number() para converter
+- ⏳ MODEL_PRICING e BRL_USD_RATE exportados do cost-tracker para reuso no model-suggester (evita duplicação)
+
+## US-004 — Adaptar agent.ts para multi-canal + provider config (2026-03-15)
+
+### O que foi feito
+- runAgent() agora recebe parâmetro channel: 'WHATSAPP' | 'EMAIL' (default 'WHATSAPP' para backward compat)
+- Descriptografa apiKey via decrypt() de encryption.ts antes de montar ProviderConfig
+- Fallback para getEnvProviderConfig() quando empresa não tem apiKey configurada
+- Verifica whatsappEnabled/emailEnabled antes de processar — retorna error específico se desabilitado
+- Verifica dailySpendLimitBrl via getTodaySpend() — retorna 'daily_spend_limit_reached' sem chamar LLM
+- Usa emailPersona quando channel=EMAIL e emailPersona não é null, senão usa persona padrão
+- System prompts separados: buildWhatsAppSystemPrompt() (conciso, direto) e buildEmailSystemPrompt() (formal, inclui assinatura)
+- Cada chamada a chatCompletion() tem logUsage() logo após, registrando tokens no AiUsageLog
+- Terminal actions expandidas: RESPOND e RESPOND_EMAIL ambos param shouldStop=true
+- ai-agent.ts worker passa channel do job data para runAgent()
+- whatsapp-inbound.ts inclui channel: 'WHATSAPP' no job data do aiAgentQueue
+
+### Lições
+- ⏳ Decimal do Prisma precisa de Number() para comparação (dailySpendLimitBrl é Decimal no DB)
+- ⏳ O contact model do Prisma (AdditionalContact) tem campo email — útil para futura resolução de destinatário de email
+- ⏳ O default do channel param garante backward compat — callers existentes não precisam mudar
+
+## US-005 — Nova tool RESPOND_EMAIL + enfileirar email inbound no ai-agent (2026-03-15)
+
+### O que foi feito
+- Nova tool RESPOND_EMAIL adicionada em tools.ts com params: subject (string) e message (string, suporta HTML simples)
+- Criadas listas de tools por canal: WHATSAPP_TOOLS (com RESPOND) e EMAIL_TOOLS (com RESPOND_EMAIL) + helper getToolsForChannel()
+- tool-executor.ts: novo case RESPOND_EMAIL que resolve email do destinatário a partir de ticket.contact.email ou ticket.client.email, cria TicketMessage e enfileira no emailOutboundQueue
+- Se não houver email do contato/cliente, retorna erro orientando uso de ESCALATE
+- email-inbound.ts: após criar TicketMessage de INBOUND, enfileira no aiAgentQueue com channel='EMAIL' (análogo ao whatsapp-inbound)
+- agent.ts: usa getToolsForChannel(channel) em vez de ALL_TOOLS, garantindo que EMAIL recebe RESPOND_EMAIL e WhatsApp recebe RESPOND
+- agent.ts: fallback de texto direto (sem tool call) agora usa RESPOND_EMAIL para canal EMAIL com subject "Re: Atendimento"
+- ai-agent.ts worker já passava channel do job data para runAgent() (feito em US-004)
+- System prompts já diferenciavam ferramentas por canal (feito em US-004)
+- npm run lint passa sem erros
+
+### Lições
+- ⏳ O emailOutboundQueue precisa de import direto de @/lib/queue no tool-executor — não é injetado via contexto
+- ⏳ O EmailOutboundJobData espera messageId, ticketId, companyId, to, subject, content, attachmentIds — criar TicketMessage ANTES de enfileirar para ter o messageId
+- ⏳ A resolução de email do destinatário segue a cadeia: ticket.contact.email → ticket.client.email → erro com sugestão de ESCALATE
+- ⏳ ALL_TOOLS ainda exportado para backward compat mas não usado mais no agent loop — getToolsForChannel() é o padrão agora
+
+## US-006 — Encriptação da API key + server actions de config (2026-03-15)
+
+### O que foi feito
+- getAiConfig atualizado para retornar todos os campos novos (provider, apiKey mascarada, model, whatsappEnabled, emailEnabled, emailPersona, emailSignature, dailySpendLimitBrl, temperature)
+- apiKey é mascarada no retorno: decrypt → últimos 4 chars visíveis, resto **** (mesmo padrão de payment-providers)
+- updateAiConfig aceita todos os novos campos; apiKey é encriptada via encrypt() antes de salvar
+- Se apiKey vier vazia ou mascarada (começa com ****) no update, mantém a existente no banco (não sobrescreve)
+- Nova action testAiConnection(companyId): descriptografa apiKey, faz chatCompletion com message 'Hi' e maxTokens 5, retorna { ok, error? }
+- Nova action listAvailableModels(companyId): para OpenAI faz GET /v1/models com apiKey (filtra modelos gpt-*), para outros retorna lista hardcoded
+- Nova action getAiUsageSummary(companyId, days): delega para getUsageSummary do cost-tracker
+- Todas as actions verificam requireCompanyAccess e requireAdmin (exceto getAiConfig que só exige requireCompanyAccess para leitura)
+- Audit log em updateAiConfig com apiKey redacted no payload
+- apiKey no create usa null como fallback (não undefined) para compatibilidade com Prisma
+- npm run lint passa sem erros
+
+### Lições
+- ⏳ A mascaração de apiKey precisa descriptografar primeiro (valor no banco é ciphertext) — decrypt antes de slice(-4)
+- ⏳ Prisma upsert: campo no update não pode ser undefined se quiser "não alterar" — simplesmente omitir o campo do objeto update
+- ⏳ O type UsageSummary precisa ser importado com `type` do cost-tracker para reexportar no actions
+- ⏳ Para OpenAI /v1/models, filtrar por prefixo gpt-* e excluir instruct/realtime/audio para lista limpa
+
+## US-007 — Frontend: refatorar /configuracoes/ai com tabs (2026-03-15)
+
+### O que foi feito
+- Página /configuracoes/ai completamente refatorada com 4 tabs: Geral, WhatsApp, Email, Consumo
+- Tab Geral: seletor de provider (OpenAI, Anthropic, Grok, Qwen), campo API key (password input), botão 'Testar Conexão' com feedback visual (ícones e texto), seletor de modelo dinâmico via listAvailableModels, slider de temperatura (0.0-1.0), input de limite diário (R$), badge de sugestão de modelo baseado no orçamento
+- Tab WhatsApp: toggle whatsappEnabled, persona textarea, welcome message, escalation keywords com chips removíveis, max iterations
+- Tab Email: toggle emailEnabled, emailPersona textarea com placeholder herdado do WhatsApp, emailSignature textarea
+- Tab Consumo: gasto de hoje vs limite, total 30 dias, breakdown por canal e modelo em tabelas
+- Ao trocar provider, modelo é limpo e lista recarregada automaticamente
+- API key usa input type="password" — nunca visível em claro
+- Toggle de enabled movido para o header da página (mais acessível)
+- Componente Slider do shadcn/ui instalado via npx shadcn@latest add slider
+- Novas server actions adicionadas: getTodaySpendAction, getSuggestedModel
+- npm run lint passa sem erros
+
+### Lições
+- ⏳ Slider do shadcn/ui precisa ser instalado separadamente (não vem por padrão)
+- ⏳ O componente Tabs já estava instalado (US anteriores ou setup inicial)
+- ⏳ Para o placeholder dinâmico do emailPersona, truncar a persona do WhatsApp para evitar texto longo demais
+- ⏳ Tab Consumo usa carregamento sob demanda (botão "Carregar dados") para não fazer queries desnecessárias ao abrir a página
+- ⏳ suggestModel é chamado client-side via server action wrapper (getSuggestedModel) porque precisa rodar no servidor para acessar cost-tracker
+
+## US-008 — Simulador de resposta IA (dry-run) (2026-03-15)
+
+### O que foi feito
+- Nova função runAgentDryRun() em agent.ts: executa o agent loop completo sem ticket real, sem salvar no banco, sem enviar mensagens
+- DryRunResult retorna: response, inputTokens, outputTokens, estimatedCostBrl
+- ToolContext expandido com campo opcional dryRun: boolean
+- tool-executor.ts: 5 funções dry-run dedicadas (GET_CLIENT_INFO, GET_HISTORY, RESPOND, RESPOND_EMAIL, ESCALATE, CREATE_NOTE) que retornam resultados simulados sem side effects
+- SEARCH_DOCUMENTS funciona igual no dry-run — usa base de conhecimento real da empresa para simulação fiel
+- Nova server action simulateAiResponse(companyId, message, channel) com rate limit in-memory (10/min por empresa)
+- Validação de input: mensagem não vazia, máximo 2000 caracteres
+- estimateCostBrl() helper usa MODEL_PRICING e BRL_USD_RATE do cost-tracker
+- Nova tab "Simulador" na página /configuracoes/ai com: toggle de canal (WhatsApp/Email), textarea de input, botão enviar, área de resposta, stats de tokens e custo
+- TabsList expandido de 4 para 5 colunas (grid-cols-5)
+- Enter para enviar, Shift+Enter para nova linha
+- Estados visuais: empty state, loading state, resultado com resposta + stats
+- npm run lint passa sem erros
+
+### Lições
+- ⏳ O dry-run não precisa de ticket real — runAgentDryRun recebe só companyId, message e channel
+- ⏳ SEARCH_DOCUMENTS deve funcionar igual no dry-run para que a simulação reflita a resposta real da IA com a base de conhecimento da empresa
+- ⏳ Rate limit in-memory (Map<companyId, timestamps[]>) é suficiente para server actions em Next.js — se houver múltiplas instâncias, migrar para Redis
+- ⏳ O dryRun flag no ToolContext permite que o dispatcher roteie para funções sem side effects sem alterar a interface do executeTool
+
+## US-SAN-001 — Adicionar 'santander' ao type system, registry e constants (2026-03-19)
+
+### O que foi feito
+- constants.ts: adicionado 'santander' ao PRODUCTION_PROVIDER_TYPES
+- registry.ts: adicionado entry completo do Santander com configSchema (7 campos) e settingsSchema (9 campos)
+- configSchema: clientId, clientSecret, keyUser, covenantCode, certificate (PEM), certificateKey (PEM), workspaceId
+- settingsSchema: documentKind (select), finePercentage, fineQuantityDays, interestPercentage, writeOffQuantityDays, protestType (select), defaultMessages, pixKeyType (select), pixDictKey
+- Criado placeholder santander.provider.ts seguindo padrão do pinbank.provider.ts
+- factory.ts: adicionado case 'santander' que instancia SantanderProvider
+- prd.json: US-SAN-001 passes=true
+- npm run lint: ✅ sem erros
+- npx tsc --noEmit: ✅ sem erros no módulo payment (erros pré-existentes no módulo AI não relacionados)
+
+### Lições
+- ⏳ O type system deriva ProviderType automaticamente de PRODUCTION_PROVIDER_TYPES — basta adicionar ao array e tudo propaga (types.ts, isProviderType guard, etc.)
+- ⏳ Erros de tsc pré-existentes no módulo AI (sanitize-html, apiKeyHint, isSimulation) — não relacionados ao payment module
+- ⏳ ConfigField type 'password' é usado para campos sensíveis como certificados PEM (armazenados encriptados AES no banco)
+
+## US-SAN-002 — SantanderAuthManager — mTLS + OAuth 2.0 com cache de token (2026-03-19)
+
+### O que foi feito
+- Criado src/lib/payment/providers/santander-auth.ts com classe SantanderAuthManager
+- SantanderCredentials interface: clientId, clientSecret, certificate (PEM), certificateKey (PEM), keyUser, sandbox
+- getHttpsAgent(): cria https.Agent com cert/key para mTLS, singleton (reutilizado)
+- getAccessToken(): POST ao endpoint OAuth com grant_type=client_credentials, token cacheado com renovação quando faltam <= 60s
+- getAuthHeaders(): retorna { Authorization: 'Bearer <token>', 'X-Application-Key': keyUser, 'Content-Type': 'application/json' }
+- getBaseUrl(): retorna URL de sandbox ou produção
+- authenticatedFetch(path, options): wrapper que injeta agent mTLS + headers OAuth automaticamente
+- Erros 401 invalidam token cache e orientam verificação de credenciais; 403 orienta verificação de certificado
+- URLs OAuth: trust-open (produção) e trust-sandbox (sandbox) sob /auth/oauth/v2/token
+- prd.json: US-SAN-002 passes=true
+- npx tsc --noEmit: ✅ sem erros no módulo payment (erros pré-existentes no módulo AI)
+- npm run lint: ✅ sem erros
+
+### Lições
+- ⏳ Node.js fetch (undici) aceita `agent` como propriedade não-tipada — precisa de @ts-expect-error para mTLS
+- ⏳ O endpoint OAuth do Santander usa application/x-www-form-urlencoded (padrão OAuth), não JSON
+- ⏳ TOKEN_RENEWAL_MARGIN_MS = 60s garante que requests em andamento não usem token prestes a expirar
+- ⏳ O https.Agent é singleton na instância do AuthManager — evita criar conexões TLS desnecessárias
+
+## US-SAN-003 — Gerador atômico de Nosso Número por convênio (2026-03-19)
+
+### O que foi feito
+- Adicionado model SantanderSequence ao schema.prisma com @@unique([companyId, covenantCode]) e @@map("santander_sequences")
+- Relação company adicionada ao Company model (santanderSequences SantanderSequence[])
+- Migration manual SQL criada: 20260319000001_add_santander_sequence (CREATE TABLE + UNIQUE INDEX + FK)
+- Criado src/lib/payment/providers/santander-sequence.ts com duas funções:
+  - getNextBankNumber(companyId, covenantCode): usa $transaction com Serializable isolation, cria registro se não existe (lastNumber=1), incrementa atomicamente
+  - setLastBankNumber(companyId, covenantCode, number): upsert para seed manual com validação (0 a 9_999_999_999_999)
+- prisma validate: ✅
+- prisma generate: ✅
+- npx tsc --noEmit: ✅ (erro pré-existente em sanitize-html do módulo AI apenas)
+- npm run lint: ✅ sem erros
+- prd.json: US-SAN-003 passes=true
+
+### Lições
+- ⏳ Prisma $transaction com isolationLevel Serializable é a forma correta de garantir atomicidade em counters — evita race conditions em requests concorrentes
+- ⏳ O compound unique @@unique([companyId, covenantCode]) gera automaticamente o nome companyId_covenantCode para uso em findUnique/where
+- ⏳ Migration manual segue padrão: CREATE TABLE, CREATE INDEX separado, ADD CONSTRAINT para FK — mesmo formato que o Prisma geraria
+
+## US-SAN-004 — SantanderProvider — createBoleto (2026-03-19)
+
+### O que foi feito
+- Substituído placeholder santander.provider.ts com implementação completa de createBoleto
+- SantanderProvider implements PaymentGateway com constructor que recebe SantanderCredentials + settings + webhookSecret + workspaceId + covenantCode + companyId
+- Instancia SantanderAuthManager internamente para mTLS + OAuth
+- createBoleto: gera nsuCode (timestamp base36 + random, até 20 chars alfanuméricos), nsuDate (YYYY-MM-DD), environment (TESTE/PRODUCAO)
+- bankNumber obtido via getNextBankNumber() atômico por empresa+convênio
+- Mapeamento customer → payer com truncamento nos limites da API (name 40, address 40, neighborhood 30, city 20)
+- nominalValue: centavos → "X.XX" string, formatPercentage para multa/juros
+- Boleto híbrido Pix: se pixKeyType + pixDictKey configurados nos settings, inclui key e txId (26-35 chars alfanuméricos)
+- Campos opcionais: finePercentage, fineQuantityDays, interestPercentage, writeOffQuantityDays, protestType, messages (max 4, 100 chars cada)
+- POST /workspaces/{workspaceId}/bank_slips via authenticatedFetch com AbortController (15s timeout)
+- Erros Santander parseados via ErrorTemplate: _errorCode, _message, _details, _errors[].field/_message
+- Response mapeada: gatewayId composto (nsuCode.nsuDate.ENV.covenantCode.bankNumber), barcode, line, qrCode, url, nossoNumero
+- factory.ts: case 'santander' extrai SantanderCredentials dos decryptedCredentials, sandbox de options.sandbox, companyId de options.companyId
+- factory.ts: adicionado 5º parâmetro opcional `options?: { sandbox?: boolean; companyId?: string }` para dados que não vêm de credentials/metadata
+- getBoletoStatus, cancelBoleto, validateWebhook, parseWebhookEvent, testConnection: placeholders com throw (US-SAN-005)
+- prd.json: US-SAN-004 passes=true
+- npx tsc --noEmit: ✅ (erro pré-existente sanitize-html apenas)
+- npm run lint: ✅ sem erros
+
+### Lições
+- ⏳ Placeholder methods no TS podem omitir parâmetros da interface — evita lint errors de unused vars
+- ⏳ O _webhookSecret com underscore prefix é aceito pelo eslint como "intencionalmente não usado" — útil para constructor params reservados para futuro
+- ⏳ factory.ts precisou de um 5º param `options` para sandbox e companyId — são dados do modelo PaymentProvider que não vêm nem de credentials nem de metadata
+- ⏳ zipCode Santander exige formato XXXXX-XXX (com hífen) — formatar antes de enviar
+- ⏳ NominalValue Santander é string "X.XX" (reais, não centavos) — dividir amount por 100
+- ⏳ finePercentage, interestPercentage, fineQuantityDays, writeOffQuantityDays são strings na API Santander, não numbers
+- ⏳ txId para bolepix precisa ter entre 26 e 35 caracteres alfanuméricos — padding com zeros se necessário
+
+## US-SAN-005 — SantanderProvider — getBoletoStatus + cancelBoleto + testConnection (2026-03-19)
+
+### O que foi feito
+- getBoletoStatus(gatewayId): parseia gatewayId composto (5 partes separadas por ponto), monta bill_id como covenantCode.bankNumber, GET /bills/{bill_id}?tipoConsulta=default
+- Mapeia status Santander → BoletoStatusResult: ATIVO→pending, LIQUIDADO→paid, LIQUIDADO PARCIALMENTE→paid, BAIXADO→cancelled
+- Se status LIQUIDADO ou LIQUIDADO PARCIALMENTE, faz segunda request com tipoConsulta=settlement para obter paidAt (settlementDate) e paidAmount (settlementValue convertido de reais para centavos)
+- cancelBoleto(gatewayId): PATCH /workspaces/{workspaceId}/bank_slips com { covenantCode, bankNumber, operation: 'BAIXAR' }
+- Retorna { success: true } se response 201/2xx; trata edge case de _errorCode no body apesar de status 2xx
+- testConnection(): GET /workspaces — se 200, retorna contagem de workspaces; se 401/403, credenciais inválidas; se erro TLS/cert, certificado inválido
+- validateWebhook e parseWebhookEvent mantidos como placeholder (US-SAN-006)
+- Helper parseGatewayId() extraído para reuso (split por ponto, valida 5 partes)
+- Helper mapSantanderStatus() para mapeamento de status
+- fetchSettlementData() como método privado best-effort (não falha a query principal)
+- Interfaces internas tipadas: SantanderBillStatusResponse, SantanderBillSettlementResponse, SantanderInstructionRequest/Response, SantanderWorkspacesResponse
+- prd.json: US-SAN-005 passes=true
+- npx tsc --noEmit: ✅ (erro pré-existente sanitize-html apenas)
+- npm run lint: ✅ sem erros
+
+### Lições
+- ⏳ O gatewayId composto usa ponto como separador e nsuDate usa hífen — split por ponto é seguro, resulta exatamente 5 partes
+- ⏳ settlementValue vem como string em reais ("X.XX") — converter para centavos (Math.round(parseFloat * 100)) para manter consistência com BoletoStatusResult.paidAmount
+- ⏳ A consulta settlement é best-effort — se falhar, o status principal já foi obtido, retorna sem paidAt/paidAmount em vez de estourar erro
+- ⏳ O PATCH para BAIXAR pode retornar 201 (não 200) como sucesso — tratar ambos
+- ⏳ Erros TLS/cert podem vir como exceções do fetch (não HTTP status) — detectar via keywords no message (certificate, ssl, tls, eproto)
+- ⏳ O authManager.authenticatedFetch já trata 401/403 com throw — testConnection precisa capturar essas exceções para retornar { ok: false } em vez de propagar
+
+## US-SAN-007 — Download de PDF do boleto Santander (2026-03-19)
+
+### O que foi feito
+- Novo método getBankSlipPdf() no SantanderProvider: POST /bills/{bill_id}/bank_slips com payerDocumentNumber como integer
+- bill_id formato: bankNumber.covenantCode (beneficiaryCode = covenantCode)
+- Retorna { link: string } com URL do PDF
+- Nova API route: GET /api/boletos/[boletoId]/pdf/route.ts
+- Autenticação via cookie accessToken + verifyAccessToken + canAccessCompany
+- Busca boleto com provider e proposal.client para obter cpfCnpj do pagador
+- Extrai covenantCode e bankNumber do gatewayId composto (5 partes separadas por ponto)
+- Instancia gateway via getGateway() e verifica instanceof SantanderProvider
+- Tratamento de erros: boleto não encontrado (404), acesso negado (403), provider não Santander (400), gatewayId inválido (400)
+- prd.json: US-SAN-007 passes=true
+- npx tsc --noEmit: ✅ (erro pré-existente sanitize-html apenas)
+- npm run lint: ✅ sem erros
+
+### Lições
+- ⏳ O bill_id para POST /bills/{bill_id}/bank_slips é bankNumber.covenantCode (ordem inversa do que se poderia esperar)
+- ⏳ payerDocumentNumber deve ser enviado como integer (parseInt) — a API Santander espera int64, não string
+- ⏳ getBankSlipPdf é método Santander-specific, não parte do PaymentGateway interface — uso de instanceof check na API route
+- ⏳ Next.js 15 App Router: params em route handlers é Promise — precisa de await params
+- ⏳ A cadeia para obter o documento do pagador é: boleto → proposal → client → cpfCnpj
+
+## US-SAN-008 — Frontend — configuração do provider Santander com upload de certificado (2026-03-19)
+
+### O que foi feito
+- Enhanced DynamicField component in integracoes-bancarias/page.tsx to detect PEM certificate fields
+- Detection via isPemCertificateField(): type "password" + helpText contains "PEM" (matches certificate and certificateKey from registry)
+- New PemCertificateField component renders:
+  - Textarea with monospace font for pasting PEM content
+  - File upload button (.crt/.pem/.cer for certificate, .key/.pem for certificateKey)
+  - Live PEM validation indicator (green checkmark if valid, red error if not starting with "-----BEGIN")
+  - Clear button to reset content
+- File upload reads content via FileReader.readAsText() and populates textarea
+- PEM validation in handleSave(): blocks submission if certificate field has content not starting with "-----BEGIN"
+- PemCertificateField spans full 2 columns (sm:col-span-2) for better readability of PEM content
+- Sandbox/production toggle already existed and works correctly
+- "Testar Conexão" button already existed and calls testConnection() correctly
+- Provider Santander already appears in registry dropdown (from US-SAN-001)
+- settingsSchema fields already render with correct defaults via existing DynamicField
+- Updated help text hint: "Deixe campos de senha/certificado em branco para manter o valor atual"
+- Added imports: Textarea, Upload icon, CheckCircle2 icon, useRef
+- prd.json: US-SAN-008 passes=true
+- npx tsc --noEmit: ✅ (only pre-existing sanitize-html error)
+- npm run lint: ✅ sem erros
+
+### Lições
+- ⏳ PEM certificate fields are detected by helpText containing "PEM" — this is more robust than checking key names, and uses data already in the registry
+- ⏳ FileReader.readAsText() is the correct approach for reading .crt/.key files — they are text, not binary
+- ⏳ The existing DynamicField + provider config UI was already 90% complete for Santander — only PEM textarea + file upload was the missing piece
+- ⏳ PemCertificateField uses sm:col-span-2 to span the full grid width since PEM content is multi-line and needs space
+- ⏳ File input accept attribute should include .pem alongside .crt/.key since PEM files can have various extensions

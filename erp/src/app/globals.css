@@ -1,0 +1,144 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Backgrounds — warm whites */
+    --background: 0 0% 97.3%;        /* #FAFAF8 */
+    --background-subtle: 0 0% 93.3%; /* #F4F2EE */
+    --surface: 0 0% 100%;            /* #FFFFFF */
+    --surface-raised: 0 0% 100%;     /* #FFFFFF */
+
+    /* Texto */
+    --text-primary: 215 25% 11%;     /* #0F172A */
+    --text-secondary: 215 16% 47%;   /* #475569 */
+    --text-tertiary: 210 16% 73%;    /* #94A3B8 */
+    --text-disabled: 30 8% 84%;      /* #D6D3D1 */
+
+    /* Accent — Violet sofisticado */
+    --accent: 234 84% 67%;           /* #6366F1 */
+    --accent-hover: 234 84% 60%;     /* #4F46E5 */
+    --accent-subtle: 234 100% 96%;   /* #EEF2FF */
+    --accent-muted: 234 76% 92%;     /* #E0E7FF */
+
+    /* Borders */
+    --border: 20 11% 90%;            /* #E8E4DF */
+    --border-subtle: 30 13% 93%;     /* #F0ECE8 */
+    --border-focus: 234 84% 67%;     /* #6366F1 */
+
+    /* Status */
+    --success: 157 84% 28%;          /* #059669 */
+    --success-subtle: 156 100% 93%;  /* #ECFDF5 */
+    --warning: 35 87% 44%;           /* #D97706 */
+    --warning-subtle: 40 100% 95%;   /* #FFFBEB */
+    --danger: 3 84% 51%;             /* #DC2626 */
+    --danger-subtle: 4 93% 97%;      /* #FEF2F2 */
+    --info: 221 83% 53%;             /* #2563EB */
+    --info-subtle: 217 91% 94%;      /* #EFF6FF */
+
+    /* Sidebar — custom design tokens (used by custom classes) */
+    --sidebar-bg: 35 14% 92%;        /* #F2F0EB */
+    --sidebar-active-bg: 0 0% 100%;  /* #FFFFFF */
+    --sidebar-active-text: 234 84% 67%; /* #6366F1 */
+    --sidebar-hover-bg: 35 13% 91%;  /* #ECEAE4 */
+
+    /* Shadows (warm-tinted) */
+    --shadow-xs: 0 1px 2px rgba(28, 25, 23, 0.06);
+    --shadow-sm: 0 1px 3px rgba(28, 25, 23, 0.08), 0 1px 2px rgba(28, 25, 23, 0.06);
+    --shadow-md: 0 4px 6px rgba(28, 25, 23, 0.07), 0 2px 4px rgba(28, 25, 23, 0.06);
+    --shadow-lg: 0 10px 15px rgba(28, 25, 23, 0.08), 0 4px 6px rgba(28, 25, 23, 0.05);
+    --shadow-xl: 0 20px 25px rgba(28, 25, 23, 0.08), 0 8px 10px rgba(28, 25, 23, 0.04);
+
+    /* Radius */
+    --radius: 0.75rem;
+
+    /* shadcn Sidebar CSS vars — mapped to our design tokens */
+    --sidebar-background: 35 14% 92%;       /* matches --sidebar-bg */
+    --sidebar-foreground: 215 25% 11%;      /* matches --text-primary */
+    --sidebar-primary: 234 84% 67%;         /* matches --accent */
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 35 13% 91%;           /* matches --sidebar-hover-bg */
+    --sidebar-accent-foreground: 215 25% 11%; /* matches --text-primary */
+    --sidebar-border: 30 13% 93%;           /* matches --border-subtle */
+    --sidebar-ring: 234 84% 67%;            /* matches --accent */
+  }
+  .dark {
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  
+  body {
+    @apply bg-background text-text-primary;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+/* Global scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #D6D3D1;
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
+
+/* Scrollbar utility */
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: #D6D3D1 transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: #D6D3D1;
+    border-radius: 9999px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background-color: #94A3B8;
+  }
+}
+
+@layer utilities {
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}

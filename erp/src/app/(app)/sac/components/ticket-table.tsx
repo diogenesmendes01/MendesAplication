@@ -1,0 +1,602 @@
+"use client";
+
+import { useState, useEffect, useCallback, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import {
+  Plus,
+  ChevronLeft,
+  ChevronRight,
+  Search,
+  Mail,
+  MessageSquare,
+  Globe,
+  Tag,
+  Bot,
+  Star,
+  Filter,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { VirtualTable, VIRTUAL_SCROLL_THRESHOLD } from "@/components/ui/virtual-table";
+import { useCompany } from "@/contexts/company-context";
+import {
+  listClientsForSelect,
+  listUsersForAssign,
+  getTicketListBootstrap,
+  type PaginatedResult,
+  type TicketRow,
+  type TicketTab,
+} from "../tickets/actions";
+import type { ChannelType } from "@prisma/client";
+import { RA_STATUS } from "@/lib/reclameaqui/types";
+import { priorityLabel, priorityColor, statusLabel, statusColor } from "@/lib/sac/ticket-formatters";
+import { SlaAlertBanner } from "./sla-alert-banner";
+import { CreateTicketDialog } from "./create-ticket-dialog";
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+const dateFmt = new Intl.DateTimeFormat("pt-BR", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+});
+
+function channelIcon(channelType: string | null) {
+  switch (channelType) {
+    case "EMAIL":
+      return <Mail className="h-4 w-4 text-blue-600" />;
+    case "WHATSAPP":
+      return <MessageSquare className="h-4 w-4 text-green-600" />;
+    case "RECLAMEAQUI":
+      return null;
+    default:
+      return <Globe className="h-4 w-4 text-gray-500" />;
+  }
+}
+
+function raStatusColor(statusId: number | null): string {
+  switch (statusId) {
+    case RA_STATUS.NAO_RESPONDIDO:
+      return "bg-red-100 text-red-800";
+    case RA_STATUS.RESPONDIDO:
+      return "bg-green-100 text-green-800";
+    case RA_STATUS.REPLICA_CONSUMIDOR:
+    case RA_STATUS.REPLICA_EMPRESA:
+    case RA_STATUS.REPLICA_PENDENTE:
+      return "bg-yellow-100 text-yellow-800";
+    case RA_STATUS.AVALIADO_RESOLVIDO:
+      return "bg-emerald-100 text-emerald-800";
+    // AVALIADO (9) é tratado como atenção junto com AVALIADO_NAO_RESOLVIDO (19):
+    // no código anterior a string "Avaliado" nunca matchava nenhum case e caía
+    // no default (cinza). Com IDs numéricos, mapeamos explicitamente para vermelho
+    // porque "avaliado sem distinção de resolução" indica que o consumidor já
+    // avaliou e o desfecho ainda não foi qualificado como resolvido — requer
+    // atenção da equipe. Comportamento intencional, não uma regressão.
+    case RA_STATUS.AVALIADO:
+    case RA_STATUS.AVALIADO_NAO_RESOLVIDO:
+      return "bg-red-100 text-red-800";
+    case RA_STATUS.CONGELADO:
+    case RA_STATUS.DESATIVADO_CONSUMIDOR:
+    case RA_STATUS.INATIVA_RA:
+      return "bg-gray-100 text-gray-700";
+    default:
+      return "bg-gray-100 text-gray-600";
+  }
+}
+
+function slaStatusColor(status: string | null) {
+  switch (status) {
+    case "ok":
+      return "bg-green-100 text-green-800";
+    case "at_risk":
+      return "bg-yellow-100 text-yellow-800";
+    case "breached":
+      return "bg-red-100 text-red-800";
+    default:
+      return "";
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Row cell renderer (shared between normal table and VirtualTable)
+// ---------------------------------------------------------------------------
+
+function TicketRowCells({ row }: { row: TicketRow }) {
+  return (
+    <>
+      {/* Canal */}
+      <TableCell>
+        <div className="flex items-center gap-1.5" title={row.channelType ?? "Web"} aria-label={`Canal: ${row.channelType ?? "Web"}`}>
+          {row.channelType === "RECLAMEAQUI" ? (
+            <Badge className="bg-purple-100 text-purple-800 text-[10px] px-1.5 py-0 font-bold">
+              RA
+            </Badge>
+          ) : (
+            channelIcon(row.channelType)
+          )}
+          {row.hasPendingSuggestion && (
+            <span title="Sugestão IA pendente" className="text-sm">🤖</span>
+          )}
+        </div>
+      </TableCell>
+      {/* Cliente */}
+      <TableCell className="font-medium">{row.client.name}</TableCell>
+      {/* Assunto */}
+      <TableCell className="max-w-[200px]">
+        <div className="flex items-center gap-2">
+          <span className="truncate">{row.subject}</span>
+          {row.channelType === "RECLAMEAQUI" && row.raRating && (
+            <span
+              className="inline-flex items-center gap-0.5 text-xs font-medium text-yellow-700 whitespace-nowrap"
+              title="Nota RA"
+            >
+              <Star className="h-3 w-3 fill-yellow-500 text-yellow-500" />
+              {row.raRating}
+            </span>
+          )}
+        </div>
+      </TableCell>
+      {/* Prioridade */}
+      <TableCell>
+        <span
+          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${priorityColor(row.priority)}`}
+        >
+          {priorityLabel(row.priority)}
+        </span>
+      </TableCell>
+      {/* Status */}
+      <TableCell>
+        <div className="flex flex-col gap-1">
+          <span
+            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusColor(row.status)}`}
+          >
+            {statusLabel(row.status)}
+          </span>
+          {row.channelType === "RECLAMEAQUI" && row.raStatusName && (
+            <span
+              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${raStatusColor(row.raStatusId)}`}
+            >
+              {row.raStatusName}
+            </span>
+          )}
+        </div>
+      </TableCell>
+      {/* SLA */}
+      <TableCell>
+        {row.slaStatus ? (
+          <span
+            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${slaStatusColor(row.slaStatus)}`}
+          >
+            {row.slaTimeLeft}
+          </span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        )}
+      </TableCell>
+      {/* Tags */}
+      <TableCell>
+        {row.tags.length > 0 ? (
+          <div className="flex flex-wrap gap-1">
+            {row.tags.slice(0, 2).map((tag) => (
+              <Badge
+                key={tag}
+                variant="secondary"
+                className="text-[10px] px-1.5 py-0"
+              >
+                <Tag className="mr-0.5 h-3 w-3" />
+                {tag}
+              </Badge>
+            ))}
+            {row.tags.length > 2 && (
+              <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                +{row.tags.length - 2}
+              </Badge>
+            )}
+          </div>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        )}
+      </TableCell>
+      {/* Responsável */}
+      <TableCell>
+        {row.assignee?.name ?? (
+          <span className="text-muted-foreground">—</span>
+        )}
+      </TableCell>
+      {/* Data */}
+      <TableCell>{dateFmt.format(new Date(row.createdAt))}</TableCell>
+    </>
+  );
+}
+
+const TICKET_COL_COUNT = 9;
+
+// ---------------------------------------------------------------------------
+// Props
+// ---------------------------------------------------------------------------
+
+interface TicketTableProps {
+  /** When set, pre-filters by channel and hides the channel filter dropdown */
+  channelType?: ChannelType;
+}
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
+export function TicketTable({ channelType: fixedChannel }: TicketTableProps) {
+  const router = useRouter();
+  const { selectedCompanyId } = useCompany();
+
+  const [tickets, setTickets] =
+    useState<PaginatedResult<TicketRow> | null>(null);
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(true);
+
+  // Tabs & search
+  const [activeTab, setActiveTab] = useState<TicketTab>("all");
+  const [search, setSearch] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [channelFilter, setChannelFilter] = useState<ChannelType | "">("");
+  const [pendingSuggestionFilter, setPendingSuggestionFilter] = useState(false);
+  const [tabCounts, setTabCounts] = useState<{
+    slaCritical: number;
+    refunds: number;
+  }>({ slaCritical: 0, refunds: 0 });
+  const [slaAlerts, setSlaAlerts] = useState<{
+    breached: number;
+    atRisk: number;
+  }>({ breached: 0, atRisk: 0 });
+
+  // Dropdown data
+  const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
+  const [users, setUsers] = useState<{ id: string; name: string }[]>([]);
+
+  // Dialog state
+  const [dialogOpen, setDialogOpen] = useState(false);
+
+  // Effective channel: fixed prop wins over dropdown
+  const effectiveChannel = fixedChannel || channelFilter || undefined;
+
+  // ---------------------------------------------------
+  // Load data
+  // ---------------------------------------------------
+
+  const loadTickets = useCallback(async () => {
+    if (!selectedCompanyId) return;
+    setLoading(true);
+    try {
+      const { tickets: result, tabCounts: counts, slaAlerts: alerts } =
+        await getTicketListBootstrap({
+          companyId: selectedCompanyId,
+          page,
+          tab: activeTab,
+          search: search || undefined,
+          channelType: effectiveChannel,
+          hasPendingSuggestion: pendingSuggestionFilter || undefined,
+        });
+      setTickets(result);
+      setTabCounts(counts);
+      setSlaAlerts(alerts);
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Erro ao carregar tickets"
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedCompanyId, page, activeTab, search, effectiveChannel, pendingSuggestionFilter]);
+
+  useEffect(() => {
+    loadTickets();
+  }, [loadTickets]);
+
+  // Load dropdown data
+  useEffect(() => {
+    if (!selectedCompanyId) return;
+    Promise.allSettled([
+      listClientsForSelect(selectedCompanyId),
+      listUsersForAssign(selectedCompanyId),
+    ]).then(([c, u]) => {
+      if (c.status === "fulfilled") setClients(c.value);
+      if (u.status === "fulfilled") setUsers(u.value);
+    });
+  }, [selectedCompanyId]);
+
+  // ---------------------------------------------------
+  // Search handler
+  // ---------------------------------------------------
+
+  function handleSearch(e: FormEvent) {
+    e.preventDefault();
+    setSearch(searchInput);
+    setPage(1);
+  }
+
+  // ---------------------------------------------------
+  // Tab change
+  // ---------------------------------------------------
+
+  function handleTabChange(value: string) {
+    setActiveTab(value as TicketTab);
+    setPage(1);
+  }
+
+  // ---------------------------------------------------
+  // No company selected
+  // ---------------------------------------------------
+
+  if (!selectedCompanyId) {
+    return (
+      <div className="flex h-64 items-center justify-center text-muted-foreground">
+        Selecione uma empresa para visualizar os tickets.
+      </div>
+    );
+  }
+
+  // ---------------------------------------------------
+  // Derived state for virtual vs normal table
+  // ---------------------------------------------------
+
+  const rows = tickets?.data ?? [];
+  const useVirtual = !loading && rows.length > VIRTUAL_SCROLL_THRESHOLD;
+
+  // Header row shared between virtual and normal table
+  const tableHeader = (
+    <TableRow>
+      <TableHead className="w-[40px]">Canal</TableHead>
+      <TableHead>Cliente</TableHead>
+      <TableHead>Assunto</TableHead>
+      <TableHead>Prioridade</TableHead>
+      <TableHead>Status</TableHead>
+      <TableHead>SLA</TableHead>
+      <TableHead>Tags</TableHead>
+      <TableHead>Responsável</TableHead>
+      <TableHead>Data</TableHead>
+    </TableRow>
+  );
+
+  // ---------------------------------------------------
+  // Render
+  // ---------------------------------------------------
+
+  return (
+    <div className="space-y-6">
+      {/* Header row: New Ticket button */}
+      <div className="flex items-center justify-end">
+        <Button onClick={() => setDialogOpen(true)}>
+          <Plus className="mr-2 h-4 w-4" />
+          Novo Ticket
+        </Button>
+      </div>
+
+      {/* SLA Alert Banner */}
+      <SlaAlertBanner
+        breached={slaAlerts.breached}
+        atRisk={slaAlerts.atRisk}
+        onViewSlaCritical={() => {
+          setActiveTab("sla_critical");
+          setPage(1);
+        }}
+      />
+
+      {/* Tabs + Search */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <Tabs value={activeTab} onValueChange={handleTabChange}>
+          <TabsList>
+            <TabsTrigger value="all">Todos</TabsTrigger>
+            <TabsTrigger value="sla_critical" className="gap-1.5">
+              SLA Crítico
+              {tabCounts.slaCritical > 0 && (
+                <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-bold text-white">
+                  {tabCounts.slaCritical}
+                </span>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="refunds" className="gap-1.5">
+              Reembolsos
+              {tabCounts.refunds > 0 && (
+                <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-orange-500 px-1.5 text-[10px] font-bold text-white">
+                  {tabCounts.refunds}
+                </span>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="my_tickets">Meus Tickets</TabsTrigger>
+          </TabsList>
+        </Tabs>
+
+        <form onSubmit={handleSearch} className="flex items-center gap-2">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Buscar cliente ou assunto..."
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              className="w-64 pl-9"
+            />
+          </div>
+          <Button type="submit" variant="outline" size="sm">
+            Buscar
+          </Button>
+          {search && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setSearch("");
+                setSearchInput("");
+                setPage(1);
+              }}
+            >
+              Limpar
+            </Button>
+          )}
+        </form>
+      </div>
+
+      {/* Filters (hide channel dropdown when channel is fixed via prop) */}
+      <div className="flex flex-wrap items-center gap-4">
+        {!fixedChannel && (
+          <div className="flex items-center gap-2">
+            <Filter className="h-4 w-4 text-muted-foreground" />
+            <Label className="text-sm font-medium">Canal:</Label>
+            <Select
+              value={channelFilter || "__all__"}
+              onValueChange={(v) => {
+                setChannelFilter(v === "__all__" ? "" : (v as ChannelType));
+                setPage(1);
+              }}
+            >
+              <SelectTrigger className="w-[160px] h-8 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">Todos</SelectItem>
+                <SelectItem value="EMAIL">Email</SelectItem>
+                <SelectItem value="WHATSAPP">WhatsApp</SelectItem>
+                <SelectItem value="RECLAMEAQUI">Reclame Aqui</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        <div className="flex items-center gap-2">
+          <Switch
+            id="pending-suggestion"
+            checked={pendingSuggestionFilter}
+            onCheckedChange={(checked) => {
+              setPendingSuggestionFilter(!!checked);
+              setPage(1);
+            }}
+          />
+          <Label htmlFor="pending-suggestion" className="text-sm cursor-pointer">
+            <Bot className="inline h-4 w-4 mr-1" />
+            Com sugestão pendente
+          </Label>
+        </div>
+      </div>
+
+      {/* Table — loading/empty use normal table; large pages use VirtualTable */}
+      {loading ? (
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>{tableHeader}</TableHeader>
+            <TableBody>
+              <TableRow>
+                <TableCell colSpan={TICKET_COL_COUNT} className="h-24 text-center">
+                  Carregando...
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </div>
+      ) : rows.length === 0 ? (
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>{tableHeader}</TableHeader>
+            <TableBody>
+              <TableRow>
+                <TableCell colSpan={TICKET_COL_COUNT} className="h-24 text-center">
+                  Nenhum ticket encontrado.
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </div>
+      ) : useVirtual ? (
+        <VirtualTable
+          data={rows}
+          colCount={TICKET_COL_COUNT}
+          estimateSize={56}
+          containerHeight="calc(100vh - 420px)"
+          renderHeader={() => tableHeader}
+          renderRow={(row) => <TicketRowCells row={row} />}
+          getRowProps={(row) => ({
+            className: "cursor-pointer hover:bg-muted/50",
+            onClick: () => router.push(`/sac/tickets/${row.id}`),
+          })}
+        />
+      ) : (
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>{tableHeader}</TableHeader>
+            <TableBody>
+              {rows.map((row) => (
+                <TableRow
+                  key={row.id}
+                  className="cursor-pointer hover:bg-muted/50"
+                  onClick={() => router.push(`/sac/tickets/${row.id}`)}
+                >
+                  <TicketRowCells row={row} />
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+
+      {/* Pagination */}
+      {tickets && tickets.totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">
+            Página {tickets.page} de {tickets.totalPages} ({tickets.total}{" "}
+            registros)
+          </p>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={tickets.page <= 1}
+              onClick={() => setPage((p) => p - 1)}
+            >
+              <ChevronLeft className="mr-1 h-4 w-4" />
+              Anterior
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={tickets.page >= tickets.totalPages}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              Próximo
+              <ChevronRight className="ml-1 h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Create Dialog */}
+      <CreateTicketDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        companyId={selectedCompanyId}
+        clients={clients}
+        users={users}
+        onCreated={loadTickets}
+      />
+    </div>
+  );
+}

@@ -1,0 +1,179 @@
+name: "🔍 QA Review"
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  qa-review:
+    name: "QA Analysis"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Get PR Info & Diff
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr diff ${{ github.event.pull_request.number }} > /tmp/pr_diff.txt
+          # Truncate large diffs
+          if [ $(wc -c < /tmp/pr_diff.txt) -gt 80000 ]; then
+            head -c 80000 /tmp/pr_diff.txt > /tmp/pr_diff_trunc.txt
+            echo -e "\n[DIFF TRUNCADO]" >> /tmp/pr_diff_trunc.txt
+            mv /tmp/pr_diff_trunc.txt /tmp/pr_diff.txt
+          fi
+
+      - name: QA Analysis
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_BRANCH: ${{ github.event.pull_request.head.ref }}
+          PR_BASE: ${{ github.event.pull_request.base.ref }}
+          PR_ADDITIONS: ${{ github.event.pull_request.additions }}
+          PR_DELETIONS: ${{ github.event.pull_request.deletions }}
+          PR_CHANGED: ${{ github.event.pull_request.changed_files }}
+          PR_NUM: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          python3 << 'PYEOF'
+          import json, os, urllib.request
+
+          diff = open("/tmp/pr_diff.txt").read()
+          
+          prompt = f"""Você é o QA Agent 🔍 — analista de qualidade rigoroso, técnico e direto.
+
+          PR #{os.environ['PR_NUM']}: {os.environ['PR_TITLE']}
+          Repo: {os.environ['REPO']}
+          Branch: {os.environ['PR_BRANCH']} → {os.environ['PR_BASE']}
+          Autor: {os.environ['PR_AUTHOR']}
+          Arquivos: {os.environ['PR_CHANGED']} | +{os.environ['PR_ADDITIONS']} -{os.environ['PR_DELETIONS']}
+
+          DIFF:
+          ```
+          {diff}
+          ```
+
+          ANALISE E RETORNE EM MARKDOWN:
+
+          ## Resumo
+          3-5 linhas do que a PR faz.
+
+          ## Findings
+          Para cada problema:
+          - Severity: 🔴 BLOCK | 🟡 WARN | 🔵 INFO
+          - Confidence: (0.0-1.0)
+          - Arquivo e linha
+          - Descrição
+          - Se BLOCK: inclua diff corretivo
+
+          ## Checklist
+          - [ ] Segurança (secrets, injection, auth)
+          - [ ] Funcionalidade (atende requisitos, edge cases)
+          - [ ] Code Smells (duplicação, complexidade)
+          - [ ] Error Handling
+
+          ## Veredicto
+          ✅ APPROVED | ⚠️ NEEDS CHANGES | 🚫 BLOCKED
+
+          Regras:
+          - Confidence score em CADA finding
+          - Priorize segurança > funcionalidade > performance > estilo
+          - Funcional e seguro > perfeito
+          - Direto e técnico, sem elogios vazios"""
+
+          payload = json.dumps({
+              "model": "claude-sonnet-4-20250514",
+              "max_tokens": 4096,
+              "messages": [{"role": "user", "content": prompt}]
+          }).encode()
+
+          req = urllib.request.Request(
+              "https://api.anthropic.com/v1/messages",
+              data=payload,
+              headers={
+                  "x-api-key": os.environ["ANTHROPIC_API_KEY"],
+                  "anthropic-version": "2023-06-01",
+                  "content-type": "application/json"
+              }
+          )
+
+          try:
+              with urllib.request.urlopen(req, timeout=120) as resp:
+                  data = json.load(resp)
+                  review = "\n".join(b["text"] for b in data["content"] if b["type"] == "text")
+          except Exception as e:
+              review = f"❌ QA Analysis failed: {e}"
+
+          with open("/tmp/qa_review.md", "w") as f:
+              f.write(review)
+          
+          print(review[:500])
+          PYEOF
+
+      - name: Post PR Comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          BODY="## 🔍 QA Review — PR #${{ github.event.pull_request.number }}
+
+          $(cat /tmp/qa_review.md)
+
+          ---
+          *Análise automatizada pelo QA Agent 🔍 | [Contestar findings](https://github.com/${{ github.repository }}/pull/${{ github.event.pull_request.number }})*"
+
+          gh pr comment ${{ github.event.pull_request.number }} --body "$BODY"
+
+      - name: Notify Telegram
+        if: always()
+        env:
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          PR_NUM: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          REPO: ${{ github.repository }}
+        run: |
+          python3 << 'PYEOF'
+          import json, os, urllib.request
+
+          review = open("/tmp/qa_review.md").read()[:3500]
+          
+          msg = f"""🔍 QA Review — PR #{os.environ['PR_NUM']}
+          📦 {os.environ['REPO']}
+          🔗 {os.environ['PR_URL']}
+
+          {review}"""
+
+          payload = json.dumps({
+              "chat_id": "-1003730685847",
+              "message_thread_id": 18,
+              "text": msg[:4000],
+              "disable_web_page_preview": True
+          }).encode()
+
+          req = urllib.request.Request(
+              f"https://api.telegram.org/bot{os.environ['TG_BOT_TOKEN']}/sendMessage",
+              data=payload,
+              headers={"Content-Type": "application/json"}
+          )
+
+          try:
+              urllib.request.urlopen(req, timeout=10)
+              print("✅ Telegram notified")
+          except Exception as e:
+              print(f"⚠️ Telegram failed: {e}")
+          PYEOF

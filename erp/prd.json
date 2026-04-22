@@ -1,0 +1,162 @@
+{
+  "project": "mendeserp",
+  "feature": "santander-provider",
+  "branchName": "feat/santander-provider",
+  "createdBy": "Vex",
+  "createdAt": "2026-03-19",
+  "userStories": [
+    {
+      "id": "US-SAN-001",
+      "title": "Adicionar 'santander' ao type system, registry e constants",
+      "description": "Como desenvolvedor, quero que o tipo 'santander' esteja registrado no módulo de pagamentos, para que o frontend saiba quais campos renderizar e o backend reconheça o provider.",
+      "priority": 1,
+      "passes": true,
+      "acceptanceCriteria": [
+        "constants.ts: PRODUCTION_PROVIDER_TYPES inclui 'santander'",
+        "registry.ts: PRODUCTION_PROVIDER_REGISTRY contém 'santander' com id, name='Santander', configSchema (7 campos) e settingsSchema (9 campos)",
+        "configSchema: clientId (text, required), clientSecret (password, required), keyUser (text, required), covenantCode (text, required), certificate (password, required, helpText='Conteúdo do .CRT em PEM'), certificateKey (password, required, helpText='Conteúdo do .KEY em PEM'), workspaceId (text, required)",
+        "settingsSchema: documentKind (select, options: DUPLICATA_MERCANTIL/DUPLICATA_SERVICO/RECIBO/NOTA_PROMISSORIA/OUTROS), finePercentage (number), fineQuantityDays (number), interestPercentage (number), writeOffQuantityDays (number), protestType (select, SEM_PROTESTO/DIAS_CORRIDOS/DIAS_UTEIS), defaultMessages (text), pixKeyType (select, CPF/CNPJ/CELULAR/EMAIL/EVP), pixDictKey (text)",
+        "factory.ts: case 'santander' instancia SantanderProvider (pode ser placeholder throw no início)",
+        "npx tsc --noEmit sem erros"
+      ],
+      "notes": "Seguir padrão do pagarme e pinbank no registry. Certificado é armazenado como string PEM no campo credentials (encriptado AES como os outros). Ver spec OpenAPI em dev/erp/santander-api-cobranca-openapi.yaml."
+    },
+    {
+      "id": "US-SAN-002",
+      "title": "SantanderAuthManager — mTLS + OAuth 2.0 com cache de token",
+      "description": "Como desenvolvedor, quero uma classe que gerencie autenticação mTLS e OAuth 2.0 do Santander, para que o provider faça requests autenticados sem se preocupar com token.",
+      "priority": 2,
+      "passes": false,
+      "acceptanceCriteria": [
+        "Arquivo: erp/src/lib/payment/providers/santander-auth.ts",
+        "Classe SantanderAuthManager com constructor(credentials: SantanderCredentials)",
+        "SantanderCredentials: { clientId, clientSecret, certificate (PEM string), certificateKey (PEM string), keyUser, sandbox }",
+        "getHttpsAgent(): retorna https.Agent com cert e key para mTLS",
+        "getAccessToken(): obtém token OAuth via POST ao endpoint de token do Santander com grant_type=client_credentials",
+        "Token cacheado em memória com expiração (renovar quando faltam <= 60s)",
+        "getAuthHeaders(): retorna { Authorization: 'Bearer <token>', 'X-Application-Key': keyUser, 'Content-Type': 'application/json' }",
+        "getBaseUrl(): retorna URL de sandbox ou produção baseado na flag",
+        "Método authenticatedFetch(path, options): wrapper que injeta agent + headers automaticamente",
+        "Trata erros 401/403 com mensagem clara sobre credenciais ou certificado",
+        "Compila sem erro"
+      ],
+      "notes": "URLs base: Produção=https://trust-open.api.santander.com.br/collection_bill_management/v2 | Sandbox=https://trust-sandbox.api.santander.com.br/collection_bill_management/v2. Para mTLS em Node.js: usar node:https Agent com cert/key. O endpoint OAuth exato precisa ser confirmado no portal Santander (geralmente /oauth/token na mesma base). Security scheme: Bearer JWE + X-Application-Key header."
+    },
+    {
+      "id": "US-SAN-003",
+      "title": "Gerador atômico de Nosso Número por convênio",
+      "description": "Como sistema, quero gerar nosso número sequencial e único por empresa/convênio, para evitar rejeição de boleto por duplicidade no banco.",
+      "priority": 3,
+      "passes": true,
+      "acceptanceCriteria": [
+        "Schema Prisma: novo model SantanderSequence { id, companyId, covenantCode, lastNumber (Int, default 0), updatedAt } com @@unique([companyId, covenantCode])",
+        "Migration roda sem erro",
+        "Função getNextBankNumber(companyId, covenantCode): incrementa atomicamente via Prisma transaction e retorna próximo número como string (até 13 dígitos)",
+        "Se registro não existe, cria com lastNumber=1 e retorna '1'",
+        "Concorrência: usa Prisma $transaction com isolation level para evitar race condition",
+        "Permite seed manual: setLastBankNumber(companyId, covenantCode, number) para clientes que já tinham numeração",
+        "Compila sem erro"
+      ],
+      "notes": "bankNumber no Santander é string numérica de 1 a 13 dígitos. Pattern: ^[0-9]{1,13}$. Cada convênio tem sua sequência independente."
+    },
+    {
+      "id": "US-SAN-004",
+      "title": "SantanderProvider — createBoleto",
+      "description": "Como admin, quero registrar boletos no Santander via API, para cobrar clientes com boleto híbrido (código de barras + QR Code Pix).",
+      "priority": 4,
+      "passes": true,
+      "acceptanceCriteria": [
+        "Arquivo: erp/src/lib/payment/providers/santander.provider.ts",
+        "Classe SantanderProvider implements PaymentGateway",
+        "Constructor recebe credentials (SantanderCredentials) + metadata (settings) + webhookSecret",
+        "Instancia SantanderAuthManager internamente",
+        "createBoleto(input: CreateBoletoInput): mapeia para RequestBankSlipBase da API Santander",
+        "Gera nsuCode único: timestamp + random alfanumérico (até 20 chars, pattern ^[A-Za-z0-9]{1,20}$)",
+        "nsuDate: data atual YYYY-MM-DD",
+        "environment: TESTE se sandbox, PRODUCAO se não",
+        "bankNumber: via getNextBankNumber()",
+        "Mapeia customer → payer: { name, documentType (CPF/CNPJ), documentNumber, address, neighborhood, city, state, zipCode }",
+        "nominalValue: amount formatado como string com 2 decimais ('10.15')",
+        "POST /workspaces/{workspaceId}/bank_slips com auth headers",
+        "Response mapeada para CreateBoletoResult: gatewayId (composto), barcode, line (digitableLine), qrCode (qrCodePix), url (qrCodeUrl), nossoNumero (bankNumber)",
+        "Se key/txId configurados nos settings, inclui no request para boleto híbrido Pix",
+        "Trata erros com ErrorTemplate do Santander (_errorCode, _message, _details)",
+        "factory.ts: case 'santander' instancia SantanderProvider",
+        "Compila sem erro"
+      ],
+      "notes": "Campos required da API: environment, nsuCode, nsuDate, covenantCode, bankNumber, dueDate, issueDate, nominalValue, payer, documentKind, paymentType. Ver RequestBankSlipBase na spec OpenAPI. paymentType default: REGISTRO. documentKind default: DUPLICATA_MERCANTIL (configurável via settings)."
+    },
+    {
+      "id": "US-SAN-005",
+      "title": "SantanderProvider — getBoletoStatus + cancelBoleto + testConnection",
+      "description": "Como admin, quero consultar status e cancelar boletos do Santander, para manter controle sobre cobranças emitidas.",
+      "priority": 5,
+      "passes": true,
+      "acceptanceCriteria": [
+        "getBoletoStatus(gatewayId): parseia gatewayId composto, faz GET /bills/{covenantCode}.{bankNumber}?tipoConsulta=default",
+        "Mapeia status Santander → BoletoStatusResult: ATIVO→pending, LIQUIDADO→paid, LIQUIDADO PARCIALMENTE→paid, BAIXADO→cancelled",
+        "Se status=LIQUIDADO, faz segunda request com tipoConsulta=settlement para obter paidAt (settlementDate) e paidAmount (settlementValue)",
+        "cancelBoleto(gatewayId): PATCH /workspaces/{workspaceId}/bank_slips com { covenantCode, bankNumber, operation: 'BAIXAR' }",
+        "Return { success: true } se response 201 com message de sucesso",
+        "testConnection(): GET /workspaces — se 200, { ok: true, message: 'Conectado ao Santander (X workspaces)' }; se 401, { ok: false, message: 'Credenciais inválidas' }; se erro TLS, { ok: false, message: 'Certificado inválido ou expirado' }",
+        "Compila sem erro"
+      ],
+      "notes": "O bill_id para consulta Bills é formato 'covenantCode.bankNumber'. A consulta settlement retorna array settlementData com detalhes do pagamento. Para cancel, a operação BAIXAR é via PATCH no endpoint de bank_slips (não DELETE). Pode enviar até 10 instruções por request."
+    },
+    {
+      "id": "US-SAN-006",
+      "title": "Webhook receiver para pagamentos Santander",
+      "description": "Como sistema, quero receber notificações automáticas quando um boleto Santander é pago, para atualizar o status sem polling.",
+      "priority": 6,
+      "passes": true,
+      "acceptanceCriteria": [
+        "Nova API route: POST /api/webhooks/santander/[providerId]",
+        "Valida que providerId existe e é provider Santander ativo",
+        "SantanderProvider.validateWebhook(): verifica headers/origem (IP allowlist ou signature se disponível)",
+        "SantanderProvider.parseWebhookEvent(): parseia payload de liquidação do Santander",
+        "Mapeia evento: pagamento boleto → boleto.paid, pagamento Pix → boleto.paid, baixa → boleto.cancelled",
+        "Extrai gatewayId, paidAt, paidAmount do payload",
+        "Reutiliza lógica existente do webhook handler para atualizar boleto/receivable no banco",
+        "Retorna 200 OK para o Santander confirmar recebimento",
+        "Log de webhook para debugging",
+        "Compila sem erro"
+      ],
+      "notes": "Webhook Santander é configurado por workspace com flags separadas para boleto (bankSlipBillingWebhookActive) e Pix (pixBillingWebhookActive). A URL do webhook será registrada na criação/update da workspace. Formato exato do payload de webhook precisa ser confirmado — a spec OpenAPI não detalha o payload de notificação push."
+    },
+    {
+      "id": "US-SAN-007",
+      "title": "Download de PDF do boleto Santander",
+      "description": "Como usuário, quero baixar o PDF de um boleto Santander, para enviar ao cliente ou imprimir.",
+      "priority": 7,
+      "passes": true,
+      "acceptanceCriteria": [
+        "Novo método no SantanderProvider: getBankSlipPdf(gatewayId, payerDocumentNumber): POST /bills/{bill_id}/bank_slips com { payerDocumentNumber }",
+        "bill_id formato: bankNumber.beneficiaryCode (ou digitableLine)",
+        "Response: { link: 'url_do_pdf' }",
+        "Nova API route: GET /api/boletos/[boletoId]/pdf — verifica permissão, chama provider.getBankSlipPdf(), retorna URL ou redirect",
+        "Frontend: botão 'Baixar PDF' na listagem/detalhe de boletos quando provider=santander",
+        "Compila sem erro"
+      ],
+      "notes": "O endpoint POST /bills/{bill_id}/bank_slips retorna um link para o PDF. O bill_id é composto de BankNumber.BeneficiaryCode ou pode ser DigitableLine. payerDocumentNumber é int64 (CPF/CNPJ sem formatação)."
+    },
+    {
+      "id": "US-SAN-008",
+      "title": "Frontend — configuração do provider Santander com upload de certificado",
+      "description": "Como admin, quero configurar o Santander como provider de pagamento na interface do ERP, incluindo upload do certificado digital.",
+      "priority": 8,
+      "passes": true,
+      "acceptanceCriteria": [
+        "Provider Santander aparece na lista de providers disponíveis para adicionar",
+        "Campos do configSchema renderizados: clientId, clientSecret, keyUser, covenantCode, workspaceId",
+        "Campos certificate e certificateKey: input tipo textarea com placeholder para colar conteúdo PEM, OU upload de arquivo .crt/.key que lê o conteúdo",
+        "Alternativa: upload de .PFX com campo de senha — conversão server-side para .CRT + .KEY via OpenSSL",
+        "Campos do settingsSchema renderizados com defaults corretos",
+        "Botão 'Testar Conexão' funcional (chama testConnection())",
+        "Toggle sandbox/produção visível e claro",
+        "Validação: certificado PEM deve começar com '-----BEGIN' (validação básica no frontend)",
+        "Compila sem erro"
+      ],
+      "notes": "A infraestrutura de UI para providers já existe — o registry define os campos e o frontend renderiza dinamicamente. A novidade é que certificate/certificateKey são campos de texto longo (PEM), não senhas curtas. Considerar UX de upload de arquivo vs textarea."
+    }
+  ]
+}

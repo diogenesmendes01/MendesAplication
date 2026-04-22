@@ -1,0 +1,461 @@
+
+import { DEFAULT_MODELS } from "./pricing";
+import { logger } from "@/lib/logger";
+
+// ─── Interfaces ───────────────────────────────────────────────────────────────
+
+export interface AiToolCall {
+  id: string;
+  type: "function";
+  function: {
+    name: string;
+    arguments: string; // JSON string
+  };
+}
+
+export interface AiMessage {
+  role: "system" | "user" | "assistant" | "tool";
+  content: string | null;
+  tool_calls?: AiToolCall[];
+  tool_call_id?: string;
+}
+
+// ─── Strongly-typed tool definitions ──────────────────────────────────────────
+
+/** JSON-Schema property descriptor used inside tool parameter schemas. */
+export interface JsonSchemaProperty {
+  type: "string" | "number" | "boolean" | "array" | "object";
+  description?: string;
+  enum?: string[];
+  items?: JsonSchemaProperty;
+}
+
+export interface AiToolParameters<
+  Props extends Record<string, JsonSchemaProperty> = Record<string, JsonSchemaProperty>,
+  Req extends readonly (keyof Props & string)[] = readonly (keyof Props & string)[],
+> {
+  type: "object";
+  properties: Props;
+  required: Req;
+}
+
+export interface AiToolDefinition<
+  N extends string = string,
+  Props extends Record<string, JsonSchemaProperty> = Record<string, JsonSchemaProperty>,
+  Req extends readonly (keyof Props & string)[] = readonly (keyof Props & string)[],
+> {
+  name: N;
+  description: string;
+  parameters: AiToolParameters<Props, Req>;
+}
+
+export function defineTool<
+  N extends string,
+  Props extends Record<string, JsonSchemaProperty>,
+  const Req extends readonly (keyof Props & string)[],
+>(tool: {
+  name: N;
+  description: string;
+  parameters: {
+    type: "object";
+    properties: Props;
+    required: Req;
+  };
+}): AiToolDefinition<N, Props, Req> {
+  return tool;
+}
+
+type JsonSchemaTypeMap = {
+  string: string;
+  number: number;
+  boolean: boolean;
+  array: unknown[];
+  object: Record<string, unknown>;
+};
+
+export type InferToolArgs<T> = T extends AiToolDefinition<
+  string,
+  infer Props,
+  infer Req
+>
+  ? Req extends readonly (infer R extends keyof Props & string)[]
+    ? { [K in R]: JsonSchemaTypeMap[Props[K]["type"]] } &
+      { [K in Exclude<keyof Props & string, R>]?: JsonSchemaTypeMap[Props[K]["type"]] }
+    : never
+  : never;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type AnyAiToolDefinition = AiToolDefinition<string, any, any>;
+
+export interface AiResponse {
+  content?: string | null;
+  tool_calls?: AiToolCall[];
+  usage?: { inputTokens: number; outputTokens: number };
+}
+
+export interface ProviderConfig {
+  provider: string; // openai | anthropic | deepseek | grok | qwen
+  apiKey: string;
+  model?: string;
+  temperature?: number;
+  maxTokens?: number;
+}
+
+// ─── Provider constants ───────────────────────────────────────────────────────
+
+const PROVIDER_BASE_URLS: Record<string, string> = {
+  openai: "https://api.openai.com",
+  deepseek: "https://api.deepseek.com",
+  grok: "https://api.x.ai",
+  qwen: "https://dashscope.aliyuncs.com/compatible-mode",
+};
+
+// ─── Global fallback guard ────────────────────────────────────────────────────
+
+/**
+ * Returns true when the BLOCK_GLOBAL_AI_FALLBACK env var is set to a truthy
+ * value ("true", "1", "yes").  When enabled, AI calls that would fall back to
+ * the global env API key are blocked instead, preventing unattributed costs.
+ */
+export function isGlobalFallbackBlocked(): boolean {
+  const raw = (process.env.BLOCK_GLOBAL_AI_FALLBACK || "").toLowerCase().trim();
+  return ["true", "1", "yes"].includes(raw);
+}
+
+// ─── Backward-compat helper ───────────────────────────────────────────────────
+
+/**
+ * Reads provider config from legacy environment variables.
+ * Use when caller does not have per-company config available.
+ *
+ * @param context  Optional context for structured logging (companyId, ticketId, etc.)
+ *
+ * ⚠️  Emits a warning log when used — costs from this path are NOT attributed
+ *     to any company.  Set BLOCK_GLOBAL_AI_FALLBACK=true to hard-block instead.
+ */
+export async function getEnvProviderConfig(
+  context?: { companyId?: string; ticketId?: string },
+): Promise<ProviderConfig> {
+  // ── Guard: optionally block global fallback entirely ────────────────────
+  if (isGlobalFallbackBlocked()) {
+    const msg =
+      "Global AI env fallback is blocked (BLOCK_GLOBAL_AI_FALLBACK=true). " +
+      "Configure an API key for this company in AI settings.";
+    logger.error(
+      { companyId: context?.companyId, ticketId: context?.ticketId },
+      msg,
+    );
+    throw new Error(msg);
+  }
+
+  // ── Warn: fallback causes unattributed costs ───────────────────────────
+  logger.warn(
+    { companyId: context?.companyId, ticketId: context?.ticketId },
+    "AI call using global env fallback — costs will NOT be attributed to a company. " +
+      "Configure a per-company API key or set BLOCK_GLOBAL_AI_FALLBACK=true to prevent this.",
+  );
+
+  const provider = process.env.AI_PROVIDER || "openai";
+  const apiKey = process.env.AI_API_KEY;
+  if (!apiKey) {
+    throw new Error("AI_API_KEY environment variable is not set");
+  }
+  return {
+    provider,
+    apiKey,
+    model: process.env.AI_MODEL || undefined,
+  };
+}
+
+// ─── Main entry point ─────────────────────────────────────────────────────────
+
+export async function chatCompletion(
+  messages: AiMessage[],
+  tools: AnyAiToolDefinition[] | undefined,
+  config: ProviderConfig
+): Promise<AiResponse> {
+  const timeout = parseInt(process.env.AI_TIMEOUT || "30000", 10);
+
+  if (["openai", "deepseek", "grok", "qwen"].includes(config.provider)) {
+    return openaiCompatibleCompletion(config, messages, tools, timeout);
+  }
+
+  if (config.provider === "anthropic") {
+    return anthropicCompletion(config, messages, tools, timeout);
+  }
+
+  throw new Error(`Provedor AI nao suportado: ${config.provider}`);
+}
+
+// ─── OpenAI / DeepSeek / Grok / Qwen (Chat Completions API) ──────────────────
+
+async function openaiCompatibleCompletion(
+  config: ProviderConfig,
+  messages: AiMessage[],
+  tools?: AnyAiToolDefinition[],
+  timeout = 30000
+): Promise<AiResponse> {
+  const baseUrl =
+    PROVIDER_BASE_URLS[config.provider] || PROVIDER_BASE_URLS.openai;
+  const model =
+    config.model || DEFAULT_MODELS[config.provider] || DEFAULT_MODELS.openai;
+
+  const body: Record<string, unknown> = {
+    model,
+    messages: messages.map((m) => {
+      const msg: Record<string, unknown> = { role: m.role, content: m.content };
+      if (m.tool_calls) msg.tool_calls = m.tool_calls;
+      if (m.tool_call_id) msg.tool_call_id = m.tool_call_id;
+      return msg;
+    }),
+  };
+
+  if (tools && tools.length > 0) {
+    body.tools = tools.map((t) => ({
+      type: "function",
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters,
+      },
+    }));
+  }
+
+  if (config.temperature !== undefined) body.temperature = config.temperature;
+  if (config.maxTokens) body.max_tokens = config.maxTokens;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
+
+  try {
+    const res = await fetch(`${baseUrl}/v1/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${config.apiKey}`,
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+
+    if (!res.ok) {
+      // Do not propagate raw error body — it may contain partial API keys
+      // (e.g. OpenAI 401: "Incorrect API key provided: sk-proj-abc...")
+      await res.text(); // consume body to avoid connection leaks
+      throw new Error(
+        `${config.provider} API error ${res.status}: [provider error body redacted]`
+      );
+    }
+
+    const data = await res.json();
+    const choice = data.choices?.[0];
+    if (!choice) {
+      throw new Error(`${config.provider} API retornou resposta vazia`);
+    }
+
+    const msg = choice.message;
+    return {
+      content: msg.content || null,
+      tool_calls: msg.tool_calls?.map(
+        (tc: Record<string, unknown>) => ({
+          id: tc.id as string,
+          type: "function" as const,
+          function: tc.function as { name: string; arguments: string },
+        })
+      ),
+      usage: data.usage
+        ? {
+            inputTokens: data.usage.prompt_tokens ?? 0,
+            outputTokens: data.usage.completion_tokens ?? 0,
+          }
+        : undefined,
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// ─── Anthropic (Messages API) ─────────────────────────────────────────────────
+
+interface AnthropicContent {
+  type: string;
+  text?: string;
+  id?: string;
+  name?: string;
+  input?: Record<string, unknown>;
+  tool_use_id?: string;
+  content?: string;
+}
+
+interface AnthropicMessage {
+  role: "user" | "assistant";
+  content: string | AnthropicContent[];
+}
+
+async function anthropicCompletion(
+  config: ProviderConfig,
+  messages: AiMessage[],
+  tools?: AnyAiToolDefinition[],
+  timeout = 30000
+): Promise<AiResponse> {
+  const model =
+    config.model || DEFAULT_MODELS.anthropic;
+
+  // Extract system message (Anthropic uses a separate `system` param)
+  let systemPrompt: string | undefined;
+  const conversationMessages: AiMessage[] = [];
+
+  for (const m of messages) {
+    if (m.role === "system") {
+      systemPrompt = m.content || undefined;
+    } else {
+      conversationMessages.push(m);
+    }
+  }
+
+  // Convert messages to Anthropic format
+  const anthropicMessages: AnthropicMessage[] = conversationMessages.map(
+    (m) => {
+      if (m.role === "assistant" && m.tool_calls && m.tool_calls.length > 0) {
+        // Assistant message with tool calls → tool_use content blocks
+        const content: AnthropicContent[] = [];
+        if (m.content) {
+          content.push({ type: "text", text: m.content });
+        }
+        for (const tc of m.tool_calls) {
+          content.push({
+            type: "tool_use",
+            id: tc.id,
+            name: tc.function.name,
+            input: JSON.parse(tc.function.arguments),
+          });
+        }
+        return { role: "assistant", content };
+      }
+
+      if (m.role === "tool") {
+        // Tool result → tool_result content block
+        return {
+          role: "user" as const,
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: m.tool_call_id || "",
+              content: m.content || "",
+            },
+          ],
+        };
+      }
+
+      return {
+        role: m.role as "user" | "assistant",
+        content: m.content || "",
+      };
+    }
+  );
+
+  // Merge consecutive user messages (Anthropic requires alternating roles)
+  const mergedMessages = mergeConsecutiveUserMessages(anthropicMessages);
+
+  const body: Record<string, unknown> = {
+    model,
+    messages: mergedMessages,
+    max_tokens: config.maxTokens || 4096,
+  };
+
+  if (systemPrompt) body.system = systemPrompt;
+  if (config.temperature !== undefined) body.temperature = config.temperature;
+
+  if (tools && tools.length > 0) {
+    body.tools = tools.map((t) => ({
+      name: t.name,
+      description: t.description,
+      input_schema: t.parameters,
+    }));
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
+
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": config.apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+
+    if (!res.ok) {
+      // Do not propagate raw error body — it may contain partial API keys
+      await res.text(); // consume body to avoid connection leaks
+      throw new Error(`Anthropic API error ${res.status}: [provider error body redacted]`);
+    }
+
+    const data = await res.json();
+    return parseAnthropicResponse(data);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function parseAnthropicResponse(data: {
+  content: AnthropicContent[];
+  usage?: { input_tokens?: number; output_tokens?: number };
+}): AiResponse {
+  let textContent: string | null = null;
+  const toolCalls: AiToolCall[] = [];
+
+  for (const block of data.content || []) {
+    if (block.type === "text" && block.text) {
+      textContent = textContent ? textContent + block.text : block.text;
+    } else if (block.type === "tool_use") {
+      toolCalls.push({
+        id: block.id || "",
+        type: "function",
+        function: {
+          name: block.name || "",
+          arguments: JSON.stringify(block.input || {}),
+        },
+      });
+    }
+  }
+
+  return {
+    content: textContent,
+    tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
+    usage: data.usage
+      ? {
+          inputTokens: data.usage.input_tokens ?? 0,
+          outputTokens: data.usage.output_tokens ?? 0,
+        }
+      : undefined,
+  };
+}
+
+function mergeConsecutiveUserMessages(
+  messages: AnthropicMessage[]
+): AnthropicMessage[] {
+  const result: AnthropicMessage[] = [];
+
+  for (const msg of messages) {
+    const last = result[result.length - 1];
+    if (last && last.role === "user" && msg.role === "user") {
+      // Merge into previous user message
+      const lastContent = Array.isArray(last.content)
+        ? last.content
+        : [{ type: "text", text: last.content }];
+      const newContent = Array.isArray(msg.content)
+        ? msg.content
+        : [{ type: "text", text: msg.content }];
+      last.content = [...lastContent, ...newContent];
+    } else {
+      result.push({ ...msg });
+    }
+  }
+
+  return result;
+}

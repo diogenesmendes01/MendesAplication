@@ -1,0 +1,213 @@
+{
+  "project": "MendesAplication",
+  "feature": "Integração Reclame Aqui (RA HugMe API)",
+  "branchName": "feature/reclameaqui-integration",
+  "createdBy": "Vex (PM) + Mendes",
+  "createdAt": "2026-03-24",
+  "specFile": "sac/reclameaqui/KNOWLEDGE-BASE.md",
+  "context": {
+    "summary": "Integrar o canal Reclame Aqui ao módulo SAC existente, permitindo ler reclamações, responder (público e privado), solicitar avaliações e moderações — tudo dentro do ERP, com suporte a IA para sugestão/auto-resposta.",
+    "apiDocs": "workspace/sac/reclameaqui/api-docs.md",
+    "knowledgeBase": "workspace/sac/reclameaqui/KNOWLEDGE-BASE.md",
+    "existingPatterns": [
+      "Channel model com config encriptada (ver configuracoes/canais/actions.ts)",
+      "Workers inbound/outbound (ver lib/workers/email-inbound.ts, whatsapp-inbound.ts)",
+      "AI Agent pipeline (ver lib/workers/ai-agent.ts + lib/ai/agent.ts)",
+      "Document model para Knowledge Base (ver configuracoes/knowledge-base/)",
+      "TicketMessage com externalId + channel unique constraint",
+      "Queue BullMQ para jobs assíncronos (ver lib/queue.ts)"
+    ],
+    "credentials": "1Password item 'Reclame Aqui API - TrustCloud (Produção)' — NUNCA hardcodar",
+    "apiBaseUrl": "https://app.hugme.com.br/api",
+    "rateLimit": "10 requests/minuto",
+    "decisions": [
+      "Modo de resposta IA configurável por empresa (sugerir, auto, desligado)",
+      "Sempre enviar mensagem privada ANTES da pública (configurável)",
+      "1 reclamação RA = 1 Ticket ERP, réplicas = TicketMessages",
+      "Moderação via botão na UI com dialog de motivo + justificativa",
+      "Knowledge Base editável na tela de configurações do canal RA"
+    ]
+  },
+  "userStories": [
+    {
+      "id": "US-RA-001",
+      "title": "Prisma: ChannelType RECLAMEAQUI + campos RA no Ticket",
+      "description": "Como desenvolvedor, quero estender o schema para suportar o canal Reclame Aqui, adicionando o novo ChannelType e campos específicos do RA no model Ticket.",
+      "priority": 1,
+      "acceptanceCriteria": [
+        "Enum ChannelType ganha valor RECLAMEAQUI",
+        "Model Ticket ganha campos opcionais: raExternalId (String?), raStatusId (Int?), raStatusName (String?), raCanEvaluate (Boolean default false), raCanModerate (Boolean default false), raRating (String?), raResolvedIssue (Boolean?), raBackDoingBusiness (Boolean?), raFrozen (Boolean default false), raConsumerConsideration (String? @db.Text), raCompanyConsideration (String? @db.Text)",
+        "Index em Ticket: @@index([companyId, raExternalId])",
+        "Unique constraint: @@unique([companyId, raExternalId]) para evitar duplicação",
+        "Migration gerada e aplicável",
+        "prisma generate e npm run lint passam sem erros"
+      ],
+      "notes": "raExternalId é o source_external_id da API (ID visível pro consumidor no RA). raStatusId segue a tabela: 5=Não respondido, 6=Respondido, 7=Réplica consumidor, 8=Réplica empresa, 9=Avaliado, 18=Avaliado Resolvido, 19=Avaliado Não Resolvido, 10=Congelado, 12=Desativado."
+    },
+    {
+      "id": "US-RA-002",
+      "title": "Reclame Aqui Provider: auth, token cache, rate limiter, client",
+      "description": "Como desenvolvedor, quero um provider/client reutilizável para a API HugMe que gerencie autenticação OAuth2, cache de token, rate limiting e todos os endpoints necessários.",
+      "priority": 2,
+      "acceptanceCriteria": [
+        "Arquivo: src/lib/reclameaqui/client.ts — classe ReclameAquiClient",
+        "Construtor recebe { clientId, clientSecret, baseUrl }",
+        "Método authenticate(): obtém token via POST /auth/oauth/token?grant_type=client_credentials com Basic auth (base64). Cacheia token até expires_in - 60s de margem",
+        "Rate limiter interno: max 10 req/min com fila (usar p-queue ou similar, já existe padrão no projeto)",
+        "Métodos de leitura: getTickets(filters), getTicketById(id), countTickets(filters), getAttachmentLink(detailId), listCompanies(), searchCompanies(name), getReputation(companyId), getWhatsAppConsumption()",
+        "Métodos de escrita: sendPublicMessage(ticketId, message), sendPrivateMessage(ticketId, message, email, files?), requestEvaluation(ticketId), requestModeration(ticketId, reason, message, file?, migrateTO?), finishPrivateMessage(ticketId)",
+        "Todos os métodos tipados com interfaces em src/lib/reclameaqui/types.ts",
+        "Erros mapeados: ReclameAquiError com code, httpStatus, message (ver tabela de erros na KNOWLEDGE-BASE.md)",
+        "Testes unitários para autenticação, rate limiting e mapeamento de erros",
+        "Credenciais NUNCA hardcodadas — vêm do Channel.config (encriptado)"
+      ],
+      "notes": "Seguir o padrão dos payment providers (ver lib/payment/providers/). A API usa ISO 8601 para timestamps. Rate limit é 10/minuto GLOBAL (não por endpoint). Filtros usam comparadores: eq, gt, gte, in, lt, lte, ne, nin. Paginação: page[size] max 50, page[number] default 1."
+    },
+    {
+      "id": "US-RA-003",
+      "title": "Worker reclameaqui-inbound: polling e sync de tickets",
+      "description": "Como sistema, quero um worker que periodicamente busque reclamações novas e atualizadas no Reclame Aqui e sincronize com o ERP, criando/atualizando Tickets e TicketMessages.",
+      "priority": 3,
+      "acceptanceCriteria": [
+        "Arquivo: src/lib/workers/reclameaqui-inbound.ts",
+        "Job type: { channelId: string, companyId: string }",
+        "Busca Channel com type=RECLAMEAQUI e config.lastSyncDate",
+        "Chama getTickets({ last_modification_date[gte]: lastSyncDate, page[size]: 50, sort[creation_date]: asc }). Pagina até esgotar",
+        "Para cada ticket RA: busca Ticket no ERP por raExternalId + companyId",
+        "SE NÃO EXISTE: cria Client (upsert por email), cria Ticket com channel=RECLAMEAQUI, cria TicketMessage para manifestação (interaction_type_id=1) com externalId=ticket_interaction_id e channel=RECLAMEAQUI",
+        "SE JÁ EXISTE: compara interactions[] do RA com TicketMessages existentes (por externalId). Cria TicketMessage para cada interação nova. Atualiza campos RA do Ticket (raStatusId, raCanEvaluate, raCanModerate, raRating, etc.)",
+        "Mapeamento de status: ra_status 5→OPEN, 6→WAITING_CLIENT, 7→IN_PROGRESS, 8→WAITING_CLIENT, 9/18/19→RESOLVED, 10/12/13→CLOSED",
+        "Mapeamento de direction: interaction_type 1,6,7,11→INBOUND, 2,3,8,9,10→OUTBOUND",
+        "Atualiza Channel.lastSyncAt e config.lastSyncDate após sync bem-sucedido",
+        "Se interação nova INBOUND (réplica consumidor) e ticket tem aiEnabled=true → enfileira job no ai-agent queue",
+        "Logging estruturado: total sincronizado, novos, atualizados, erros",
+        "Tratamento de erro: se falhar, não atualiza lastSyncDate (retry no próximo poll)"
+      ],
+      "notes": "O poll é triggado por um repeatable job no BullMQ (configurado na US-RA-007 de canais). Intervalo default: 15 minutos. Importante: a constraint @@unique([externalId, channel]) no TicketMessage garante idempotência — se tentar inserir duplicata, catch e skip. Dados do customer RA (CPF, email, telefone) devem ser tratados com cuidado (LGPD)."
+    },
+    {
+      "id": "US-RA-004",
+      "title": "Worker reclameaqui-outbound: envio de respostas e ações",
+      "description": "Como atendente, quero que quando eu respondo um ticket RA no ERP, a mensagem seja enviada automaticamente para o Reclame Aqui via API.",
+      "priority": 4,
+      "acceptanceCriteria": [
+        "Arquivo: src/lib/workers/reclameaqui-outbound.ts",
+        "Job types: RA_SEND_PUBLIC | RA_SEND_PRIVATE | RA_REQUEST_EVALUATION | RA_REQUEST_MODERATION | RA_FINISH_PRIVATE",
+        "RA_SEND_PUBLIC: recebe { ticketId, message } → chama sendPublicMessage(raTicketId, message). Cria TicketMessage com direction=OUTBOUND, channel=RECLAMEAQUI, isInternal=false. Atualiza deliveryStatus.",
+        "RA_SEND_PRIVATE: recebe { ticketId, message, email, files? } → chama sendPrivateMessage(). Cria TicketMessage com isInternal=true (privada não é pública).",
+        "RA_REQUEST_EVALUATION: recebe { ticketId } → chama requestEvaluation(). Registra no histórico do ticket.",
+        "RA_REQUEST_MODERATION: recebe { ticketId, reason, message, file?, migrateTO? } → chama requestModeration(). Registra no histórico.",
+        "RA_FINISH_PRIVATE: recebe { ticketId } → chama finishPrivateMessage().",
+        "Tratamento de erros: captura ReclameAquiError, atualiza deliveryStatus=FAILED, loga erro. Não retenta automaticamente (erros 409 são de negócio, não transitórios).",
+        "Erro 40930 (mensagem duplicada): marca como SENT (já foi enviada antes).",
+        "Se config da empresa tem 'privateBeforePublic=true' e ação é resposta: enfileira RA_SEND_PRIVATE primeiro, depois RA_SEND_PUBLIC sequencialmente."
+      ],
+      "notes": "O worker é chamado a partir das server actions do ticket (US-RA-006). Para o fluxo privada→pública: usar job dependency do BullMQ (parent/child) ou simplesmente processar sequencialmente no mesmo job. Rate limit do client (10/min) protege contra flood."
+    },
+    {
+      "id": "US-RA-005",
+      "title": "Adaptar AI Agent para canal RECLAMEAQUI com sugestão dual (privada + pública)",
+      "description": "Como IA, quero gerar sugestões de resposta específicas para o canal Reclame Aqui, produzindo tanto mensagem privada quanto pública, respeitando as regras da Knowledge Base RA.",
+      "priority": 5,
+      "acceptanceCriteria": [
+        "ai-agent.ts reconhece channel=RECLAMEAQUI e ajusta comportamento",
+        "Busca Documents onde channel='RECLAMEAQUI' OU channel IS NULL (gerais) para compor contexto",
+        "Para canal RA, o agent gera TWO outputs: { privateMessage: string, publicMessage: string, detectedType: string, confidence: number, suggestedTemplate: string | null }",
+        "detectedType classifica: 'boleto_nao_solicitado' | 'cobranca_indevida' | 'reembolso' | 'servico_nao_entregue' | 'qualidade_servico' | 'trabalhista' | 'outro'",
+        "Se detectedType é 'trabalhista' → sinaliza flag suggestModeration=true com reason=16",
+        "Se AiConfig.raMode='auto' → enfileira outbound imediatamente (privada+pública)",
+        "Se AiConfig.raMode='suggest' → salva sugestão como TicketMessage com isAiGenerated=true, deliveryStatus='PENDING_APPROVAL'",
+        "Se AiConfig.raMode='off' → não faz nada",
+        "Prompt do sistema inclui: 'Você está respondendo uma reclamação no Reclame Aqui. Respostas públicas são PERMANENTES e visíveis para TODOS. Nunca exponha dados pessoais. Siga as regras da Knowledge Base.'",
+        "Palavras de escalação (processo, advogado, procon, judicial) → escalate pra humano mesmo em modo auto"
+      ],
+      "notes": "O campo deliveryStatus='PENDING_APPROVAL' é novo — indica que a mensagem é uma sugestão aguardando aprovação. Na tela, isso renderiza o SuggestionCard. Quando aprovada, muda pra 'QUEUED' e enfileira no outbound. O campo isAiGenerated=true já existe."
+    },
+    {
+      "id": "US-RA-006",
+      "title": "Server Actions: responder, aprovar sugestão, pedir avaliação/moderação",
+      "description": "Como atendente, quero ações no ticket para interagir com o Reclame Aqui: aprovar/editar sugestões IA, responder manualmente, pedir avaliação e solicitar moderação.",
+      "priority": 6,
+      "acceptanceCriteria": [
+        "Nova action: approveSuggestion(messageId, editedPrivate?, editedPublic?) — atualiza conteúdo se editado, muda deliveryStatus para QUEUED, enfileira jobs outbound (privada+pública)",
+        "Nova action: discardSuggestion(messageId) — muda deliveryStatus para DISCARDED",
+        "Nova action: sendRaResponse(ticketId, publicMessage, privateMessage?, email?) — cria TicketMessages + enfileira outbound",
+        "Nova action: requestRaEvaluation(ticketId) — valida raCanEvaluate=true, enfileira RA_REQUEST_EVALUATION",
+        "Nova action: requestRaModeration(ticketId, reason, message, file?) — valida raCanModerate=true ou reason-specific, enfileira RA_REQUEST_MODERATION",
+        "Nova action: getRaReputation(companyId) — busca reputação via client, retorna dados formatados",
+        "Todas as actions validam requireCompanyAccess e logam auditoria",
+        "Erros da API RA traduzidos para mensagens user-friendly em português"
+      ],
+      "notes": "O fluxo de aprovação: TicketMessage com deliveryStatus=PENDING_APPROVAL → atendente clica Aprovar → approveSuggestion() → deliveryStatus=QUEUED → worker outbound processa → deliveryStatus=SENT. Se falhar: deliveryStatus=FAILED."
+    },
+    {
+      "id": "US-RA-007",
+      "title": "Frontend: cadastro de canal RA nas configurações + Knowledge Base",
+      "description": "Como admin, quero cadastrar as credenciais do Reclame Aqui na tela de canais e configurar a Knowledge Base específica do canal RA.",
+      "priority": 7,
+      "acceptanceCriteria": [
+        "Tela /configuracoes/canais: opção 'Reclame Aqui' ao criar canal",
+        "Formulário com campos: Client ID, Client Secret (password field), URL base (default preenchido), Intervalo de polling (default 15min)",
+        "Botão 'Testar Conexão': chama GET /auth/availability + POST /auth/oauth/token. Se OK, chama GET /companies/organization pra preencher companyId automaticamente",
+        "Ao salvar: encripta config, cria Channel, registra repeatable job no BullMQ para o worker inbound",
+        "Tela /configuracoes/knowledge-base: nova tab 'Reclame Aqui'",
+        "Tab RA mostra Documents filtrados por channel='RECLAMEAQUI'",
+        "CRUD de documentos com editor Markdown (título + conteúdo)",
+        "Seção 'Configurações IA para RA': raMode (suggest/auto/off), privateBeforePublic toggle, autoRequestEvaluation toggle, escalation keywords",
+        "Seed: ao criar canal RA, criar Documents iniciais com conteúdo do context-trustcloud.md e respostas-modelo.md"
+      ],
+      "notes": "Seguir exatamente o padrão de cadastro de canal EMAIL que já existe (ver configuracoes/canais/). Config é encriptada com encryptConfig(). O repeatable job usa cron: '*/15 * * * *' (a cada 15min) e pode ser ajustado pelo campo intervalo."
+    },
+    {
+      "id": "US-RA-008",
+      "title": "Frontend: lista de tickets com badges RA + sugestão pendente",
+      "description": "Como atendente, quero identificar rapidamente tickets do Reclame Aqui na lista e ver quais têm sugestão de IA pendente de aprovação.",
+      "priority": 8,
+      "acceptanceCriteria": [
+        "Badge 'RA' com ícone na lista de tickets quando channel=RECLAMEAQUI",
+        "Badge '🤖💬' quando ticket tem TicketMessage com isAiGenerated=true e deliveryStatus=PENDING_APPROVAL",
+        "Badge com ra_status traduzido (cores: vermelho=não respondido, amarelo=réplica, verde=respondido, azul=avaliado)",
+        "Se raRating existe: mostrar nota com estrela (ex: ⭐ 8/10)",
+        "Filtro na lista: canal='Reclame Aqui'",
+        "Filtro: 'Com sugestão pendente'",
+        "Counter no tab 'Todos': incluir count de sugestões pendentes"
+      ],
+      "notes": "Reutilizar o componente Badge existente. As cores devem seguir o design system atual."
+    },
+    {
+      "id": "US-RA-009",
+      "title": "Frontend: timeline do ticket com SuggestionCard e ações RA",
+      "description": "Como atendente, quero ver sugestões da IA na timeline do ticket RA e poder aprovar, editar ou descartar, além de usar ações específicas do RA.",
+      "priority": 9,
+      "acceptanceCriteria": [
+        "SuggestionCard na timeline: renderiza quando TicketMessage tem isAiGenerated=true e deliveryStatus=PENDING_APPROVAL",
+        "SuggestionCard mostra: mensagem privada (se houver) + mensagem pública, tipo detectado, confiança, template sugerido",
+        "Botões: Aprovar e Enviar (chama approveSuggestion), Editar (abre editor inline com 2 textareas: privada + pública), Descartar (chama discardSuggestion com confirmação)",
+        "Editor inline: 2 campos de texto (privada + pública), checkboxes 'Enviar privada primeiro' e 'Enviar pública após privada', botão 'Salvar e Enviar'",
+        "Mensagens RA na timeline com indicador visual: 📢 pública, 📨 privada, ⭐ avaliação",
+        "Header do ticket: seção 'Ações Reclame Aqui' com botões condicionais:",
+        "  - 'Pedir Avaliação' visível só quando raCanEvaluate=true",
+        "  - 'Pedir Moderação' sempre visível → abre ModerationDialog",
+        "  - 'Ver Reputação' → abre modal com dados de reputação",
+        "ModerationDialog: select de motivo (7 opções com código), textarea de justificativa (obrigatório), upload de arquivo (opcional), campo 'Empresa destino' (só se reason=1, com busca via searchCompanies)",
+        "Feedback visual após ações: toast de sucesso/erro, atualização da timeline"
+      ],
+      "notes": "O SuggestionCard deve ter visual distinto (fundo levemente diferente, borda tracejada ou similar) para diferenciar de mensagens reais. Quando aprovada, a sugestão muda de visual para mensagem normal com badge 'IA'. Reutilizar o ticket-timeline.tsx existente e os componentes Dialog, Select, Textarea do design system."
+    },
+    {
+      "id": "US-RA-010",
+      "title": "Dashboard SAC: card de reputação Reclame Aqui",
+      "description": "Como gestor, quero ver um card no dashboard do SAC com as métricas de reputação da empresa no Reclame Aqui.",
+      "priority": 10,
+      "acceptanceCriteria": [
+        "Novo componente ReputationCard no dashboard SAC (/sac/tickets/ticket-dashboard.tsx)",
+        "Mostra dados do período SEISMESES: selo (RA1000/Ótimo/Bom/Regular/Ruim), nota final, % respondidas, % resolvidas, % voltaria a fazer negócio, tempo médio de resposta, total de reclamações",
+        "Cores do selo: RA1000=dourado, Ótimo=verde, Bom=azul, Regular=amarelo, Ruim=vermelho, Não recomendada=vermelho escuro",
+        "Link 'Ver detalhes' mostra modal com comparação 6m vs 12m",
+        "Dados cacheados por 1h (usar kpi-cache pattern existente)",
+        "Se empresa não tem canal RA configurado: não mostra o card"
+      ],
+      "notes": "Usar o componente KpiCard como base. Os dados de reputação vêm do endpoint GET /companies/{companyId}/reputation. O companyId está salvo no Channel.config."
+    }
+  ]
+}

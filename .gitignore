@@ -1,0 +1,16 @@
+node_modules/
+.env
+.env.local
+*.log
+dist/
+.DS_Store
+Thumbs.db
+erp/uploads/*
+!erp/uploads/.gitkeep
+uploads/
+*.tgz
+*.tar.gz
+.devcontainer/
+.claude/
+tasks/
+docs/plans/
