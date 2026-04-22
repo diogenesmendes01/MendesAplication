@@ -92,6 +92,7 @@ model Company {
   documents           Document[]
   fiscalConfig        FiscalConfig?
   paymentProviders    PaymentProvider[]
+  erpProviders        ErpProvider[]
   santanderSequences  SantanderSequence[]
   aiSuggestions       AiSuggestion[]
   aiFeedbacks         AiFeedback[]
@@ -1125,6 +1126,28 @@ model PaymentProvider {
   // isDefault=false to one per company, which is incorrect.
   // If regenerating migrations, re-add this partial index manually.
   @@map("payment_providers")
+}
+
+model ErpProvider {
+  id          String    @id @default(cuid())
+  companyId   String
+  name        String
+  provider    String
+  credentials String    @db.Text
+  baseUrl     String    @default("https://api.bling.com.br/Api/v3")
+  storeId     String?
+  sandbox     Boolean   @default(false)
+  isActive    Boolean   @default(true)
+  lastSyncAt  DateTime?
+  syncStatus  Json?
+  metadata    Json?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, isActive])
+  @@map("erp_providers")
 }
 
 model PaymentRoutingRule {
