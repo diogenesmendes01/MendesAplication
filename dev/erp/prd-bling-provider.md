@@ -81,7 +81,7 @@ O Bling usa **OAuth 2.0** (não API Key simples como outros providers).
 
 **Endpoints de Auth:**
 ```
-POST https://www.bling.com.br/Authorization/Token
+POST https://api.bling.com.br/oauth/token
 Content-Type: application/x-www-form-urlencoded
 
 grant_type=authorization_code&code={code}&client_id={id}&client_secret={secret}&redirect_uri={uri}
@@ -89,9 +89,9 @@ grant_type=authorization_code&code={code}&client_id={id}&client_secret={secret}&
 
 **Em produção:**
 ```
-Base URL: https://www.bling.com.br
-OAuth: https://www.bling.com.br/Authorization/Token
-API: https://www.bling.com.br/api/v3
+Base URL: https://api.bling.com.br
+OAuth: https://api.bling.com.br/oauth/token
+API: https://api.bling.com.br/Api/v3
 ```
 
 **Rate Limits:**
@@ -348,7 +348,7 @@ model ErpProvider {
   name          String                          // "Bling Produção"
   provider      String                          // "bling"
   credentials   String   @db.Text               // JSON encriptado (access_token, refresh_token, client_id, client_secret)
-  baseUrl       String   @default("https://www.bling.com.br/api/v3")
+  baseUrl       String   @default("https://api.bling.com.br/Api/v3")
   storeId       String?                         // ID da loja no Bling (para multi-loja)
   sandbox       Boolean  @default(false)
   isActive      Boolean  @default(true)
@@ -842,8 +842,8 @@ import {
   InvoiceListParams, AccountListParams
 } from './types';
 
-const BASE_URL = 'https://www.bling.com.br/api/v3';
-const TOKEN_URL = 'https://www.bling.com.br/Authorization/Token';
+const BASE_URL = 'https://api.bling.com.br/Api/v3';
+const TOKEN_URL = 'https://api.bling.com.br/oauth/token';
 
 export class BlingApiClient implements BlingClient {
   private credentials: BlingCredentials;
@@ -852,7 +852,7 @@ export class BlingApiClient implements BlingClient {
   constructor(credentials: BlingCredentials, sandbox = false) {
     this.credentials = credentials;
     this.baseUrl = sandbox
-      ? 'https://www.bling.com.br/api/v3'
+      ? 'https://api.bling.com.br/Api/v3'
       : BASE_URL;
   }
 
@@ -1471,7 +1471,7 @@ Para credenciar o Bling, o usuário precisa fazer OAuth flow:
 
 1. **Frontend** redireciona para:
 ```
-https://www.bling.com.br/Authorization/Authorize?
+https://api.bling.com.br/Authorization/Authorize?
   response_type=code&
   client_id={CLIENT_ID}&
   redirect_uri={REDIRECT_URI}&
@@ -1485,7 +1485,7 @@ https://www.bling.com.br/Authorization/Authorize?
 4. **Backend** troca o code por tokens:
 ```typescript
 async function exchangeCodeForTokens(code: string, credentials: BlingCredentials) {
-  const response = await fetch('https://www.bling.com.br/Authorization/Token', {
+  const response = await fetch('https://api.bling.com.br/oauth/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
